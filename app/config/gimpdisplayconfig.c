@@ -71,6 +71,7 @@ enum
   PROP_SPACE_BAR_ACTION,
   PROP_ZOOM_QUALITY,
   PROP_USE_EVENT_HISTORY,
+  PROP_OVERRIDE_CONFIRM_ON_CLOSE_IF_EXPORTED,
 
   /* ignored, only for backward compatibility: */
   PROP_DEFAULT_SNAP_TO_GUIDES,
@@ -306,6 +307,13 @@ gimp_display_config_class_init (GimpDisplayConfigClass *klass)
                             DEFAULT_USE_EVENT_HISTORY,
                             GIMP_PARAM_STATIC_STRINGS);
 
+  GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_OVERRIDE_CONFIRM_ON_CLOSE_IF_EXPORTED,
+                            "override-confirm-on-close-if-exported",
+                            "override-confirm-on-close-if-exported",
+                            OVERRIDE_CONFIRM_ON_CLOSE_IF_EXPORTED_BLURB,
+                            FALSE,
+                            GIMP_PARAM_STATIC_STRINGS);
+
   /*  only for backward compatibility:  */
   GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_DEFAULT_SNAP_TO_GUIDES,
                             "default-snap-to-guides",
@@ -484,6 +492,9 @@ gimp_display_config_set_property (GObject      *object,
     case PROP_USE_EVENT_HISTORY:
       display_config->use_event_history = g_value_get_boolean (value);
       break;
+    case PROP_OVERRIDE_CONFIRM_ON_CLOSE_IF_EXPORTED:
+      display_config->override_confirm_on_close_if_exported = g_value_get_boolean (value);
+      break;
 
     case PROP_DEFAULT_SNAP_TO_GUIDES:
     case PROP_DEFAULT_SNAP_TO_GRID:
@@ -588,6 +599,9 @@ gimp_display_config_get_property (GObject    *object,
       break;
     case PROP_USE_EVENT_HISTORY:
       g_value_set_boolean (value, display_config->use_event_history);
+      break;
+    case PROP_OVERRIDE_CONFIRM_ON_CLOSE_IF_EXPORTED:
+      g_value_set_boolean (value, display_config->override_confirm_on_close_if_exported);
       break;
 
     case PROP_DEFAULT_SNAP_TO_GUIDES:

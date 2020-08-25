@@ -737,5 +737,8 @@ _("When enabled, a search of actions will also return inactive actions.")
 #define ACTION_HISTORY_SIZE_BLURB \
 _("The maximum number of actions saved in history.")
 
+#define OVERRIDE_CONFIRM_ON_CLOSE_IF_EXPORTED_BLURB \
+_("Do NOT ask for confirmation before closing an image without saving " \
+  "only if it has been exported." )
 
 #endif  /* __GIMP_RC_BLURBS_H__ */
