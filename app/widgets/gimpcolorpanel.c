@@ -209,6 +209,8 @@ gimp_color_panel_clicked (GtkButton *button)
     {
       gimp_color_dialog_set_color (GIMP_COLOR_DIALOG (panel->color_dialog),
                                    &color);
+      gimp_color_dialog_set_old_color (GIMP_COLOR_DIALOG (panel->color_dialog),
+                                         &color);
     }
 
   gtk_window_present (GTK_WINDOW (panel->color_dialog));
@@ -263,6 +265,8 @@ gimp_color_panel_color_changed (GimpColorButton *button)
         {
           gimp_color_dialog_set_color (GIMP_COLOR_DIALOG (panel->color_dialog),
                                        &color);
+          gimp_color_dialog_set_old_color (GIMP_COLOR_DIALOG (panel->color_dialog),
+                                                 &color);
         }
     }
 }

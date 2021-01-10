@@ -525,12 +525,29 @@ gimp_color_dialog_set_color (GimpColorDialog *dialog,
 
   gimp_color_selection_set_color (GIMP_COLOR_SELECTION (dialog->selection),
                                   color);
-  gimp_color_selection_set_old_color (GIMP_COLOR_SELECTION (dialog->selection),
-                                      color);
 
   g_signal_handlers_unblock_by_func (dialog->selection,
                                      gimp_color_dialog_color_changed,
                                      dialog);
+}
+
+void
+gimp_color_dialog_set_old_color (GimpColorDialog *dialog,
+                                 const GimpRGB   *color)
+{
+  g_return_if_fail (GIMP_IS_COLOR_DIALOG (dialog));
+  g_return_if_fail (color != NULL);
+
+  g_signal_handlers_block_by_func (dialog->selection,
+                                     gimp_color_dialog_color_changed,
+                                     dialog);
+
+  gimp_color_selection_set_old_color (GIMP_COLOR_SELECTION (dialog->selection),
+                                      color);
+
+  g_signal_handlers_unblock_by_func (dialog->selection,
+                                       gimp_color_dialog_color_changed,
+                                       dialog);
 }
 
 void
@@ -571,6 +588,7 @@ gimp_color_dialog_colormap_clicked (GimpColorDialog  *dialog,
                                     GdkModifierType   state)
 {
   gimp_color_dialog_set_color (dialog, &entry->color);
+  gimp_color_dialog_set_old_color(dialog, &entry->color);
 
   if (dialog->wants_updates)
     {
@@ -592,6 +610,7 @@ gimp_color_dialog_colormap_edit_activate (GimpColorDialog *dialog)
   col_index = gimp_colormap_selection_get_index (colormap_selection, NULL);
   gimp_image_get_colormap_entry (dialog->active_image, col_index, &color);
   gimp_color_dialog_set_color (dialog, &color);
+  gimp_color_dialog_set_old_color(dialog, &color);
 
   gtk_stack_set_visible_child_name (GTK_STACK (dialog->stack), "color");
 }
