@@ -358,6 +358,12 @@ gimp_color_dialog_response (GtkDialog *gtk_dialog,
       gimp_color_selection_get_color (GIMP_COLOR_SELECTION (dialog->selection),
                                       &color);
 
+      if (viewable_dialog->context)
+        {
+          GimpPalette        *history = gimp_palettes_get_color_history (viewable_dialog->context->gimp);
+          gimp_palette_mru_add (GIMP_PALETTE_MRU (history), &color);
+        }
+
       if (dialog->colormap_editing && image)
         {
           GimpRGB old_color;
