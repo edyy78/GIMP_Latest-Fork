@@ -280,6 +280,7 @@ static GimpLayer       * layer_from_surface  (GimpImage            *image,
                                               gdouble               progress_start,
                                               gdouble               progress_scale);
 
+static gchar           * get_sanitized_file_name_wo_ext (GFile     *file);
 
 G_DEFINE_TYPE (Pdf, pdf, GIMP_TYPE_PLUG_IN)
 
@@ -364,6 +365,7 @@ pdf_create_procedure (GimpPlugIn  *plug_in,
                                  "Pages",
                                  "The pages to load in the expected order",
                                  G_PARAM_READWRITE);
+
     }
   else if (! strcmp (name, LOAD_THUMB_PROC))
     {
@@ -787,11 +789,13 @@ load_image (PopplerDocument        *doc,
             gboolean                antialias,
             PdfSelectedPages       *pages)
 {
-  GimpImage  *image = NULL;
-  GimpImage **images   = NULL;
+  GimpImage  *image         = NULL;
+  GimpImage **images        = NULL;
   gint        i;
   gdouble     scale;
-  gdouble     doc_progress = 0;
+  gdouble     doc_progress  = 0;
+  int         padding_width = (int) log (pages->n_pages);
+  gchar      *sanitized_uri;
 
   if (target == GIMP_PAGE_SELECTOR_TARGET_IMAGES)
     images = g_new0 (GimpImage *, pages->n_pages);
@@ -801,12 +805,13 @@ load_image (PopplerDocument        *doc,
 
   scale = resolution / gimp_unit_get_factor (GIMP_UNIT_POINT);
 
-  /* read the file */
+  sanitized_uri = get_sanitized_file_name_wo_ext(file);
 
+  /* read the file */
   for (i = 0; i < pages->n_pages; i++)
     {
       PopplerPage *page;
-      gchar       *page_label;
+      gchar       *layer_name;
       gdouble      page_width;
       gdouble      page_height;
 
@@ -820,25 +825,21 @@ load_image (PopplerDocument        *doc,
       width  = page_width  * scale;
       height = page_height * scale;
 
-      g_object_get (G_OBJECT (page), "label", &page_label, NULL);
+      layer_name = g_strdup_printf ("%0*d", padding_width, i + 1);
 
       if (! image)
         {
           GFile *new_file;
-          gchar *uri;
           gchar *new_uri;
 
           image = gimp_image_new (width, height, GIMP_RGB);
           gimp_image_undo_disable (image);
 
-          uri = g_file_get_uri (file);
-
           if (target == GIMP_PAGE_SELECTOR_TARGET_IMAGES)
-            new_uri = g_strdup_printf (_("%s-%s"), uri, page_label);
+            new_uri = g_strdup_printf ("%s-%s", sanitized_uri, layer_name);
           else
-            new_uri = g_strdup_printf (_("%s-pages"), uri);
-
-          g_free (uri);
+            new_uri = (pages->n_pages == 1) ? g_strdup(sanitized_uri)
+                : g_strdup_printf (_("%s-pages"), sanitized_uri);
 
           new_file = g_file_new_for_uri (new_uri);
 
@@ -853,10 +854,10 @@ load_image (PopplerDocument        *doc,
 
       surface = render_page_to_surface (page, width, height, scale, antialias);
 
-      layer_from_surface (image, page_label, 0, surface,
+      layer_from_surface (image, layer_name, 0, surface,
                           doc_progress, 1.0 / pages->n_pages);
 
-      g_free (page_label);
+      g_free (layer_name);
       cairo_surface_destroy (surface);
 
       doc_progress = (double) (i + 1) / pages->n_pages;
@@ -874,6 +875,8 @@ load_image (PopplerDocument        *doc,
     }
   gimp_progress_update (1.0);
 
+  g_free (sanitized_uri);
+
   if (image)
     {
       gimp_image_undo_enable (image);
@@ -887,10 +890,9 @@ load_image (PopplerDocument        *doc,
           /* Display images in reverse order.  The last will be
            * displayed by GIMP itself
            */
-          for (i = pages->n_pages - 1; i > 0; i--)
+          for (i = pages->n_pages - 1; i > 0; --i)
             gimp_display_new (images[i]);
         }
-
       image = images[0];
 
       g_free (images);
@@ -1165,6 +1167,37 @@ load_dialog (PopplerDocument  *doc,
   g_thread_join (thread);
 
   return run ? GIMP_PDB_SUCCESS : GIMP_PDB_CANCEL;
+}
+
+
+/**
+ * caller code must use g_free() on returned string when it no longer needed
+ */
+static gchar *
+get_sanitized_file_name_wo_ext (GFile* file)
+{
+  gchar    *dirty_name;
+  gchar    *p;
+  gchar    *last_dot_pos;
+  gchar    *wo_ext;
+
+  dirty_name = g_file_get_uri (file);
+  last_dot_pos = g_strrstr(dirty_name, ".");
+
+  wo_ext = *last_dot_pos
+            ? g_strndup(dirty_name, last_dot_pos - dirty_name)
+            : g_strdup(dirty_name);
+
+  g_free(dirty_name);
+
+  /* replace dots in source file uri with dashes */
+  for (p = wo_ext; *p; ++p)
+    if (*p == '.')
+      *p = '-';
+
+  p = 0;
+
+  return wo_ext;
 }
 
 
