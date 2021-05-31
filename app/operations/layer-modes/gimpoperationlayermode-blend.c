@@ -118,7 +118,7 @@ gimp_operation_layer_mode_blend_burn (GeglOperation *operation,
           gint c;
 
           for (c = 0; c < 3; c++)
-            comp[c] = 1.0f - safe_div (1.0f - in[c], layer[c]);
+            comp[c] = CLAMP(1.0f - safe_div (1.0f - in[c], layer[c]), 0.0f, 1.0f);
         }
 
       comp[ALPHA] = layer[ALPHA];
@@ -761,7 +761,7 @@ gimp_operation_layer_mode_blend_linear_burn (GeglOperation *operation,
           gint c;
 
           for (c = 0; c < 3; c++)
-            comp[c] = in[c] + layer[c] - 1.0f;
+            comp[c] = CLAMP(in[c] + layer[c] - 1.0f, 0.0f, 1.0f);
         }
 
       comp[ALPHA] = layer[ALPHA];
@@ -796,7 +796,7 @@ gimp_operation_layer_mode_blend_linear_light (GeglOperation *operation,
               else
                 val = in[c] + 2.0f * (layer[c] - 0.5f);
 
-              comp[c] = val;
+              comp[c] = CLAMP(val, 0.0f, 1.0f);
             }
         }
 
@@ -817,7 +817,7 @@ gimp_operation_layer_mode_blend_luma_darken_only (GeglOperation *operation,
 {
   const Babl *space  = gegl_operation_get_source_space (operation, "input");
   double red_luminance, green_luminance, blue_luminance;
-  babl_space_get_rgb_luminance (space, 
+  babl_space_get_rgb_luminance (space,
     &red_luminance, &green_luminance, &blue_luminance);
 
   while (samples--)
@@ -865,7 +865,7 @@ gimp_operation_layer_mode_blend_luma_lighten_only (GeglOperation *operation,
 {
   const Babl *space  = gegl_operation_get_source_space (operation, "input");
   double red_luminance, green_luminance, blue_luminance;
-  babl_space_get_rgb_luminance (space, 
+  babl_space_get_rgb_luminance (space,
     &red_luminance, &green_luminance, &blue_luminance);
 
   while (samples--)
