@@ -93,7 +93,7 @@ gimp_operation_layer_mode_blend_addition (GeglOperation *operation,
           gint c;
 
           for (c = 0; c < 3; c++)
-            comp[c] = in[c] + layer[c];
+            comp[c] = MIN (in[c] + layer[c], 1.0f);
         }
 
       comp[ALPHA] = layer[ALPHA];
@@ -118,7 +118,7 @@ gimp_operation_layer_mode_blend_burn (GeglOperation *operation,
           gint c;
 
           for (c = 0; c < 3; c++)
-            comp[c] = CLAMP(1.0f - safe_div (1.0f - in[c], layer[c]), 0.0f, 1.0f);
+            comp[c] = CLAMP (1.0f - safe_div (1.0f - in[c], layer[c]), 0.0f, 1.0f);
         }
 
       comp[ALPHA] = layer[ALPHA];
@@ -193,7 +193,7 @@ gimp_operation_layer_mode_blend_divide (GeglOperation *operation,
           gint c;
 
           for (c = 0; c < 3; c++)
-            comp[c] = safe_div (in[c], layer[c]);
+            comp[c] = CLAMP (safe_div (in[c], layer[c]), 0.0f, 1.0f);
         }
 
       comp[ALPHA] = layer[ALPHA];
@@ -218,7 +218,7 @@ gimp_operation_layer_mode_blend_dodge (GeglOperation *operation,
           gint c;
 
           for (c = 0; c < 3; c++)
-            comp[c] = safe_div (in[c], 1.0f - layer[c]);
+            comp[c] = CLAMP(safe_div (in[c], 1.0f - layer[c]), 0.0f, 1.0f);
         }
 
       comp[ALPHA] = layer[ALPHA];
@@ -268,7 +268,7 @@ gimp_operation_layer_mode_blend_grain_extract (GeglOperation *operation,
           gint c;
 
           for (c = 0; c < 3; c++)
-            comp[c] = in[c] - layer[c] + 0.5f;
+            comp[c] = CLAMP (in[c] - layer[c] + 0.5f, 0.0f, 1.0f);
         }
 
       comp[ALPHA] = layer[ALPHA];
@@ -293,7 +293,7 @@ gimp_operation_layer_mode_blend_grain_merge (GeglOperation *operation,
           gint c;
 
           for (c = 0; c < 3; c++)
-            comp[c] = in[c] + layer[c] - 0.5f;
+            comp[c] = CLAMP(in[c] + layer[c] - 0.5f, 0.0f, 1.0f);
         }
 
       comp[ALPHA] = layer[ALPHA];
@@ -347,17 +347,11 @@ gimp_operation_layer_mode_blend_hardlight (GeglOperation *operation,
               gfloat val;
 
               if (layer[c] > 0.5f)
-                {
-                  val = (1.0f - in[c]) * (1.0f - (layer[c] - 0.5f) * 2.0f);
-                  val = MIN (1.0f - val, 1.0f);
-                }
+                  val = 1.0f - (1.0f - in[c]) * (1.0f - (layer[c] - 0.5f) * 2.0f);
               else
-                {
                   val = in[c] * (layer[c] * 2.0f);
-                  val = MIN (val, 1.0f);
-                }
 
-              comp[c] = val;
+              comp[c] = CLAMP (val, 0.0f, 1.0f);
             }
         }
       comp[ALPHA] = layer[ALPHA];
@@ -407,15 +401,13 @@ gimp_operation_layer_mode_blend_hsl_color (GeglOperation *operation,
 
               dest_l = MIN (dest_l, 1.0f - dest_l);
               src_l  = MIN (src_l,  1.0f - src_l);
+              ratio  = dest_l / src_l;
 
-              ratio                  = dest_l / src_l;
-
-              offset                 = 0.0f;
-              if (dest_high) offset += 1.0f - 2.0f * dest_l;
-              if (src_high)  offset += 2.0f * dest_l - ratio;
+              offset = dest_high ? 1.0f - 2.0f * dest_l : 0.0f;
+              offset += src_high ? 2.0f * dest_l - ratio : 0.0f;
 
               for (c = 0; c < 3; c++)
-                comp[c] = layer[c] * ratio + offset;
+                comp[c] = CLAMP (layer[c] * ratio + offset, 0.0f, 1.0f);
             }
           else
             {
@@ -446,6 +438,7 @@ gimp_operation_layer_mode_blend_hsv_hue (GeglOperation *operation,
         {
           gfloat src_min,  src_max,  src_delta;
           gfloat dest_min, dest_max, dest_delta, dest_s;
+          gint   c;
 
           src_min   = MIN (layer[0], layer[1]);
           src_min   = MIN (src_min, layer[2]);
@@ -457,7 +450,6 @@ gimp_operation_layer_mode_blend_hsv_hue (GeglOperation *operation,
             {
               gfloat ratio;
               gfloat offset;
-              gint   c;
 
               dest_min   = MIN (in[0], in[1]);
               dest_min   = MIN (dest_min, in[2]);
@@ -470,12 +462,10 @@ gimp_operation_layer_mode_blend_hsv_hue (GeglOperation *operation,
               offset = dest_max - src_max * ratio;
 
               for (c = 0; c < 3; c++)
-                comp[c] = layer[c] * ratio + offset;
+                comp[c] = CLAMP (layer[c] * ratio + offset, 0.0f, 1.0f);
             }
           else
             {
-              gint c;
-
               for (c = 0; c < 3; c++)
                 comp[c] = in[c];
             }
@@ -526,13 +516,11 @@ gimp_operation_layer_mode_blend_hsv_saturation (GeglOperation *operation,
               offset = (1.0f - ratio) * dest_max;
 
               for (c = 0; c < 3; c++)
-                comp[c] = in[c] * ratio + offset;
+                comp[c] = CLAMP (in[c] * ratio + offset, 0.0f, 1.0f);
             }
           else
             {
-              comp[RED]   = dest_max;
-              comp[GREEN] = dest_max;
-              comp[BLUE]  = dest_max;
+              comp[RED] = comp[GREEN] = comp[BLUE] = dest_max;
             }
         }
 
@@ -570,13 +558,11 @@ gimp_operation_layer_mode_blend_hsv_value (GeglOperation *operation,
               gint   c;
 
               for (c = 0; c < 3; c++)
-                comp[c] = in[c] * ratio;
+                comp[c] = CLAMP(in[c] * ratio, 0.0f, 1.0f);
             }
           else
             {
-              comp[RED]   = src_v;
-              comp[GREEN] = src_v;
-              comp[BLUE]  = src_v;
+              comp[RED] = comp[GREEN] = comp[BLUE] = src_v;
             }
         }
 
@@ -612,8 +598,8 @@ gimp_operation_layer_mode_blend_lch_chroma (GeglOperation *operation,
               gfloat B  = c2 * B1 / c1;
 
               comp[0] = in[0];
-              comp[1] = A;
-              comp[2] = B;
+              comp[1] = CLAMP (A, 0.0f, 1.0f);
+              comp[2] = CLAMP (B, 0.0f, 1.0f);
             }
           else
             {
@@ -679,8 +665,8 @@ gimp_operation_layer_mode_blend_lch_hue (GeglOperation *operation,
               gfloat B  = c1 * B2 / c2;
 
               comp[0] = in[0];
-              comp[1] = A;
-              comp[2] = B;
+              comp[1] = CLAMP (A, 0.0f, 1.0f);
+              comp[2] = CLAMP (B, 0.0f, 1.0f);
             }
           else
             {
@@ -761,7 +747,7 @@ gimp_operation_layer_mode_blend_linear_burn (GeglOperation *operation,
           gint c;
 
           for (c = 0; c < 3; c++)
-            comp[c] = CLAMP(in[c] + layer[c] - 1.0f, 0.0f, 1.0f);
+            comp[c] = CLAMP (in[c] + layer[c] - 1.0f, 0.0f, 1.0f);
         }
 
       comp[ALPHA] = layer[ALPHA];
@@ -796,7 +782,7 @@ gimp_operation_layer_mode_blend_linear_light (GeglOperation *operation,
               else
                 val = in[c] + 2.0f * (layer[c] - 0.5f);
 
-              comp[c] = CLAMP(val, 0.0f, 1.0f);
+              comp[c] = CLAMP (val, 0.0f, 1.0f);
             }
         }
 
@@ -936,7 +922,7 @@ gimp_operation_layer_mode_blend_luminance (GeglOperation *operation,
           gint   c;
 
           for (c = 0; c < 3; c ++)
-            comp[c] = in[c] * ratio;
+            comp[c] = CLAMP (in[c] * ratio, 0.0f, 1.0f);
         }
 
       comp[ALPHA] = layer[ALPHA];
@@ -998,7 +984,7 @@ gimp_operation_layer_mode_blend_overlay (GeglOperation *operation,
               else
                 val = 1.0f - 2.0f * (1.0f - layer[c]) * (1.0f - in[c]);
 
-              comp[c] = val;
+              comp[c] = CLAMP (val, 0.0f, 1.0f);
             }
         }
       comp[ALPHA] = layer[ALPHA];
@@ -1059,7 +1045,7 @@ gimp_operation_layer_mode_blend_screen (GeglOperation *operation,
           gint c;
 
           for (c = 0; c < 3; c++)
-            comp[c] = 1.0f - (1.0f - in[c])   * (1.0f - layer[c]);
+            comp[c] = 1.0f - (1.0f - in[c]) * (1.0f - layer[c]);
         }
 
       comp[ALPHA] = layer[ALPHA];
@@ -1085,6 +1071,9 @@ gimp_operation_layer_mode_blend_softlight (GeglOperation *operation,
 
           for (c = 0; c < 3; c++)
             {
+              /* GIMP uses pegtop's Soft Light formula to avoid discontinuity
+               * at 0.5. Please refer to https://en.wikipedia.org/wiki/Blend_modes#Soft_Light
+              */
               gfloat multiply = in[c] * layer[c];
               gfloat screen   = 1.0f - (1.0f - in[c]) * (1.0f - layer[c]);
               gfloat val      = (1.0f - in[c]) * multiply + in[c] * screen;
@@ -1114,7 +1103,7 @@ gimp_operation_layer_mode_blend_subtract (GeglOperation *operation,
           gint c;
 
           for (c = 0; c < 3; c++)
-            comp[c] = in[c] - layer[c];
+            comp[c] = MAX (in[c] - layer[c], 0.0f);
         }
 
       comp[ALPHA] = layer[ALPHA];
@@ -1145,17 +1134,11 @@ gimp_operation_layer_mode_blend_vivid_light (GeglOperation *operation,
               gfloat val;
 
               if (layer[c] <= 0.5f)
-                {
                   val = 1.0f - safe_div (1.0f - in[c], 2.0f * layer[c]);
-                  val = MAX (val, 0.0f);
-                }
               else
-                {
                   val = safe_div (in[c], 2.0f * (1.0f - layer[c]));
-                  val = MIN (val, 1.0f);
-                }
 
-              comp[c] = val;
+              comp[c] = CLAMP (val, 0.0f, 1.0f);
             }
         }
 
@@ -1213,16 +1196,11 @@ gimp_operation_layer_mode_blend_color_erase (GeglOperation *operation,
             }
 
           if (alpha > EPSILON)
-            {
-              gfloat alpha_inv = 1.0f / alpha;
-
               for (c = 0; c < 3; c++)
-                comp[c] = (color[c] - bgcolor[c]) * alpha_inv + bgcolor[c];
-            }
+                comp[c] = CLAMP (safe_div (color[c] - bgcolor[c], alpha) + bgcolor[c],
+                                0.0f, 1.0f);
           else
-            {
               comp[RED] = comp[GREEN] = comp[BLUE] = 0.0f;
-            }
 
           comp[ALPHA] = alpha;
         }
