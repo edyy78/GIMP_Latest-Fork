@@ -15,14 +15,13 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __SCRIPT_FU_COMPAT_H__
-#define __SCRIPT_FU_COMPAT_H__
+#ifndef __SCRIPT_FU_LATE_BIND_H__
+#define __SCRIPT_FU_LATE_BIND_H__
 
+gboolean   try_late_bind_symbol_to_foreign_func  (scheme *,
+                                                  gchar  *);
 
-void          define_compat_procs (scheme *sc);
-gboolean      is_deprecated       (const char *old_name,
-                                   char      **new_name);
-const gchar * deprecated_name_for (const char *new_name);
+pointer    value_for_binding                     (scheme *,
+                                                  pointer);
 
-
-#endif /*  __SCRIPT_FU_COMPAT_H__  */
+#endif /* __SCRIPT_FU_LATE_BIND_H__ */

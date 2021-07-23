@@ -47,9 +47,10 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "../script-fu-intl.h"
-
 #include "scheme-private.h"
+
+#include "../script-fu-intl.h"
+#include "../script-fu-late-bind.h"
 
 #if !STANDALONE
 static ts_output_func   ts_output_handler = NULL;
@@ -1345,6 +1346,7 @@ static void gc(scheme *sc, pointer a, pointer b) {
   if(sc->gc_verbose) {
     putstr(sc, "gc...");
   }
+  g_info("collect garbage");
 
   /* mark system globals */
   mark(sc->oblist);
@@ -2780,14 +2782,40 @@ static pointer opexe_0(scheme *sc, enum scheme_opcodes op) {
        /* fall through */
      case OP_REAL_EVAL:
 #endif
-          if (is_symbol(sc->code)) {    /* symbol */
-               x=find_slot_in_env(sc,sc->envir,sc->code,1);
-               if (x != sc->NIL) {
-                    s_return(sc,slot_value_in_env(x));
-               } else {
-                    Error_1(sc,"eval: unbound variable:", sc->code);
-               }
-          } else if (is_pair(sc->code)) {
+          if (is_symbol(sc->code))     /* symbol */
+            {
+              pointer value;
+
+              x = find_slot_in_env (sc, sc->envir, sc->code, 1);
+              if (x != sc->NIL)
+                {
+                  /* Original to  TS 1.41 : value = slot_value_in_env(x); */
+                  value = value_for_binding (sc, x);
+                  s_return(sc, value);
+                }
+              else
+                {
+                  /* Symbol is unbound */
+                  /* Late binding mod of TinyScheme for GIMP ScriptFu. */
+                  if (try_late_bind_symbol_to_foreign_func (sc, symname (sc->code)))
+                    {
+                      /* retry find slot */
+                      x = find_slot_in_env (sc, sc->envir, sc->code, 1);
+                      if (x != sc->NIL)
+                        {
+                          value = value_for_binding (sc, x);
+                          s_return(sc,value);
+                        }
+                      else
+                        /* Should not happen: we bound it but can't find the binding. */
+                        Error_1(sc,"Fail find binding for late bound symbol:", sc->code);
+                    }
+                  else
+                      /* Not late bindable. */
+                      Error_1(sc,"eval: unbound variable:", sc->code);
+                }
+            }
+          else if (is_pair(sc->code)) {
                if (is_syntax(x = car(sc->code))) {     /* SYNTAX */
                     sc->code = cdr(sc->code);
                     s_goto(sc,syntaxnum(x));
@@ -2954,6 +2982,7 @@ static pointer opexe_0(scheme *sc, enum scheme_opcodes op) {
           if (!is_symbol(x)) {
                Error_0(sc,"variable is not a symbol");
           }
+          g_info("Define %s", symname(x));
           s_save(sc,OP_DEF1, sc->NIL, x);
           s_goto(sc,OP_EVAL);
 
