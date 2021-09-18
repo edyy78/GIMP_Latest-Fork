@@ -50,6 +50,7 @@ scripts = [
 install_data(
   scripts,
   install_dir: gimpdatadir / 'scripts',
+  install_tag: 'plugins',
 )
 
 # scripts interpreted by gimp-script-fu-interpreter
@@ -73,5 +74,6 @@ foreach plugin : scripts_independent
 
   install_data(srcs,
                install_dir: gimpplugindir / 'plug-ins' / name,
-               install_mode: 'rwxr-xr-x')
+               install_mode: 'rwxr-xr-x',
+               install_tag: 'plugins')
 endforeach

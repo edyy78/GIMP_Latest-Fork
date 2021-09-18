@@ -338,6 +338,14 @@ compilation and installation output is not shown.
   % ninja -C _build                 # build GIMP
   % ninja -C _build install         # install GIMP
 
+If you want to install only a subset of the project, you can make use of
+installation tags. These are supported by the 'meson install --tags' command.
+Meson offers a number of default tags which you can find over at
+https://mesonbuild.com/Installing.html#installation-tags. Additionally, one can
+use the names of the top-level project directories (e.g., app, libgimp,..) as
+an install tag. An example for installing only plugins would be:
+
+  % meson install -C _build --tags plugins
 
 The `configure' step examines your system, and adapts GIMP to run on
 it. The script has many options, some of which are described in the

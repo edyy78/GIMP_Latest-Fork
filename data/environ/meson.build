@@ -4,6 +4,7 @@
 install_data(
   'default.env',
   install_dir: gimpplugindir / 'environ',
+  install_tag: 'data',
 )
 
 

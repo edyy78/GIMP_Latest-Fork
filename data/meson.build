@@ -10,7 +10,8 @@ subdir('tool-presets')
 
 meson.add_install_script(python, '-c',
   'from pathlib import Path; import sys, os; destdir = os.environ.get("MESON_INSTALL_DESTDIR_PREFIX"); (Path(destdir) / sys.argv[1] / "fonts").mkdir(parents=True, exist_ok=True)',
-  gimpdatadir
+  gimpdatadir,
+  install_tag: 'data'
 )
 release_conf = configuration_data()
 release_conf.set('REVISION', get_option('revision'))
@@ -22,4 +23,5 @@ configure_file(
   configuration: release_conf,
   install: true,
   install_dir: gimpdatadir,
+  install_tag: 'data',
 )

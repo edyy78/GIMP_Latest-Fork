@@ -63,4 +63,5 @@ brushes = [
 install_data(
   brushes,
   install_dir: gimpdatadir / 'gimpressionist' / 'Brushes',
+  install_tag: 'plugins',
 )

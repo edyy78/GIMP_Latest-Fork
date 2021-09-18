@@ -29,6 +29,7 @@ exe = executable(plug_in_name + '-c',
   ],
   install: true,
   install_dir: gimpplugindir /  'extensions' / extension_name,
+  install_tag: 'extensions',
   win_subsystem: 'windows',
 )
 
@@ -39,6 +40,7 @@ plug_ins = exe.full_path().split('/')[-1].split('\\')[-1]
 install_data(
   'goat-exercise-c.c',
   install_dir: gimpplugindir /  'extensions' / extension_name,
+  install_tag: 'extensions',
 )
 
 # Vala version
@@ -56,6 +58,7 @@ if have_vala and have_gobject_introspection
     ],
     install: true,
     install_dir: gimpplugindir /  'extensions' / extension_name,
+    install_tag: 'extensions',
     win_subsystem: 'windows',
   )
   plug_ins = plug_ins + ':' + exe.full_path().split('/')[-1].split('\\')[-1]
@@ -63,6 +66,7 @@ if have_vala and have_gobject_introspection
   install_data(
     'goat-exercise-vala.vala',
     install_dir: gimpplugindir /  'extensions' / extension_name,
+    install_tag: 'extensions',
   )
 endif
 
@@ -71,6 +75,7 @@ endif
 install_data(
   'goat-exercise-py3.py',
   install_dir: gimpplugindir /  'extensions' / extension_name,
+    install_tag: 'extensions',
 )
 plug_ins = plug_ins + ':goat-exercise-py3.py'
 
@@ -80,6 +85,7 @@ if have_javascript
   install_data(
     'goat-exercise-gjs.js',
     install_dir: gimpplugindir /  'extensions' / extension_name,
+    install_tag: 'extensions',
   )
   plug_ins = plug_ins + ':goat-exercise-gjs.js'
 endif
@@ -90,6 +96,7 @@ if have_lua
   install_data(
     'goat-exercise-lua.lua',
     install_dir: gimpplugindir /  'extensions' / extension_name,
+    install_tag: 'extensions',
   )
   plug_ins = plug_ins + ':goat-exercise-lua.lua'
 endif
@@ -112,4 +119,5 @@ appdatafile = i18n.merge_file(
   po_dir: po_plug_ins_dir,
   install: true,
   install_dir: gimpplugindir /  'extensions' / extension_name,
+  install_tag: 'extensions',
 )

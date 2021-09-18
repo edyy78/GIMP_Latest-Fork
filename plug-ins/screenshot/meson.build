@@ -47,5 +47,6 @@ screenshot = executable('screenshot',
                         ],
                         win_subsystem: 'windows',
                         install: true,
-                        install_dir: gimpplugindir / 'plug-ins' / plugin_name)
+                        install_dir: gimpplugindir / 'plug-ins' / plugin_name,
+                        install_tag: 'plugins')
 plugin_executables += [screenshot.full_path()]

@@ -86,8 +86,10 @@ gradients_obsolete = files(
 install_data(
   gradients,
   install_dir: gimpdatadir / 'gradients',
+  install_tag: 'data',
 )
 install_data(
   gradients_obsolete,
   install_dir: gimpdatadir / 'gradients' / 'gimp-obsolete-files',
+  install_tag: 'data',
 )

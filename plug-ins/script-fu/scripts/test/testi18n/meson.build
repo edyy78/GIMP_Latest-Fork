@@ -14,7 +14,8 @@ foreach plugin : scripts_independent
 
   install_data(srcs,
                install_dir: gimpplugindir / 'plug-ins' / name,
-               install_mode: 'rwxr-xr-x')
+               install_mode: 'rwxr-xr-x',
+               install_tag: 'plugins')
 endforeach
 
 

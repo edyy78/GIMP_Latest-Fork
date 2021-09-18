@@ -6,4 +6,5 @@ files = [
 ]
 
 install_data(files,
-             install_dir: gimpdatadir / 'themes' / 'Default')
+             install_dir: gimpdatadir / 'themes' / 'Default',
+             install_tag: 'themes')

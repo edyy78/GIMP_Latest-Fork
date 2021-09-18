@@ -39,7 +39,8 @@ foreach plugin_name : file_raw_exes
                           dependencies: libgimpui_dep,
                           win_subsystem: 'windows',
                           install: true,
-                          install_dir: gimpplugindir / 'plug-ins' / plugin_name)
+                          install_dir: gimpplugindir / 'plug-ins' / plugin_name,
+                          install_tag: 'plugins')
   plugin_executables += [plugin_exe.full_path()]
 endforeach
 
@@ -48,4 +49,5 @@ install_data([
     'file-darktable-get-size.lua',
   ],
   install_dir: prefix / gimpdatadir / 'file-raw',
+  install_tag: 'plugins',
 )

@@ -38,6 +38,7 @@ ui_menus_files = files(
 
 install_data(ui_menus_files,
   install_dir: menus_dir,
+  install_tag: 'menus',
 )
 
 unstable_menus_args = stable ? [] : [ '--stringparam', 'unstable-menus', 'yes' ]
@@ -86,6 +87,7 @@ foreach menu_filegen : [ 'dockable-menu.ui', 'image-menu.ui', ]
     ],
     install: true,
     install_dir: menus_dir,
+    install_tag: 'menus',
   )
 endforeach
 

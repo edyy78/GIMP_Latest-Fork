@@ -37,4 +37,5 @@ install_data([
     'bmp-export-tests.ini',
   ],
   install_dir: gimpplugindir / 'plug-ins' / 'test-file-plug-ins' / 'tests',
+  install_tag: 'plugins',
 )

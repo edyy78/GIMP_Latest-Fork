@@ -34,4 +34,5 @@ install_data([
     'Zooming_Circle',
   ],
   install_dir: gimpdatadir / 'fractalexplorer',
+  install_tag: 'plugins',
 )

@@ -21,6 +21,7 @@ desktopfile = i18n.merge_file(
   po_dir: po_dir,
   install: true,
   install_dir: get_option('datadir') / 'applications',
+  install_tag: 'desktop',
 )
 
 appdatafilename = 'org.gimp.GIMP.appdata.xml'
@@ -35,6 +36,7 @@ appdatafile = i18n.merge_file(
   po_dir: po_dir,
   install: true,
   install_dir: get_option('datadir') / 'metainfo',
+  install_tag: 'desktop',
 )
 
 if desktop_validate.found()

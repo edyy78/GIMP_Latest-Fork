@@ -33,4 +33,5 @@ gimp_docs = custom_target('gimp-docs',
   build_by_default: true,
   install: true,
   install_dir: get_option('datadir') / 'doc' / 'gimp-@0@'.format(gimp_app_version),
+  install_tag: 'devel-docs',
 )
