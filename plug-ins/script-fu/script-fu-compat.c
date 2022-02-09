@@ -168,16 +168,16 @@ define_compat_procs (scheme *sc)
     }
 }
 
-/* Return empty string or old_name */
-/* Used for a warning message */
+/* Return empty string or old_name.
+ * Used for a warning message.
+ */
 const gchar *
 deprecated_name_for (const char *new_name)
 {
-  gint i;
   const gchar * result = empty_string;
 
   /* search values of dictionary/map. */
-  for (i = 0; i < G_N_ELEMENTS (compat_procs); i++)
+  for (gint i = 0; i < G_N_ELEMENTS (compat_procs); i++)
     {
       if (strcmp (compat_procs[i].new_name, new_name) == 0)
         {
@@ -186,23 +186,23 @@ deprecated_name_for (const char *new_name)
         }
     }
   return result;
-
 }
 
-/* Not used.
- * Keep for future implementation: catch "undefined symbol" from lisp machine.
+/* Return whether is deprecated, and the new name.
+ * Used for late binding of PDB names.
  */
 gboolean
-is_deprecated (const char *old_name)
+is_deprecated (const char *old_name,
+               char      **new_name_handle)
 {
-  gint i;
   gboolean result = FALSE;
 
   /* search keys of dictionary/map. */
-  for (i = 0; i < G_N_ELEMENTS (compat_procs); i++)
+  for (gint i = 0; i < G_N_ELEMENTS (compat_procs); i++)
   {
     if (strcmp (compat_procs[i].old_name, old_name) == 0)
       {
+        *new_name_handle = compat_procs[i].new_name;
         result = TRUE;
         break;
       }

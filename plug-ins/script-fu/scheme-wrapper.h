@@ -44,4 +44,7 @@ void          ts_gstring_output_func  (TsOutputType  type,
                                        int           len,
                                        gpointer      user_data);
 
+pointer       script_fu_marshal_procedure_call (scheme    *sc,
+                                                pointer    a);
+
 #endif /* __SCHEME_WRAPPER_H__ */

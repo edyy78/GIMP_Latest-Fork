@@ -56,16 +56,6 @@ static void     ts_init_enum                                (scheme    *sc,
 static void     ts_init_procedures                          (scheme    *sc,
                                                              gboolean   register_scipts);
 static void     convert_string                              (gchar     *str);
-static pointer  script_fu_marshal_procedure_call            (scheme    *sc,
-                                                             pointer    a,
-                                                             gboolean   permissive,
-                                                             gboolean   deprecated);
-static pointer  script_fu_marshal_procedure_call_strict     (scheme    *sc,
-                                                             pointer    a);
-static pointer  script_fu_marshal_procedure_call_permissive (scheme    *sc,
-                                                             pointer    a);
-static pointer  script_fu_marshal_procedure_call_deprecated (scheme    *sc,
-                                                             pointer    a);
 
 static pointer  script_fu_register_call                     (scheme    *sc,
                                                              pointer    a);
@@ -142,24 +132,28 @@ void
 tinyscheme_init (GList    *path,
                  gboolean  register_scripts)
 {
-  /* init the interpreter */
+  /* init the wrapped interpreter */
   if (! scheme_init (&sc))
     {
       g_warning ("Could not initialize TinyScheme!");
       return;
     }
+  g_info ("Done initializing wrapped TS interpreter.");
 
   scheme_set_input_port_file (&sc, stdin);
   scheme_set_output_port_file (&sc, stdout);
   ts_register_output_func (ts_stdout_output_func, NULL);
+  g_info ("Done connecting stdin and stdout to Scheme ports.");
 
   /* Initialize the TinyScheme extensions */
   init_ftx (&sc);
   script_fu_regex_init (&sc);
+  g_info ("Done initializing TS modules.");
 
   /* register in the interpreter the gimp functions and types. */
   ts_init_constants (&sc);
   ts_init_procedures (&sc, register_scripts);
+  g_info ("Done defining GIMP functions and enums into TS.");
 
   if (path)
     {
@@ -169,8 +163,12 @@ tinyscheme_init (GList    *path,
         {
           gchar *dir = g_file_get_path (list->data);
 
+          /* Minimal TinyScheme implements a small subset.
+           * Load the scripts that implement more of the Scheme language.
+           */
           if (ts_load_file (dir, "script-fu.init"))
             {
+              g_info ("Done loading script-fu.init");
               /*  To improve compatibility with older Script-Fu scripts,
                *  load script-fu-compat.init from the same directory.
                */
@@ -180,6 +178,7 @@ tinyscheme_init (GList    *path,
                *  load plug-in-compat.init from the same directory.
                */
               ts_load_file (dir, "plug-in-compat.init");
+              g_info ("Done loading compatibility .scm scripts");
 
               g_free (dir);
 
@@ -192,6 +191,7 @@ tinyscheme_init (GList    *path,
       if (list == NULL)
         g_warning ("Unable to read initialization file script-fu.init\n");
     }
+    g_info ("Done initialize ScriptFu.");
 }
 
 /* Create an SF-RUN-MODE constant for use in scripts.
@@ -403,10 +403,9 @@ static void
 ts_init_procedures (scheme   *sc,
                     gboolean  register_scripts)
 {
-  gchar   **proc_list;
-  gint      num_procs;
-  gint      i;
   pointer   symbol;
+
+/* The few foreign functions of ScriptFu that are not calls to the PDB. */
 
 #if USE_DL
   symbol = sc->vptr->mk_symbol (sc,"load-extension");
@@ -435,61 +434,6 @@ ts_init_procedures (scheme   *sc,
   sc->vptr->scheme_define (sc, sc->global_env, symbol,
                            sc->vptr->mk_foreign_func (sc, script_fu_quit_call));
   sc->vptr->setimmutable (symbol);
-
-  /*  register normal database execution procedure  */
-  symbol = sc->vptr->mk_symbol (sc, "gimp-proc-db-call");
-  sc->vptr->scheme_define (sc, sc->global_env, symbol,
-                           sc->vptr->mk_foreign_func (sc,
-                                                      script_fu_marshal_procedure_call_strict));
-  sc->vptr->setimmutable (symbol);
-
-  /*  register permissive and deprecated db execution procedure; see comment below  */
-  symbol = sc->vptr->mk_symbol (sc, "-gimp-proc-db-call");
-  sc->vptr->scheme_define (sc, sc->global_env, symbol,
-                           sc->vptr->mk_foreign_func (sc,
-                                                      script_fu_marshal_procedure_call_permissive));
-  sc->vptr->setimmutable (symbol);
-
-  symbol = sc->vptr->mk_symbol (sc, "--gimp-proc-db-call");
-  sc->vptr->scheme_define (sc, sc->global_env, symbol,
-                           sc->vptr->mk_foreign_func (sc,
-                                                      script_fu_marshal_procedure_call_deprecated));
-  sc->vptr->setimmutable (symbol);
-
-  proc_list = gimp_pdb_query_procedures (gimp_get_pdb (),
-                                         ".*", ".*", ".*", ".*",
-                                         ".*", ".*", ".*", ".*",
-                                         &num_procs);
-
-  /*  Register each procedure as a scheme func  */
-  for (i = 0; i < num_procs; i++)
-    {
-      gchar *buff;
-
-      /* Build a define that will call the foreign function.
-       * The Scheme statement was suggested by Simon Budig.
-       *
-       * Call the procedure through -gimp-proc-db-call, which is a more
-       * permissive version of gimp-proc-db-call, that accepts (and ignores)
-       * any number of arguments for nullary procedures, for backward
-       * compatibility.
-       */
-      buff = g_strdup_printf (" (define (%s . args)"
-                              " (apply -gimp-proc-db-call \"%s\" args))",
-                              proc_list[i], proc_list[i]);
-
-      /*  Execute the 'define'  */
-      sc->vptr->load_string (sc, buff);
-
-      g_free (buff);
-    }
-
-  g_strfreev (proc_list);
-
-  /* Register more scheme funcs that call PDB procedures, for compatibility
-   * This can overwrite earlier scheme func definitions.
-   */
-  define_compat_procs (sc);
 }
 
 static gboolean
@@ -526,12 +470,12 @@ convert_string (gchar *str)
     }
 }
 
+
+
 /* Called by the Scheme interpreter on calls to GIMP PDB procedures */
-static pointer
+pointer
 script_fu_marshal_procedure_call (scheme   *sc,
-                                  pointer   a,
-                                  gboolean  permissive,
-                                  gboolean  deprecated)
+                                  pointer   a)
 {
   GimpProcedure   *procedure;
   GimpValueArray  *args;
@@ -556,21 +500,57 @@ script_fu_marshal_procedure_call (scheme   *sc,
                                  "(possibly none) must be specified.",
                                  0);
 
-  /*  The PDB procedure name is the argument or first argument of the list  */
+  /* This is a foreign func. In general, "a" is an atom, or list or nil.
+   *
+   * Specific to ScriptFu, the atom or first element of the list is_string, the bound name.
+   * The bound name is a name of a PDB procedure, or a deprecated name.
+   * The rest (if any) of any list  are actual args to a called PDB procedure.
+   *
+   * Assert the name is owned by TinyScheme for the lifetime of this invocation,
+   * so we don't need to copy its string value.
+   *
+   * Note that this script may call a PDB procedure that also is a script,
+   * but the interpreter can be reentered.
+   */
   if (sc->vptr->is_pair (a))
-    proc_name = g_strdup (sc->vptr->string_value (sc->vptr->pair_car (a)));
+  {
+    proc_name = sc->vptr->string_value (sc->vptr->pair_car (a));
+    /* Skip over procedure name, to the args to the procedure */
+    a = sc->vptr->pair_cdr (a);
+    /* Count the remaining arg list */
+    actual_arg_count = sc->vptr->list_length (sc, a);
+  }
   else
-    proc_name = g_strdup (sc->vptr->string_value (a));
+  {
+    /* One atom. */
+    proc_name = sc->vptr->string_value (a);
+    actual_arg_count = 0;
+  }
 
-  g_debug ("proc name: %s", proc_name);
-  g_debug ("parms rcvd: %d", sc->vptr->list_length (sc, a)-1);
+  g_debug ("bound proc name: %s", proc_name);
+  g_debug ("actual arg count: %d", actual_arg_count);
 
-  if (deprecated )
-    g_warning ("PDB procedure name %s is deprecated, please use %s.",
-               deprecated_name_for (proc_name),
-               proc_name);
+  /* Given proc_name is the bound name, in ScriptFu namespace.
+   * Derive a called name in PDB namespace.
+   * They are the same, unless bound name is deprecated.
+   */
+  {
+    gchar * replacement_name;
 
-  /*  report the current command  */
+    if (is_deprecated (proc_name, &replacement_name) )
+    {
+      g_warning ("PDB procedure name %s is deprecated, please use %s.",
+                 proc_name,
+                 replacement_name);
+
+      /* Instead call the replacement. */
+      proc_name = replacement_name;
+    }
+  }
+
+  g_debug ("called proc name: %s", proc_name);
+
+  /*  say current command to GIMP user */
   script_fu_interface_report_cc (proc_name);
 
   /*  Attempt to fetch the procedure from the database  */
@@ -584,15 +564,15 @@ script_fu_marshal_procedure_call (scheme   *sc,
     }
 
   arg_specs = gimp_procedure_get_arguments (procedure, &n_arg_specs);
-  actual_arg_count = sc->vptr->list_length (sc, a) - 1;
 
   /* Check the supplied number of arguments.
    * This only gives warnings to the console.
    * It does not ensure that the count of supplied args equals the count of formal args.
    * Subsequent code must not assume that.
    *
-   * When too few supplied args, when permissive, scriptfu or downstream machinery
-   * can try to provide missing args e.g. defaults.
+   * When too few supplied args, be permissive.
+   * Some calls to PDB (i.e. not kind Internal)
+   * can provide missing args e.g. defaults.
    *
    * Extra supplied args can be discarded.
    * Formerly, this was a deprecated behavior depending on "permissive".
@@ -625,20 +605,29 @@ script_fu_marshal_procedure_call (scheme   *sc,
       pointer     vector;   /* !!! list or vector */
       gint        j;
 
-      consumed_arg_count++;
-
-      if (consumed_arg_count > actual_arg_count)
+      /* Is the next formal arg beyond actual args? */
+      if ((consumed_arg_count+1) > actual_arg_count)
         {
           /* Exhausted supplied arguments before formal specs. */
 
           /* Say formal type of first missing arg. */
           g_warning ("Missing arg type: %s", g_type_name (G_PARAM_SPEC_VALUE_TYPE (arg_spec)));
 
+          /* Cannot call Internal kind of PDB procedures because they crash ScriptFu extension.
+           * Other kinds are more forgiving and will provide defaults for missing args.
+           */
+           /* Internal kind have names starting with 'gimp-' */
+           if ( strncmp ( "gimp-", proc_name, strlen ("gimp-")) == 0 )
+            {
+              g_snprintf (error_str, sizeof (error_str),
+                          "Too few arguments to internal PDB procedure %s",
+                          proc_name);
+              return script_error (sc, error_str, 0);
+            }
+
           /* Break loop over formal specs. Continuation is to call PDB with partial args. */
           break;
         }
-      else
-        a = sc->vptr->pair_cdr (a);  /* advance pointer to next arg in list. */
 
       g_value_init (&value, G_PARAM_SPEC_VALUE_TYPE (arg_spec));
 
@@ -1156,7 +1145,13 @@ script_fu_marshal_procedure_call (scheme   *sc,
       debug_gvalue (&value);
       gimp_value_array_append (args, &value);
       g_value_unset (&value);
-    }
+
+      /* Advance to next formal arg in Scheme list.
+       * When consumed_arg_count > list length, assert 'a' is nil.
+       */
+      a = sc->vptr->pair_cdr (a);
+      consumed_arg_count++;
+    } /* end for each formal arg */
 
   /* Omit refresh scripts from a script, better than crashing, see #575830. */
   if (strcmp (proc_name, "script-fu-refresh") == 0)
@@ -1528,11 +1523,10 @@ script_fu_marshal_procedure_call (scheme   *sc,
       g_debug ("returning with non-empty result");
     }
 
-  g_free (proc_name);
-
   /*  free executed procedure return values  */
   gimp_value_array_unref (values);
 
+  /* FUTURE properly clean up: any errors return without freeing args. */
   /*  free arguments and values  */
   gimp_value_array_unref (args);
 
@@ -1549,26 +1543,11 @@ script_fu_marshal_procedure_call (scheme   *sc,
   return return_val;
 }
 
-static pointer
-script_fu_marshal_procedure_call_strict (scheme  *sc,
-                                         pointer  a)
-{
-  return script_fu_marshal_procedure_call (sc, a, FALSE, FALSE);
-}
 
-static pointer
-script_fu_marshal_procedure_call_permissive (scheme  *sc,
-                                             pointer  a)
-{
-  return script_fu_marshal_procedure_call (sc, a, TRUE, FALSE);
-}
-
-static pointer
-script_fu_marshal_procedure_call_deprecated (scheme  *sc,
-                                             pointer  a)
-{
-  return script_fu_marshal_procedure_call (sc, a, TRUE, TRUE);
-}
+/*
+ * The basic foreign (to TS) functions that ScriptFu implements,
+ * that don't call a PDB procedure.
+ */
 
 static pointer
 script_fu_register_call (scheme  *sc,

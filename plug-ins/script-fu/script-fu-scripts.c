@@ -576,7 +576,12 @@ script_fu_run_command (const gchar  *command,
 
   if (ts_interpret_string (command))
     {
-      g_set_error (error, 0, 0, "%s", output->str);
+      GQuark domain;
+      domain  = g_quark_from_static_string ("scriptfu");
+      /* Error message is a string, already formatted,
+       * so use g_set_error_literal instead of g_set_error.
+       */
+      g_set_error_literal (error, domain, 0, output->str);
     }
   else
     {

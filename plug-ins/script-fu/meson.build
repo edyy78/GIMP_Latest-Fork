@@ -20,7 +20,8 @@ plugin_sources = [
   'script-fu-utils.c',
   'script-fu.c',
   'script-fu-errors.c',
-  'script-fu-compat.c'
+  'script-fu-compat.c',
+  'script-fu-late-bind.c'
 ]
 
 if platform_windows

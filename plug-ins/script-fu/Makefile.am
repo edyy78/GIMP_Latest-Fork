@@ -88,7 +88,9 @@ script_fu_SOURCES = \
 	scheme-marshal.c		\
 	scheme-marshal.h		\
 	scheme-wrapper.c		\
-	scheme-wrapper.h
+	scheme-wrapper.h    \
+	script-fu-late-bind.c \
+	script-fu-late-bind.h
 
 LDADD = \
 	$(libgimpui)		\
