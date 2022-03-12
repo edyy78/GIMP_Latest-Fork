@@ -62,10 +62,13 @@ build-image:
   stage: prepare
   variables:
     GIT_STRATEGY: none
+    container: docker
   cache: {}
   image:
     name: gcr.io/kaniko-project/executor:debug
     entrypoint: [""]
+  environment:
+    container
   script:
     - mkdir -p /kaniko/.docker
     - echo "{\"auths\":{\"$CI_REGISTRY\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" > /kaniko/.docker/config.json
@@ -89,6 +92,7 @@ build-image-win64:
   stage: prepare
   variables:
     GIT_STRATEGY: none
+    container: docker
   cache: {}
   image:
     name: gcr.io/kaniko-project/executor:debug
@@ -111,6 +115,7 @@ build-image-win32:
   stage: prepare
   variables:
     GIT_STRATEGY: none
+    container: docker
   cache: {}
   image:
     name: gcr.io/kaniko-project/executor:debug
