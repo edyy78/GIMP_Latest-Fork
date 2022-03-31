@@ -6,11 +6,6 @@
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <libgimpthumb/gimpthumb.h>
 
-
-#define STATE_NONE  -1
-#define STATE_ERROR -2
-
-
 static gboolean  parse_option_state (const gchar  *option_name,
                                      const gchar  *value,
                                      gpointer      data,
@@ -23,7 +18,7 @@ static void      process_folder     (const gchar  *folder);
 static void      process_thumbnail  (const gchar  *filename);
 
 
-static GimpThumbState  option_state   = STATE_NONE;
+static GimpThumbState  option_state   = GIMP_THUMB_STATE_NONE;
 static gboolean        option_verbose = FALSE;
 static gchar          *option_path    = NULL;
 
@@ -122,7 +117,7 @@ parse_option_state (const gchar  *option_name,
   else if (strcmp (value, "ok") == 0)
     option_state = GIMP_THUMB_STATE_OK;
   else if (strcmp (value, "error") == 0)
-    option_state = STATE_ERROR;
+    option_state = GIMP_THUMB_STATE_ERROR;
   else
     return FALSE;
 
@@ -186,7 +181,7 @@ process_thumbnail (const gchar *filename)
 
   if (! gimp_thumbnail_set_from_thumb (thumbnail, filename, &error))
     {
-      if (option_state == STATE_ERROR)
+      if (option_state == GIMP_THUMB_STATE_ERROR)
         {
           if (option_verbose)
             g_print ("%s '%s'\n", filename, error->message);
@@ -200,7 +195,7 @@ process_thumbnail (const gchar *filename)
     {
       GimpThumbState state = gimp_thumbnail_peek_image (thumbnail);
 
-      if ((option_state == STATE_NONE || state == option_state)
+      if ((option_state == GIMP_THUMB_STATE_NONE || state == option_state)
 
           &&
 
