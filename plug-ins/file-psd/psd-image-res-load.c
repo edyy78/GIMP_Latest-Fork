@@ -812,7 +812,7 @@ load_resource_1022 (const PSDimageres  *res_a,
                     GError            **error)
 {
   /* Load quick mask info */
-  gboolean              quick_mask_empty;       /* Quick mask initially empty */
+  gboolean              quick_mask_empty = 0;       /* Quick mask initially empty */
 
   IFDBG(2) g_debug ("Process image resource block: 1022: Quick Mask");
 
@@ -1354,7 +1354,7 @@ load_resource_1069 (const PSDimageres  *res_a,
                     GInputStream       *input,
                     GError            **error)
 {
-  guint16 layer_count;
+  guint16 layer_count = 0;
   gint    i;
 
   IFDBG(2) g_debug ("Process image resource block: 1069: Layer Selection ID(s)");
@@ -1374,7 +1374,7 @@ load_resource_1069 (const PSDimageres  *res_a,
 
   for (i = 0; i < layer_count; i++)
     {
-      guint32 layer_id;
+      guint32 layer_id = 0;
 
       if (psd_read (input, &layer_id, 4, error) < 4)
         {
@@ -1511,7 +1511,7 @@ load_resource_2000 (const PSDimageres  *res_a,
   gint32        x[3];
   gint32        y[3];
   GimpVectors  *vectors = NULL;
-  gint16        type;
+  gint16        type    = 0;
   gint16        init_fill;
   gint16        num_rec;
   gint16        path_rec;

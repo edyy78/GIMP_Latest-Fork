@@ -1297,10 +1297,10 @@ load_image (GFile        *file,
 
       /* any resolution info in the file? */
       {
-        gfloat   xres = 72.0;
-        gfloat   yres = 72.0;
-        gushort  read_unit;
-        GimpUnit unit = GIMP_UNIT_PIXEL; /* invalid unit */
+        gfloat   xres      = 72.0;
+        gfloat   yres      = 72.0;
+        gushort  read_unit = 0;
+        GimpUnit unit      = GIMP_UNIT_PIXEL; /* invalid unit */
 
         if (TIFFGetField (tif, TIFFTAG_XRESOLUTION, &xres))
           {
