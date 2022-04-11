@@ -797,8 +797,8 @@ read_layer_info (PSDimage      *img_a,
                 GINT16_FROM_BE (lyr_a[lidx]->chn_info[cidx].channel_id);
               img_a->layer_data_len += lyr_a[lidx]->chn_info[cidx].data_len;
               IFDBG(3) g_debug ("Channel ID %d, data len %" G_GSIZE_FORMAT,
-                                lyr_a[lidx]->chn_info[cidx].channel_id,
-                                lyr_a[lidx]->chn_info[cidx].data_len);
+                                       lyr_a[lidx]->chn_info[cidx].channel_id,
+                                (gsize)lyr_a[lidx]->chn_info[cidx].data_len);
             }
 
           if (psd_read (input, lyr_a[lidx]->mode_key,   4, error) < 4 ||
@@ -838,16 +838,16 @@ read_layer_info (PSDimage      *img_a,
           IFDBG(2) g_debug ("\n\tLayer mode sig: %.4s\n\tBlend mode: %.4s\n\t"
                             "Opacity: %d\n\tClipping: %d\n\tExtra data len: %" G_GSIZE_FORMAT "\n\t"
                             "Alpha lock: %d\n\tVisible: %d\n\tIrrelevant: %d",
-                            lyr_a[lidx]->mode_key,
-                            lyr_a[lidx]->blend_mode,
-                            lyr_a[lidx]->opacity,
-                            lyr_a[lidx]->clipping,
-                            lyr_a[lidx]->extra_len,
-                            lyr_a[lidx]->layer_flags.trans_prot,
-                            lyr_a[lidx]->layer_flags.visible,
-                            lyr_a[lidx]->layer_flags.irrelevant);
+                                   lyr_a[lidx]->mode_key,
+                                   lyr_a[lidx]->blend_mode,
+                                   lyr_a[lidx]->opacity,
+                                   lyr_a[lidx]->clipping,
+                            (gsize)lyr_a[lidx]->extra_len,
+                                   lyr_a[lidx]->layer_flags.trans_prot,
+                                   lyr_a[lidx]->layer_flags.visible,
+                                   lyr_a[lidx]->layer_flags.irrelevant);
           IFDBG(3) g_debug ("Offset: %" G_GOFFSET_FORMAT ", Remaining length %" G_GSIZE_FORMAT,
-                            PSD_TELL(input), block_rem);
+                            PSD_TELL(input), (gsize)block_rem);
 
           if (! lyr_a[lidx]->layer_flags.irrelevant)
             {
@@ -896,14 +896,14 @@ read_layer_info (PSDimage      *img_a,
               g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
                            _("Unsupported or invalid mask info size."));
               /* Translations have problems with using G_GSIZE_FORMAT, let's use g_debug. */
-              g_debug ("Unsupported or invalid mask info size: %" G_GSIZE_FORMAT, block_len);
+              g_debug ("Unsupported or invalid mask info size: %" G_GSIZE_FORMAT, (gsize)block_len);
               free_lyr_a (lyr_a, img_a->num_layers);
               return NULL;
             }
 
           block_rem -= (block_len + 4);
           IFDBG(3) g_debug ("Offset: %" G_GOFFSET_FORMAT ", Remaining length %" G_GSIZE_FORMAT,
-                            PSD_TELL(input), block_rem);
+                            PSD_TELL(input), (gsize)block_rem);
 
           lyr_a[lidx]->layer_mask_extra.top = 0;
           lyr_a[lidx]->layer_mask_extra.left = 0;
@@ -1110,9 +1110,9 @@ read_layer_info (PSDimage      *img_a,
           block_len = GUINT32_FROM_BE (block_len);
           block_rem -= (block_len + 4);
           IFDBG(3) g_debug ("Blending ranges size %" G_GSIZE_FORMAT
-                            " (not imported)", block_len);
+                            " (not imported)", (gsize)block_len);
           IFDBG(3) g_debug ("Offset: %" G_GOFFSET_FORMAT ", Remaining length %" G_GSIZE_FORMAT,
-                            PSD_TELL(input), block_rem);
+                            PSD_TELL(input), (gsize)block_rem);
 
           if (block_len > 0)
             {
@@ -1134,7 +1134,7 @@ read_layer_info (PSDimage      *img_a,
 
           block_rem -= read_len;
           IFDBG(3) g_debug ("Offset: %" G_GOFFSET_FORMAT ", Remaining length %" G_GSIZE_FORMAT,
-                            PSD_TELL(input), block_rem);
+                            PSD_TELL(input), (gsize)block_rem);
 
           /* Adjustment layer info */           /* FIXME */
 
@@ -1142,7 +1142,7 @@ read_layer_info (PSDimage      *img_a,
             {
               gint  header_size;
               IFDBG(3) g_debug ("Offset: %" G_GOFFSET_FORMAT ", Remaining length %" G_GSIZE_FORMAT,
-                                PSD_TELL(input), block_rem);
+                                PSD_TELL(input), (gsize)block_rem);
               header_size = get_layer_resource_header (&res_a, img_a->version, input, error);
               if (header_size < 0)
                 {
@@ -1179,7 +1179,7 @@ read_layer_info (PSDimage      *img_a,
                   return NULL;
                 }
               block_rem -= res_a.data_len;
-              IFDBG(3) g_debug ("Remaining length in block: %" G_GSIZE_FORMAT, block_rem);
+              IFDBG(3) g_debug ("Remaining length in block: %" G_GSIZE_FORMAT, (gsize)block_rem);
             }
           if (block_rem > 0)
             {
@@ -1202,7 +1202,7 @@ read_layer_info (PSDimage      *img_a,
 
       IFDBG(1) g_debug ("Layer image data block start %" G_GOFFSET_FORMAT ", size %" G_GSIZE_FORMAT
                         ", end: %" G_GOFFSET_FORMAT,
-                        img_a->layer_data_start, img_a->layer_data_len, PSD_TELL(input));
+                        img_a->layer_data_start, (gsize)img_a->layer_data_len, PSD_TELL(input));
     }
 
   return lyr_a;
@@ -1345,7 +1345,7 @@ read_layer_block (PSDimage      *img_a,
               /* Not fatal just skip remainder of this block. */
               g_debug ("Invalid resource block length: %" G_GSIZE_FORMAT
                        " is larger than maximum %" G_GSIZE_FORMAT,
-                       res_a.data_len, total_len);
+                       (gsize)res_a.data_len, total_len);
               break;
             }
 
@@ -1648,9 +1648,9 @@ read_RLE_channel (PSDimage      *img_a,
   IFDBG(4) g_debug ("RLE channel length %" G_GSIZE_FORMAT
                     ", RLE length data: %d, "
                     "RLE data block: %" G_GSIZE_FORMAT,
-                    channel_data_len - 2,
+                    (gsize)channel_data_len - 2,
                     rle_row_size,
-                    (channel_data_len - 2 - rle_row_size));
+                    ((gsize)channel_data_len - 2 - rle_row_size));
   rle_pack_len = g_malloc (lyr_chn->rows * 4); /* Always 4 since this is the data size in memory. */
   for (rowi = 0; rowi < lyr_chn->rows; ++rowi)
     {
@@ -1927,7 +1927,7 @@ add_layers (GimpImage     *image,
                     {
                       case PSD_COMP_RAW:        /* Planar raw data */
                         IFDBG(3) g_debug ("Raw data length: %" G_GSIZE_FORMAT,
-                                          lyr_a[lidx]->chn_info[cidx].data_len - 2);
+                                          (gsize)lyr_a[lidx]->chn_info[cidx].data_len - 2);
                         if (read_channel_data (lyr_chn[cidx], img_a->bps,
                                                PSD_COMP_RAW, NULL, input, 0,
                                                error) < 1)
