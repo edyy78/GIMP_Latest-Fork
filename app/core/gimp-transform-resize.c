@@ -39,71 +39,38 @@ typedef struct
   GimpVector2 a, b, c, d;
   gdouble     area;
   gdouble     aspect;
+  GimpVector2 target_centre;
+  GimpVector2 current_centre;
 } Rectangle;
 
+typedef struct
+{
+  gdouble       area [5];
+  GimpVector2   coord [5];
+} t_rectangle_areas;
 
-static void      gimp_transform_resize_adjust        (const GimpVector2 *points,
-                                                      gint               n_points,
-                                                      gint              *x1,
-                                                      gint              *y1,
-                                                      gint              *x2,
-                                                      gint              *y2);
-static void      gimp_transform_resize_crop          (const GimpVector2 *points,
-                                                      gint               n_points,
-                                                      gdouble            aspect,
-                                                      gint              *x1,
-                                                      gint              *y1,
-                                                      gint              *x2,
-                                                      gint              *y2);
+gdouble     side_min_x [5];
+gdouble     side_max_x [5];
+gdouble     side_min_y [5];
+gdouble     side_max_y [5];
+gdouble     side_gradient [5];      /* (not valid for vertical sides) */
+gdouble     side_offset [5];        /* (not valid for vertical sides) */
+gboolean    side_vertical [5];
+gboolean    side_horizontal [5];
 
-static void      add_rectangle                       (const GimpVector2 *points,
-                                                      gint               n_points,
-                                                      Rectangle         *r,
-                                                      GimpVector2        a,
-                                                      GimpVector2        b,
-                                                      GimpVector2        c,
-                                                      GimpVector2        d);
-static gboolean  intersect                           (GimpVector2        a,
-                                                      GimpVector2        b,
-                                                      GimpVector2        c,
-                                                      GimpVector2        d,
-                                                      GimpVector2       *i);
-static gboolean  intersect_x                         (GimpVector2        a,
-                                                      GimpVector2        b,
-                                                      GimpVector2        c,
-                                                      GimpVector2       *i);
-static gboolean  intersect_y                         (GimpVector2        a,
-                                                      GimpVector2        b,
-                                                      GimpVector2        c,
-                                                      GimpVector2       *i);
-static gboolean  in_poly                             (const GimpVector2 *points,
-                                                      gint               n_points,
-                                                      GimpVector2        p);
-static gboolean  point_on_border                     (const GimpVector2 *points,
-                                                      gint               n_points,
-                                                      GimpVector2        p);
-
-static void      find_two_point_rectangle            (Rectangle         *r,
-                                                      const GimpVector2 *points,
-                                                      gint               n_points,
-                                                      gint               p);
-static void      find_three_point_rectangle_corner   (Rectangle         *r,
-                                                      const GimpVector2 *points,
-                                                      gint               n_points,
-                                                      gint               p);
-static void      find_three_point_rectangle          (Rectangle          *r,
-                                                      const GimpVector2 *points,
-                                                      gint               n_points,
-                                                      gint               p);
-static void      find_three_point_rectangle_triangle (Rectangle         *r,
-                                                      const GimpVector2 *points,
-                                                      gint               n_points,
-                                                      gint               p);
-static void      find_maximum_aspect_rectangle       (Rectangle          *r,
-                                                      const GimpVector2 *points,
-                                                      gint               n_points,
-                                                      gint               p);
-
+static void      gimp_transform_resize_adjust    (const GimpVector2 *points,
+                                                  gint               n_points,
+                                                  gint              *x1,
+                                                  gint              *y1,
+                                                  gint              *x2,
+                                                  gint              *y2);
+static void      gimp_transform_resize_crop      (const GimpVector2 *points,
+                                                  gint               n_points,
+                                                  gdouble            aspect,
+                                                  gint              *x1,
+                                                  gint              *y1,
+                                                  gint              *x2,
+                                                  gint              *y2);
 
 /*
  * This function wants to be passed the inverse transformation matrix!!
@@ -231,6 +198,912 @@ gimp_transform_resize_adjust (const GimpVector2 *points,
   *y2 = (gint) ceil (bottom_right.y - EPSILON);
 }
 
+/* Check for a new maximum rectangle area. The area is constrained by an aspect
+   ratio if r->aspect != 0.0 */
+
+static gdouble
+check_for_new_max_area (Rectangle    *r,
+                        GimpVector2   lower_left_corner,
+                        gdouble       height,
+                        gdouble       width)
+{
+  gdouble       area;       /* the area of the rectangle (taking into account
+                               the aspect ratio if appropriate */
+  gdouble       new_height = height;
+  gdouble       new_width = width;
+  GimpVector2   new_centre;
+
+  if (r->aspect != 0)
+    {                       /* looking for the largest rectangle of the
+                               specified aspect ratio */
+      if (r->aspect > 1.0)
+        {                   /* looking for a landscape orientation */
+          if (height >= width / r->aspect)
+            new_height = width / r->aspect;
+          else
+            new_width = height * r->aspect;
+        }
+      else
+        {                   /* looking for a square or portrait orientation */
+          if (width >= height * r->aspect)
+            new_width = height * r->aspect;
+          else
+            new_height = width / r->aspect;
+        }
+
+      if (new_height < height)
+        lower_left_corner.y -= (height - new_height) / 2.0;
+
+      if (new_width < width)
+        lower_left_corner.x += (width - new_width) / 2.0;
+
+    }
+
+  area = new_width * new_height;
+  new_centre.x = lower_left_corner.x + new_width / 2.0;
+  new_centre.y = lower_left_corner.y - new_height / 2.0;
+
+  if ((area > r->area)                  ||
+      ((area == r->area) &&
+        ((fabs (new_centre.x - r->target_centre.x) <=
+             fabs (r->current_centre.x - r->target_centre.x)) ||
+         (fabs (new_centre.y - r->target_centre.y) <=
+             fabs (r->current_centre.y - r->target_centre.y)))))
+    {            /* found a new maximum area or an area the same size but closer
+                    to the centre of the shape */
+                 /* corners are:      a    b
+                                      d    c  */
+      r->area = area;
+      r->d = lower_left_corner;
+      r->c.x = r->d.x + new_width;
+      r->c.y = r->d.y;
+      r->a.x = r->d.x;
+      r->a.y = r->d.y - new_height;
+      r->b.x = r->c.x;
+      r->b.y = r->a.y;
+      r->current_centre = new_centre;
+    }
+  return area;
+}
+
+/* Compare an array of 5 areas to determine which is the largest. The largest
+ * and the adjacent areas are transferred to elementa 0, 2 and 4 of the array
+ * and the x-offsets for array elements 1 and 3 set to be mid-way between
+ * elements 0 and 2, and 2 and 4 respectively.
+ *
+ * If the separation between adjacent x coordinates is <= 0.5 the function
+ * performs no processing and returns a result of FALSE to indicate that the
+ * search for the largest rectangle has completed. Otherwise the
+ * processing noted above is performed and the function returns TRUE
+ */
+
+static gboolean
+compare_areas (t_rectangle_areas *rectangle_areas)
+{
+  gdouble   max_area = 0.0;
+  gint      max_area_index = 0;
+  gint      centre_index;
+  gint      width_of_max = 0;
+  gint      i;
+  gboolean  result;
+
+  for (i = 0; i < 5; i++)
+    {
+      if (rectangle_areas->area[i] == max_area)
+        width_of_max++;
+
+      if (rectangle_areas->area[i] > max_area)
+        {
+          width_of_max = 1;
+          max_area_index = i;
+          max_area = rectangle_areas->area[i];
+        }
+    }
+
+ if (((fabs(rectangle_areas->coord[1].x -
+            rectangle_areas->coord[0].x) <= 0.5) &&
+       (fabs(rectangle_areas->coord[1].y -
+             rectangle_areas->coord[0].y) <= 0.5)) ||
+       (max_area == 0.0))
+    result = FALSE;             /* reached the minimum spacing between the
+                                   readings or no valid results - stop the
+                                   search */
+  else
+    {
+      result = TRUE;
+
+      centre_index = max_area_index + (width_of_max / 2);
+
+      if (centre_index == 4)
+        centre_index = 3;
+
+      if (centre_index == 0)
+        centre_index++;
+
+      /* now set the three peak areas into elements 0, 2 and 4 of the array */
+
+      rectangle_areas->area[0] = rectangle_areas->area[centre_index - 1];
+      rectangle_areas->area[4] = rectangle_areas->area[centre_index + 1];
+      rectangle_areas->area[2] = rectangle_areas->area[centre_index];
+
+      rectangle_areas->coord[0] = rectangle_areas->coord[centre_index - 1];
+      rectangle_areas->coord[4] = rectangle_areas->coord[centre_index + 1];
+      rectangle_areas->coord[2] = rectangle_areas->coord[centre_index];
+
+      rectangle_areas->coord[1].x = rectangle_areas->coord[0].x +
+         ((rectangle_areas->coord[2].x - rectangle_areas->coord[0].x) / 2.0);
+      rectangle_areas->coord[1].y = rectangle_areas->coord[0].y +
+         ((rectangle_areas->coord[2].y - rectangle_areas->coord[0].y) / 2.0);
+      rectangle_areas->coord[3].x = rectangle_areas->coord[2].x +
+         ((rectangle_areas->coord[4].x - rectangle_areas->coord[2].x) / 2.0);
+      rectangle_areas->coord[3].y = rectangle_areas->coord[2].y +
+         ((rectangle_areas->coord[4].y - rectangle_areas->coord[2].y) / 2.0);
+      rectangle_areas->area[1] = 0.0;
+      rectangle_areas->area[3] = 0.0;
+    }
+
+  return result;
+}
+
+/* Initialise the t_rectangle_areas structure used to find the rectangle of
+ * maximum area
+ */
+
+static void
+init_rectangle_areas (t_rectangle_areas     *rectangle_areas,
+                      GimpVector2           point1,
+                      GimpVector2           point2)
+{
+  gint          i;
+  gdouble       x_reading_spacing;
+  gdouble       y_reading_spacing;
+
+  x_reading_spacing = (point2.x - point1.x) / 4.0;      /* (doesn't matter if
+                                                            this is negative) */
+  y_reading_spacing = (point2.y - point1.y) / 4.0;
+
+  rectangle_areas->coord[0] = point1;
+  rectangle_areas->coord[4] = point2;
+
+  for (i = 1; i < 4; i++)
+    {
+      rectangle_areas->coord[i].x = point1.x + (x_reading_spacing * i);
+      rectangle_areas->coord[i].y = point1.y + (y_reading_spacing * i);
+    }
+
+  for (i = 0; i < 5; i++)
+    rectangle_areas->area[i] = 0.0;
+}
+
+/* Find the intersection of a horizontal line specified point on one side of the
+ * polygon with another side.
+ *
+ * On entry:
+ *  The following arrays must have been set-up:
+ *          side_min_x [5]
+ *          side_max_x [5]
+ *          side_min_y [5]
+ *          side_max_y [5]
+ *          side_gradient [5] 
+ *          side_offset [5]
+ *          side_vertical [5]
+ *          side_horizontal [5]
+ *
+ * The function will return FALSE if the line passes through a vertex which is
+ * at the top or bottom of the polygon.
+ */
+
+static gboolean
+find_horizontal_intersection (GimpVector2           point,
+                              const  GimpVector2   *points,
+                              gint                  point_side,
+                              gint                 *intersect_side,
+                              gint                  num_sides,
+                              GimpVector2          *intersection)
+{
+  gint      i;
+  gboolean  intersection_found = FALSE;
+
+  i = 0;
+  while ((i < num_sides) && !intersection_found)
+    {
+      if ((i != point_side)                           &&
+          (point.x != points[i].x)                    &&  /* not at the shared
+                                                             vertex with another
+                                                             side */
+          (point.y != points[i].y)                    &&
+          (point.x != points[(i + 1) % num_sides].x)  &&
+          (point.y != points[(i + 1) % num_sides].y))
+        if ((point.y >= side_min_y[i]) &&
+            (point.y <= side_max_y[i]))
+          {
+            intersection_found = TRUE;
+            *intersect_side = i;
+            intersection->y = point.y;
+            if (side_vertical[i])
+              intersection->x = side_min_x[i];
+            else
+              intersection->x = (point.y - side_offset[i])/side_gradient[i];
+          }
+      i++;
+    }
+  return intersection_found;
+}
+
+/* Find the intersection of a vertical line specified point on one side of the
+ * polygon with another side.
+ *
+ * On entry:
+ *  The following arrays must have been set-up:
+ *          side_min_x [5]
+ *          side_max_x [5]
+ *          side_min_y [5]
+ *          side_max_y [5]
+ *          side_gradient [5] 
+ *          side_offset [5]
+ *          side_vertical [5]
+ *          side_horizontal [5]
+ *
+ * The function will return FALSE if the line passes through a vertex which is
+ * on the leftmost or rightmost point of the polygon.
+ */
+
+static gboolean
+find_vertical_intersection (GimpVector2           point,
+                            const  GimpVector2   *points,
+                            gint                  point_side,
+                            gint                 *intersect_side,
+                            gint                  num_sides,
+                            GimpVector2          *intersection)
+{
+  gint      i;
+  gboolean  intersection_found = FALSE;
+
+  i = 0;
+  while ((i < num_sides) && !intersection_found)
+    {
+      if ((i != point_side)                             &&
+          (point.x != points[i].x)                      &&  /* not at the shared
+                                                               vertex with
+                                                               another side */
+          (point.y != points[i].y)                      &&
+          (point.x != points[(i + 1) % num_sides].x)    &&
+          (point.y != points[(i + 1) % num_sides].y))
+        if ((point.x >= side_min_x[i]) &&
+            (point.x <= side_max_x[i]))
+          {
+            intersection_found = TRUE;
+            *intersect_side = i;
+            intersection->x = point.x;
+            intersection->y = (point.x * side_gradient[i]) + side_offset[i];
+          }
+      i++;
+    }
+  return intersection_found;
+}
+
+/* Find the intersection of a horizontal line in the specified direction from
+ * the specified point with a side of the polygon.
+ *
+ * On entry:
+ *      right =  TRUE for right, FALSE for left
+ */
+
+static gboolean
+horizontal_intersection_from_internal_point (GimpVector2    point,
+                                             gint           num_sides,
+                                             gboolean       right,
+                                             GimpVector2   *i1)
+{
+  gint      i;
+  gboolean  intersection_found = FALSE;
+
+  i = 0;
+  while ((i< num_sides) && !intersection_found)
+  {
+    if ((point.y >= side_min_y[i]) && (point.y <= side_max_y[i]))
+      {
+        if (side_vertical[i])
+          i1->x = side_min_x[i];
+        else
+          i1->x = (point.y - side_offset[i])/side_gradient[i];
+
+        if (((i1->x > point.x) && right) ||
+            ((i1->x < point.x) && !right))
+          {
+            i1->y = point.y;
+            intersection_found = TRUE;
+          }
+      }
+    i++;
+  }
+
+  return intersection_found;
+}
+
+/* Find the intersection of a vertical line in the specified direction from the
+ * specified point with a side of the polygon
+ *
+ * On entry:
+ *      upwards = TRUE for up, FALSE for down
+ */
+
+static gboolean
+vertical_intersection_from_internal_point (GimpVector2    point,
+                                           gint           num_sides,
+                                           gboolean       upwards,
+                                           GimpVector2   *i1)
+{
+  gint      i;
+  gboolean  intersection_found = FALSE;
+
+  i = 0;
+  while ((i< num_sides) && !intersection_found)
+  {
+    if ((point.x >= side_min_x[i]) &&
+        (point.x <= side_max_x[i]) &&
+        (!side_vertical[i]))
+      {
+        i1->y = (point.x * side_gradient[i]) + side_offset[i];
+
+                                           /* (upwards is to lower y values) */
+        if (((i1->y > point.y) && !upwards) ||
+            ((i1->y < point.y) && upwards))
+          {
+            i1->x = point.x;
+            intersection_found = TRUE;
+          }
+      }
+    i++;
+  }
+
+  return intersection_found;
+}
+
+/* Take a reading for the function two_orthogonals_area()
+ *
+ *  On entry:
+ *      index = index into sub_rectangular_areas
+ *      corner = a point on a sloping side
+ *      horizontal_intersection = the point at which a horizontal line
+ *                                from corner intersects another side
+ *      vertical_intersection = the point at which a horizontal line from
+ *                              corner intersects another side
+ *      up_or_right - TRUE => up or right, FALSE => down or left 
+ */
+
+static void
+two_orthogonals_reading (Rectangle           *r,
+                         t_rectangle_areas   *sub_rectangle_areas,
+                         gint                 index,
+                         gint                 num_sides,
+                         GimpVector2          corner,
+                         GimpVector2          horizontal_intersection,
+                         GimpVector2          vertical_intersection,
+                         gboolean             from_horizontal_line,
+                         gboolean             up_or_right)
+
+{
+  gboolean      result;
+  gdouble       height;
+  gdouble       width;
+  GimpVector2   lower_left_corner;
+  GimpVector2   intersection;
+  GimpVector2   point;
+
+  point = sub_rectangle_areas->coord[index];
+
+  if (from_horizontal_line)
+    result = vertical_intersection_from_internal_point (point,
+                                                        num_sides,
+                                                        up_or_right,
+                                                       &intersection);
+  else
+    result = horizontal_intersection_from_internal_point (point,
+                                                          num_sides,
+                                                          up_or_right,
+                                                         &intersection);
+
+  if (result)
+    {
+      lower_left_corner = corner;
+
+      if (from_horizontal_line)
+        {
+          if (up_or_right)
+            height = point.y - MAX (intersection.y, vertical_intersection.y);
+          else
+            {
+              height = MIN (intersection.y, vertical_intersection.y) - point.y;
+              lower_left_corner.y = point.y + height;
+            }
+
+          width = fabs (corner.x - point.x);
+          lower_left_corner.x = MIN (point.x, corner.x);
+        }
+      else
+        {
+          height = fabs (corner.y - point.y);
+          if (up_or_right)
+            width = MIN (intersection.x, horizontal_intersection.x) - point.x;
+          else
+            {
+              width = point.x - MAX (intersection.x, horizontal_intersection.x);
+              lower_left_corner.x = point.x - width;
+            }
+          lower_left_corner.y = MAX (point.y, corner.y);
+        }
+
+      sub_rectangle_areas->area[index] =
+                         check_for_new_max_area (r,
+                         lower_left_corner,
+                         height,
+                         width);
+    }
+}
+
+/* Find the maximum area rectangle in a polygon from a point on a sloping side
+ *
+ * On entry:
+ *      index = index into rectangular_areas
+ *      point = the point on a sloping side
+ *      horizontal_intersect = where the horizontal line from point intersects
+ *                             the polygon side
+ *      vertical_intersect = where the horizontal line from point intersects the
+ *                           polygon side
+ */
+
+static void
+two_orthogonals_area (Rectangle           *r,
+                      t_rectangle_areas   *rectangle_areas,
+                      gint                 index,
+                      gint                 num_sides,
+                      GimpVector2          point,
+                      GimpVector2          horizontal_intersect,
+                      GimpVector2          vertical_intersect)
+
+{
+  t_rectangle_areas   sub_rectangle_areas;
+  GimpVector2         end_point;
+  gboolean            process_horizontal;
+  gboolean            right_or_up;
+  gint                i;
+  gdouble             max_area;
+
+  if (fabs (point.x - horizontal_intersect.x) >
+      fabs (point.y - vertical_intersect.y))
+                /* go for the greatest resolution. Note that processing both
+                 * horizontal and vertical lines may result in a slightly
+                 * larger area being determined but at a cost of increasing
+                 * the processing time and in practice the difference is not
+                 * noticable. If users are really concerned with total
+                 * accuracy then, presumably, they would be using the Adjust
+                 * mode and then manually cropping.
+                 */
+    {
+      process_horizontal = TRUE;
+      end_point = horizontal_intersect;
+      right_or_up = (point.y > vertical_intersect.y);
+    }
+  else
+    {
+      process_horizontal = FALSE;
+      end_point = vertical_intersect;
+      right_or_up = (point.x < horizontal_intersect.x);
+    }
+
+  init_rectangle_areas (&sub_rectangle_areas,
+                         point,
+                         end_point);
+
+
+
+  for (i = 0; i < 5; i++)               /* take the initial readings */
+    {
+      two_orthogonals_reading (r,
+                              &sub_rectangle_areas,
+                               i,
+                               num_sides,
+                               point,
+                               horizontal_intersect,
+                               vertical_intersect,
+                               process_horizontal,
+                               right_or_up);
+    }
+
+  while (compare_areas (&sub_rectangle_areas))
+    {                   /* only need readings 1 and 3 on subsequent passes */
+      two_orthogonals_reading (r,
+                              &sub_rectangle_areas,
+                               1,
+                               num_sides,
+                               point,
+                               horizontal_intersect,
+                               vertical_intersect,
+                               process_horizontal,
+                               right_or_up);
+      two_orthogonals_reading (r,
+                              &sub_rectangle_areas,
+                               3,
+                               num_sides,
+                               point,
+                               horizontal_intersect,
+                               vertical_intersect,
+                               process_horizontal,
+                               right_or_up);
+    }
+
+  max_area = 0.0;
+  for (i = 0; i < 5; i++)
+    if (sub_rectangle_areas.area[i] > max_area)
+      max_area = sub_rectangle_areas.area[i];
+
+  rectangle_areas->area[index] = max_area;
+}
+
+/* Check for the maximum area rectangle in an orthogonal triangle - taking into
+ * acount the aspect ratio if appropriate.
+ *
+ * On entry:
+ *      corner =  the coordinates of the right-angle corner
+ *      p1 and p2 are the coordinates of the ends of the hypotenuse
+ *      index = the index into rectangle_areas
+ */
+
+static void
+check_orthogonal_triangle (Rectangle             *r,
+                           t_rectangle_areas     *rectangle_areas,
+                           gint                   index,
+                           GimpVector2            corner,
+                           GimpVector2            p1,
+                           GimpVector2            p2)
+{
+  gdouble   height;
+  gdouble   width;
+  gboolean  corner_at_top;
+  gboolean  corner_at_right;
+
+  if (p1.y == corner.y)
+    {                                   /* corner to p1 is horizontal */
+      width = fabs (p1.x - corner.x);
+      if (p1.x < corner.x)
+        corner_at_right = TRUE;
+      else
+        corner_at_right = FALSE;
+
+      height = fabs (p2.y - corner.y);
+      if (p2.y < corner.y)
+        corner_at_top = FALSE;
+      else
+        corner_at_top = TRUE;
+    }
+  else
+    {                                   /* corner to p2 is horizontal */
+      width = fabs (p2.x - corner.x);
+      if (p2.x < corner.x)
+        corner_at_right = TRUE;
+      else
+        corner_at_right = FALSE;
+
+      height = fabs (p1.y - corner.y);
+      if (p1.y < corner.y)
+        corner_at_top = FALSE;
+      else
+        corner_at_top = TRUE;
+    }
+
+  if (r->aspect == 0.0)
+    {                               /* just want the maximum area rectangle */
+      height /= 2.0;
+      width /= 2.0;
+    }
+  else
+    {           /* need the largest rectangle of the specified aspect ratio */
+      if (height != 0.0 && width != 0)
+        {
+          height = width / (width/height + r->aspect);
+          width = r->aspect * height;
+        }
+    }
+
+  if (corner_at_right)
+    corner.x -= width;
+
+  if (corner_at_top)
+    corner.y += height;
+
+  rectangle_areas->area[index] = check_for_new_max_area (r,
+                                                         corner,
+                                                         height,
+                                                         width);
+}
+
+/* Check for the maximum area rectangle of the specified aspect ratio */
+
+static void
+check_aspect_ratio_rectangle (Rectangle             *r,
+                              t_rectangle_areas     *rectangle_areas,
+                              gint                   index,
+                              GimpVector2            corner,
+                              GimpVector2            horizontal_intersect,
+                              GimpVector2            vertical_intersect,
+                              gint                   num_sides)
+
+{
+  gdouble       diagonal_gradient;
+  gdouble       diagonal_offset;
+  GimpVector2   diagonal_intersect;
+  GimpVector2   lower_left_corner;
+  gdouble       height;
+  gdouble       width;
+  gdouble       width_limit;
+  gboolean      intersect_right;
+  gboolean      intersect_upwards;
+  gboolean      intersection_found;
+  gboolean      possible_intersection;
+  gint          i;
+
+  diagonal_gradient = 1.0 / r->aspect;      /* +ve gradient used if corner is
+                                               top right or bottom left */
+
+  if (vertical_intersect.y > corner.y)
+    {                                       /* corner is at the top of the
+                                               rectangle (lower y value) */
+      intersect_upwards = FALSE;
+
+      if (horizontal_intersect.x > corner.x)
+                                            /* corner is at top left */
+        intersect_right = TRUE;
+      else
+        {
+          intersect_right = FALSE;          /* corner is in top rigt */
+          diagonal_gradient *= -1.0;
+        }
+    }
+  else
+    {                                       /* corner is at the bottom of the
+                                               rectangle */
+      intersect_upwards = TRUE;
+
+      if (horizontal_intersect.x > corner.x)
+        {                                   /* corner is at bottom right */
+          diagonal_gradient *= -1.0;
+          intersect_right = TRUE;           /* corner is at bottom left */
+        }
+      else
+        intersect_right = FALSE;
+    }
+
+  diagonal_offset = corner.y - (corner.x * diagonal_gradient);
+
+  intersection_found = FALSE;
+  i = 0;
+  while ((i < num_sides) && !intersection_found)
+    {
+      possible_intersection = FALSE;
+      if (diagonal_gradient != side_gradient[i])
+        {       /* the two lines must intersect somewhere (but this may not be
+                   between the endpoints of side i) */
+          if (side_vertical[i])
+            {
+              diagonal_intersect.x = side_min_x[i];
+              diagonal_intersect.y = diagonal_intersect.x *
+                     diagonal_gradient + diagonal_offset;
+              if ((diagonal_intersect.y >= side_min_y[i]) &&
+                  (diagonal_intersect.y <= side_max_y[i]))
+                possible_intersection = TRUE;
+            }
+          else
+            {
+              diagonal_intersect.x = (side_offset[i] - diagonal_offset) /
+                                        (diagonal_gradient - side_gradient[i]);
+              diagonal_intersect.y = (diagonal_intersect.x *
+                     diagonal_gradient) + diagonal_offset;
+
+              if ((diagonal_intersect.x >= side_min_x[i]) &&
+                  (diagonal_intersect.x <= side_max_x[i]))
+                possible_intersection = TRUE;
+            }
+
+          if (possible_intersection)
+            {
+              if ((((diagonal_intersect.x > corner.x) && intersect_right) ||
+                   ((diagonal_intersect.x < corner.x) && !intersect_right)) &&
+                  (((diagonal_intersect.y < corner.y) && intersect_upwards) ||
+                   ((diagonal_intersect.y > corner.y) && !intersect_upwards)))
+                intersection_found = TRUE;
+            }
+        }
+      i++;
+    }
+
+  if (intersection_found)
+    {                                   /* should always get here */
+      if (intersect_upwards)
+        height = corner.y - MAX (diagonal_intersect.y, vertical_intersect.y);
+      else
+        height = MIN (diagonal_intersect.y, vertical_intersect.y) - corner.y;
+ 
+      width = height * r->aspect;
+
+      width_limit = fabs (corner.x - horizontal_intersect.x);
+      if (width > width_limit)
+        {
+          width = width_limit;
+          height = width / r->aspect;
+        }
+
+      lower_left_corner = corner;
+      if (!intersect_upwards)
+        lower_left_corner.y += height;
+      if (!intersect_right)
+        lower_left_corner.x -= width;
+
+      rectangle_areas->area[index] = check_for_new_max_area (r,
+                                                             lower_left_corner,
+                                                             height,
+                                                             width);
+    }
+}
+
+/* Find the rectangle area associated with a point on a sloping
+ * (non-ortho-aligned) side of the polygon.
+ *
+ * Note that this function relies on the fact that a horizontal or vertical line
+ * from a point on one side of the polygon will intersect one, and only one,
+ * other side (unless the point is at a vertex at the top, bottom, left or right
+ * of the polygon)
+ *
+ *  On entry:
+ *      side = 0 for the line defined by points[0]..points[1] etc.
+ */
+
+static void
+sloping_side_reading (Rectangle *r,
+                      t_rectangle_areas    *rectangle_areas,
+                      gint                  index,
+                      const  GimpVector2   *points,
+                      gint                  num_sides,
+                      gint                  side)
+{
+  GimpVector2   start_corner;
+  GimpVector2   horizontal_intersect;
+  GimpVector2   vertical_intersect;
+  gint          horizontal_intersect_side;
+  gint          vertical_intersect_side;
+
+
+  start_corner = rectangle_areas->coord[index];
+
+  if (find_horizontal_intersection (start_corner,
+                                    points,
+                                    side,
+                                    &horizontal_intersect_side,
+                                    num_sides,
+                                    &horizontal_intersect)          &&
+      find_vertical_intersection (start_corner,
+                                  points,
+                                  side,
+                                  &vertical_intersect_side,
+                                  num_sides,
+                                  &vertical_intersect))
+    {
+      if (r->aspect == 0.0)
+        {
+          if (horizontal_intersect_side == vertical_intersect_side)
+                        /* have an orthogonal triangle formed by start_point and
+                           the two intersection points */
+              check_orthogonal_triangle (r,
+                                         rectangle_areas,
+                                         index,
+                                         start_corner,
+                                         horizontal_intersect,
+                                         vertical_intersect);
+          else
+            two_orthogonals_area (r,
+                                  rectangle_areas,
+                                  index,
+                                  num_sides,
+                                  start_corner,
+                                  horizontal_intersect,
+                                  vertical_intersect);
+        }
+      else
+        {
+          if (horizontal_intersect_side == vertical_intersect_side)
+                        /* have an orthogonal triangle formed by start_point and
+                           the two intersection points */
+            check_orthogonal_triangle (r,
+                                       rectangle_areas,
+                                       index,
+                                       start_corner,
+                                       horizontal_intersect,
+                                       vertical_intersect);
+          else
+            check_aspect_ratio_rectangle (r,
+                                          rectangle_areas,
+                                          index,
+                                          start_corner,
+                                          horizontal_intersect,
+                                          vertical_intersect,
+                                          num_sides);
+        }
+    }
+}
+
+/* Process a sloping side in a polygon
+ *
+ * On entry:
+ *    side = 0 for the line defined by points[0]..points[1] etc.
+ */
+
+static void
+process_sloping_side (Rectangle *r,
+                      const  GimpVector2   *points,
+                      gint                  num_sides,
+                      gint                  side)
+{
+  gint                 i;
+  t_rectangle_areas    rectangle_areas;
+
+
+  init_rectangle_areas (&rectangle_areas,
+                        points[side],
+                        points[(side + 1) % num_sides]);
+
+  for (i = 0; i < 5; i++)                   /* take the initial readings */
+    sloping_side_reading (r,
+                          &rectangle_areas,
+                          i,
+                          points,
+                          num_sides,
+                          side);
+  while (compare_areas (&rectangle_areas))
+    {                   /* only need readings 1 and 3 on subsequent passes */
+      sloping_side_reading (r,
+                            &rectangle_areas,
+                            1,
+                            points,
+                            num_sides,
+                            side);
+
+      sloping_side_reading (r,
+                            &rectangle_areas,
+                            3,
+                            points,
+                            num_sides,
+                            side);
+    }
+}
+
+/* Record the area of the rectangle or the area of the largest rectangle of the
+ * specified aspect ratio
+ */
+
+static void
+handle_rectangle (Rectangle *r,
+                  const  GimpVector2  *points)
+{
+  gdouble       height;
+  gdouble       width;
+  GimpVector2   lower_left_corner;
+
+  lower_left_corner.x =
+                 MIN4 (points[0].x, points[1].x, points[2].x, points[3].x);
+  lower_left_corner.y =
+                 MAX4 (points[0].y, points[1].y, points[2].y, points[3].y);
+  height = lower_left_corner.y -
+                 MIN4 (points[0].y, points[1].y, points[2].y, points[3].y);
+  width = MAX4 (points[0].x, points[1].x, points[2].x, points[3].x) -
+                lower_left_corner.x;
+
+  check_for_new_max_area(r,
+                         lower_left_corner,
+                         height,
+                         width);
+}
+                  
+
 static void
 gimp_transform_resize_crop (const GimpVector2 *orig_points,
                             gint               n_points,
@@ -245,13 +1118,20 @@ gimp_transform_resize_crop (const GimpVector2 *orig_points,
   GimpVector2 t,a;
   gint        i, j;
   gint        min;
+  gdouble     min_x;
+  gdouble     max_x;
+  gdouble     min_y;
+  gdouble     max_y;
+
+  gint        num_horizontal_sides;
+  gint        num_vertical_sides;
 
   memcpy (points, orig_points, sizeof (GimpVector2) * n_points);
 
   /* find lowest, rightmost corner of surrounding rectangle */
   a.x = 0;
   a.y = 0;
-  for (i = 0; i < 4; i++)
+  for (i = 0; i < n_points; i++)
     {
       if (points[i].x < a.x)
         a.x = points[i].x;
@@ -335,21 +1215,88 @@ gimp_transform_resize_crop (const GimpVector2 *orig_points,
   r.a.x = r.a.y = r.b.x = r.b.y = r.c.x = r.c.y = r.d.x = r.d.y = r.area = 0;
   r.aspect = aspect;
 
-  if (aspect != 0)
-    {
-      for (i = 0; i < n_points; i++)
-        find_maximum_aspect_rectangle (&r, points, n_points, i);
-    }
-  else
-    {
-      for (i = 0; i < n_points; i++)
+  min_x = points[0].x;
+  max_x = points[0].x;
+  min_y = points[0].y;
+  max_y = points[0].y;
+
+  num_horizontal_sides = 0;
+  num_vertical_sides = 0;
+
+  for (i = 0; i < n_points; i++)
+    {                           /* set up arrays to speed later processing */
+
+      if (points[i].x < min_x)
+        min_x = points[i].x;
+      if (points[i].x > max_x)
+        max_x = points[i].x;
+      if (points[i].y < min_y)
+        min_y = points[i].y;
+      if (points[i].y > max_y)
+        max_y = points[i].y;
+
+      j = (i + 1) % n_points;
+      side_vertical[i] = FALSE;
+      side_horizontal[i] = FALSE;
+
+      if (points[i].x < points[j].x)
+        { 
+          side_min_x[i] = points[i].x;
+          side_max_x[i] = points[j].x;
+        }
+      else
         {
-          find_three_point_rectangle          (&r, points, n_points, i);
-          find_three_point_rectangle_corner   (&r, points, n_points, i);
-          find_two_point_rectangle            (&r, points, n_points, i);
-          find_three_point_rectangle_triangle (&r, points, n_points, i);
+          side_min_x[i] = points[j].x;
+          side_max_x[i] = points[i].x;
+       }
+
+       if (points[i].y < points[j].y)
+        { 
+          side_min_y[i] = points[i].y;
+          side_max_y[i] = points[j].y;
+        }
+      else
+        {
+          side_min_y[i] = points[j].y;
+          side_max_y[i] = points[i].y;
+        }
+
+      if (side_min_y[i] == side_max_y[i])
+        {
+          num_horizontal_sides++;
+          side_horizontal[i] = TRUE;
+        }
+
+      if (side_min_x[i] == side_max_x[i])
+        {
+          num_vertical_sides++;
+          side_vertical[i] = TRUE;
+        }
+
+      if (!side_vertical[i])
+        {                           /* calculate the equation for the side */
+          side_gradient[i] = (points[j].y - points[i].y) /
+                             (points[j].x - points[i].x);
+          side_offset[i] = points[i].y - (points[i].x * side_gradient[i]);
         }
     }
+
+        /* r.target_centre is used to try to centre the clipped area and stop it
+         * dancing around as the shape is altered
+         */
+  r.target_centre.x = min_x + (max_x - min_x) / 2.0;   
+  r.target_centre.y = min_y + (max_y - min_y) / 2.0; 
+
+  if (((num_horizontal_sides + num_vertical_sides) == 4) && (n_points == 4))
+    handle_rectangle(&r,
+                      points);
+  else
+    for (i = 0; i < n_points; i++)
+      if (!side_horizontal[i] && !side_vertical[i])
+        process_sloping_side(&r,
+                              points,
+                              n_points,
+                              i);
 
   if (r.area == 0)
     {
@@ -357,475 +1304,20 @@ gimp_transform_resize_crop (const GimpVector2 *orig_points,
       gimp_transform_resize_adjust (orig_points, n_points,
                                     x1, y1, x2, y2);
       g_printerr ("no rectangle found by algorithm, no cropping done\n");
-      return;
     }
   else
     {
       /* round and translate the calculated points back */
-      *x1 = floor (r.a.x + 0.5);
-      *y1 = floor (r.a.y + 0.5);
-      *x2 = ceil  (r.c.x - 0.5);
-      *y2 = ceil  (r.c.y - 0.5);
+      *x1 = ceil (r.a.x);
+      *y1 = ceil (r.a.y);
+      *x2 = floor  (r.c.x + 0.5);
+      *y2 = floor  (r.c.y + 0.5);
 
       *x1 = *x1 - ((-a.x) * 2);
       *y1 = *y1 - ((-a.y) * 2);
       *x2 = *x2 - ((-a.x) * 2);
       *y2 = *y2 - ((-a.y) * 2);
-      return;
+
     }
 }
 
-static void
-find_three_point_rectangle (Rectangle         *r,
-                            const GimpVector2 *points,
-                            gint               n_points,
-                            gint               p)
-{
-  GimpVector2 a = points[p       % n_points];  /* 0 1 2 3 */
-  GimpVector2 b = points[(p + 1) % n_points];  /* 1 2 3 0 */
-  GimpVector2 c = points[(p + 2) % n_points];  /* 2 3 0 1 */
-  GimpVector2 d = points[(p + 3) % n_points];  /* 3 0 1 2 */
-  GimpVector2 i1;                              /* intersection point */
-  GimpVector2 i2;                              /* intersection point */
-  GimpVector2 i3;                              /* intersection point */
-
-  if (intersect_x (b, c, a,  &i1) &&
-      intersect_y (c, d, i1, &i2) &&
-      intersect_x (d, a, i2, &i3))
-    add_rectangle (points, n_points, r, i3, i3, i1, i1);
-
-  if (intersect_y (b, c, a,  &i1) &&
-      intersect_x (c, d, i1, &i2) &&
-      intersect_y (d, a, i2, &i3))
-    add_rectangle (points, n_points, r, i3, i3, i1, i1);
-
-  if (intersect_x (d, c, a,  &i1) &&
-      intersect_y (c, b, i1, &i2) &&
-      intersect_x (b, a, i2, &i3))
-    add_rectangle (points, n_points, r, i3, i3, i1, i1);
-
-  if (intersect_y (d, c, a,  &i1) &&
-      intersect_x (c, b, i1, &i2) &&
-      intersect_y (b, a, i2, &i3))
-    add_rectangle (points, n_points, r, i3, i3, i1, i1);
-}
-
-static void
-find_three_point_rectangle_corner (Rectangle         *r,
-                                   const GimpVector2 *points,
-                                   gint               n_points,
-                                   gint               p)
-{
-  GimpVector2 a = points[p       % n_points];  /* 0 1 2 3 */
-  GimpVector2 b = points[(p + 1) % n_points];  /* 1 2 3 0 */
-  GimpVector2 c = points[(p + 2) % n_points];  /* 2 3 0 2 */
-  GimpVector2 d = points[(p + 3) % n_points];  /* 3 0 2 1 */
-  GimpVector2 i1;                              /* intersection point */
-  GimpVector2 i2;                              /* intersection point */
-
-  if (intersect_x (b, c, a , &i1) &&
-      intersect_y (c, d, i1, &i2))
-    add_rectangle (points, n_points, r, a, a, i1, i2);
-
-  if (intersect_y (b, c, a , &i1) &&
-      intersect_x (c, d, i1, &i2))
-    add_rectangle (points, n_points, r, a, a, i1, i2);
-
-  if (intersect_x (c, d, a , &i1) &&
-      intersect_y (b, c, i1, &i2))
-    add_rectangle (points, n_points, r, a, a, i1, i2);
-
-  if (intersect_y (c, d, a , &i1) &&
-      intersect_x (b, c, i1, &i2))
-    add_rectangle (points, n_points, r, a, a, i1, i2);
-}
-
-static void
-find_two_point_rectangle (Rectangle         *r,
-                          const GimpVector2 *points,
-                          gint               n_points,
-                          gint               p)
-{
-  GimpVector2 a = points[ p      % n_points];  /* 0 1 2 3 */
-  GimpVector2 b = points[(p + 1) % n_points];  /* 1 2 3 0 */
-  GimpVector2 c = points[(p + 2) % n_points];  /* 2 3 0 1 */
-  GimpVector2 d = points[(p + 3) % n_points];  /* 3 0 1 2 */
-  GimpVector2 i1;                              /* intersection point */
-  GimpVector2 i2;                              /* intersection point */
-  GimpVector2 mid;                             /* Mid point */
-
-  add_rectangle (points, n_points, r, a, a, c, c);
-  add_rectangle (points, n_points, r, b, b, d, d);
-
-  if (intersect_x (c, b, a, &i1) &&
-      intersect_y (c, b, a, &i2))
-    {
-      mid.x = ( i1.x + i2.x ) / 2.0;
-      mid.y = ( i1.y + i2.y ) / 2.0;
-
-      add_rectangle (points, n_points, r, a, a, mid, mid);
-    }
-}
-
-static void
-find_three_point_rectangle_triangle (Rectangle         *r,
-                                     const GimpVector2 *points,
-                                     gint               n_points,
-                                     gint               p)
-{
-  GimpVector2 a = points[p       % n_points];  /* 0 1 2 3 */
-  GimpVector2 b = points[(p + 1) % n_points];  /* 1 2 3 0 */
-  GimpVector2 c = points[(p + 2) % n_points];  /* 2 3 0 1 */
-  GimpVector2 d = points[(p + 3) % n_points];  /* 3 0 1 2 */
-  GimpVector2 i1;                              /* intersection point */
-  GimpVector2 i2;                              /* intersection point */
-  GimpVector2 mid;
-
-  mid.x = (a.x + b.x) / 2.0;
-  mid.y = (a.y + b.y) / 2.0;
-
-  if (intersect_x (b, c, mid, &i1) &&
-      intersect_y (a, d, mid, &i2))
-    add_rectangle (points, n_points, r, mid, mid, i1, i2);
-
-  if (intersect_y (b, c, mid, &i1) &&
-      intersect_x (a, d, mid, &i2))
-    add_rectangle (points, n_points, r, mid, mid, i1, i2);
-
-  if (intersect_x (a, d, mid, &i1) &&
-      intersect_y (b, c, mid, &i2))
-    add_rectangle (points, n_points, r, mid, mid, i1, i2);
-
-  if (intersect_y (a, d, mid, &i1) &&
-      intersect_x (b, c, mid, &i2))
-    add_rectangle (points, n_points, r, mid, mid, i1, i2);
-}
-
-static void
-find_maximum_aspect_rectangle (Rectangle         *r,
-                               const GimpVector2 *points,
-                               gint               n_points,
-                               gint               p)
-{
-  GimpVector2 a = points[ p      % n_points];  /* 0 1 2 3 */
-  GimpVector2 b = points[(p + 1) % n_points];  /* 1 2 3 0 */
-  GimpVector2 c = points[(p + 2) % n_points];  /* 2 3 0 1 */
-  GimpVector2 d = points[(p + 3) % n_points];  /* 3 0 1 2 */
-  GimpVector2 i1;                              /* intersection point */
-  GimpVector2 i2;                              /* intersection point */
-  GimpVector2 i3;                              /* intersection point */
-
-  if (intersect_x (b, c, a, &i1))
-    {
-      i2.x = i1.x + 1.0 * r->aspect;
-      i2.y = i1.y + 1.0;
-
-      if (intersect (d, a, i1, i2, &i3))
-        add_rectangle (points, n_points, r, i1, i3, i1, i3);
-
-      if (intersect (a, b, i1, i2, &i3))
-        add_rectangle (points, n_points, r, i1, i3, i1, i3);
-
-      if (intersect (c, d, i1, i2, &i3))
-        add_rectangle (points, n_points, r, i1, i3, i1, i3);
-
-      i2.x = i1.x - 1.0 * r->aspect;
-      i2.y = i1.y + 1.0;
-
-      if (intersect (d, a, i1, i2, &i3))
-        add_rectangle (points, n_points, r, i1, i3, i1, i3);
-
-      if (intersect (a, b, i1, i2, &i3))
-        add_rectangle (points, n_points, r, i1, i3, i1, i3);
-
-      if (intersect (c, d, i1, i2, &i3))
-        add_rectangle (points, n_points, r, i1, i3, i1, i3);
-    }
-
-  if (intersect_y (b, c, a, &i1))
-    {
-      i2.x = i1.x + 1.0 * r->aspect;
-      i2.y = i1.y + 1.0;
-
-      if (intersect (d, a, i1, i2, &i3))
-        add_rectangle (points, n_points, r, i1, i3, i1, i3);
-
-      if (intersect (a, b, i1, i2, &i3))
-        add_rectangle (points, n_points, r, i1, i3, i1, i3);
-
-      if (intersect (c, d, i1, i2, &i3))
-        add_rectangle (points, n_points, r, i1, i3, i1, i3);
-
-      i2.x = i1.x - 1.0 * r->aspect;
-      i2.y = i1.y + 1.0;
-
-      if (intersect (d, a, i1, i2, &i3))
-        add_rectangle (points, n_points, r, i1, i3, i1, i3);
-
-      if (intersect (a, b, i1, i2, &i3))
-        add_rectangle (points, n_points, r, i1, i3, i1, i3);
-
-      if (intersect (c, d, i1, i2, &i3))
-        add_rectangle (points, n_points, r, i1, i3, i1, i3);
-    }
-
-  if (intersect_x (c, d, a,  &i1))
-    {
-      i2.x = i1.x + 1.0 * r->aspect;
-      i2.y = i1.y + 1.0;
-
-      if (intersect (d, a, i1, i2, &i3))
-        add_rectangle (points, n_points, r, i1, i3, i1, i3);
-
-      if (intersect (a, b, i1, i2, &i3))
-        add_rectangle (points, n_points, r, i1, i3, i1, i3);
-
-      if (intersect (b, c, i1, i2, &i3))
-        add_rectangle (points, n_points, r, i1, i3, i1, i3);
-
-      i2.x = i1.x - 1.0 * r->aspect;
-      i2.y = i1.y + 1.0;
-
-      if (intersect (d, a, i1, i2, &i3))
-        add_rectangle (points, n_points, r, i1, i3, i1, i3);
-
-      if (intersect (a, b, i1, i2, &i3))
-        add_rectangle (points, n_points, r, i1, i3, i1, i3);
-
-      if (intersect (b, c, i1, i2, &i3))
-        add_rectangle (points, n_points, r, i1, i3, i1, i3);
-    }
-
-  if (intersect_y (c, d, a,  &i1))
-    {
-      i2.x = i1.x + 1.0 * r->aspect;
-      i2.y = i1.y + 1.0;
-
-      if (intersect (d, a, i1, i2, &i3))
-        add_rectangle (points, n_points, r, i1, i3, i1, i3);
-
-      if (intersect (a, b, i1, i2, &i3))
-        add_rectangle (points, n_points, r, i1, i3, i1, i3);
-
-      if (intersect (b, c, i1, i2, &i3))
-        add_rectangle (points, n_points, r, i1, i3, i1, i3);
-
-      i2.x = i1.x - 1.0 * r->aspect;
-      i2.y = i1.y + 1.0;
-
-      if (intersect (d, a, i1, i2, &i3))
-        add_rectangle (points, n_points, r, i1, i3, i1, i3);
-
-      if (intersect (a, b, i1, i2, &i3))
-        add_rectangle (points, n_points, r, i1, i3, i1, i3);
-
-      if (intersect (b, c, i1, i2, &i3))
-        add_rectangle (points, n_points, r, i1, i3, i1, i3);
-    }
-}
-
-/* check if point is inside the polygon "points", if point is on border
- * its still inside.
- */
-static gboolean
-in_poly (const GimpVector2 *points,
-         gint               n_points,
-         GimpVector2        p)
-{
-  GimpVector2 p1, p2;
-  gint  counter = 0;
-  gint  i;
-
-  p1 = points[0];
-
-  for (i = 1; i <= n_points; i++)
-    {
-      p2 = points[i % n_points];
-
-      if (p.y > MIN (p1.y, p2.y))
-        {
-          if (p.y <= MAX (p1.y, p2.y))
-            {
-              if (p.x <= MAX (p1.x, p2.x))
-                {
-                  if (p1.y != p2.y)
-                    {
-                      gdouble xinters = ((p.y - p1.y) * (p2.x - p1.x) /
-                                         (p2.y - p1.y) + p1.x);
-
-                      if (p1.x == p2.x || p.x <= xinters)
-                        counter++;
-                    }
-                }
-            }
-        }
-
-      p1 = p2;
-    }
-
-  /* border check */
-  if (point_on_border (points, n_points, p))
-    return TRUE;
-
-  return (counter % 2 != 0);
-}
-
-/* check if the point p lies on the polygon "points"
- */
-static gboolean
-point_on_border (const GimpVector2 *points,
-                 gint               n_points,
-                 GimpVector2        p)
-{
-  gint i;
-
-  for (i = 0; i <= n_points; i++)
-    {
-      GimpVector2   a  = points[i       % n_points];
-      GimpVector2   b  = points[(i + 1) % n_points];
-      gdouble a1 = (b.y - a.y);
-      gdouble b1 = (a.x - b.x);
-      gdouble c1 = a1 * a.x + b1 * a.y;
-      gdouble c2 = a1 * p.x + b1 * p.y;
-
-      if (ABS (c1 - c2) < EPSILON &&
-          MIN (a.x, b.x) <= p.x   &&
-          MAX (a.x, b.x) >= p.x   &&
-          MIN (a.y, b.y) <= p.y   &&
-          MAX (a.y, b.y) >= p.y)
-        return TRUE;
-    }
-
-  return FALSE;
-}
-
-/* calculate the intersection point of the line a-b with the line c-d
- * and write it to i, if existing.
- */
-static gboolean
-intersect (GimpVector2  a,
-           GimpVector2  b,
-           GimpVector2  c,
-           GimpVector2  d,
-           GimpVector2 *i)
-{
-  gdouble a1  = (b.y - a.y);
-  gdouble b1  = (a.x - b.x);
-  gdouble c1  = a1 * a.x + b1 * a.y;
-
-  gdouble a2  = (d.y - c.y);
-  gdouble b2  = (c.x - d.x);
-  gdouble c2  = a2 * c.x + b2 * c.y;
-  gdouble det = a1 * b2 - a2 * b1;
-
-  if (det == 0)
-    return FALSE;
-
-  i->x = (b2 * c1 - b1 * c2) / det;
-  i->y = (a1 * c2 - a2 * c1) / det;
-
-  return TRUE;
-}
-
-/* calculate the intersection point of the line a-b with the vertical line
- * through c and write it to i, if existing.
- */
-static gboolean
-intersect_x (GimpVector2  a,
-             GimpVector2  b,
-             GimpVector2  c,
-             GimpVector2 *i)
-{
-  GimpVector2   d = c;
-  d.y += 1;
-
-  return intersect(a,b,c,d,i);
-}
-
-/* calculate the intersection point of the line a-b with the horizontal line
- * through c and write it to i, if existing.
- */
-static gboolean
-intersect_y (GimpVector2  a,
-             GimpVector2  b,
-             GimpVector2  c,
-             GimpVector2 *i)
-{
-  GimpVector2   d = c;
-  d.x += 1;
-
-  return intersect(a,b,c,d,i);
-}
-
-/* this takes the smallest ortho-aligned (the sides of the rectangle are
- * parallel to the x- and y-axis) rectangle fitting around the points a to d,
- * checks if the whole rectangle is inside the polygon described by points and
- * writes it to r if the area is bigger than the rectangle already stored in r.
- */
-static void
-add_rectangle (const GimpVector2 *points,
-               gint               n_points,
-               Rectangle         *r,
-               GimpVector2        a,
-               GimpVector2        b,
-               GimpVector2        c,
-               GimpVector2        d)
-{
-  gdouble width;
-  gdouble height;
-  gdouble minx, maxx;
-  gdouble miny, maxy;
-
-  /* get the orthoaligned (the sides of the rectangle are parallel to the x-
-   * and y-axis) rectangle surrounding the points a to d.
-   */
-  minx = MIN4 (a.x, b.x, c.x, d.x);
-  maxx = MAX4 (a.x, b.x, c.x, d.x);
-  miny = MIN4 (a.y, b.y, c.y, d.y);
-  maxy = MAX4 (a.y, b.y, c.y, d.y);
-
-  a.x = minx;
-  a.y = miny;
-
-  b.x = maxx;
-  b.y = miny;
-
-  c.x = maxx;
-  c.y = maxy;
-
-  d.x = minx;
-  d.y = maxy;
-
-  width  =  maxx - minx;
-  height =  maxy - miny;
-
-  /* check if this rectangle is inside the polygon "points" */
-  if (in_poly (points, n_points, a) &&
-      in_poly (points, n_points, b) &&
-      in_poly (points, n_points, c) &&
-      in_poly (points, n_points, d))
-    {
-      gdouble area = width * height;
-
-      /* check if the new rectangle is larger (in terms of area)
-       * than the currently stored rectangle in r, if yes store
-       * new rectangle to r
-       */
-      if (r->area <= area)
-        {
-          r->a.x = a.x;
-          r->a.y = a.y;
-
-          r->b.x = b.x;
-          r->b.y = b.y;
-
-          r->c.x = c.x;
-          r->c.y = c.y;
-
-          r->d.x = d.x;
-          r->d.y = d.y;
-
-          r->area = area;
-        }
-    }
-}
