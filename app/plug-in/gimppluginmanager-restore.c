@@ -31,8 +31,8 @@
 
 #include "config/gimpcoreconfig.h"
 
-#include "core/gimp.h"
 #include "core/gimp-utils.h"
+#include "core/gimp.h"
 
 #include "pdb/gimppdb.h"
 #include "pdb/gimppdbcontext.h"
@@ -44,65 +44,48 @@
 #include "gimppluginmanager-call.h"
 #include "gimppluginmanager-file.h"
 #include "gimppluginmanager-help-domain.h"
-#include "gimppluginmanager-locale-domain.h"
 #include "gimppluginmanager-restore.h"
 #include "gimppluginprocedure.h"
 #include "plug-in-rc.h"
 
 #include "gimp-intl.h"
 
-
-static void    gimp_plug_in_manager_search            (GimpPlugInManager    *manager,
-                                                       GimpInitStatusFunc    status_callback);
-static void    gimp_plug_in_manager_search_directory  (GimpPlugInManager    *manager,
-                                                       GFile                *directory);
-static GFile * gimp_plug_in_manager_get_pluginrc      (GimpPlugInManager    *manager);
-static void    gimp_plug_in_manager_read_pluginrc     (GimpPlugInManager    *manager,
-                                                       GFile                *file,
-                                                       GimpInitStatusFunc    status_callback);
-static void    gimp_plug_in_manager_query_new         (GimpPlugInManager    *manager,
-                                                       GimpContext          *context,
-                                                       GimpInitStatusFunc    status_callback);
-static void    gimp_plug_in_manager_init_plug_ins     (GimpPlugInManager    *manager,
-                                                       GimpContext          *context,
-                                                       GimpInitStatusFunc    status_callback);
-static void    gimp_plug_in_manager_run_extensions    (GimpPlugInManager    *manager,
-                                                       GimpContext          *context,
-                                                       GimpInitStatusFunc    status_callback);
-static void    gimp_plug_in_manager_bind_text_domains (GimpPlugInManager    *manager);
-static void    gimp_plug_in_manager_add_from_file     (GimpPlugInManager    *manager,
-                                                       GFile                *file,
-                                                       guint64               mtime);
-static void    gimp_plug_in_manager_add_from_rc       (GimpPlugInManager    *manager,
-                                                       GimpPlugInDef        *plug_in_def);
-static void    gimp_plug_in_manager_add_to_db         (GimpPlugInManager    *manager,
-                                                       GimpContext          *context,
-                                                       GimpPlugInProcedure  *proc);
-static void    gimp_plug_in_manager_sort_file_procs   (GimpPlugInManager    *manager);
-static gint    gimp_plug_in_manager_file_proc_compare (gconstpointer         a,
-                                                       gconstpointer         b,
-                                                       gpointer              data);
-
+static void   gimp_plug_in_manager_search (GimpPlugInManager *manager,
+                                           GimpInitStatusFunc status_callback);
+static void   gimp_plug_in_manager_search_directory (GimpPlugInManager *manager,
+                                                     GFile *directory);
+static GFile *gimp_plug_in_manager_get_pluginrc (GimpPlugInManager *manager);
+static void   gimp_plug_in_manager_read_pluginrc (GimpPlugInManager *manager,
+                                                  GFile             *file,
+                                                  GimpInitStatusFunc status_callback);
+static void   gimp_plug_in_manager_query_new (GimpPlugInManager *manager,
+                                              GimpContext       *context,
+                                              GimpInitStatusFunc status_callback);
+static void   gimp_plug_in_manager_init_plug_ins (GimpPlugInManager *manager,
+                                                  GimpContext       *context,
+                                                  GimpInitStatusFunc status_callback);
+static void   gimp_plug_in_manager_run_extensions (GimpPlugInManager *manager,
+                                                   GimpContext       *context,
+                                                   GimpInitStatusFunc status_callback);
+static void   gimp_plug_in_manager_add_from_file (GimpPlugInManager *manager,
+                                                  GFile             *file,
+                                                  guint64            mtime);
+static void   gimp_plug_in_manager_add_from_rc (GimpPlugInManager *manager,
+                                                GimpPlugInDef     *plug_in_def);
+static void   gimp_plug_in_manager_add_to_db (GimpPlugInManager   *manager,
+                                              GimpContext         *context,
+                                              GimpPlugInProcedure *proc);
+static void   gimp_plug_in_manager_sort_file_procs (GimpPlugInManager *manager);
+static gint   gimp_plug_in_manager_file_proc_compare (gconstpointer a, gconstpointer b, gpointer data);
 
 typedef struct
 {
-  GimpPlugInManager  *manager;
-  GimpContext        *context;
-  GimpInitStatusFunc  callback;
-  gint                n_plugins;
-} QueryThreadData;
-
-typedef struct
-{
-  GimpPlugInManager  *manager;
-  GimpContext        *context;
-  GimpPlugInDef      *plug_in_def;
-} QueryIdleData;
+  GimpPlugInManager *manager;
+  GimpContext       *context;
+} ThreadPoolData;
 
 void
-gimp_plug_in_manager_restore (GimpPlugInManager  *manager,
-                              GimpContext        *context,
-                              GimpInitStatusFunc  status_callback)
+gimp_plug_in_manager_restore (GimpPlugInManager *manager, GimpContext *context, GimpInitStatusFunc status_callback)
 {
   Gimp   *gimp;
   GFile  *pluginrc;
@@ -152,8 +135,7 @@ gimp_plug_in_manager_restore (GimpPlugInManager  *manager,
 
       if (! plug_in_rc_write (manager->plug_in_defs, pluginrc, &error))
         {
-          gimp_message_literal (gimp,
-                                NULL, GIMP_MESSAGE_ERROR, error->message);
+          gimp_message_literal (gimp, NULL, GIMP_MESSAGE_ERROR, error->message);
           g_clear_error (&error);
         }
 
@@ -162,23 +144,13 @@ gimp_plug_in_manager_restore (GimpPlugInManager  *manager,
 
   g_object_unref (pluginrc);
 
-  /* create locale and help domain lists */
+  /* create help domain lists */
   for (list = manager->plug_in_defs; list; list = list->next)
     {
-      GimpPlugInDef *plug_in_def   = list->data;
-      const gchar   *locale_domain = NULL;
-
-      if (plug_in_def->locale_domain_name)
-        {
-          gimp_plug_in_manager_add_locale_domain (manager,
-                                                  plug_in_def->file,
-                                                  plug_in_def->locale_domain_name,
-                                                  plug_in_def->locale_domain_path);
-        }
+      GimpPlugInDef *plug_in_def = list->data;
 
       if (plug_in_def->help_domain_name)
-        gimp_plug_in_manager_add_help_domain (manager,
-                                              plug_in_def->file,
+        gimp_plug_in_manager_add_help_domain (manager, plug_in_def->file,
                                               plug_in_def->help_domain_name,
                                               plug_in_def->help_domain_uri);
     }
@@ -186,9 +158,6 @@ gimp_plug_in_manager_restore (GimpPlugInManager  *manager,
   /* we're done with the plug-in-defs */
   g_slist_free_full (manager->plug_in_defs, (GDestroyNotify) g_object_unref);
   manager->plug_in_defs = NULL;
-
-  /* bind plug-in text domains  */
-  gimp_plug_in_manager_bind_text_domains (manager);
 
   /* add the plug-in procs to the procedure database */
   for (list = manager->plug_in_procedures; list; list = list->next)
@@ -204,34 +173,9 @@ gimp_plug_in_manager_restore (GimpPlugInManager  *manager,
   g_object_unref (context);
 }
 
-/*
- * This function can be used to force to query() all plug-ins at next
- * GIMP start. It basically empties out the pluginrc file.
- *
- * E.g. this is useful when updating the GUI language since some
- * strings localization may happen in the query() step, such as the
- * localization of procedure documentation and parameters' titles or
- * descriptions.
- */
-void
-gimp_plug_in_manager_force_query_all (GimpPlugInManager *manager)
-{
-  GError *error = NULL;
-  GFile  *pluginrc;
-
-  pluginrc = gimp_plug_in_manager_get_pluginrc (manager);
-  if (! plug_in_rc_write (NULL, pluginrc, &error))
-    {
-      g_printerr ("%s: %s", G_STRFUNC, error->message);
-      g_clear_error (&error);
-    }
-  g_object_unref (pluginrc);
-}
-
 /* search for binaries in the plug-in directory path */
 static void
-gimp_plug_in_manager_search (GimpPlugInManager  *manager,
-                             GimpInitStatusFunc  status_callback)
+gimp_plug_in_manager_search (GimpPlugInManager *manager, GimpInitStatusFunc status_callback)
 {
   const gchar *path_str;
   GList       *path;
@@ -261,27 +205,24 @@ gimp_plug_in_manager_search (GimpPlugInManager  *manager,
     }
 #endif /* G_OS_WIN32 */
 
-  status_callback (_("Loading extension plug-ins"), "", 0.0);
-  g_object_get (manager->gimp->extension_manager,
-                "plug-in-paths", &path,
-                NULL);
+  status_callback (_ ("Loading extension plug-ins"), "", 0.0);
+  g_object_get (manager->gimp->extension_manager, "plug-in-paths", &path, NULL);
   for (list = path; list; list = g_list_next (list))
     {
       if (gimp_file_is_executable (list->data))
         {
-          guint64 mtime;
+          guint64    mtime;
           GFileInfo *info;
 
           info = g_file_query_info (list->data, G_FILE_ATTRIBUTE_TIME_MODIFIED,
                                     G_FILE_QUERY_INFO_NONE, NULL, NULL);
-          mtime = g_file_info_get_attribute_uint64 (info,
-                                                    G_FILE_ATTRIBUTE_TIME_MODIFIED);
+          mtime = g_file_info_get_attribute_uint64 (info, G_FILE_ATTRIBUTE_TIME_MODIFIED);
           gimp_plug_in_manager_add_from_file (manager, list->data, mtime);
           g_object_unref (info);
         }
     }
 
-  status_callback (_("Searching plug-ins"), "", 0.0);
+  status_callback (_ ("Searching plug-ins"), "", 0.0);
 
   /* Give automatic tests a chance to use plug-ins from the build
    * dir
@@ -301,17 +242,15 @@ gimp_plug_in_manager_search (GimpPlugInManager  *manager,
 }
 
 static void
-gimp_plug_in_manager_search_directory (GimpPlugInManager *manager,
-                                       GFile             *directory)
+gimp_plug_in_manager_search_directory (GimpPlugInManager *manager, GFile *directory)
 {
   GFileEnumerator *enumerator;
 
   enumerator = g_file_enumerate_children (directory,
-                                          G_FILE_ATTRIBUTE_STANDARD_NAME ","
-                                          G_FILE_ATTRIBUTE_STANDARD_IS_HIDDEN ","
-                                          G_FILE_ATTRIBUTE_TIME_MODIFIED,
-                                          G_FILE_QUERY_INFO_NONE,
-                                          NULL, NULL);
+                                          G_FILE_ATTRIBUTE_STANDARD_NAME
+                                          "," G_FILE_ATTRIBUTE_STANDARD_IS_HIDDEN
+                                          "," G_FILE_ATTRIBUTE_TIME_MODIFIED,
+                                          G_FILE_QUERY_INFO_NONE, NULL, NULL);
   if (enumerator)
     {
       GFileInfo *info;
@@ -328,9 +267,7 @@ gimp_plug_in_manager_search_directory (GimpPlugInManager *manager,
 
           child = g_file_enumerator_get_child (enumerator, info);
 
-          if (g_file_query_file_type (child,
-                                      G_FILE_QUERY_INFO_NONE,
-                                      NULL) == G_FILE_TYPE_DIRECTORY)
+          if (g_file_query_file_type (child, G_FILE_QUERY_INFO_NONE, NULL) == G_FILE_TYPE_DIRECTORY)
             {
               /* Search in subdirectory the first executable file with
                * the same name as the directory (except extension).
@@ -341,11 +278,10 @@ gimp_plug_in_manager_search_directory (GimpPlugInManager *manager,
               GFileEnumerator *enumerator2;
 
               enumerator2 = g_file_enumerate_children (child,
-                                                       G_FILE_ATTRIBUTE_STANDARD_NAME ","
-                                                       G_FILE_ATTRIBUTE_STANDARD_IS_HIDDEN ","
-                                                       G_FILE_ATTRIBUTE_TIME_MODIFIED,
-                                                       G_FILE_QUERY_INFO_NONE,
-                                                       NULL, NULL);
+                                                       G_FILE_ATTRIBUTE_STANDARD_NAME
+                                                       "," G_FILE_ATTRIBUTE_STANDARD_IS_HIDDEN
+                                                       "," G_FILE_ATTRIBUTE_TIME_MODIFIED,
+                                                       G_FILE_QUERY_INFO_NONE, NULL, NULL);
               if (enumerator2)
                 {
                   GFileInfo *info2;
@@ -369,13 +305,12 @@ gimp_plug_in_manager_search_directory (GimpPlugInManager *manager,
                       if (ext)
                         *ext = '\0';
 
-                      if (g_strcmp0 (file_name, g_file_info_get_name (info)) == 0 &&
-                          gimp_file_is_executable (child2))
+                      if (g_strcmp0 (file_name, g_file_info_get_name (info)) == 0
+                          && gimp_file_is_executable (child2))
                         {
                           guint64 mtime;
 
-                          mtime = g_file_info_get_attribute_uint64 (info2,
-                                                                    G_FILE_ATTRIBUTE_TIME_MODIFIED);
+                          mtime = g_file_info_get_attribute_uint64 (info2, G_FILE_ATTRIBUTE_TIME_MODIFIED);
 
                           gimp_plug_in_manager_add_from_file (manager, child2, mtime);
 
@@ -399,21 +334,22 @@ gimp_plug_in_manager_search_directory (GimpPlugInManager *manager,
                 {
                   guint64 mtime;
 
-                  mtime = g_file_info_get_attribute_uint64 (info,
-                                                            G_FILE_ATTRIBUTE_TIME_MODIFIED);
+                  mtime = g_file_info_get_attribute_uint64 (info, G_FILE_ATTRIBUTE_TIME_MODIFIED);
 
                   gimp_plug_in_manager_add_from_file (manager, child, mtime);
                 }
               else
                 {
-                  g_printerr (_("Skipping potential plug-in '%s': "
-                                "plug-ins must be installed in subdirectories.\n"),
+                  g_printerr (_ ("Skipping potential plug-in '%s': "
+                                 "plug-ins must be installed in "
+                                 "subdirectories.\n"),
                               g_file_peek_path (child));
                 }
             }
           else
             {
-              g_printerr (_("Skipping unknown file '%s' in plug-in directory.\n"),
+              g_printerr (_ ("Skipping unknown file '%s' in plug-in "
+                             "directory.\n"),
                           g_file_peek_path (child));
             }
 
@@ -433,8 +369,7 @@ gimp_plug_in_manager_get_pluginrc (GimpPlugInManager *manager)
 
   if (gimp->config->plug_in_rc_path)
     {
-      gchar *path = gimp_config_path_expand (gimp->config->plug_in_rc_path,
-                                             TRUE, NULL);
+      gchar *path = gimp_config_path_expand (gimp->config->plug_in_rc_path, TRUE, NULL);
 
       if (g_path_is_absolute (path))
         pluginrc = g_file_new_for_path (path);
@@ -453,15 +388,12 @@ gimp_plug_in_manager_get_pluginrc (GimpPlugInManager *manager)
 
 /* read the pluginrc file for cached data */
 static void
-gimp_plug_in_manager_read_pluginrc (GimpPlugInManager  *manager,
-                                    GFile              *pluginrc,
-                                    GimpInitStatusFunc  status_callback)
+gimp_plug_in_manager_read_pluginrc (GimpPlugInManager *manager, GFile *pluginrc, GimpInitStatusFunc status_callback)
 {
   GSList *rc_defs;
   GError *error = NULL;
 
-  status_callback (_("Resource configuration"),
-                   gimp_file_get_utf8_name (pluginrc), 0.0);
+  status_callback (_ ("Resource configuration"), gimp_file_get_utf8_name (pluginrc), 0.0);
 
   if (manager->gimp->be_verbose)
     g_print ("Parsing '%s'\n", gimp_file_get_utf8_name (pluginrc));
@@ -480,78 +412,41 @@ gimp_plug_in_manager_read_pluginrc (GimpPlugInManager  *manager,
   else if (error)
     {
       if (error->code != GIMP_CONFIG_ERROR_OPEN_ENOENT)
-        gimp_message_literal (manager->gimp, NULL, GIMP_MESSAGE_ERROR,
-                              error->message);
+        gimp_message_literal (manager->gimp, NULL, GIMP_MESSAGE_ERROR, error->message);
 
       g_clear_error (&error);
     }
 }
 
 static gboolean
-idle_query_plug_in (gpointer data)
+query_plug_in_thread (gpointer query, gpointer data)
 {
-  QueryIdleData *idle_data = data;
+  ThreadPoolData *thread_data = data;
+  GimpPlugInDef  *plug_in_def = query;
 
-  if (idle_data->manager->gimp->be_verbose)
-    g_print ("Querying plug-in: '%s'\n",
-             gimp_file_get_utf8_name (idle_data->plug_in_def->file));
+  if (thread_data->manager->gimp->be_verbose)
+    g_print ("Querying plug-in: '%s'\n", gimp_file_get_utf8_name (plug_in_def->file));
 
-  gimp_plug_in_manager_call_query (idle_data->manager,
-                                   idle_data->context,
-                                   idle_data->plug_in_def);
+  gimp_plug_in_manager_call_query (thread_data->manager, thread_data->context, plug_in_def);
 
   return FALSE;
 }
 
-static gpointer
-query_thread (gpointer data)
-{
-  QueryThreadData  *thread_data = data;
-  gint              nth;
-  GSList           *list;
-
-  for (list = thread_data->manager->plug_in_defs, nth = 0; list; list = list->next)
-    {
-      GimpPlugInDef *plug_in_def = list->data;
-
-      if (plug_in_def->needs_query)
-        {
-          gchar         *basename;
-          QueryIdleData *idle_data = g_new0 (QueryIdleData, 1);
-
-          idle_data->manager     = thread_data->manager;
-          idle_data->context     = thread_data->context;
-          idle_data->plug_in_def = plug_in_def;
-
-          g_idle_add (idle_query_plug_in, idle_data);
-
-          basename =
-            g_path_get_basename (gimp_file_get_utf8_name (plug_in_def->file));
-                                 thread_data->callback (NULL, basename,
-                                 (gdouble) nth++ / (gdouble) thread_data->n_plugins);
-          g_free (basename);
-        }
-    }
-
-  return NULL;
-}
-
 /* query any plug-ins that changed since we last wrote out pluginrc */
 static void
-gimp_plug_in_manager_query_new (GimpPlugInManager  *manager,
-                                GimpContext        *context,
-                                GimpInitStatusFunc  status_callback)
+gimp_plug_in_manager_query_new (GimpPlugInManager *manager, GimpContext *context, GimpInitStatusFunc status_callback)
 {
-  GSList          *list;
-  gint             n_plugins;
-  QueryThreadData  thread_data;
-  GThread         *thread;
+  GSList *list;
+  gint    n_plugins;
 
-  status_callback (_("Querying new Plug-ins"), "", 0.0);
+  status_callback (_ ("Querying new Plug-ins"), "", 0.0);
 
   for (list = manager->plug_in_defs, n_plugins = 0; list; list = list->next)
     {
       GimpPlugInDef *plug_in_def = list->data;
+
+      if (manager->gimp->query_all)
+        gimp_plug_in_def_set_needs_query (plug_in_def, TRUE);
 
       if (plug_in_def->needs_query)
         n_plugins++;
@@ -559,16 +454,38 @@ gimp_plug_in_manager_query_new (GimpPlugInManager  *manager,
 
   if (n_plugins)
     {
+      gint            nth;
+      gint            n_threads   = g_get_num_processors ();
+      GThreadPool    *thread_pool = NULL;
+      ThreadPoolData *data        = g_new0 (ThreadPoolData, 1);
+
       manager->write_pluginrc = TRUE;
 
-      thread_data.n_plugins = n_plugins;
-      thread_data.manager   = manager;
-      thread_data.context   = context;
-      thread_data.callback  = status_callback;
+      data->manager = manager;
+      data->context = context;
 
-      thread = g_thread_new ("query_plug_ins", query_thread, &thread_data);
+      thread_pool = g_thread_pool_new ((GFunc) query_plug_in_thread, data,
+                                       n_threads, TRUE, NULL);
 
-      g_thread_join (thread);
+      for (list = manager->plug_in_defs, nth = 0; list; list = list->next)
+        {
+          GimpPlugInDef *plug_in_def = list->data;
+
+          if (plug_in_def->needs_query)
+            {
+              gchar *basename;
+
+              basename = g_path_get_basename (
+                  gimp_file_get_utf8_name (plug_in_def->file));
+              status_callback (NULL, basename, (gdouble) nth++ / (gdouble) n_plugins);
+
+              g_free (basename);
+
+              g_thread_pool_push (thread_pool, (gpointer) list->data, NULL);
+            }
+        }
+
+      g_thread_pool_free (thread_pool, 0, 1);
     }
 
   status_callback (NULL, "", 1.0);
@@ -576,14 +493,14 @@ gimp_plug_in_manager_query_new (GimpPlugInManager  *manager,
 
 /* initialize the plug-ins */
 static void
-gimp_plug_in_manager_init_plug_ins (GimpPlugInManager  *manager,
-                                    GimpContext        *context,
-                                    GimpInitStatusFunc  status_callback)
+gimp_plug_in_manager_init_plug_ins (GimpPlugInManager *manager,
+                                    GimpContext       *context,
+                                    GimpInitStatusFunc status_callback)
 {
   GSList *list;
   gint    n_plugins;
 
-  status_callback (_("Initializing Plug-ins"), "", 0.0);
+  status_callback (_ ("Initializing Plug-ins"), "", 0.0);
 
   for (list = manager->plug_in_defs, n_plugins = 0; list; list = list->next)
     {
@@ -605,10 +522,9 @@ gimp_plug_in_manager_init_plug_ins (GimpPlugInManager  *manager,
             {
               gchar *basename;
 
-              basename =
-                g_path_get_basename (gimp_file_get_utf8_name (plug_in_def->file));
-              status_callback (NULL, basename,
-                               (gdouble) nth++ / (gdouble) n_plugins);
+              basename = g_path_get_basename (
+                  gimp_file_get_utf8_name (plug_in_def->file));
+              status_callback (NULL, basename, (gdouble) nth++ / (gdouble) n_plugins);
               g_free (basename);
 
               if (manager->gimp->be_verbose)
@@ -625,9 +541,9 @@ gimp_plug_in_manager_init_plug_ins (GimpPlugInManager  *manager,
 
 /* run automatically started extensions */
 static void
-gimp_plug_in_manager_run_extensions (GimpPlugInManager  *manager,
-                                     GimpContext        *context,
-                                     GimpInitStatusFunc  status_callback)
+gimp_plug_in_manager_run_extensions (GimpPlugInManager *manager,
+                                     GimpContext       *context,
+                                     GimpInitStatusFunc status_callback)
 {
   Gimp   *gimp = manager->gimp;
   GSList *list;
@@ -639,9 +555,8 @@ gimp_plug_in_manager_run_extensions (GimpPlugInManager  *manager,
     {
       GimpPlugInProcedure *proc = list->data;
 
-      if (proc->file                                                       &&
-          GIMP_PROCEDURE (proc)->proc_type == GIMP_PDB_PROC_TYPE_EXTENSION &&
-          GIMP_PROCEDURE (proc)->num_args  == 0)
+      if (proc->file && GIMP_PROCEDURE (proc)->proc_type == GIMP_PDB_PROC_TYPE_EXTENSION
+          && GIMP_PROCEDURE (proc)->num_args == 0)
         {
           extensions = g_list_prepend (extensions, proc);
         }
@@ -656,7 +571,7 @@ gimp_plug_in_manager_run_extensions (GimpPlugInManager  *manager,
       GList *list;
       gint   nth;
 
-      status_callback (_("Starting Extensions"), "", 0.0);
+      status_callback (_ ("Starting Extensions"), "", 0.0);
 
       for (list = extensions, nth = 0; list; list = g_list_next (list), nth++)
         {
@@ -672,16 +587,14 @@ gimp_plug_in_manager_run_extensions (GimpPlugInManager  *manager,
 
           args = gimp_value_array_new (0);
 
-          gimp_procedure_execute_async (GIMP_PROCEDURE (proc),
-                                        gimp, context, NULL,
-                                        args, NULL, &error);
+          gimp_procedure_execute_async (GIMP_PROCEDURE (proc), gimp, context,
+                                        NULL, args, NULL, &error);
 
           gimp_value_array_unref (args);
 
           if (error)
             {
-              gimp_message_literal (gimp, NULL, GIMP_MESSAGE_ERROR,
-                                    error->message);
+              gimp_message_literal (gimp, NULL, GIMP_MESSAGE_ERROR, error->message);
               g_clear_error (&error);
             }
         }
@@ -690,30 +603,6 @@ gimp_plug_in_manager_run_extensions (GimpPlugInManager  *manager,
 
       status_callback (NULL, "", 1.0);
     }
-}
-
-static void
-gimp_plug_in_manager_bind_text_domains (GimpPlugInManager *manager)
-{
-  gchar **locale_domains;
-  gchar **locale_paths;
-  gint    n_domains;
-  gint    i;
-
-  n_domains = gimp_plug_in_manager_get_locale_domains (manager,
-                                                       &locale_domains,
-                                                       &locale_paths);
-
-  for (i = 0; i < n_domains; i++)
-    {
-      bindtextdomain (locale_domains[i], locale_paths[i]);
-#ifdef HAVE_BIND_TEXTDOMAIN_CODESET
-      bind_textdomain_codeset (locale_domains[i], "UTF-8");
-#endif
-    }
-
-  g_strfreev (locale_domains);
-  g_strfreev (locale_paths);
 }
 
 /**
@@ -733,11 +622,10 @@ gimp_plug_in_manager_ignore_plugin_basename (const gchar *plugin_basename)
   GList       *iter;
   gboolean     ignore = FALSE;
 
-  ignore_basenames_string = g_getenv ("GIMP_TESTING_PLUGINDIRS_BASENAME_IGNORES");
-  ignore_basenames        = gimp_path_parse (ignore_basenames_string,
-                                             256 /*max_paths*/,
-                                             FALSE /*check*/,
-                                             NULL /*check_failed*/);
+  ignore_basenames_string = g_getenv ("GIMP_TESTING_PLUGINDIRS_BASENAME_"
+                                      "IGNORES");
+  ignore_basenames = gimp_path_parse (ignore_basenames_string, 256 /*max_paths*/,
+                                      FALSE /*check*/, NULL /*check_failed*/);
 
   for (iter = ignore_basenames; iter; iter = g_list_next (iter))
     {
@@ -756,9 +644,7 @@ gimp_plug_in_manager_ignore_plugin_basename (const gchar *plugin_basename)
 }
 
 static void
-gimp_plug_in_manager_add_from_file (GimpPlugInManager *manager,
-                                    GFile             *file,
-                                    guint64            mtime)
+gimp_plug_in_manager_add_from_file (GimpPlugInManager *manager, GFile *file, guint64 mtime)
 {
   GimpPlugInDef *plug_in_def;
   GSList        *list;
@@ -787,14 +673,13 @@ gimp_plug_in_manager_add_from_file (GimpPlugInManager *manager,
 
       plug_in_def = list->data;
 
-      path = g_file_get_path (plug_in_def->file);
+      path         = g_file_get_path (plug_in_def->file);
       plug_in_name = g_path_get_basename (path);
       g_free (path);
 
       if (g_ascii_strcasecmp (basename, plug_in_name) == 0)
         {
-          g_printerr ("Skipping duplicate plug-in: '%s'\n",
-                      gimp_file_get_utf8_name (file));
+          g_printerr ("Skipping duplicate plug-in: '%s'\n", gimp_file_get_utf8_name (file));
 
           g_free (plug_in_name);
           g_free (basename);
@@ -816,8 +701,7 @@ gimp_plug_in_manager_add_from_file (GimpPlugInManager *manager,
 }
 
 static void
-gimp_plug_in_manager_add_from_rc (GimpPlugInManager *manager,
-                                  GimpPlugInDef     *plug_in_def)
+gimp_plug_in_manager_add_from_rc (GimpPlugInManager *manager, GimpPlugInDef *plug_in_def)
 {
   GSList *list;
   gchar  *path1;
@@ -856,9 +740,8 @@ gimp_plug_in_manager_add_from_rc (GimpPlugInManager *manager,
 
       if (! strcmp (basename1, basename2))
         {
-          if (g_file_equal (plug_in_def->file,
-                            ondisk_plug_in_def->file) &&
-              (plug_in_def->mtime == ondisk_plug_in_def->mtime))
+          if (g_file_equal (plug_in_def->file, ondisk_plug_in_def->file)
+              && (plug_in_def->mtime == ondisk_plug_in_def->mtime))
             {
               /* Use pluginrc entry, deleting on-disk entry */
               list->data = plug_in_def;
@@ -894,7 +777,6 @@ gimp_plug_in_manager_add_from_rc (GimpPlugInManager *manager,
   g_object_unref (plug_in_def);
 }
 
-
 static void
 gimp_plug_in_manager_add_to_db (GimpPlugInManager   *manager,
                                 GimpContext         *context,
@@ -906,22 +788,21 @@ gimp_plug_in_manager_add_to_db (GimpPlugInManager   *manager,
     {
       if (proc->image_types)
         {
-          gimp_plug_in_procedure_set_file_proc (proc,
-                                                proc->extensions,
-                                                proc->prefixes,
-                                                NULL);
+          gimp_plug_in_procedure_set_file_proc (proc, proc->extensions, proc->prefixes, NULL);
 
           gimp_plug_in_manager_add_save_procedure (manager, proc);
         }
       else
         {
-          gimp_plug_in_procedure_set_file_proc (proc,
-                                                proc->extensions,
-                                                proc->prefixes,
-                                                proc->magics);
+          gimp_plug_in_procedure_set_file_proc (proc, proc->extensions,
+                                                proc->prefixes, proc->magics);
 
           gimp_plug_in_manager_add_load_procedure (manager, proc);
         }
+    }
+  else if (proc->batch_interpreter)
+    {
+      gimp_plug_in_manager_add_batch_procedure (manager, proc);
     }
 }
 
@@ -933,50 +814,42 @@ gimp_plug_in_manager_sort_file_procs (GimpPlugInManager *manager)
   GFile          *raw_plug_in    = NULL;
   GSList         *list;
 
-  manager->load_procs =
-    g_slist_sort_with_data (manager->load_procs,
-                            gimp_plug_in_manager_file_proc_compare,
-                            GINT_TO_POINTER (FALSE));
-  manager->save_procs =
-    g_slist_sort_with_data (manager->save_procs,
-                            gimp_plug_in_manager_file_proc_compare,
-                            GINT_TO_POINTER (FALSE));
-  manager->export_procs =
-    g_slist_sort_with_data (manager->export_procs,
-                            gimp_plug_in_manager_file_proc_compare,
-                            GINT_TO_POINTER (FALSE));
+  manager->load_procs   = g_slist_sort_with_data (manager->load_procs,
+                                                  gimp_plug_in_manager_file_proc_compare,
+                                                  GINT_TO_POINTER (FALSE));
+  manager->save_procs   = g_slist_sort_with_data (manager->save_procs,
+                                                  gimp_plug_in_manager_file_proc_compare,
+                                                  GINT_TO_POINTER (FALSE));
+  manager->export_procs = g_slist_sort_with_data (manager->export_procs,
+                                                  gimp_plug_in_manager_file_proc_compare,
+                                                  GINT_TO_POINTER (FALSE));
 
-  g_clear_pointer (&manager->display_load_procs,   g_slist_free);
-  g_clear_pointer (&manager->display_save_procs,   g_slist_free);
+  g_clear_pointer (&manager->display_load_procs, g_slist_free);
+  g_clear_pointer (&manager->display_save_procs, g_slist_free);
   g_clear_pointer (&manager->display_export_procs, g_slist_free);
 
   manager->display_load_procs   = g_slist_copy (manager->load_procs);
   manager->display_save_procs   = g_slist_copy (manager->save_procs);
   manager->display_export_procs = g_slist_copy (manager->export_procs);
 
-  manager->display_load_procs =
-    g_slist_sort_with_data (manager->display_load_procs,
-                            gimp_plug_in_manager_file_proc_compare,
-                            GINT_TO_POINTER (TRUE));
-  manager->display_save_procs =
-    g_slist_sort_with_data (manager->display_save_procs,
-                            gimp_plug_in_manager_file_proc_compare,
-                            GINT_TO_POINTER (TRUE));
-  manager->display_export_procs =
-    g_slist_sort_with_data (manager->display_export_procs,
-                            gimp_plug_in_manager_file_proc_compare,
-                            GINT_TO_POINTER (TRUE));
+  manager->display_load_procs = g_slist_sort_with_data (manager->display_load_procs,
+                                                        gimp_plug_in_manager_file_proc_compare,
+                                                        GINT_TO_POINTER (TRUE));
+  manager->display_save_procs = g_slist_sort_with_data (manager->display_save_procs,
+                                                        gimp_plug_in_manager_file_proc_compare,
+                                                        GINT_TO_POINTER (TRUE));
+  manager->display_export_procs = g_slist_sort_with_data (manager->display_export_procs,
+                                                          gimp_plug_in_manager_file_proc_compare,
+                                                          GINT_TO_POINTER (TRUE));
 
-  g_clear_pointer (&manager->raw_load_procs,         g_slist_free);
+  g_clear_pointer (&manager->raw_load_procs, g_slist_free);
   g_clear_pointer (&manager->display_raw_load_procs, g_slist_free);
 
   if (config->import_raw_plug_in)
     {
       /* remember the configured raw loader, unless it's the placeholder */
       if (! strstr (config->import_raw_plug_in, "file-raw-placeholder"))
-        config_plug_in =
-          gimp_file_new_for_config_path (config->import_raw_plug_in,
-                                         NULL);
+        config_plug_in = gimp_file_new_for_config_path (config->import_raw_plug_in, NULL);
     }
 
   /* make the list of raw loaders, and remember the one configured in
@@ -990,14 +863,11 @@ gimp_plug_in_manager_sort_file_procs (GimpPlugInManager *manager)
         {
           GFile *file;
 
-          manager->raw_load_procs = g_slist_prepend (manager->raw_load_procs,
-                                                     file_proc);
+          manager->raw_load_procs = g_slist_prepend (manager->raw_load_procs, file_proc);
 
           file = gimp_plug_in_procedure_get_file (file_proc);
 
-          if (! raw_plug_in  &&
-              config_plug_in &&
-              g_file_equal (config_plug_in, file))
+          if (! raw_plug_in && config_plug_in && g_file_equal (config_plug_in, file))
             {
               raw_plug_in = file;
             }
@@ -1006,10 +876,9 @@ gimp_plug_in_manager_sort_file_procs (GimpPlugInManager *manager)
 
   manager->raw_load_procs         = g_slist_reverse (manager->raw_load_procs);
   manager->display_raw_load_procs = g_slist_copy (manager->raw_load_procs);
-  manager->display_raw_load_procs =
-    g_slist_sort_with_data (manager->display_raw_load_procs,
-                            gimp_plug_in_manager_file_proc_compare,
-                            GINT_TO_POINTER (TRUE));
+  manager->display_raw_load_procs = g_slist_sort_with_data (manager->display_raw_load_procs,
+                                                            gimp_plug_in_manager_file_proc_compare,
+                                                            GINT_TO_POINTER (TRUE));
 
   if (config_plug_in)
     g_object_unref (config_plug_in);
@@ -1041,15 +910,12 @@ gimp_plug_in_manager_sort_file_procs (GimpPlugInManager *manager)
 
       if (! raw_plug_in)
         {
-          raw_plug_in =
-            gimp_plug_in_procedure_get_file (manager->raw_load_procs->data);
+          raw_plug_in = gimp_plug_in_procedure_get_file (manager->raw_load_procs->data);
 
           path = gimp_file_get_config_path (raw_plug_in, NULL);
         }
 
-      g_object_set (config,
-                    "import-raw-plug-in", path,
-                    NULL);
+      g_object_set (config, "import-raw-plug-in", path, NULL);
 
       g_free (path);
     }
@@ -1064,27 +930,21 @@ gimp_plug_in_manager_sort_file_procs (GimpPlugInManager *manager)
       /* finally, remove all raw loaders except the configured one from
        * the list of load_procs
        */
-      if (file_proc->handles_raw &&
-          ! g_file_equal (gimp_plug_in_procedure_get_file (file_proc),
-                          raw_plug_in))
+      if (file_proc->handles_raw
+          && ! g_file_equal (gimp_plug_in_procedure_get_file (file_proc), raw_plug_in))
         {
-          manager->load_procs =
-            g_slist_remove (manager->load_procs, file_proc);
-          manager->display_load_procs =
-            g_slist_remove (manager->display_load_procs, file_proc);
+          manager->load_procs = g_slist_remove (manager->load_procs, file_proc);
+          manager->display_load_procs = g_slist_remove (manager->display_load_procs, file_proc);
         }
       /* Remove generic (non-image) loaders from the display loader
        * list. */
-     if (file_proc->generic_file_proc)
-          manager->display_load_procs =
-            g_slist_remove (manager->display_load_procs, file_proc);
+      if (file_proc->generic_file_proc)
+        manager->display_load_procs = g_slist_remove (manager->display_load_procs, file_proc);
     }
 }
 
 static gint
-gimp_plug_in_manager_file_proc_compare (gconstpointer a,
-                                        gconstpointer b,
-                                        gpointer      data)
+gimp_plug_in_manager_file_proc_compare (gconstpointer a, gconstpointer b, gpointer data)
 {
   GimpPlugInProcedure *proc_a  = GIMP_PLUG_IN_PROCEDURE (a);
   GimpPlugInProcedure *proc_b  = GIMP_PLUG_IN_PROCEDURE (b);
@@ -1092,17 +952,16 @@ gimp_plug_in_manager_file_proc_compare (gconstpointer a,
   const gchar         *label_a;
   const gchar         *label_b;
 
-  if (g_str_has_prefix (gimp_file_get_utf8_name (proc_a->file),
-                                                 "gimp-xcf"))
+  if (g_str_has_prefix (gimp_file_get_utf8_name (proc_a->file), "gimp-xcf"))
     {
-      if (! g_str_has_prefix (gimp_file_get_utf8_name (proc_b->file),
-                              "gimp-xcf"))
+      if (! g_str_has_prefix (gimp_file_get_utf8_name (proc_b->file), "gimp-"
+                                                                      "xcf"))
         {
           return -1;
         }
     }
-  else if (g_str_has_prefix (gimp_file_get_utf8_name (proc_b->file),
-                             "gimp-xcf"))
+  else if (g_str_has_prefix (gimp_file_get_utf8_name (proc_b->file), "gimp-"
+                                                                     "xcf"))
     {
       return 1;
     }
@@ -1134,3 +993,4 @@ gimp_plug_in_manager_file_proc_compare (gconstpointer a,
 
   return strcmp (gimp_object_get_name (proc_a), gimp_object_get_name (proc_b));
 }
+
