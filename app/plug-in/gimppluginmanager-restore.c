@@ -82,6 +82,20 @@ static gint    gimp_plug_in_manager_file_proc_compare (gconstpointer         a,
                                                        gpointer              data);
 
 
+typedef struct
+{
+  GimpPlugInManager  *manager;
+  GimpContext        *context;
+  GimpInitStatusFunc  callback;
+  gint                n_plugins;
+} QueryThreadData;
+
+typedef struct
+{
+  GimpPlugInManager  *manager;
+  GimpContext        *context;
+  GimpPlugInDef      *plug_in_def;
+} QueryIdleData;
 
 void
 gimp_plug_in_manager_restore (GimpPlugInManager  *manager,
@@ -436,14 +450,65 @@ gimp_plug_in_manager_read_pluginrc (GimpPlugInManager  *manager,
     }
 }
 
+static gboolean
+idle_query_plug_in (gpointer data)
+{
+  QueryIdleData *idle_data = data;
+
+  if (idle_data->manager->gimp->be_verbose)
+    g_print ("Querying plug-in: '%s'\n",
+             gimp_file_get_utf8_name (idle_data->plug_in_def->file));
+
+  gimp_plug_in_manager_call_query (idle_data->manager,
+                                   idle_data->context,
+                                   idle_data->plug_in_def);
+
+  return FALSE;
+}
+
+static gpointer
+query_thread (gpointer data)
+{
+  QueryThreadData  *thread_data = data;
+  gint              nth;
+  GSList           *list;
+
+  for (list = thread_data->manager->plug_in_defs, nth = 0; list; list = list->next)
+    {
+      GimpPlugInDef *plug_in_def = list->data;
+
+      if (plug_in_def->needs_query)
+        {
+          gchar         *basename;
+          QueryIdleData *idle_data = g_new0 (QueryIdleData, 1);
+
+          idle_data->manager     = thread_data->manager;
+          idle_data->context     = thread_data->context;
+          idle_data->plug_in_def = plug_in_def;
+
+          g_idle_add (idle_query_plug_in, idle_data);
+
+          basename =
+            g_path_get_basename (gimp_file_get_utf8_name (plug_in_def->file));
+                                 thread_data->callback (NULL, basename,
+                                 (gdouble) nth++ / (gdouble) thread_data->n_plugins);
+          g_free (basename);
+        }
+    }
+
+  return NULL;
+}
+
 /* query any plug-ins that changed since we last wrote out pluginrc */
 static void
 gimp_plug_in_manager_query_new (GimpPlugInManager  *manager,
                                 GimpContext        *context,
                                 GimpInitStatusFunc  status_callback)
 {
-  GSList *list;
-  gint    n_plugins;
+  GSList          *list;
+  gint             n_plugins;
+  QueryThreadData  thread_data;
+  GThread         *thread;
 
   status_callback (_("Querying new Plug-ins"), "", 0.0);
 
@@ -460,31 +525,16 @@ gimp_plug_in_manager_query_new (GimpPlugInManager  *manager,
 
   if (n_plugins)
     {
-      gint nth;
-
       manager->write_pluginrc = TRUE;
 
-      for (list = manager->plug_in_defs, nth = 0; list; list = list->next)
-        {
-          GimpPlugInDef *plug_in_def = list->data;
+      thread_data.n_plugins = n_plugins;
+      thread_data.manager   = manager;
+      thread_data.context   = context;
+      thread_data.callback  = status_callback;
 
-          if (plug_in_def->needs_query)
-            {
-              gchar *basename;
+      thread = g_thread_new ("query_plug_ins", query_thread, &thread_data);
 
-              basename =
-                g_path_get_basename (gimp_file_get_utf8_name (plug_in_def->file));
-              status_callback (NULL, basename,
-                               (gdouble) nth++ / (gdouble) n_plugins);
-              g_free (basename);
-
-              if (manager->gimp->be_verbose)
-                g_print ("Querying plug-in: '%s'\n",
-                         gimp_file_get_utf8_name (plug_in_def->file));
-
-              gimp_plug_in_manager_call_query (manager, context, plug_in_def);
-            }
-        }
+      g_thread_join (thread);
     }
 
   status_callback (NULL, "", 1.0);
@@ -814,10 +864,6 @@ gimp_plug_in_manager_add_to_db (GimpPlugInManager   *manager,
 
           gimp_plug_in_manager_add_load_procedure (manager, proc);
         }
-    }
-  else if (proc->batch_interpreter)
-    {
-      gimp_plug_in_manager_add_batch_procedure (manager, proc);
     }
 }
 
