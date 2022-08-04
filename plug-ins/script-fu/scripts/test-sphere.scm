@@ -211,7 +211,8 @@
     (if (and
          (or (and (>= light 45) (<= light 75))
              (and (<= light 135) (>= light 105)))
-         (= shadow TRUE))
+        ; lkk TODO was (= shadow #t))
+         shadow)
         (let ((shadow-w (* (* radius 2.5) (cos (+ *pi* radians))))
               (shadow-h (* radius 0.5))
               (shadow-x cx)
@@ -220,21 +221,21 @@
               (begin (set! shadow-x (+ cx shadow-w))
                      (set! shadow-w (- shadow-w))))
 
-          (gimp-context-set-feather TRUE)
+          (gimp-context-set-feather #t)
           (gimp-context-set-feather-radius 7.5 7.5)
           (gimp-image-select-ellipse img CHANNEL-OP-REPLACE shadow-x shadow-y shadow-w shadow-h)
           (gimp-context-set-pattern pattern)
           (gimp-drawable-edit-fill drawable FILL-PATTERN)))
 
-    (gimp-context-set-feather FALSE)
+    (gimp-context-set-feather #f)
     (gimp-image-select-ellipse img CHANNEL-OP-REPLACE (- cx radius) (- cy radius)
                                (* 2 radius) (* 2 radius))
 
     (gimp-context-set-gradient-fg-bg-rgb)
     (gimp-drawable-edit-gradient-fill drawable
 				      GRADIENT-RADIAL offset
-				      FALSE 0 0
-				      TRUE
+				      #f 0 0
+				      #t
 				      light-x light-y
 				      light-end-x light-end-y)
 
@@ -246,8 +247,8 @@
     (gimp-context-set-gradient-reverse gradient-reverse)
     (gimp-drawable-edit-gradient-fill drawable
 				      GRADIENT-LINEAR offset
-				      FALSE 0 0
-				      TRUE
+				      #f 0 0
+				      #t
 				      10 10
 				      30 60)
 
@@ -257,7 +258,7 @@
     (gimp-floating-sel-anchor (car (gimp-text-fontname img drawable
                                                        x-position y-position
                                                        multi-text
-                                                       0 TRUE
+                                                       0 #t
                                                        size PIXELS
                                                        font)))
 
@@ -277,7 +278,7 @@
   ""
   SF-ADJUSTMENT "Radius (in pixels)" (list 100 1 5000 1 10 0 SF-SPINNER)
   SF-ADJUSTMENT "Lighting (degrees)" (list 45 0 360 1 10 1 SF-SLIDER)
-  SF-TOGGLE     "Shadow"             TRUE
+  SF-TOGGLE     "Shadow"             #t
   SF-COLOR      "Background color"   "white"
   SF-COLOR      "Sphere color"       "red"
   SF-BRUSH      "Brush"              '("2. Hardness 100" 100 44 0)
@@ -285,7 +286,7 @@
   SF-TEXT       "Multi-line text"    "Hello,\nWorld!"
   SF-PATTERN    "Pattern"            "Maple Leaves"
   SF-GRADIENT   "Gradient"           "Deep Sea"
-  SF-TOGGLE     "Gradient reverse"   FALSE
+  SF-TOGGLE     "Gradient reverse"   #f
   SF-FONT       "Font"               "Agate"
   SF-ADJUSTMENT "Font size (pixels)" '(50 1 1000 1 10 0 1)
   SF-PALETTE    "Palette"            "Default"

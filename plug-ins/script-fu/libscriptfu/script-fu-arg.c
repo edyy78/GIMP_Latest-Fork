@@ -483,8 +483,9 @@ script_fu_arg_append_repr_from_gvalue (SFArg       *arg,
       break;
 
     case SF_TOGGLE:
+      /* Scheme truthy represented by strings "#t" "#f" */
       g_string_append_printf (result_string, (g_value_get_boolean (gvalue) ?
-                                  "TRUE" : "FALSE"));
+                                  "#t" : "#f"));
       break;
 
     case SF_VALUE:
@@ -626,7 +627,7 @@ script_fu_arg_append_repr_from_self (SFArg       *arg,
       break;
 
     case SF_TOGGLE:
-      g_string_append (result_string, arg_value->sfa_toggle ? "TRUE" : "FALSE");
+      g_string_append (result_string, arg_value->sfa_toggle ? "#t" : "#f");
       break;
 
     case SF_VALUE:
