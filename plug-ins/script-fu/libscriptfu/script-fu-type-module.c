@@ -1,101 +1,78 @@
-//#include <gmodule.h>
 
 #include <glib-object.h>
 
 #include "script-fu-type-module.h"
 
-/* Originally a GTypeModule that loaded a GModule.  But why? */
+/* A GTypeModule (See GLib docs: a dynamically loaded type)
+ * Specialized to create a GEnum type.
+ *
+ * Dynamic means at runtime, say by an interpreted plugin.
+ * At compile time of GIMP, the enum is unknown.
+ *
+ * The dynamic type's lifetime is the same as the GIMP app:
+ * we don't unload plugins, so we don't unload their types.
+ *
+ * The parameters of the type (passed to the new function) are:
+ *     name
+ *     array of strings naming the enum's values
+ *
+ * The name must be globally unique, to avoid name clashes.
+ *
+ * The enum value names don't need to be unique, even amongst themselves.
+ * The order of enum value names is important.
+ * Not a parameter: the starting integer for the enum values,
+ * you can't control the numbering of the enum values, they are consecutive ints.
+ */
 
-struct _GimpTypeModuleEnumPrivate
-{
-  gchar * enum_name;
-  // TODO allocate this?
-  GEnumValue enum_values[2];
-};
+/* Overrides of virtual methods. */
+static gboolean	gimp_type_module_enum_load     (GTypeModule *module);
+static void	    gimp_type_module_enum_unload   (GTypeModule	*module);
+
+static void	    gimp_type_module_enum_finalize (GObject 	  *object);
 
 
-static gboolean	animal_module_load		(GTypeModule 	*type_module);
-static void	animal_module_unload		(GTypeModule	*type_module);
-static void	animal_module_finalize		(GObject 	*object);
+/* This defines many types and methods. */
+G_DEFINE_TYPE(GimpTypeModuleEnum, gimp_type_module_enum, G_TYPE_TYPE_MODULE)
 
 
-G_DEFINE_TYPE(GimpTypeModuleEnum, animal_module, G_TYPE_TYPE_MODULE)
-
-
+/* Class initializer method. */
 static void
-animal_module_class_init (GimpTypeModuleEnumClass *klass)
+gimp_type_module_enum_class_init (GimpTypeModuleEnumClass *klass)
 {
   GTypeModuleClass *module_class = G_TYPE_MODULE_CLASS(klass);
-  GObjectClass *object_class = G_OBJECT_CLASS(klass);
+  GObjectClass     *object_class = G_OBJECT_CLASS(klass);
 
-  module_class->load = animal_module_load;
-  module_class->unload = animal_module_unload;
-  object_class->finalize = animal_module_finalize;
+  /* Install overridden virtual methods.. */
+  module_class->load = gimp_type_module_enum_load;
+  module_class->unload = gimp_type_module_enum_unload;
 
-  // lkk this compiles but is deprecated
-  g_type_class_add_private(object_class, sizeof(GimpTypeModuleEnumPrivate));
-  // lkk something like this should replace it, but not working
-  // G_ADD_PRIVATE (GimpTypeModuleEnum);
+  object_class->finalize = gimp_type_module_enum_finalize;
 }
 
-/* Init an instance. */
+/* Instance initializer method. */
 static void
-animal_module_init (GimpTypeModuleEnum *animal_module)
+gimp_type_module_enum_init (GimpTypeModuleEnum *module)
 {
-  GimpTypeModuleEnumPrivate *priv;
+  g_debug("gimp_type_module_enum_init");
 
-  g_debug("animal_module_init");
-
-  /* Allocate private. */
-  animal_module->priv = G_TYPE_INSTANCE_GET_PRIVATE(animal_module, ANIMAL_TYPE_MODULE, GimpTypeModuleEnumPrivate);
-  priv = animal_module->priv;
-
-  // NULL private
-  priv->enum_name = NULL;
-
-  priv->enum_values[1].value = 0;
-  priv->enum_values[1].value_name = NULL;
-  priv->enum_values[1].value_nick = NULL;
+  /* We don't need to initialize completely.
+   * This is called by _new, which goes on to set enum_name and enum_values.
+   */
+  module->enum_name = NULL;
 }
 
 
-/*
- * Load the type module,
- * Register dynamic types.
+/* Overridden virtual method.
+ * Register dynamic types into GType runtime system.
  */
 static gboolean
-animal_module_load (GTypeModule	*type_module)
+gimp_type_module_enum_load (GTypeModule	*module)
 {
-  GimpTypeModuleEnum *animal_module = ANIMAL_MODULE(type_module);
-  GimpTypeModuleEnumPrivate *priv = animal_module->priv;
+  /* Cast */
+  GimpTypeModuleEnum *enum_module = GIMP_TYPE_MODULE_ENUM(module);
+  GType               agtype; // a TypeID
 
-  g_debug("animal_module_load");
-
-  #ifdef lkk
-  priv->module = g_module_open (priv->path,
-				G_MODULE_BIND_LAZY | G_MODULE_BIND_LOCAL);
-
-  if (
-      //!g_module_symbol (priv->module, "animal_object_module_get_id",
-			// (gpointer *)&animal_module->get_id) ||
-      !g_module_symbol (priv->module, "animal_object_module_init",
-			(gpointer *)&animal_module->init) ||
-      !g_module_symbol (priv->module, "animal_object_module_exit",
-			(gpointer *)&animal_module->exit)
-      // ||
-      // !g_module_symbol (priv->module, "animal_object_module_create",
-			//(gpointer *)&animal_module->create)
-      )
-    {
-      g_warning ("module error %s", g_module_error());
-      g_module_close (priv->module);
-      return FALSE;
-    }
-  #endif
-
-  // lkk why init self again?
-  // It crashes here?
-  // animal_module->init (type_module);
+  g_debug("gimp_type_module_enum_load");
 
   /* Form unique name for a dynamic enum.
    * Prepend prefix to avoid clash outside.
@@ -106,22 +83,20 @@ animal_module_load (GTypeModule	*type_module)
   enum_name = g_string_append (enum_name, priv->enum_name);
   #endif
 
+  /* Require enum_name is globally unique. */
   /* Require enum_values is null terminated array. */
 
-  // register GEnum this GTypeModule dynamically cretes.
-  GType agtype; // a TypeID
-
+  /* register in GType system the GEnum this GTypeModule dynamically creates. */
   agtype = g_type_module_register_enum (
-    type_module, // GTypeModule* module,
-    priv->enum_name,  // gchar *
-    priv->enum_values // const GEnumValue* const_static_values
+    module,                   // GTypeModule*
+    enum_module->enum_name,   // gchar *
+    enum_module->enum_values  // const GEnumValue* const_static_values
     );
-  // Not use returned gtype, but it is registered.
-  /* Check sanity of enum. */
-  // have ID, need GType* ???  g_enum_get_value(agtype, 0);
 
+  /* Check sanity of enum. */
   if (agtype == G_TYPE_INVALID)
     g_debug("Failed create dynamic enum type");
+
   g_debug( "Dynamic type name: %s", g_type_name(agtype));
   // g_string_free(enum_name, TRUE);
 
@@ -129,64 +104,54 @@ animal_module_load (GTypeModule	*type_module)
 
 }
 
+/* Override virtual method.
+ * We don't expect it to be called.
+ */
 static void
-animal_module_unload (GTypeModule *type_module)
+gimp_type_module_enum_unload (GTypeModule *module)
 {
-  GimpTypeModuleEnum *animal_module = ANIMAL_MODULE(type_module);
-  GimpTypeModuleEnumPrivate *priv;
-
-  priv=animal_module->priv;
-
-  // animal_module->exit ();
-
-  // g_module_close (priv->module);
-
-  animal_module->init = NULL;
-
-  // animal_module->exit = NULL;
-  //animal_module->get_id = NULL;
-  //animal_module->create = NULL;
+  g_warning ("Unimplemented gimp_type_module_enum_unload" );
+  /* TODO free any allocated enum_values, etc. ??? */
 }
 
 static void
-animal_module_finalize (GObject *object)
+gimp_type_module_enum_finalize (GObject *object)
 {
-  G_OBJECT_CLASS(animal_module_parent_class)->finalize (object);
+  G_OBJECT_CLASS(gimp_type_module_enum_parent_class)->finalize (object);
 }
 
 
 /* public */
 
-
 GimpTypeModuleEnum*
-animal_module_new (const gchar *enum_name,
-                   const gchar *first_value_name)
+gimp_type_module_enum_new (const gchar *enum_name,
+                           const gchar *first_value_name) // TODO array
 {
-  GimpTypeModuleEnum *animal_module;
+  GimpTypeModuleEnum *enum_module;
 
-  g_debug("animal_module_new");
+  g_debug("gimp_type_module_enum_new");
 
   /* Require enum_name is fully qualified (globally unique)
    * and meets requirements for a type name (no spaces, etc.)
    * Typically <plugin name><property name>
    */
 
-  animal_module= g_object_new (ANIMAL_TYPE_MODULE, NULL);
-  /* Init was called. */
+  enum_module= g_object_new (GIMP_TYPE_TYPE_MODULE_ENUM, NULL);
+  /* Initializer was called. */
 
   if (enum_name)
     {
-      GimpTypeModuleEnumPrivate *priv = animal_module->priv;
+      enum_module->enum_name = g_strdup (enum_name);
 
-      /* Init private */
-      priv->enum_name = g_strdup (enum_name);
+      // TODO an array
+      enum_module->enum_values[0].value_name = g_strdup (first_value_name);
+      enum_module->enum_values[0].value_nick = g_strdup (first_value_name);
+      enum_module->enum_values[0].value = 1;
 
-      // TODO init [0] and null the next one
-      priv->enum_values[0].value_name = g_strdup (first_value_name);
-      priv->enum_values[0].value_nick = g_strdup (first_value_name);
-      priv->enum_values[0].value = 1;
-      // assert [1] is still NULL
+      enum_module->enum_values[1].value = 0;
+      enum_module->enum_values[1].value_name = NULL;
+      enum_module->enum_values[1].value_nick = NULL;
     }
 
-  return animal_module;
+  return enum_module;
 }

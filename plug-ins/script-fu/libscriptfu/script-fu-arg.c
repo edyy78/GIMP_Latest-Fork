@@ -440,7 +440,7 @@ script_fu_arg_get_param_spec (SFArg       *arg,
       type_name = g_string_new("SFEnum");  // TODO not unique
       type_name = g_string_append(type_name, name);  /* property name unique within plugin. */
 
-      a = animal_module_new(type_name->str, "foo");
+      a = gimp_type_module_enum_new(type_name->str, "foo");
       g_type_module_use (G_TYPE_MODULE(a));
 
 
