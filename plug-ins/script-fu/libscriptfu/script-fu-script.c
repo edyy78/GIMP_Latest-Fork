@@ -55,6 +55,10 @@ static void     script_fu_command_append_drawables (
                                              GString              *s,
                                              guint                 n_drawables,
                                              GimpDrawable        **drawables);
+static void     script_fu_script_set_enums  (GimpProcedure        *procedure,
+                                             SFScript             *script);
+static gboolean script_fu_script_has_enums  (SFScript             *script);
+
 /*
  *  Function definitions
  */
@@ -168,6 +172,8 @@ script_fu_script_create_PDB_procedure (GimpPlugIn     *plug_in,
 
       script_fu_script_set_proc_metadata (procedure, script);
 
+      script_fu_script_set_enums (procedure, script);
+
       /* Script author does not declare image, drawable in script-fu-register-filter,
        * and we don't add to formal args in PDB.
        * The convenience class GimpImageProcedure already has formal args:
@@ -190,6 +196,8 @@ script_fu_script_create_PDB_procedure (GimpPlugIn     *plug_in,
                                       script, NULL);
 
       script_fu_script_set_proc_metadata (procedure, script);
+
+      script_fu_script_set_enums (procedure, script);
 
       gimp_procedure_add_argument (procedure,
                                    g_param_spec_enum ("run-mode",
@@ -620,4 +628,29 @@ script_fu_script_set_drawable_sensitivity (GimpProcedure *procedure, SFScript *s
       /* Fail to set sensitivy mask. */
       g_warning ("Unhandled case for SFDrawableArity");
     }
+}
+
+static void
+script_fu_script_set_enums  (GimpProcedure *procedure, SFScript *script)
+{
+  if (script_fu_script_has_enums (script))
+    gimp_procedure_add_enum (procedure, script->name, "firstvaluename");
+}
+
+/* Does script have an arg of type SF_OPTION */
+static gboolean
+script_fu_script_has_enums  (SFScript *script)
+{
+  gboolean result = FALSE;
+
+  for (guint i = 0; i < script->n_args; i++)
+    {
+      if (script->args[i].type == SF_OPTION)
+        {
+          result = TRUE;
+          break;
+        }
+    }
+  g_debug("script_fu_script_has_enums %b", result);
+  return result;
 }

@@ -256,6 +256,7 @@ EXPORTS
 	gimp_wire_write
 	gimp_wire_write_msg
 	gp_config_write
+	gp_enum_install_write
 	gp_extension_ack_write
 	gp_has_init_write
 	gp_init

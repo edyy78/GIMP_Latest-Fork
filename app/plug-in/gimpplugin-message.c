@@ -73,6 +73,8 @@ static void gimp_plug_in_handle_proc_install     (GimpPlugIn      *plug_in,
                                                   GPProcInstall   *proc_install);
 static void gimp_plug_in_handle_proc_uninstall   (GimpPlugIn      *plug_in,
                                                   GPProcUninstall *proc_uninstall);
+static void gimp_plug_in_handle_enum_install     (GimpPlugIn      *plug_in,
+                                                  GPEnumInstall   *enum_install);
 static void gimp_plug_in_handle_extension_ack    (GimpPlugIn      *plug_in);
 static void gimp_plug_in_handle_has_init         (GimpPlugIn      *plug_in);
 
@@ -160,6 +162,13 @@ gimp_plug_in_handle_message (GimpPlugIn      *plug_in,
     case GP_HAS_INIT:
       gimp_plug_in_handle_has_init (plug_in);
       break;
+
+    case GP_ENUM_INSTALL:
+      gimp_plug_in_handle_enum_install (plug_in, msg->data);
+      break;
+
+    default:
+      g_warning ("Unhandled case in gimp_plug_in_handle_message");
     }
 }
 
@@ -928,4 +937,12 @@ gimp_plug_in_handle_has_init (GimpPlugIn *plug_in)
                     gimp_file_get_utf8_name (plug_in->file));
       gimp_plug_in_close (plug_in, TRUE);
     }
+}
+
+
+static void
+gimp_plug_in_handle_enum_install (GimpPlugIn    *plug_in,
+                                  GPEnumInstall *enum_install)
+{
+  g_printerr("gimp_plug_in_handle_enum_install not implemented\n");
 }

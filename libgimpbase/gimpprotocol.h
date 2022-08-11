@@ -43,7 +43,8 @@ enum
   GP_PROC_INSTALL,
   GP_PROC_UNINSTALL,
   GP_EXTENSION_ACK,
-  GP_HAS_INIT
+  GP_HAS_INIT,
+  GP_ENUM_INSTALL
 };
 
 typedef enum
@@ -97,6 +98,7 @@ typedef struct _GPProcRun          GPProcRun;
 typedef struct _GPProcReturn       GPProcReturn;
 typedef struct _GPProcInstall      GPProcInstall;
 typedef struct _GPProcUninstall    GPProcUninstall;
+typedef struct _GPEnumInstall      GPEnumInstall;
 
 
 struct _GPConfig
@@ -287,6 +289,12 @@ struct _GPProcUninstall
   gchar *name;
 };
 
+struct _GPEnumInstall
+{
+  gchar      *name;
+  gchar      *value_name;
+};
+
 
 void      gp_init                   (void);
 
@@ -317,6 +325,9 @@ gboolean  gp_temp_proc_return_write (GIOChannel      *channel,
                                      gpointer         user_data);
 gboolean  gp_proc_install_write     (GIOChannel      *channel,
                                      GPProcInstall   *proc_install,
+                                     gpointer         user_data);
+gboolean  gp_enum_install_write     (GIOChannel      *channel,
+                                     GPEnumInstall   *enum_install,
                                      gpointer         user_data);
 gboolean  gp_proc_uninstall_write   (GIOChannel      *channel,
                                      GPProcUninstall *proc_uninstall,

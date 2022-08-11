@@ -83,6 +83,10 @@ struct _GimpProcedurePrivate
   gint32            n_values;
   GParamSpec      **values;
 
+  //gint32            n_enums;
+  //GParamSpec      **enums;
+  gchar *           enum_name;
+
   GimpRunFunc       run_func;
   gpointer          run_data;
   GDestroyNotify    run_data_destroy;
@@ -367,6 +371,34 @@ gimp_procedure_install_icon (GimpProcedure *procedure)
     }
 }
 
+
+static void
+try_enums(GimpProcedure *procedure, GimpPlugIn *plug_in)
+{
+  //GParamSpec   *enums;
+  //gint          n_enums = 0;
+  gchar * enum_name;
+
+  g_printerr("try_enums\n");
+  /* Install enums before arg param specs that refer to them. */
+  enum_name = gimp_procedure_get_enum_name (procedure);
+  g_printerr("enum_name: %s\n", enum_name);
+
+  if (enum_name)
+    {
+      GPEnumInstall  enum_install;
+
+      enum_install.name = enum_name;
+      enum_install.value_name = "bar";
+
+      g_printerr("call gp_enum_install_write\n");
+      if (! gp_enum_install_write (_gimp_plug_in_get_write_channel (plug_in),
+                                   &enum_install, plug_in))
+        gimp_quit ();
+    }
+}
+
+
 static void
 gimp_procedure_real_install (GimpProcedure *procedure)
 {
@@ -380,6 +412,8 @@ gimp_procedure_real_install (GimpProcedure *procedure)
   gint           i;
 
   g_return_if_fail (procedure->priv->installed == FALSE);
+
+  g_printerr("real install lkk\n");
 
   args        = gimp_procedure_get_arguments (procedure, &n_args);
   return_vals = gimp_procedure_get_return_values (procedure, &n_return_vals);
@@ -404,6 +438,8 @@ gimp_procedure_real_install (GimpProcedure *procedure)
     }
 
   plug_in = gimp_procedure_get_plug_in (procedure);
+
+  try_enums(procedure, plug_in);
 
   if (! gp_proc_install_write (_gimp_plug_in_get_write_channel (plug_in),
                                &proc_install, plug_in))
@@ -1602,6 +1638,45 @@ gimp_procedure_get_return_values (GimpProcedure *procedure,
   return procedure->priv->values;
 }
 
+
+#ifdef LKK
+WIP
+/**
+ * gimp_procedure_get_enums:
+ * @procedure:   A #GimpProcedure.
+ * @n_enums: (out): Returns the number of enums.
+ *
+ * Returns: (transfer none) (array length=n_enums): An array
+ *          of @GParamSpec in the order added with
+ *          [method@Procedure.add_enum].
+ *
+ * Since: 3.0
+ **/
+GParamSpec **
+gimp_procedure_get_enums (GimpProcedure *procedure,
+                          gint          *n_enums)
+{
+  g_return_val_if_fail (GIMP_IS_PROCEDURE (procedure), NULL);
+  g_return_val_if_fail (n_enums != NULL, NULL);
+
+  *n_enums = procedure->priv->n_enums;
+  g_printerr("gimp_procedure_get_enums %d", *n_enums);
+
+  return procedure->priv->enums;
+}
+#endif
+
+gchar *
+gimp_procedure_get_enum_name (GimpProcedure *procedure)
+{
+  g_return_val_if_fail (GIMP_IS_PROCEDURE (procedure), NULL);
+
+  g_printerr("gimp_procedure_get_enum_name\n");
+
+  return procedure->priv->enum_name;
+}
+
+
 /**
  * gimp_procedure_set_argument_sync:
  * @procedure: a #GimpProcedure.
@@ -1803,6 +1878,59 @@ gimp_procedure_new_return_values (GimpProcedure     *procedure,
   g_clear_error (&error);
 
   return args;
+}
+
+/**
+ * gimp_procedure_add_enum:
+ * @procedure: the #GimpProcedure.
+ * @enum_name: the name of the enum
+ * @first_value_name: the name of the enum
+ *
+ * Dynamically register a #GEnum type into #GType runtime system.
+ * The lifetime of the type is lifetime of the GIMP app.
+ *
+ * The defined enum is immediately available on this plugin side of the wire.
+ * An equivalent type is defined on the other app side of the wire,
+ * after the procedure is installed.
+ *
+ * Only valid for GimpPluginProcedure
+ *
+ * The enum name must be globally unique TODO
+ *
+ * Returns: the GType (an ID) of the enum
+ *
+ * Since: 3.0
+ **/
+GType
+gimp_procedure_add_enum (GimpProcedure *procedure,
+                        const gchar   *enum_name,
+                        const gchar   *first_value_name)
+{
+  GParamSpec *pspec;
+
+  g_printerr("gimp_procedure_add_enum\n");
+  g_return_val_if_fail (GIMP_IS_PROCEDURE (procedure), G_TYPE_INVALID);
+
+  g_printerr("gimp_procedure_add_enum 2\n" );
+  // TODO install on this side of the wire
+  // gimp_type_module_enum_new
+
+  /* Add it locally to the procedure, to be installed later. */
+  // temporarily a bogus pspec
+  procedure->priv->enum_name = enum_name;
+
+  /*
+  procedure->priv->n_enums++;
+  pspec = g_param_spec_enum ("name",
+                             "nick",
+                             "blurb",
+                             GIMP_TYPE_RUN_MODE,  // BOGUS
+                             1,   // int, default, temporarily always 1,
+                             G_PARAM_READWRITE);
+  procedure->priv->enums = pspec;
+  */
+
+  return G_TYPE_INVALID;
 }
 
 /**

@@ -222,6 +222,9 @@ GParamSpec    ** gimp_procedure_get_aux_arguments  (GimpProcedure        *proced
                                                     gint                 *n_arguments);
 GParamSpec    ** gimp_procedure_get_return_values  (GimpProcedure        *procedure,
                                                     gint                 *n_return_values);
+GParamSpec    * gimp_procedure_get_enums          (GimpProcedure        *procedure,
+                                                   gint                 *n_enums);
+gchar * gimp_procedure_get_enum_name         (GimpProcedure        *procedure);
 
 void             gimp_procedure_set_argument_sync  (GimpProcedure        *procedure,
                                                     const gchar          *arg_name,
@@ -241,6 +244,9 @@ void             gimp_procedure_extension_ready    (GimpProcedure        *proced
 
 GimpProcedureConfig *
                  gimp_procedure_create_config      (GimpProcedure        *procedure);
+GType            gimp_procedure_add_enum           (GimpProcedure        *procedure,
+                                                    const gchar          *name,
+                                                    const gchar          *first_value_name);
 
 
 G_END_DECLS
