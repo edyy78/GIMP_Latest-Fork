@@ -593,7 +593,8 @@ script_fu_script_set_proc_args (GimpProcedure *procedure,
       const gchar *nick  = NULL;
 
       script_fu_arg_generate_name_and_nick (&script->args[i], &name, &nick);
-      pspec = script_fu_arg_get_param_spec (&script->args[i],
+      pspec = script_fu_arg_get_param_spec (script,
+                                            &script->args[i],
                                             name,
                                             nick);
       gimp_procedure_add_argument (procedure, pspec);

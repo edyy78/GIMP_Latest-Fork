@@ -22,7 +22,8 @@ void        script_fu_arg_free                    (SFArg    *arg);
 void        script_fu_arg_reset                   (SFArg    *arg,
                                                    gboolean should_reset_ids);
 
-GParamSpec *script_fu_arg_get_param_spec          (SFArg       *arg,
+GParamSpec *script_fu_arg_get_param_spec          (SFScript    *script,
+                                                   SFArg       *arg,
                                                    const gchar *name,
                                                    const gchar *nick);
 void        script_fu_arg_append_repr_from_gvalue (SFArg       *arg,

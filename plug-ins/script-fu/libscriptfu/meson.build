@@ -21,7 +21,8 @@ libscriptfu_sources = [
   'script-fu-run-func.c',
   'script-fu-command.c',
   'script-fu-dynamic-enum.c',
-  'script-fu-type-module.c'
+  'script-fu-type-module.c',
+  'script-fu-option.c',
 ]
 
 # !! just "library(...)" which means shared versus static depends on configuration of project.

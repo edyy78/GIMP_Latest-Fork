@@ -81,10 +81,15 @@ typedef union
   SFEnum         sfa_enum;
 } SFArgValue;
 
+/*
+ * label is not necessarily unique nor valid Glib name for property.
+ * property_name is unique among args for a script, and valid.
+ */
 typedef struct
 {
   SFArgType   type;
   gchar      *label;
+  gchar      *property_name;
   SFArgValue  default_value;
   SFArgValue  value;
 } SFArg;

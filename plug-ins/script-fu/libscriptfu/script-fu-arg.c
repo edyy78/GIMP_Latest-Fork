@@ -25,6 +25,7 @@
 #include "script-fu-types.h"
 #include "script-fu-arg.h"
 #include "script-fu-utils.h"
+#include "script-fu-option.h"
 
 #include "script-fu-type-module.h"
 
@@ -272,7 +273,8 @@ script_fu_arg_reset (SFArg *arg, gboolean should_reset_ids)
  * but it doesn't fully do that yet.
  */
 GParamSpec *
-script_fu_arg_get_param_spec (SFArg       *arg,
+script_fu_arg_get_param_spec (SFScript    *script,
+                              SFArg       *arg,
                               const gchar *name,  /* Unique name for property. */
                               const gchar *nick)
 {
@@ -428,36 +430,9 @@ script_fu_arg_get_param_spec (SFArg       *arg,
       break;
 
     case SF_OPTION:
+      arg->property_name = name;
 
-      /* Form a unique name for an GEnum
-       * Cat plugin name with unique property name.
-       */
-      GString *type_name;
-      GType enum_type;
-      GimpTypeModuleEnum* a;
-
-
-      type_name = g_string_new("SFEnum");  // TODO not unique
-      type_name = g_string_append(type_name, name);  /* property name unique within plugin. */
-
-      a = gimp_type_module_enum_new(type_name->str, "foo");
-      g_type_module_use (G_TYPE_MODULE(a));
-
-
-      enum_type = g_type_from_name (type_name->str);
-      g_assert(G_TYPE_IS_ENUM (enum_type));
-
-      g_debug( "get param spec enum");
-      pspec = g_param_spec_enum (name,
-                                 nick,
-                                 arg->label,
-                                 g_type_from_name (type_name->str),
-                                 1,   // int, default, temporarily always 1,
-                                 // Does an enum start at 1 ???
-                                 // Was arg->default_value.sfa_enum.history,
-                                 G_PARAM_READWRITE);
-      g_debug( "return from get param spec enum");
-      g_string_free(type_name, TRUE);
+      pspec = script_fu_option_get_param_spec(script, arg, name, nick);
 
       #ifdef LKK
       pspec = g_param_spec_int (name,
