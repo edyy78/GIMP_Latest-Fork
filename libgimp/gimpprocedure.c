@@ -85,7 +85,7 @@ struct _GimpProcedurePrivate
 
   //gint32            n_enums;
   //GParamSpec      **enums;
-  gchar *           enum_name;
+  gchar            *enum_name;
 
   GimpRunFunc       run_func;
   gpointer          run_data;
@@ -1895,7 +1895,10 @@ gimp_procedure_new_return_values (GimpProcedure     *procedure,
  *
  * Only valid for GimpPluginProcedure
  *
- * The enum name must be globally unique TODO
+ * The enum name must be globally unique.
+ * Typically it is concatenated plugin name and arg's property name
+
+ name is copied
  *
  * Returns: the GType (an ID) of the enum
  *
@@ -1906,18 +1909,19 @@ gimp_procedure_add_enum (GimpProcedure *procedure,
                         const gchar   *enum_name,
                         const gchar   *first_value_name)
 {
-  GParamSpec *pspec;
+  //GParamSpec *pspec;
 
-  g_printerr("gimp_procedure_add_enum\n");
   g_return_val_if_fail (GIMP_IS_PROCEDURE (procedure), G_TYPE_INVALID);
+  g_printerr("gimp_procedure_add_enum: %s\n", enum_name);
 
-  g_printerr("gimp_procedure_add_enum 2\n" );
   // TODO install on this side of the wire
+  //For now, scriptfu has done it
   // gimp_type_module_enum_new
 
-  /* Add it locally to the procedure, to be installed later. */
-  // temporarily a bogus pspec
-  procedure->priv->enum_name = enum_name;
+  /* Add it locally to the procedure.
+   * Enum will be installed on other side of wire when procedure installed.
+   */
+  procedure->priv->enum_name = g_strdup (enum_name);
 
   /*
   procedure->priv->n_enums++;

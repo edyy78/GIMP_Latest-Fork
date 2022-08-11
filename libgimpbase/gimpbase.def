@@ -181,6 +181,8 @@ EXPORTS
 	gimp_transform_resize_get_type
 	gimp_type_get_translation_context
 	gimp_type_get_translation_domain
+	gimp_type_module_enum_get_type
+	gimp_type_module_enum_new
 	gimp_type_set_translation_context
 	gimp_type_set_translation_domain
 	gimp_uint8_array_get_type

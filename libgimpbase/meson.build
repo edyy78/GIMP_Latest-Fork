@@ -63,6 +63,7 @@ libgimpbase_sources_introspectable = files(
   'gimpunit.c',
   'gimputils.c',
   'gimpvaluearray.c',
+  'gimp-type-module.c',
 )
 
 libgimpbase_sources = [

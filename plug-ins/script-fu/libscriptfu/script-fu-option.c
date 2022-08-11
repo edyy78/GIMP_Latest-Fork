@@ -19,9 +19,9 @@
 
 #include <libgimp/gimp.h>
 #include <libgimp/gimpui.h>
+#include <libgimpbase/gimp-type-module.h>
 
 #include "script-fu-types.h"
-#include "script-fu-type-module.h"  // TODO gimp_
 
 #include "script-fu-option.h"
 
@@ -99,12 +99,14 @@ script_fu_option_get_type_name (SFScript *script, SFArg *arg)
 {
   GString *type_name;
 
+  g_debug ("script_fu_option_get_type_name");
+
   /* Script name is unique in GIMP namespace. */
   type_name = g_string_new(script->name);
 
   /* Property name is unique in script namespace. */
-  type_name = g_string_append(type_name,
-     arg->property_name); // default_value.sfa_option.);  /* property name unique within plugin. */
+  type_name = g_string_append(type_name, arg->property_name);
+  // default_value.sfa_option.);  /* property name unique within plugin. */
   g_debug ("script_fu_option_get_type_name: %s", type_name->str);
   return type_name;
 }

@@ -21,9 +21,9 @@ libscriptfu_sources = [
   'script-fu-run-func.c',
   'script-fu-command.c',
   'script-fu-dynamic-enum.c',
-  'script-fu-type-module.c',
   'script-fu-option.c',
 ]
+# script-fu-type-module.c',
 
 # !! just "library(...)" which means shared versus static depends on configuration of project.
 # Meson defaults to shared, but you can reconfigure to static.

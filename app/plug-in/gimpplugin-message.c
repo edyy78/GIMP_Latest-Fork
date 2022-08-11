@@ -27,6 +27,7 @@
 #include "libgimpbase/gimpbase.h"
 #include "libgimpbase/gimpprotocol.h"
 #include "libgimpbase/gimpwire.h"
+#include "libgimpbase/gimp-type-module.h"
 
 #include "libgimp/gimpgpparams.h"
 
@@ -944,5 +945,18 @@ static void
 gimp_plug_in_handle_enum_install (GimpPlugIn    *plug_in,
                                   GPEnumInstall *enum_install)
 {
-  g_printerr("gimp_plug_in_handle_enum_install not implemented\n");
+  GimpTypeModuleEnum* type_module;
+
+  g_printerr("gimp_plug_in_handle_enum_install\n");
+
+  /* Create a new type module. TODO a factory of dynamic types. */
+  type_module = gimp_type_module_enum_new (enum_install->name,
+                                           enum_install->value_name);
+  /* Use it, forever. */
+  g_type_module_use (G_TYPE_MODULE(type_module));
+
+  /* Not retaining a reference, we never unuse.
+   * The enum type remains defined in Gimp
+   * as long as the plugin is known to Gimp.
+   */
 }

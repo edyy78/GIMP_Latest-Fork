@@ -1,10 +1,6 @@
 #ifndef __GIMP_TYPE_MODULE_ENUM_H__
 #define __GIMP_TYPE_MODULE_ENUM_H__
 
-// TODO should be outside
-// #include <glib-object.h>
-
-
 #define GIMP_TYPE_TYPE_MODULE_ENUM                (gimp_type_module_enum_get_type ())
 #define GIMP_TYPE_MODULE_ENUM(obj)                (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_TYPE_MODULE_ENUM, GimpTypeModuleEnum))
 #define GIMP_TYPE_MODULE_ENUM_CLASS(klass)        (G_TYPE_CHECK_CLASS_CAST ((klass),  GIMP_TYPE_TYPE_MODULE_ENUM, GimpTypeModuleEnumClass))

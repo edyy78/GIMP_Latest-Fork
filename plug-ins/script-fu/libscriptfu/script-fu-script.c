@@ -28,6 +28,7 @@
 #include "script-fu-arg.h"
 #include "script-fu-script.h"
 #include "script-fu-run-func.h"
+#include "script-fu-option.h"
 
 #include "script-fu-intl.h"
 
@@ -55,6 +56,8 @@ static void     script_fu_command_append_drawables (
                                              GString              *s,
                                              guint                 n_drawables,
                                              GimpDrawable        **drawables);
+static void     script_fu_script_generate_arg_names (
+                                            SFScript             *script);
 static void     script_fu_script_set_enums  (GimpProcedure        *procedure,
                                              SFScript             *script);
 static gboolean script_fu_script_has_enums  (SFScript             *script);
@@ -157,6 +160,8 @@ script_fu_script_create_PDB_procedure (GimpPlugIn     *plug_in,
                                        GimpPDBProcType plug_in_type)
 {
   GimpProcedure *procedure;
+
+  script_fu_script_generate_arg_names (script);
 
   if (script->proc_class == GIMP_TYPE_IMAGE_PROCEDURE)
     {
@@ -585,18 +590,11 @@ script_fu_script_set_proc_args (GimpProcedure *procedure,
                                 SFScript      *script,
                                 guint          first_conveyed_arg)
 {
-  script_fu_arg_reset_name_generator ();
   for (gint i = first_conveyed_arg; i < script->n_args; i++)
     {
       GParamSpec  *pspec = NULL;
-      const gchar *name  = NULL;
-      const gchar *nick  = NULL;
 
-      script_fu_arg_generate_name_and_nick (&script->args[i], &name, &nick);
-      pspec = script_fu_arg_get_param_spec (script,
-                                            &script->args[i],
-                                            name,
-                                            nick);
+      pspec = script_fu_arg_get_param_spec (script, &script->args[i]);
       gimp_procedure_add_argument (procedure, pspec);
     }
 }
@@ -631,11 +629,35 @@ script_fu_script_set_drawable_sensitivity (GimpProcedure *procedure, SFScript *s
     }
 }
 
+/* Get the first arg that is an enum
+TODO iterate over all enums */
+static SFArg*
+script_fu_script_get_enum  (SFScript *script)
+{
+  for (guint i = 0; i < script->n_args; i++)
+    {
+      if (script->args[i].type == SF_OPTION)
+        {
+          return &script->args[i];
+        }
+    }
+  g_warning ("script_fu_script_get_enum returns NULL");
+  return NULL;
+}
+
 static void
 script_fu_script_set_enums  (GimpProcedure *procedure, SFScript *script)
 {
   if (script_fu_script_has_enums (script))
-    gimp_procedure_add_enum (procedure, script->name, "firstvaluename");
+    {
+      GString *type_name;
+
+      SFArg* arg = script_fu_script_get_enum(script);
+      type_name = script_fu_option_get_type_name(script, arg);
+
+      gimp_procedure_add_enum (procedure, type_name->str, "firstvaluename");
+      g_string_free (type_name, TRUE);
+    }
 }
 
 /* Does script have an arg of type SF_OPTION */
@@ -652,6 +674,20 @@ script_fu_script_has_enums  (SFScript *script)
           break;
         }
     }
-  g_debug("script_fu_script_has_enums %b", result);
+  g_debug("script_fu_script_has_enums %d", result);
   return result;
+}
+
+/* Generate names for args, unique within script.
+ * Valid property names.
+ */
+static void
+script_fu_script_generate_arg_names (SFScript  *script)
+{
+  script_fu_arg_reset_name_generator ();
+
+  for (gint i = 0; i < script->n_args; i++)
+  {
+    script->args[i].property_name = g_strdup (script_fu_arg_generate_name (&script->args[i]));
+  }
 }

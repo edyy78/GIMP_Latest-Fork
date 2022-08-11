@@ -23,9 +23,7 @@ void        script_fu_arg_reset                   (SFArg    *arg,
                                                    gboolean should_reset_ids);
 
 GParamSpec *script_fu_arg_get_param_spec          (SFScript    *script,
-                                                   SFArg       *arg,
-                                                   const gchar *name,
-                                                   const gchar *nick);
+                                                   SFArg       *arg);
 void        script_fu_arg_append_repr_from_gvalue (SFArg       *arg,
                                                    GString     *result_string,
                                                    GValue      *gvalue);
@@ -33,8 +31,6 @@ void        script_fu_arg_append_repr_from_self   (SFArg       *arg,
                                                    GString     *result_string);
 
 void        script_fu_arg_reset_name_generator    (void);
-void        script_fu_arg_generate_name_and_nick  (SFArg        *arg,
-                                                   const gchar **name,
-                                                   const gchar **nick);
+gchar      *script_fu_arg_generate_name           (SFArg        *arg);
 
 #endif /*  __SCRIPT_FU_ARG__  */

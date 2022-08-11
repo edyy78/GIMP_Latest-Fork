@@ -1,7 +1,9 @@
 
+#include "config.h"
+
 #include <glib-object.h>
 
-#include "script-fu-type-module.h"
+#include "gimp-type-module.h"
 
 /* A GTypeModule (See GLib docs: a dynamically loaded type)
  * Specialized to create a GEnum type.
