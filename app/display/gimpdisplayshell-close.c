@@ -97,7 +97,10 @@ gimp_display_shell_close (GimpDisplayShell *shell,
   if (! kill_it                                 &&
       image                                     &&
       gimp_image_get_display_count (image) == 1 &&
-      gimp_image_is_dirty (image))
+      gimp_image_is_dirty (image)               &&
+      ((! shell->display->config->override_confirm_on_close_if_exported) ||
+        (shell->display->config->override_confirm_on_close_if_exported &&
+          gimp_image_is_export_dirty (image))))
     {
       /*  If there's a save dialog active for this image, then raise it.
        *  (see bug #511965)

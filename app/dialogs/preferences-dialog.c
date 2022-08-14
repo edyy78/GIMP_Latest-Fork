@@ -1608,6 +1608,17 @@ prefs_dialog_new (Gimp       *gimp,
                              _("Metadata can contain sensitive information."));
   gtk_box_pack_start (GTK_BOX (vbox2), hbox, FALSE, FALSE, 0);
 
+  /*  Confirm-on-close override if exported  */
+  button = prefs_check_button_add (object, "override-confirm-on-close-if-exported",
+                                   _("Do NOT confirm closing of unsa_ved images "
+                                     "only if they are exported"),
+                                   GTK_BOX (vbox2));
+  hbox = prefs_hint_box_new (GIMP_ICON_DIALOG_WARNING,
+                             _("If enabled you could lose data. "
+                               "Exported file types do not support all of the features "
+                               "of a XCF native save."));
+  gtk_box_pack_start (GTK_BOX (vbox2), hbox, FALSE, FALSE, 0);
+
   /*  Export File Type  */
   vbox2 = prefs_frame_new (_("Export File Type"), GTK_CONTAINER (vbox), FALSE);
   grid = prefs_grid_new (GTK_CONTAINER (vbox2));
@@ -3052,7 +3063,7 @@ prefs_dialog_new (Gimp       *gimp,
       "%f-%p.%i (%t) %z%%",
       "%f-%p.%i (%t) %d:%s",
       "%f-%p.%i (%t) %wx%h",
-      "%f-%p-%i (%t) %wx%h (%xx%y)"
+      "%f-%p-%i (%t) %wx%h (%xx%y)",
     };
 
     const gchar *format_names[] =
@@ -3062,7 +3073,7 @@ prefs_dialog_new (Gimp       *gimp,
       N_("Show zoom percentage"),
       N_("Show zoom ratio"),
       N_("Show image size"),
-      N_("Show drawable size")
+      N_("Show drawable size"),
     };
 
     struct

@@ -71,6 +71,7 @@ struct _GimpDisplayConfig
   GimpSpaceBarAction  space_bar_action;
   GimpZoomQuality     zoom_quality;
   gboolean            use_event_history;
+  gboolean            override_confirm_on_close_if_exported;
 };
 
 struct _GimpDisplayConfigClass
