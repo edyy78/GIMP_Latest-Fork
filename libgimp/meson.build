@@ -275,6 +275,7 @@ libgimpui_sources_introspectable = [
   'gimpselectbutton.c',
   'gimpui.c',
   'gimpzoompreview.c',
+  'propwidgetfactory.c',
 ]
 
 libgimpui_sources = [

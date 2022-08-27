@@ -51,7 +51,9 @@ void  gimp_widget_set_bound_property (GtkWidget             *widget,
                                       GObject               *config,
                                       const gchar           *property_name);
 
-
+void  gimp_widget_get_bound_property (GtkWidget             *widget,
+                                      GObject              **config,
+                                      const gchar          **property_name);
 G_END_DECLS
 
 #endif /* __GIMP_WIDGETS_PRIVATE_H__ */

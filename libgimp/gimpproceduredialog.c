@@ -28,6 +28,7 @@
 
 #include "gimp.h"
 #include "gimpui.h"
+#include "propwidgetfactory.h"
 
 #include "gimpprocedureconfig-private.h"
 
@@ -738,6 +739,33 @@ gimp_procedure_dialog_get_widget (GimpProcedureDialog *dialog,
       gtk_widget_set_hexpand (widget, TRUE);
       widget = gimp_label_int_widget_new (g_param_spec_get_nick (pspec),
                                           widget);
+    }
+  else  if (G_IS_PARAM_SPEC_OBJECT (pspec) && pspec->value_type == GIMP_TYPE_IMAGE)
+    {
+      widget = gimp_prop_widget_factory (gimp_image_combo_box_new,
+                                         G_OBJECT (dialog->priv->config),
+                                         property,
+                                         g_param_spec_get_nick (pspec),
+                                         (FuncIDToObject) gimp_image_get_by_id,
+                                         (FuncObjectToID) gimp_image_get_id);
+    }
+  else  if (G_IS_PARAM_SPEC_OBJECT (pspec) && pspec->value_type == GIMP_TYPE_LAYER)
+    {
+      widget = gimp_prop_widget_factory (gimp_layer_combo_box_new,
+                                         G_OBJECT (dialog->priv->config),
+                                         property,
+                                         g_param_spec_get_nick (pspec),
+                                         (FuncIDToObject) gimp_item_get_by_id,
+                                         (FuncObjectToID) gimp_item_get_id);
+    }
+  else  if (G_IS_PARAM_SPEC_OBJECT (pspec) && pspec->value_type == GIMP_TYPE_VECTORS)
+    {
+      widget = gimp_prop_widget_factory (gimp_vectors_combo_box_new,
+                                         G_OBJECT (dialog->priv->config),
+                                         property,
+                                         g_param_spec_get_nick (pspec),
+                                         (FuncIDToObject) gimp_item_get_by_id,
+                                         (FuncObjectToID) gimp_item_get_id);
     }
   else
     {
