@@ -42,15 +42,19 @@ static gboolean    icns_save_dialog      (IcnsSaveInfo *info,
 
 void               icns_dialog_add_icon  (GtkWidget    *dialog,
                                           GimpDrawable *layer,
-                                          gint          layer_num);
+                                          gint          layer_num,
+                                          gint          duplicates[]);
 
 static GtkWidget * icns_preview_new      (GimpDrawable *layer);
 
-static GtkWidget * icns_create_icon_hbox (GtkWidget    *icon_preview,
+static GtkWidget * icns_create_icon_item (GtkWidget    *icon_preview,
                                           GimpDrawable *layer,
                                           gint          layer_num,
-                                          IcnsSaveInfo *info);
+                                          IcnsSaveInfo *info,
+                                          gint          duplicates[]);
 
+static gint        icns_find_type        (gint          width,
+                                          gint          height);
 static gboolean    icns_check_dimensions (gint          width,
                                           gint          height);
 static gboolean    icns_check_compat     (GtkWidget    *dialog,
@@ -67,26 +71,28 @@ static void        icns_save_info_free   (IcnsSaveInfo *info);
 void
 icns_dialog_add_icon (GtkWidget    *dialog,
                       GimpDrawable *layer,
-                      gint          layer_num)
+                      gint          layer_num,
+                      gint          duplicates[])
 {
-  GtkWidget    *vbox;
-  GtkWidget    *hbox;
+  GtkWidget    *flowbox;
+  GtkWidget    *vbox_item;
   GtkWidget    *preview;
   gchar         key[ICNS_MAXBUF];
   IcnsSaveInfo *info;
 
-  vbox = g_object_get_data (G_OBJECT (dialog), "icons_vbox");
+  flowbox = g_object_get_data (G_OBJECT (dialog), "icons_vbox");
   info = g_object_get_data (G_OBJECT (dialog), "save_info");
 
   preview = icns_preview_new (layer);
-  hbox = icns_create_icon_hbox (preview, layer, layer_num, info);
-  gtk_box_pack_start (GTK_BOX (vbox), hbox, FALSE, FALSE, 0);
-  gtk_widget_show (hbox);
+  vbox_item = icns_create_icon_item (preview, layer, layer_num, info,
+                                     duplicates);
+  gtk_flow_box_insert (GTK_FLOW_BOX (flowbox), vbox_item, -1);
+  gtk_widget_show (vbox_item);
 
-  /* Let's make the hbox accessible through the layer ID */
+  /* Let's make the vbox_item accessible through the layer ID */
   g_snprintf (key, sizeof (key), "layer_%i_hbox",
               gimp_item_get_id (GIMP_ITEM (layer)));
-  g_object_set_data (G_OBJECT (dialog), key, hbox);
+  g_object_set_data (G_OBJECT (dialog), key, vbox_item);
 
   icns_check_compat (dialog, info);
 }
@@ -109,8 +115,34 @@ icns_preview_new (GimpDrawable *layer)
   return image;
 }
 
+static gint
+icns_find_type (gint width,
+                gint height)
+{
+  gint match = -1;
+
+  for (gint j = 0; iconTypes[j].type; j++)
+    {
+      /* TODO: Currently, this chooses the first "modern" ICNS format for a
+       * ICNS file. This is because newer formats are not supported well in
+       * non-native MacOS programs like Inkscape. It'd be nice to design
+       * a GUI with enough information for users to make their own decisions
+       */
+      if (iconTypes[j].width == width   &&
+          iconTypes[j].height == height &&
+          iconTypes[j].isModern)
+        {
+          match = j;
+          break;
+        }
+    }
+
+  return match;
+}
+
 static gboolean
-icns_check_dimensions (gint width, gint height)
+icns_check_dimensions (gint width,
+                       gint height)
 {
   gboolean isValid = TRUE;
 
@@ -141,61 +173,79 @@ icns_check_dimensions (gint width, gint height)
 }
 
 static GtkWidget *
-icns_create_icon_hbox (GtkWidget    *icon_preview,
+icns_create_icon_item (GtkWidget    *icon_preview,
                        GimpDrawable *layer,
                        gint          layer_num,
-                       IcnsSaveInfo *info)
+                       IcnsSaveInfo *info,
+                       gint          duplicates[])
 {
   static GtkSizeGroup *size = NULL;
 
-  GtkWidget *hbox;
-  GtkWidget *vbox;
+  GtkWidget *vbox_item;
+  GtkWidget *frame;
+  gchar     *frame_header;
+  gint       match  = -1;
+  gint       width  = gimp_drawable_get_width (layer);
+  gint       height = gimp_drawable_get_height (layer);
 
-  hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
+  vbox_item = gtk_box_new (GTK_ORIENTATION_VERTICAL, 6);
 
   /* To make life easier for the callbacks, we store the
-     layer's ID and stacking number with the hbox. */
+     layer's ID and stacking number with vbox_item. */
 
-  g_object_set_data (G_OBJECT (hbox),
+  g_object_set_data (G_OBJECT (vbox_item),
                      "icon_layer", layer);
-  g_object_set_data (G_OBJECT (hbox),
+  g_object_set_data (G_OBJECT (vbox_item),
                      "icon_layer_num", GINT_TO_POINTER (layer_num));
 
-  g_object_set_data (G_OBJECT (hbox), "icon_preview", icon_preview);
-  gtk_widget_set_halign (icon_preview, GTK_ALIGN_END);
-  gtk_widget_set_valign (icon_preview, GTK_ALIGN_CENTER);
-  gtk_box_pack_start (GTK_BOX (hbox), icon_preview, FALSE, FALSE, 0);
+  frame_header = g_strdup_printf ("%dx%d", width, height);
+
+  frame = gimp_frame_new (frame_header);
+  gtk_box_pack_start (GTK_BOX (vbox_item), frame, FALSE, FALSE, 0);
+  gtk_widget_show (frame);
+  g_free (frame_header);
+
+  g_object_set_data (G_OBJECT (vbox_item), "icon_preview", icon_preview);
+  gtk_container_add (GTK_CONTAINER (frame), icon_preview);
   gtk_widget_show (icon_preview);
 
   if (! size)
-    size = gtk_size_group_new (GTK_SIZE_GROUP_HORIZONTAL);
+    size = gtk_size_group_new (GTK_SIZE_GROUP_VERTICAL);
 
   gtk_size_group_add_widget (size, icon_preview);
 
-  vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
-  gtk_box_pack_start (GTK_BOX (hbox), vbox, FALSE, FALSE, 0);
-  gtk_widget_show (vbox);
+  match = icns_find_type (gimp_drawable_get_width (layer),
+                          gimp_drawable_get_height (layer));
 
-  if (! icns_check_dimensions (gimp_drawable_get_width (layer),
-                               gimp_drawable_get_height (layer)))
+  if (! icns_check_dimensions (width, height) ||
+      (match != -1 && duplicates[match] != 0))
     {
       GtkWidget *label;
-      gchar     *warning = g_strdup_printf (_("%d x %d is invalid for ICNS\n"
-                                              "It will not be exported"),
-                                              gimp_drawable_get_width (layer),
-                                              gimp_drawable_get_height (layer));
-      gchar     *markup = g_strdup_printf ("<b>%s</b>", warning);
+      gchar     *warning;
+      gchar     *markup;
+
+      if (! icns_check_dimensions (width, height))
+        warning = g_strdup_printf (_("Invalid icon size. \nIt will not be exported"));
+      else
+        warning = g_strdup_printf (_("Duplicate layer size. \nIt will not be exported"));
+
+      markup = g_strdup_printf ("<i>%s</i>", warning);
 
       label = gtk_label_new (NULL);
       gtk_label_set_markup (GTK_LABEL (label), markup);
       g_free (markup);
       g_free (warning);
 
-      gtk_box_pack_start (GTK_BOX (vbox), label, FALSE, FALSE, 0);
+      gtk_box_pack_start (GTK_BOX (vbox_item), label, FALSE, FALSE, 0);
       gtk_widget_show (label);
+      gtk_style_context_add_class (gtk_widget_get_style_context (vbox_item),
+                                   "background");
     }
 
-  return hbox;
+  if (match != -1)
+    duplicates[match] = 1;
+
+  return vbox_item;
 }
 
 static gboolean
@@ -231,10 +281,10 @@ icns_dialog_new (IcnsSaveInfo *info)
 {
   GtkWidget     *dialog;
   GtkWidget     *main_vbox;
-  GtkWidget     *vbox;
   GtkWidget     *frame;
   GtkWidget     *scrolled_window;
   GtkWidget     *viewport;
+  GtkWidget     *flowbox;
   GtkWidget     *warning;
 
   dialog = gimp_export_dialog_new (_("Apple Icon Image"),
@@ -274,11 +324,13 @@ icns_dialog_new (IcnsSaveInfo *info)
   gtk_container_add (GTK_CONTAINER (scrolled_window), viewport);
   gtk_widget_show (viewport);
 
-  vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 6);
-  gtk_container_set_border_width (GTK_CONTAINER (vbox), 6);
-  g_object_set_data (G_OBJECT (dialog), "icons_vbox", vbox);
-  gtk_container_add (GTK_CONTAINER (viewport), vbox);
-  gtk_widget_show (vbox);
+  flowbox = gtk_flow_box_new ();
+  gtk_flow_box_set_column_spacing (GTK_FLOW_BOX (flowbox), 6);
+  gtk_flow_box_set_row_spacing (GTK_FLOW_BOX (flowbox), 6);
+  gtk_flow_box_set_selection_mode (GTK_FLOW_BOX (flowbox), GTK_SELECTION_NONE);
+  g_object_set_data (G_OBJECT (dialog), "icons_vbox", flowbox);
+  gtk_container_add (GTK_CONTAINER (viewport), flowbox);
+  gtk_widget_show (flowbox);
 
   g_object_set_data (G_OBJECT (dialog), "warning", warning);
 
@@ -289,24 +341,54 @@ static gboolean
 icns_save_dialog (IcnsSaveInfo *info,
                   GimpImage    *image)
 {
-  GtkWidget     *dialog;
-  GList         *iter;
-  gint           i;
-  gint           response;
+  GtkWidget *dialog;
+  GList     *iter;
+  gint       i;
+  gint       j;
+  gint       response;
+  gint       duplicates[ICNS_TYPE_NUM];
+  gint       ordered[12] =
+    {12, 16, 18, 24, 32, 36, 48, 64, 128, 256, 512, 1024};
 
   gimp_ui_init (PLUG_IN_BINARY);
 
+  for (i = 0; i < ICNS_TYPE_NUM; i++)
+    duplicates[i] = 0;
+
   dialog = icns_dialog_new (info);
+
+  /* Add icons in order, smallest to largest */
+  for (i = 0; i < 12; i++)
+    {
+      for (iter = info->layers, j = 0;
+           iter;
+           iter = g_list_next (iter), j++)
+        {
+          /* Put the icons in order in dialog */
+          gint height = gimp_drawable_get_height (iter->data);
+          if (height != ordered[i])
+            continue;
+
+          icns_dialog_add_icon (dialog, iter->data, i, duplicates);
+        }
+    }
+
+  /* Add any invalid icons at the end */
   for (iter = info->layers, i = 0;
        iter;
        iter = g_list_next (iter), i++)
-    icns_dialog_add_icon (dialog, iter->data, i);
+    {
+      if (! icns_check_dimensions (gimp_drawable_get_width (iter->data),
+                                   gimp_drawable_get_height (iter->data)))
+        icns_dialog_add_icon (dialog, iter->data, i, duplicates);
+    }
 
   /* Scale the thing to approximately fit its content, but not too large ... */
   gtk_window_set_default_size (GTK_WINDOW (dialog),
-                               -1,
                                200 + (info->num_icons > 4 ?
-                                      500 : info->num_icons * 120));
+                                      500 : info->num_icons * 120),
+                               200 + (info->num_icons > 4 ?
+                                      250 : info->num_icons * 60));
 
   gtk_widget_show (dialog);
 
@@ -326,9 +408,12 @@ icns_export_image (GFile        *file,
   FILE           *fp;
   GList          *iter;
   gint            i;
-  gint            j;
   guint32         file_size   = 8;
   GimpValueArray *return_vals = NULL;
+  gint            duplicates[ICNS_TYPE_NUM];
+
+  for (i = 0; i < ICNS_TYPE_NUM; i++)
+    duplicates[i] = 0;
 
   fp = g_fopen (g_file_peek_path (file), "wb");
 
@@ -358,24 +443,10 @@ icns_export_image (GFile        *file,
       if (! icns_check_dimensions (width, height))
         continue;
 
-      for (j = 0; iconTypes[j].type; j++)
-        {
-          /* TODO: Currently, this chooses the first "modern" ICNS format for a
-           * ICNS file. This is because newer formats are not supported well in
-           * non-native MacOS programs like Inkscape. It'd be nice to design
-           * a GUI with enough information for users to make their own decisions
-           */
-          if (iconTypes[j].width == width   &&
-              iconTypes[j].height == height &&
-              iconTypes[j].isModern)
-            {
-              match = j;
-              break;
-            }
-        }
+      match = icns_find_type (width, height);
 
       /* MacOS X format icons */
-      if (match != -1)
+      if (match != -1 && duplicates[match] == 0)
         {
           GimpDrawable   **drawables = NULL;
           GFile           *temp_file = NULL;
@@ -454,6 +525,7 @@ icns_export_image (GFile        *file,
           fclose (temp_fp);
 
           file_size += temp_size + 8;
+          duplicates[match] = 1;
         }
 
       gimp_progress_update (i / info->num_icons);
@@ -484,10 +556,35 @@ icns_save_image (GFile      *file,
                  gint32      run_mode,
                  GError    **error)
 {
-  IcnsSaveInfo info;
+  IcnsSaveInfo  info;
+  GList        *iter;
+  gboolean      isValidLayers = FALSE;
+  gint          i;
 
-  info.layers         = gimp_image_list_layers (image);
-  info.num_icons      = g_list_length (info.layers);
+  info.layers    = gimp_image_list_layers (image);
+  info.num_icons = g_list_length (info.layers);
+
+  /* Initial check if we have any valid layers to export */
+  for (iter = info.layers, i = 0; iter; iter = iter->next, i++)
+    {
+      gint width  = gimp_drawable_get_width (iter->data);
+      gint height = gimp_drawable_get_height (iter->data);
+
+      if (icns_check_dimensions (width, height))
+        {
+          isValidLayers = TRUE;
+          break;
+        }
+    }
+  if (! isValidLayers)
+    {
+      g_set_error (error, G_FILE_ERROR, 0,
+                   _("No valid sized layers. Only valid layer sizes are "
+                     "16x12, 16x16, 18x18, 24x24, 32x32, 36x36, 48x48,"
+                     "64x64, 128x128, 256x256, 512x512, or 1024x1024."));
+
+      return GIMP_PDB_EXECUTION_ERROR;
+    }
 
   if (run_mode == GIMP_RUN_INTERACTIVE)
     {

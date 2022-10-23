@@ -36,6 +36,7 @@
 #define PLUG_IN_ROLE        "gimp-file-icns"
 
 #define ICNS_MAXBUF          4096
+#define ICNS_TYPE_NUM        34
 
 typedef struct _IcnsResourceHeader
 {
@@ -54,8 +55,8 @@ typedef struct _IcnsResource
 
 typedef struct _IcnsSaveInfo
 {
-  GList       *layers;
-  gint         num_icons;
+  GList *layers;
+  gint   num_icons;
 } IcnsSaveInfo;
 
 void

@@ -22,9 +22,9 @@
 #define __ICNS_SAVE_H__
 
 
-GimpPDBStatusType icns_save_image          (GFile         *file,
-                                            GimpImage     *image,
-                                            gint32         run_mode,
-                                            GError       **error);
+GimpPDBStatusType icns_save_image (GFile     *file,
+                                   GimpImage *image,
+                                   gint32     run_mode,
+                                   GError   **error);
 
 #endif /* __ICNS_SAVE_H__ */
