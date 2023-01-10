@@ -237,10 +237,12 @@ EXPORTS
 	gimp_int_radio_frame_set_sensitivity
 	gimp_int_radio_group_new
 	gimp_int_radio_group_set_active
+	gimp_int_store_append
 	gimp_int_store_get_type
 	gimp_int_store_lookup_by_user_data
 	gimp_int_store_lookup_by_value
 	gimp_int_store_new
+	gimp_int_store_new_empty
 	gimp_int_store_new_valist
 	gimp_label_color_get_color_widget
 	gimp_label_color_get_type
@@ -274,6 +276,8 @@ EXPORTS
 	gimp_memsize_entry_get_value
 	gimp_memsize_entry_new
 	gimp_memsize_entry_set_value
+	gimp_mock_enum_get_widget
+	gimp_mock_enum_is_mock
 	gimp_monitor_get_color_profile
 	gimp_number_pair_entry_get_aspect
 	gimp_number_pair_entry_get_default_text

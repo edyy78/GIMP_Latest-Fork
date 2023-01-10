@@ -120,6 +120,42 @@ Formerly, a SF-VALUE argument let a user enter garbage for an argument,
 which caused an error in the script.
 SF-ADJUSTMENT is more user-friendly.
 
+### SF-OPTION kind of argument is slightly changed
+
+You use the symbol SF-OPTION to declare an argument to take a small set of integers,
+i.e. an enumeration.
+
+In both v2 and v3, the declaration is for example:
+
+```
+SF-OPTION "Label"  '("Foo" "Bar")
+```
+
+The change is in the behavior and in the allowed characters.
+In v3, ScriptFu formats this into  a documentation string for the argument,
+that appears in the PDB Browser like this:
+
+```
+option  gint "Label {Foo(0), Bar(1)}"
+```
+Note that ScriptFu has numbered the enum values starting with 0.
+In neither v2 nor v3 are the value symbols in the Scheme environment;
+instead your script must use integer literals like "1",
+or you can define the symbols yourself.
+
+The names you provide must not use the characters '(){}'.
+You can use white space and commas.
+For example, this is valid:
+
+```
+SF-OPTION "Orient with" '("Horiz, tiled" "Vert/Diag")
+```
+If your script is localized by a translator, use "_" on each string:
+
+```
+SF-OPTION _"Label"  '(_"Foo" _"Bar")
+```
+
 ### FALSE and TRUE symbols obsolete
 
 FALSE and TRUE symbols are no longer defined symbols in the ScriptFu language.

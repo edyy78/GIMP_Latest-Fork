@@ -258,6 +258,30 @@ gimp_int_store_add_empty (GimpIntStore *store)
   priv->empty_iter = gtk_tree_iter_copy (&iter);
 }
 
+/* Returns int store truly empty.
+ * Not containing a value which says "Empty" to a user!
+ */
+GtkListStore *
+gimp_int_store_new_empty (void)
+{
+  GtkListStore *store;
+
+  store = g_object_new (GIMP_TYPE_INT_STORE, NULL);
+  return store;
+}
+
+void
+gimp_int_store_append (GtkListStore *store, const gchar *label, gint value)
+{
+  GtkTreeIter iter = { 0, };
+
+  gtk_list_store_append (store, &iter);
+  gtk_list_store_set (store, &iter,
+                      GIMP_INT_STORE_VALUE, value,
+                      GIMP_INT_STORE_LABEL, label,
+                      -1);
+}
+
 /**
  * gimp_int_store_new: (skip)
  * @first_label: the label of the first item

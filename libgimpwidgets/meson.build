@@ -96,6 +96,7 @@ libgimpwidgets_sources = [
   'gimpcontroller.c',
   'gimpeevl.c',
   'gimpwidgets-private.c',
+  'gimpmockenum.c',
 
   'gimpwidgetsenums.c',
   stamp_widgets_enums,

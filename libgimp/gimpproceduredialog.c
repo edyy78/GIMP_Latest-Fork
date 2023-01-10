@@ -25,6 +25,7 @@
 #include <gtk/gtk.h>
 
 #include "libgimpwidgets/gimpwidgets.h"
+#include "libgimpwidgets/gimpmockenum.h"
 
 #include "gimp.h"
 #include "gimpui.h"
@@ -617,6 +618,12 @@ gimp_procedure_dialog_get_widget (GimpProcedureDialog *dialog,
                                        property,
                                        g_param_spec_get_nick (pspec),
                                        &label, NULL);
+    }
+  else if (G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_INT && gimp_mock_enum_is_mock (pspec))
+    {
+      widget = gimp_mock_enum_get_widget (G_OBJECT (dialog->priv->config),
+                                          property,
+                                          pspec);
     }
   else if (G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_INT ||
            G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_DOUBLE)
