@@ -720,6 +720,7 @@ EXPORTS
 	gimp_procedure_add_argument_from_property
 	gimp_procedure_add_aux_argument
 	gimp_procedure_add_aux_argument_from_property
+	gimp_procedure_add_enum
 	gimp_procedure_add_menu_path
 	gimp_procedure_add_return_value
 	gimp_procedure_add_return_value_from_property
@@ -751,6 +752,7 @@ EXPORTS
 	gimp_procedure_get_blurb
 	gimp_procedure_get_copyright
 	gimp_procedure_get_date
+	gimp_procedure_get_enum_name
 	gimp_procedure_get_help
 	gimp_procedure_get_help_id
 	gimp_procedure_get_icon_file

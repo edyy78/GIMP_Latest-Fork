@@ -27,6 +27,7 @@
 #include "libgimpbase/gimpbase.h"
 #include "libgimpbase/gimpprotocol.h"
 #include "libgimpbase/gimpwire.h"
+#include "libgimpbase/gimp-type-module.h"
 
 #include "libgimp/gimpgpparams.h"
 
@@ -73,6 +74,8 @@ static void gimp_plug_in_handle_proc_install     (GimpPlugIn      *plug_in,
                                                   GPProcInstall   *proc_install);
 static void gimp_plug_in_handle_proc_uninstall   (GimpPlugIn      *plug_in,
                                                   GPProcUninstall *proc_uninstall);
+static void gimp_plug_in_handle_enum_install     (GimpPlugIn      *plug_in,
+                                                  GPEnumInstall   *enum_install);
 static void gimp_plug_in_handle_extension_ack    (GimpPlugIn      *plug_in);
 static void gimp_plug_in_handle_has_init         (GimpPlugIn      *plug_in);
 
@@ -160,6 +163,13 @@ gimp_plug_in_handle_message (GimpPlugIn      *plug_in,
     case GP_HAS_INIT:
       gimp_plug_in_handle_has_init (plug_in);
       break;
+
+    case GP_ENUM_INSTALL:
+      gimp_plug_in_handle_enum_install (plug_in, msg->data);
+      break;
+
+    default:
+      g_warning ("Unhandled case in gimp_plug_in_handle_message");
     }
 }
 
@@ -928,4 +938,25 @@ gimp_plug_in_handle_has_init (GimpPlugIn *plug_in)
                     gimp_file_get_utf8_name (plug_in->file));
       gimp_plug_in_close (plug_in, TRUE);
     }
+}
+
+
+static void
+gimp_plug_in_handle_enum_install (GimpPlugIn    *plug_in,
+                                  GPEnumInstall *enum_install)
+{
+  GimpTypeModuleEnum* type_module;
+
+  g_printerr("gimp_plug_in_handle_enum_install\n");
+
+  /* Create a new type module. TODO a factory of dynamic types. */
+  type_module = gimp_type_module_enum_new (enum_install->name,
+                                           enum_install->value_name);
+  /* Use it, forever. */
+  g_type_module_use (G_TYPE_MODULE(type_module));
+
+  /* Not retaining a reference, we never unuse.
+   * The enum type remains defined in Gimp
+   * as long as the plugin is known to Gimp.
+   */
 }

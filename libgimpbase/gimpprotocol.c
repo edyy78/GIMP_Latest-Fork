@@ -144,6 +144,14 @@ static void _gp_has_init_write           (GIOChannel       *channel,
                                           gpointer          user_data);
 static void _gp_has_init_destroy         (GimpWireMessage  *msg);
 
+static void _gp_enum_install_read        (GIOChannel       *channel,
+                                          GimpWireMessage  *msg,
+                                          gpointer          user_data);
+static void _gp_enum_install_write       (GIOChannel       *channel,
+                                          GimpWireMessage  *msg,
+                                          gpointer          user_data);
+static void _gp_enum_install_destroy     (GimpWireMessage  *msg);
+
 
 
 void
@@ -201,6 +209,10 @@ gp_init (void)
                       _gp_has_init_read,
                       _gp_has_init_write,
                       _gp_has_init_destroy);
+  gimp_wire_register (GP_ENUM_INSTALL,
+                      _gp_enum_install_read,
+                      _gp_enum_install_write,
+                      _gp_enum_install_destroy);
 }
 
 /* public writing API */
@@ -402,6 +414,27 @@ gp_proc_uninstall_write (GIOChannel      *channel,
 
   msg.type = GP_PROC_UNINSTALL;
   msg.data = proc_uninstall;
+
+  if (! gimp_wire_write_msg (channel, &msg, user_data))
+    return FALSE;
+
+  if (! gimp_wire_flush (channel, user_data))
+    return FALSE;
+
+  return TRUE;
+}
+
+gboolean
+gp_enum_install_write (GIOChannel    *channel,
+                       GPEnumInstall *enum_install,
+                       gpointer       user_data)
+{
+  GimpWireMessage msg;
+
+  msg.type = GP_ENUM_INSTALL;
+  msg.data = enum_install;
+
+  g_printerr("gp_enum_install_write\n");
 
   if (! gimp_wire_write_msg (channel, &msg, user_data))
     return FALSE;
@@ -1945,4 +1978,55 @@ _gp_has_init_write (GIOChannel      *channel,
 static void
 _gp_has_init_destroy (GimpWireMessage *msg)
 {
+}
+
+/* enum_install */
+
+static void
+_gp_enum_install_read (GIOChannel      *channel,
+                       GimpWireMessage *msg,
+                       gpointer         user_data)
+{
+  GPEnumInstall *enum_install = g_slice_new0 (GPEnumInstall);
+
+  g_printerr ("_gp_enum_install_read\n");
+
+  if (! _gimp_wire_read_string (channel,
+                                &enum_install->name, 1, user_data)    ||
+      ! _gimp_wire_read_string (channel,
+                                &enum_install->value_name, 1, user_data))
+    goto cleanup;
+
+  msg->data = enum_install;
+  return;
+
+ cleanup:
+  g_free (enum_install->name);
+  g_free (enum_install->value_name);
+
+  g_slice_free (GPEnumInstall, enum_install);
+  msg->data = NULL;
+}
+
+static void
+_gp_enum_install_write (GIOChannel      *channel,
+                    GimpWireMessage *msg,
+                    gpointer         user_data)
+{
+
+  GPEnumInstall *enum_install = msg->data;
+  g_printerr ("name: %s\n", enum_install->name);
+  g_printerr ("value_name: %s\n", enum_install->value_name);
+  g_printerr ("_gp_enum_install_write\n");
+
+
+  if (! _gimp_wire_write_string (channel, &enum_install->name, 1, user_data) ||
+      ! _gimp_wire_write_string (channel, &enum_install->value_name, 1, user_data))
+    return;
+}
+
+static void
+_gp_enum_install_destroy (GimpWireMessage *msg)
+{
+  g_printerr ("_gp_enum_install_destroy not implemented\n");
 }

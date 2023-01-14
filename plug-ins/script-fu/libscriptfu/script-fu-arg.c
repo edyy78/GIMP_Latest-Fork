@@ -21,9 +21,13 @@
 
 #include <libgimp/gimp.h>
 
+#include <libgimpbase/gimp-type-module.h>
+
 #include "script-fu-types.h"
 #include "script-fu-arg.h"
 #include "script-fu-utils.h"
+#include "script-fu-option.h"
+
 
 
 /*
@@ -81,6 +85,7 @@
 
 static void pspec_set_default_file (GParamSpec *pspec, const gchar *filepath);
 static void append_int_repr_from_gvalue (GString *result_string, GValue *gvalue);
+
 
 /* Free any allocated members.
  * Somewhat hides what members of the SFArg struct are allocated.
@@ -270,9 +275,8 @@ script_fu_arg_reset (SFArg *arg, gboolean should_reset_ids)
  * but it doesn't fully do that yet.
  */
 GParamSpec *
-script_fu_arg_get_param_spec (SFArg       *arg,
-                              const gchar *name,
-                              const gchar *nick)
+script_fu_arg_get_param_spec (SFScript    *script,
+                              SFArg       *arg)
 {
   GParamSpec * pspec = NULL;
 
@@ -280,48 +284,48 @@ script_fu_arg_get_param_spec (SFArg       *arg,
     {
       /* No defaults for GIMP objects: Image, Item subclasses, Display */
     case SF_IMAGE:
-      pspec = gimp_param_spec_image (name,
-                                     nick,
+      pspec = gimp_param_spec_image (arg->property_name,
+                                     arg->label,
                                      arg->label,
                                      TRUE,  /* None is valid. */
                                      G_PARAM_READWRITE);
       break;
 
     case SF_DRAWABLE:
-      pspec = gimp_param_spec_drawable (name,
-                                        nick,
+      pspec = gimp_param_spec_drawable (arg->property_name,
+                                        arg->label,
                                         arg->label,
                                         TRUE,
                                         G_PARAM_READWRITE);
       break;
 
     case SF_LAYER:
-      pspec = gimp_param_spec_layer (name,
-                                     nick,
+      pspec = gimp_param_spec_layer (arg->property_name,
+                                     arg->label,
                                      arg->label,
                                      TRUE,
                                      G_PARAM_READWRITE);
       break;
 
     case SF_CHANNEL:
-      pspec = gimp_param_spec_channel (name,
-                                       nick,
+      pspec = gimp_param_spec_channel (arg->property_name,
+                                       arg->label,
                                        arg->label,
                                        TRUE,
                                        G_PARAM_READWRITE);
       break;
 
     case SF_VECTORS:
-      pspec = gimp_param_spec_vectors (name,
-                                       nick,
+      pspec = gimp_param_spec_vectors (arg->property_name,
+                                       arg->label,
                                        arg->label,
                                        TRUE,
                                        G_PARAM_READWRITE);
       break;
 
     case SF_DISPLAY:
-      pspec = gimp_param_spec_display (name,
-                                       nick,
+      pspec = gimp_param_spec_display (arg->property_name,
+                                       arg->label,
                                        arg->label,
                                        TRUE,
                                        G_PARAM_READWRITE);
@@ -331,8 +335,8 @@ script_fu_arg_get_param_spec (SFArg       *arg,
       /* Pass address of default color i.e. instance of GimpRGB.
        * Color is owned by ScriptFu and exists for lifetime of SF process.
        */
-      pspec = gimp_param_spec_rgb (name,
-                                   nick,
+      pspec = gimp_param_spec_rgb (arg->property_name,
+                                   arg->label,
                                    arg->label,
                                    TRUE,  /* is alpha relevant */
                                    &arg->default_value.sfa_color,
@@ -342,8 +346,8 @@ script_fu_arg_get_param_spec (SFArg       *arg,
 
     case SF_TOGGLE:
       /* Implicit conversion from gint32 to gboolean. */
-      pspec = g_param_spec_boolean (name,
-                                    nick,
+      pspec = g_param_spec_boolean (arg->property_name,
+                                    arg->label,
                                     arg->label,
                                     arg->default_value.sfa_toggle,
                                     G_PARAM_READWRITE);
@@ -366,8 +370,8 @@ script_fu_arg_get_param_spec (SFArg       *arg,
       /* These cases the same type: gchar *.
        * Use arbitrary SFArg field of that type.
        */
-      pspec = g_param_spec_string (name,
-                                   nick,
+      pspec = g_param_spec_string (arg->property_name,
+                                   arg->label,
                                    arg->label,
                                    arg->default_value.sfa_value,
                                    G_PARAM_READWRITE);
@@ -377,8 +381,8 @@ script_fu_arg_get_param_spec (SFArg       *arg,
       /* FUTURE: brush object has more fields.
        * ?? Implement gimp_param_spec_brush
        */
-      pspec = g_param_spec_string (name,
-                                   nick,
+      pspec = g_param_spec_string (arg->property_name,
+                                   arg->label,
                                    arg->label,
                                    arg->default_value.sfa_brush.name,
                                    G_PARAM_READWRITE);
@@ -390,13 +394,13 @@ script_fu_arg_get_param_spec (SFArg       *arg,
        * Decimal places == 0 means type integer, else float
        */
       if (arg->default_value.sfa_adjustment.digits == 0)
-        pspec = g_param_spec_int (name, nick, arg->label,
+        pspec = g_param_spec_int (arg->property_name, arg->label, arg->label,
                                   arg->default_value.sfa_adjustment.lower,
                                   arg->default_value.sfa_adjustment.upper,
                                   arg->default_value.sfa_adjustment.value,
                                   G_PARAM_READWRITE);
       else
-        pspec = g_param_spec_double (name, nick, arg->label,
+        pspec = g_param_spec_double (arg->property_name, arg->label, arg->label,
                                      arg->default_value.sfa_adjustment.lower,
                                      arg->default_value.sfa_adjustment.upper,
                                      arg->default_value.sfa_adjustment.value,
@@ -405,8 +409,8 @@ script_fu_arg_get_param_spec (SFArg       *arg,
 
     case SF_FILENAME:
     case SF_DIRNAME:
-      pspec = g_param_spec_object (name,
-                                   nick,
+      pspec = g_param_spec_object (arg->property_name,
+                                   arg->label,
                                    arg->label,
                                    G_TYPE_FILE,
                                    G_PARAM_READWRITE |
@@ -417,8 +421,8 @@ script_fu_arg_get_param_spec (SFArg       *arg,
 
     case SF_ENUM:
       /* history is the last used value AND the default. */
-      pspec = g_param_spec_enum (name,
-                                 nick,
+      pspec = g_param_spec_enum (arg->property_name,
+                                 arg->label,
                                  arg->label,
                                  g_type_from_name (arg->default_value.sfa_enum.type_name),
                                  arg->default_value.sfa_enum.history,
@@ -426,13 +430,20 @@ script_fu_arg_get_param_spec (SFArg       *arg,
       break;
 
     case SF_OPTION:
+      g_assert( arg->property_name != NULL);
+      /* Requires the option has already registered enum type, and property_name*/
+
+      pspec = script_fu_option_get_param_spec(script, arg, arg->property_name, arg->label);
+
+      #ifdef LKK
       pspec = g_param_spec_int (name,
-                                nick,
+                                arg->label,
                                 arg->label,
                                 0,        /* Always zero based. */
                                 g_slist_length (arg->default_value.sfa_option.list),
                                 arg->default_value.sfa_option.history,
                                 G_PARAM_READWRITE);
+      #endif
       /* FUTURE: Model values not now appear in PDB browser NOR in widgets? */
       /* FUTURE: Does not show a combo box widget ??? */
       break;
@@ -725,7 +736,7 @@ script_fu_arg_reset_name_generator (void)
 }
 
 /*
- * Return a unique name, and non-unique nick, for self.
+ * Return a unique name for self.
  *
  * Self's label came from a call to script-fu-register ()
  * and was not lexically checked so is unsuitable for a property name.
@@ -745,17 +756,14 @@ script_fu_arg_reset_name_generator (void)
  * The name means nothing to human readers of the spec.
  * Instead, the nick is descriptive for human readers.
  *
- * The returned string is owned by the generator, a constant.
- * The caller need not copy it,
- * but usually does by creating a GParamSpec.
+ * The caller must copy the string.
  */
-void
-script_fu_arg_generate_name_and_nick (SFArg        *arg,
-                                      const gchar **returned_name,
-                                      const gchar **returned_nick)
+gchar *
+script_fu_arg_generate_name (SFArg        *arg)
 {
   static gchar  numbered_name[64];
   gchar        *name = NULL;
+  gchar        *result = NULL;
 
   switch (arg->type)
     {
@@ -844,22 +852,25 @@ script_fu_arg_generate_name_and_nick (SFArg        *arg,
       break;
     }
 
-  if (arg_count[arg->type] == 0)
+  if (arg_count[arg->type] != 0)
     {
-      g_strlcpy (numbered_name, name, sizeof (numbered_name));
+      /* append a unique numeral */
+      g_snprintf (numbered_name, sizeof (numbered_name),
+                  "%s-%d", name, arg_count[arg->type] + 1);
+      result = numbered_name;
     }
   else
     {
-      g_snprintf (numbered_name, sizeof (numbered_name),
-                  "%s-%d", name, arg_count[arg->type] + 1);
+      result = name;
     }
 
   arg_count[arg->type]++;
 
-  *returned_name = numbered_name;
+  g_assert( result != NULL);
+  return result;
 
   /* nick is what the script author said describes the arg */
-  *returned_nick = arg->label;
+// OLD  *returned_nick = arg->label;
 }
 
 

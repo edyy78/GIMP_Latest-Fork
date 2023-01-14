@@ -181,6 +181,8 @@ EXPORTS
 	gimp_transform_resize_get_type
 	gimp_type_get_translation_context
 	gimp_type_get_translation_domain
+	gimp_type_module_enum_get_type
+	gimp_type_module_enum_new
 	gimp_type_set_translation_context
 	gimp_type_set_translation_domain
 	gimp_uint8_array_get_type
@@ -256,6 +258,7 @@ EXPORTS
 	gimp_wire_write
 	gimp_wire_write_msg
 	gp_config_write
+	gp_enum_install_write
 	gp_extension_ack_write
 	gp_has_init_write
 	gp_init
