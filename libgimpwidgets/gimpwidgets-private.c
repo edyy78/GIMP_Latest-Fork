@@ -262,6 +262,22 @@ gimp_widget_set_bound_property (GtkWidget   *widget,
                           (GDestroyNotify) g_object_unref);
 }
 
+/* Transfer none. */
+void
+gimp_widget_get_bound_property (GtkWidget             *widget,
+                                GObject              **config,
+                                const gchar          **property_name)
+{
+  g_return_if_fail (GTK_IS_WIDGET (widget));
+
+  *property_name = (const gchar*) g_object_steal_data (G_OBJECT (widget),
+                                                       "gimp-widget-property-name");
+  *config = g_object_steal_data (G_OBJECT (widget), "gimp-widget-property-config");
+}
+
+
+
+
 /* clean up babl (in particular, so that the fish cache is constructed) if the
  * compiler supports destructors
  */

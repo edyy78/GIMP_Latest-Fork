@@ -77,6 +77,7 @@ install_data(
 scripts_independent = [
   { 'name': 'ts-helloworld' },
   { 'name': 'test-sphere-v3' },
+  { 'name': 'test-widgets' },
 ]
 
 foreach plugin : scripts_independent
