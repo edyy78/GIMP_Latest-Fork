@@ -45,6 +45,7 @@ typedef enum /*< skip >*/
   GIMP_ADD_SELECTION_MASK      = GIMP_ADD_MASK_SELECTION,
   GIMP_ADD_COPY_MASK           = GIMP_ADD_MASK_COPY,
   GIMP_ADD_CHANNEL_MASK        = GIMP_ADD_MASK_CHANNEL
+  GIMP_ADD_COPY_OF_MASK        = GIMP_ADD_MASK_COPY_OF,
 } GimpAddMaskTypeCompat;
 #endif
 

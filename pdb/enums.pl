@@ -35,14 +35,15 @@ package Gimp::CodeGen::enums;
 	  symbols => [ qw(GIMP_ADD_MASK_WHITE GIMP_ADD_MASK_BLACK
 			  GIMP_ADD_MASK_ALPHA GIMP_ADD_MASK_ALPHA_TRANSFER
 			  GIMP_ADD_MASK_SELECTION GIMP_ADD_MASK_COPY
-			  GIMP_ADD_MASK_CHANNEL) ],
+			  GIMP_ADD_MASK_CHANNEL GIMP_ADD_MASK_COPY_OF) ],
 	  mapping => { GIMP_ADD_MASK_WHITE => '0',
 		       GIMP_ADD_MASK_BLACK => '1',
 		       GIMP_ADD_MASK_ALPHA => '2',
 		       GIMP_ADD_MASK_ALPHA_TRANSFER => '3',
 		       GIMP_ADD_MASK_SELECTION => '4',
 		       GIMP_ADD_MASK_COPY => '5',
-		       GIMP_ADD_MASK_CHANNEL => '6' }
+		       GIMP_ADD_MASK_CHANNEL => '6',
+		       GIMP_ADD_MASK_COPY_OF => '7' }
 	},
     GimpBrushGeneratedShape =>
 	{ contig => 1,

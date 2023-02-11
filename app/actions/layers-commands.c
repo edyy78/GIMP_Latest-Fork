@@ -137,6 +137,7 @@ static void   layers_add_mask_callback        (GtkWidget             *dialog,
                                                GList                 *layers,
                                                GimpAddMaskType        add_mask_type,
                                                GimpChannel           *channel,
+                                               GimpLayer             *source_layer,
                                                gboolean               invert,
                                                gpointer               user_data);
 static void   layers_scale_callback           (GtkWidget             *dialog,
@@ -1442,6 +1443,12 @@ layers_mask_add_last_vals_cmd_callback (GimpAction *action,
         }
     }
 
+  if (config->layer_add_mask_type == GIMP_ADD_MASK_CHANNEL)
+    {
+      layers_mask_add_cmd_callback (action, value, data);
+      return;
+    }
+
   for (iter = layers; iter; iter = iter->next)
     {
       if (! gimp_layer_get_mask (iter->data))
@@ -1461,7 +1468,8 @@ layers_mask_add_last_vals_cmd_callback (GimpAction *action,
 
       mask = gimp_layer_create_mask (iter->data,
                                      config->layer_add_mask_type,
-                                     channel);
+                                     channel,
+                                     NULL /* source_layer */);
 
       if (config->layer_add_mask_invert)
         gimp_channel_invert (GIMP_CHANNEL (mask), FALSE);
@@ -2381,6 +2389,7 @@ layers_add_mask_callback (GtkWidget       *dialog,
                           GList           *layers,
                           GimpAddMaskType  add_mask_type,
                           GimpChannel     *channel,
+                          GimpLayer       *source_layer,
                           gboolean         invert,
                           gpointer         user_data)
 {
@@ -2402,7 +2411,8 @@ layers_add_mask_callback (GtkWidget       *dialog,
     {
       mask = gimp_layer_create_mask (iter->data,
                                      config->layer_add_mask_type,
-                                     channel);
+                                     channel,
+                                     source_layer);
 
       if (config->layer_add_mask_invert)
         gimp_channel_invert (GIMP_CHANNEL (mask), FALSE);

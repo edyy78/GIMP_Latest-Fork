@@ -2117,7 +2117,8 @@ gimp_layer_tree_view_layer_clicked (GimpCellRendererViewable *cell,
                         {
                           mask = gimp_layer_create_mask (layer,
                                                          config->layer_add_mask_type,
-                                                         channel);
+                                                         channel,
+                                                         NULL /* source_layer */);
 
                           if (config->layer_add_mask_invert)
                             gimp_channel_invert (GIMP_CHANNEL (mask), FALSE);

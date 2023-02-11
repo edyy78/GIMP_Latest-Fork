@@ -562,9 +562,14 @@ layer_create_mask_invoker (GimpProcedure         *procedure,
             channel = channels->data;
         }
 
+      if (mask_type == GIMP_ADD_MASK_COPY_OF)
+        {
+          success = FALSE;
+        }
+
       if (success)
         {
-          mask = gimp_layer_create_mask (layer, mask_type, channel);
+          mask = gimp_layer_create_mask (layer, mask_type, channel, NULL /* source_layer */);
 
           if (! mask)
             success = FALSE;

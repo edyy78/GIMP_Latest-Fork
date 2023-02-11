@@ -157,7 +157,8 @@ GimpLayer     * gimp_layer_get_parent          (GimpLayer            *layer);
 GimpLayerMask * gimp_layer_get_mask            (GimpLayer            *layer);
 GimpLayerMask * gimp_layer_create_mask         (GimpLayer            *layer,
                                                 GimpAddMaskType       mask_type,
-                                                GimpChannel          *channel);
+                                                GimpChannel          *channel,
+                                                GimpLayer            *source_layer);
 GimpLayerMask * gimp_layer_add_mask            (GimpLayer            *layer,
                                                 GimpLayerMask        *mask,
                                                 gboolean              push_undo,

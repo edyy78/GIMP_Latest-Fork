@@ -23,6 +23,7 @@ gimp_add_mask_type_get_type (void)
     { GIMP_ADD_MASK_SELECTION, "GIMP_ADD_MASK_SELECTION", "selection" },
     { GIMP_ADD_MASK_COPY, "GIMP_ADD_MASK_COPY", "copy" },
     { GIMP_ADD_MASK_CHANNEL, "GIMP_ADD_MASK_CHANNEL", "channel" },
+    { GIMP_ADD_MASK_COPY_OF, "GIMP_ADD_MASK_COPY_OF", "copy-of" },
     { 0, NULL, NULL }
   };
 
@@ -35,6 +36,7 @@ gimp_add_mask_type_get_type (void)
     { GIMP_ADD_MASK_SELECTION, NC_("add-mask-type", "_Selection"), NULL },
     { GIMP_ADD_MASK_COPY, NC_("add-mask-type", "_Grayscale copy of layer"), NULL },
     { GIMP_ADD_MASK_CHANNEL, NC_("add-mask-type", "C_hannel"), NULL },
+    { GIMP_ADD_MASK_COPY_OF, NC_("add-mask-type", "_Grayscale copy of another layer"), NULL },
     { 0, NULL, NULL }
   };
 

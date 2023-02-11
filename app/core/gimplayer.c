@@ -2018,7 +2018,8 @@ gimp_layer_add_mask (GimpLayer      *layer,
 GimpLayerMask *
 gimp_layer_create_mask (GimpLayer       *layer,
                         GimpAddMaskType  add_mask_type,
-                        GimpChannel     *channel)
+                        GimpChannel     *channel,
+                        GimpLayer       *source_layer)
 {
   GimpDrawable  *drawable;
   GimpItem      *item;
@@ -2030,6 +2031,8 @@ gimp_layer_create_mask (GimpLayer       *layer,
   g_return_val_if_fail (GIMP_IS_LAYER (layer), NULL);
   g_return_val_if_fail (add_mask_type != GIMP_ADD_MASK_CHANNEL ||
                         GIMP_IS_CHANNEL (channel), NULL);
+  g_return_val_if_fail (add_mask_type != GIMP_ADD_MASK_COPY_OF ||
+                        GIMP_IS_LAYER (source_layer), NULL);
 
   drawable = GIMP_DRAWABLE (layer);
   item     = GIMP_ITEM (layer);
@@ -2148,9 +2151,16 @@ gimp_layer_create_mask (GimpLayer       *layer,
       break;
 
     case GIMP_ADD_MASK_COPY:
+    case GIMP_ADD_MASK_COPY_OF:
       {
         GeglBuffer *src_buffer;
         GeglBuffer *dest_buffer;
+
+        if (add_mask_type == GIMP_ADD_MASK_COPY_OF)
+          {
+            drawable = GIMP_DRAWABLE (source_layer);
+            item = GIMP_ITEM (source_layer);
+          }
 
         if (! gimp_drawable_is_gray (drawable))
           {
