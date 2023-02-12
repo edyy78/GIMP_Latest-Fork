@@ -151,9 +151,11 @@ static void
 gimp_vector_layer_options_finalize (GObject *object)
 {
   GimpVectorLayerOptions *options = GIMP_VECTOR_LAYER_OPTIONS (object);
+  GimpImage              *image   = gimp_item_get_image (GIMP_ITEM (options->vectors));
 
   if (options->vectors)
     {
+      gimp_image_remove_hidden_item (image, GIMP_ITEM (options->vectors));
       g_object_unref (options->vectors);
       options->vectors = NULL;
     }
@@ -221,16 +223,26 @@ gimp_vector_layer_options_set_property (GObject      *object,
     case PROP_VECTORS:
       if (options->vectors)
         {
+          GimpImage *image = gimp_item_get_image (GIMP_ITEM (options->vectors));
+
           g_signal_handlers_disconnect_by_func (options->vectors,
                                                 G_CALLBACK (gimp_vector_layer_options_vectors_changed),
                                                 options);
+
+          gimp_image_remove_hidden_item(image, GIMP_ITEM (options->vectors));
+
           g_object_unref (options->vectors);
         }
 
-      options->vectors = g_value_dup_object (value);
-
-      if (options->vectors)
+      if (g_value_get_object (value))
         {
+          GObject *object = g_value_get_object (value);
+
+          GimpImage *image = gimp_item_get_image (GIMP_ITEM (object));
+          options->vectors = GIMP_VECTORS (
+              gimp_item_duplicate (GIMP_ITEM (object), GIMP_TYPE_VECTORS));
+          gimp_image_add_hidden_item (image, GIMP_ITEM (options->vectors));
+
           g_signal_connect_object (options->vectors, "invalidate-preview",
                                    G_CALLBACK (gimp_vector_layer_options_vectors_changed),
                                    options, G_CONNECT_SWAPPED);
@@ -240,6 +252,11 @@ gimp_vector_layer_options_set_property (GObject      *object,
 
           /* update the tattoo */
           options->vectors_tattoo = gimp_item_get_tattoo (GIMP_ITEM (options->vectors));
+        }
+      else
+        {
+          options->vectors        = NULL;
+          options->vectors_tattoo = 0;
         }
       break;
     case PROP_VECTORS_TATTOO:

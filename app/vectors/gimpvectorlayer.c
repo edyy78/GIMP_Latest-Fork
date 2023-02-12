@@ -202,7 +202,7 @@ gimp_vector_layer_set_property (GObject      *object,
                                                 G_CALLBACK  (gimp_vector_layer_changed_options),
                                                 vector_layer);
           if (vector_layer->options->vectors)
-	        g_signal_handlers_disconnect_by_func (vector_layer->options->vectors,
+            g_signal_handlers_disconnect_by_func (vector_layer->options->vectors,
                                                   G_CALLBACK (gimp_vector_layer_removed_options_vectors),
                                                   vector_layer);
 
@@ -361,6 +361,7 @@ gimp_vector_layer_removed (GimpItem *item)
  * @context: the #GimpContext from which to pull context properties
  *
  * Creates a new vector layer.
+ * Input vectors are duplicated into a new hidden item and can be safely deleted.
  *
  * Return value: a new #GimpVectorLayer or %NULL in case of a problem
  **/

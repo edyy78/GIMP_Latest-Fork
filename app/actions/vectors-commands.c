@@ -45,6 +45,7 @@
 #include "pdb/gimpprocedure.h"
 
 #include "vectors/gimpvectorlayer.h"
+#include "vectors/gimpvectorlayeroptions.h"
 #include "vectors/gimpvectors.h"
 #include "vectors/gimpvectors-export.h"
 #include "vectors/gimpvectors-import.h"
@@ -495,19 +496,39 @@ vectors_to_vector_layer_cmd_callback (GimpAction *action,
                                       gpointer    data)
 {
   GimpImage       *image;
-  GimpVectors     *vectors;
+  GList           *vectors;
   GimpVectorLayer *layer;
-  return_if_no_vectors (image, vectors, data);
+  return_if_no_vectors_list (image, vectors, data);
 
-  layer = gimp_vector_layer_new (image, vectors,
+  gimp_image_undo_group_start (image, GIMP_UNDO_GROUP_VECTORS_IMPORT,
+                               _ ("Paths to Vector Layer"));
+
+  GimpVectors *origin_first;
+  GimpVectors *new_vectors;
+  gchar       *new_vectors_name;
+
+  origin_first     = GIMP_VECTORS (vectors->data);
+  new_vectors      = GIMP_VECTORS (gimp_item_duplicate (GIMP_ITEM (origin_first), GIMP_TYPE_VECTORS));
+  new_vectors_name = g_strdup (gimp_object_get_name (origin_first));
+
+  for (; vectors; vectors = g_list_next (vectors))
+    gimp_vectors_add_strokes (GIMP_VECTORS (vectors->data), new_vectors);
+
+  gimp_object_take_name (GIMP_OBJECT (new_vectors), new_vectors_name);
+
+  layer = gimp_vector_layer_new (image, new_vectors,
                                  gimp_get_user_context (image->gimp));
+
+  g_object_unref (new_vectors);
+
   gimp_image_add_layer (image,
                         GIMP_LAYER (layer),
                         GIMP_IMAGE_ACTIVE_PARENT,
                         -1,
                         TRUE);
-  gimp_vector_layer_refresh (layer);
 
+  gimp_image_undo_group_end (image);
+  gimp_vector_layer_refresh (layer);
   gimp_image_flush (image);
 }
 

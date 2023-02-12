@@ -259,10 +259,16 @@ layers_edit_vector_cmd_callback (GimpAction *action,
 {
   GimpImage *image;
   GimpLayer *layer;
+  GList     *layers;
   GtkWidget *widget;
   GimpTool  *active_tool;
-  return_if_no_layer (image, layer, data);
+  return_if_no_layers (image, layers, data);
   return_if_no_widget (widget, data);
+
+  if (g_list_length (layers) != 1)
+    return;
+
+  layer = layers->data;
 
   if (! gimp_drawable_is_vector_layer (GIMP_DRAWABLE (layer)))
     {
@@ -1145,9 +1151,15 @@ layers_vector_fill_stroke_cmd_callback (GimpAction *action,
 {
   GimpImage *image;
   GimpLayer *layer;
+  GList     *layers;
   GtkWidget *widget;
-  return_if_no_layer (image, layer, data);
+  return_if_no_layers (image, layers, data);
   return_if_no_widget (widget, data);
+
+  if (g_list_length (layers) != 1)
+    return;
+
+  layer = layers->data;
 
   if (GIMP_IS_VECTOR_LAYER (layer))
     {
@@ -1170,7 +1182,13 @@ layers_vector_discard_cmd_callback (GimpAction *action,
 {
   GimpImage *image;
   GimpLayer *layer;
-  return_if_no_layer (image, layer, data);
+  GList     *layers;
+  return_if_no_layers (image, layers, data);
+
+  if (g_list_length (layers) != 1)
+    return;
+
+  layer = layers->data;
 
   if (GIMP_IS_VECTOR_LAYER (layer))
     gimp_vector_layer_discard (GIMP_VECTOR_LAYER (layer));
