@@ -83,6 +83,8 @@
 #include "gimpundostack.h"
 
 #include "vectors/gimpvectors.h"
+#include "vectors/gimpvectorlayer.h"
+#include "vectors/gimpvectorlayeroptions.h"
 
 #include "gimp-log.h"
 #include "gimp-intl.h"
@@ -4899,6 +4901,27 @@ gimp_image_set_selected_layers (GimpImage *image,
         gimp_drawable_invalidate_boundary (GIMP_DRAWABLE (selected_layers->data));
 
       gimp_item_tree_set_selected_items (private->layers, layers2);
+
+      /* If we are switching to a vector layer, select constituent vectors */
+      {
+        GList *list;
+        GList *vectors = NULL;
+
+        for (list = layers2; list; list = g_list_next (list))
+          {
+            if (! GIMP_IS_VECTOR_LAYER (list->data))
+              {
+                continue;
+              }
+
+            GimpVectorLayer *vector_layer  = GIMP_VECTOR_LAYER (list->data);
+            GimpVectors     *layer_vectors = vector_layer->options->vectors;
+            vectors = g_list_prepend (vectors, layer_vectors);
+          }
+
+        gimp_image_set_selected_vectors (image, vectors);
+        g_list_free (vectors);
+      }
 
       /* We cannot edit masks with multiple selected layers. */
       if (g_list_length (layers2) > 1)
