@@ -26,6 +26,8 @@
 
 #include "core/gimptooloptions.h"
 
+#include "widgets/gimppropwidgets.h"
+
 #include "gimptooloptions-gui.h"
 
 #include "gimp-intl.h"
@@ -60,4 +62,29 @@ gimp_tool_options_empty_gui (GimpToolOptions *tool_options)
   gtk_widget_show (label);
 
   return vbox;
+}
+
+GtkWidget *
+smoothing_options_gui (GimpToolOptions *tool_options,
+                       GType             tool_type)
+{
+  GObject   *config = G_OBJECT (tool_options);
+  GtkWidget *frame;
+  GtkWidget *vbox;
+  GtkWidget *scale;
+
+  vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
+
+  frame = gimp_prop_expanding_frame_new (config, "use-smoothing", NULL,
+                                         vbox, NULL);
+
+  scale = gimp_prop_spin_scale_new (config, "smoothing-quality",
+                                    1, 10, 1);
+  gtk_box_pack_start (GTK_BOX (vbox), scale, FALSE, FALSE, 0);
+
+  scale = gimp_prop_spin_scale_new (config, "smoothing-factor",
+                                    1, 10, 1);
+  gtk_box_pack_start (GTK_BOX (vbox), scale, FALSE, FALSE, 0);
+
+  return frame;
 }

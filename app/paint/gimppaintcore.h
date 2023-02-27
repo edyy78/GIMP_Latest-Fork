@@ -28,7 +28,7 @@
 #define GIMP_IS_PAINT_CORE(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_PAINT_CORE))
 #define GIMP_IS_PAINT_CORE_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_PAINT_CORE))
 #define GIMP_PAINT_CORE_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_PAINT_CORE, GimpPaintCoreClass))
-
+#define STROKE_BUFFER_INIT_SIZE         2000
 
 typedef struct _GimpPaintCoreClass GimpPaintCoreClass;
 
@@ -207,9 +207,9 @@ void      gimp_paint_core_replace           (GimpPaintCore            *core,
                                              gdouble                   image_opacity,
                                              GimpPaintApplicationMode  mode);
 
-void      gimp_paint_core_smooth_coords             (GimpPaintCore    *core,
-                                                     GimpPaintOptions *paint_options,
-                                                     GimpCoords       *coords);
+void      gimp_paint_core_smooth_coords     (GimpPaintCore   *core,
+                                             GimpToolOptions *tool_options,
+                                             GimpCoords      *coords);
 
 
 #endif  /*  __GIMP_PAINT_CORE_H__  */

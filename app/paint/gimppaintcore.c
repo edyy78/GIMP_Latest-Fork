@@ -58,7 +58,6 @@
 #include "gimp-intl.h"
 
 
-#define STROKE_BUFFER_INIT_SIZE 2000
 
 enum
 {
@@ -1240,11 +1239,11 @@ gimp_paint_core_replace (GimpPaintCore            *core,
  */
 
 void
-gimp_paint_core_smooth_coords (GimpPaintCore    *core,
-                               GimpPaintOptions *paint_options,
-                               GimpCoords       *coords)
+gimp_paint_core_smooth_coords (GimpPaintCore   *core,
+                               GimpToolOptions *tool_options,
+                               GimpCoords      *coords)
 {
-  GimpSmoothingOptions *smoothing_options = paint_options->smoothing_options;
+  GimpSmoothingOptions *smoothing_options = tool_options->smoothing_options;
   GArray               *history           = core->stroke_buffer;
 
   if (core->stroke_buffer == NULL)

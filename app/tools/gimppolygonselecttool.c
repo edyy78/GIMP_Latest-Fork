@@ -31,12 +31,17 @@
 #include "core/gimpchannel-select.h"
 #include "core/gimpimage.h"
 #include "core/gimplayer-floating-selection.h"
+#include "core/gimppaintinfo.h"
+#include "core/gimptoolinfo.h"
+#include "core/gimptooloptions.h"
 
 #include "widgets/gimphelp-ids.h"
 #include "widgets/gimpwidgets-utils.h"
 
 #include "display/gimpdisplay.h"
 #include "display/gimptoolpolygon.h"
+
+#include "paint/gimppaintcore.h"
 
 #include "gimppolygonselecttool.h"
 #include "gimpselectionoptions.h"
@@ -47,6 +52,7 @@ struct _GimpPolygonSelectToolPrivate
 {
   GimpToolWidget *widget;
   GimpToolWidget *grab_widget;
+  GimpPaintCore  *paintCore;
 
   gboolean        pending_response;
   gint            pending_response_id;
@@ -230,6 +236,17 @@ gimp_polygon_select_tool_button_press (GimpTool            *tool,
 
   if (press_type == GIMP_BUTTON_PRESS_NORMAL)
     gimp_tool_control_activate (tool->control);
+
+  if (poly_sel->priv->paintCore == NULL)
+    {
+      GimpPaintInfo *paint_info = tool->tool_info->paint_info;
+      poly_sel->priv->paintCore = g_object_new (paint_info->paint_type,
+                                                "undo-desc", paint_info->blurb,
+                                                NULL);
+    }
+  poly_sel->priv->paintCore->stroke_buffer = g_array_sized_new (TRUE, TRUE,
+                                                                sizeof (GimpCoords),
+                                                                STROKE_BUFFER_INIT_SIZE);
 }
 
 static void
@@ -279,6 +296,9 @@ gimp_polygon_select_tool_button_release (GimpTool              *tool,
 
       priv->pending_response = FALSE;
     }
+
+  g_array_free (poly_sel->priv->paintCore->stroke_buffer, TRUE);
+  poly_sel->priv->paintCore->stroke_buffer = NULL;
 }
 
 static void
@@ -288,12 +308,15 @@ gimp_polygon_select_tool_motion (GimpTool         *tool,
                                  GdkModifierType   state,
                                  GimpDisplay      *display)
 {
-  GimpPolygonSelectTool        *poly_sel = GIMP_POLYGON_SELECT_TOOL (tool);
-  GimpPolygonSelectToolPrivate *priv     = poly_sel->priv;
+  GimpPolygonSelectTool        *poly_sel     = GIMP_POLYGON_SELECT_TOOL (tool);
+  GimpPolygonSelectToolPrivate *priv         = poly_sel->priv;
+  GimpToolOptions              *tool_options = gimp_tool_get_options (tool);
+  GimpCoords                   coords_clone  = { coords->x, coords->y };
 
+  gimp_paint_core_smooth_coords (priv->paintCore, tool_options, &coords_clone);
   if (priv->grab_widget)
     {
-      gimp_tool_widget_motion (priv->grab_widget, coords, time, state);
+      gimp_tool_widget_motion (priv->grab_widget, &coords_clone, time, state);
     }
 }
 

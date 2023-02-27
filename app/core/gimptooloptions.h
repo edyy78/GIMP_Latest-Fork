@@ -28,15 +28,18 @@
 #define GIMP_IS_TOOL_OPTIONS(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_TOOL_OPTIONS))
 #define GIMP_IS_TOOL_OPTIONS_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_TOOL_OPTIONS))
 #define GIMP_TOOL_OPTIONS_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_TOOL_OPTIONS, GimpToolOptionsClass))
-
+#define DEFAULT_SMOOTHING_QUALITY         20
+#define DEFAULT_SMOOTHING_FACTOR          50
 
 typedef struct _GimpToolOptionsClass GimpToolOptionsClass;
+typedef struct _GimpSmoothingOptions GimpSmoothingOptions;
 
 struct _GimpToolOptions
 {
-  GimpContext   parent_instance;
+  GimpContext           parent_instance;
 
-  GimpToolInfo *tool_info;
+  GimpToolInfo         *tool_info;
+  GimpSmoothingOptions *smoothing_options;
 
   /*  if TRUE this instance is the main tool options object used for
    *  the GUI, this is not exactly clean, but there are some things
@@ -51,6 +54,13 @@ struct _GimpToolOptions
 struct _GimpToolOptionsClass
 {
   GimpContextClass parent_class;
+};
+
+struct _GimpSmoothingOptions
+{
+  gboolean use_smoothing;
+  gint     smoothing_quality;
+  gdouble  smoothing_factor;
 };
 
 
