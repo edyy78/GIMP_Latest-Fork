@@ -22,6 +22,20 @@
 GtkWidget * gimp_paint_options_gui                    (GimpToolOptions *tool_options);
 
 GtkWidget * gimp_paint_options_gui_get_paint_mode_box (GtkWidget       *options_gui);
+GtkWidget * gimp_paint_options_gui_scale_with_buttons
+    (GObject      *config,
+     gchar        *prop_name,
+     gchar        *link_prop_name,
+     gchar        *reset_tooltip,
+     gdouble       step_increment,
+     gdouble       page_increment,
+     gint          digits,
+     gdouble       scale_min,
+     gdouble       scale_max,
+     gdouble       factor,
+     gdouble       gamma,
+     GCallback     reset_callback,
+     GtkSizeGroup *link_group);
 
 
 #endif /* __GIMP_PAINT_OPTIONS_GUI_H__ */

@@ -166,6 +166,11 @@ gimp_clone_motion (GimpSourceCore   *source_core,
   GimpImage         *image          = gimp_item_get_image (GIMP_ITEM (drawable));
   gdouble            fade_point;
   gdouble            force;
+  GeglBuffer        *final_buffer;
+  GeglNode          *gegl;
+  GeglNode          *source;
+  GeglNode          *scale;
+  GeglNode          *sink;
 
   if (gimp_source_core_use_source (source_core, source_options))
     {
@@ -198,19 +203,30 @@ gimp_clone_motion (GimpSourceCore   *source_core,
       GimpPattern *pattern    = gimp_context_get_pattern (context);
       GeglBuffer  *src_buffer = gimp_pattern_create_buffer (pattern);
 
-      src_offset_x += gegl_buffer_get_width (src_buffer) / 2;
-      src_offset_y += gegl_buffer_get_height (src_buffer) / 2;
+      gegl = gegl_node_new ();
+      source = gegl_node_new_child (gegl, "operation", "gegl:buffer-source", "buffer", src_buffer, NULL);
+      scale = gegl_node_new_child (gegl, "operation", "gegl:scale-ratio", "x", options->pattern_size, "y", options->pattern_size, NULL);
+      sink = gegl_node_new_child (gegl, "operation", "gegl:buffer-sink", "buffer", &final_buffer, NULL);
+
+      gegl_node_link_many (source, scale, sink, NULL);
+      gegl_node_process (sink);
+
+
+      src_offset_x += gegl_buffer_get_width (final_buffer) / 2;
+      src_offset_y += gegl_buffer_get_height (final_buffer) / 2;
 
       gegl_buffer_set_pattern (paint_buffer,
                                GEGL_RECTANGLE (paint_area_offset_x,
                                                paint_area_offset_y,
                                                paint_area_width,
                                                paint_area_height),
-                               src_buffer,
+                               final_buffer,
                                - paint_buffer_x - src_offset_x,
                                - paint_buffer_y - src_offset_y);
 
       g_object_unref (src_buffer);
+      g_object_unref (gegl);
+      g_object_unref (final_buffer);
     }
   else
     {

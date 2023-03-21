@@ -31,7 +31,8 @@ void       gimp_drawable_fill_buffer       (GimpDrawable        *drawable,
                                             const GimpRGB       *color,
                                             GimpPattern         *pattern,
                                             gint                 pattern_offset_x,
-                                            gint                 pattern_offset_y);
+                                            gint                 pattern_offset_y,
+                                            GimpFillOptions     *options);
 
 
 /*  Proper API that is used for actual editing (not just initializing)

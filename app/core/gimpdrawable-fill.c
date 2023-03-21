@@ -72,18 +72,19 @@ gimp_drawable_fill (GimpDrawable *drawable,
 
   gimp_drawable_fill_buffer (drawable,
                              gimp_drawable_get_buffer (drawable),
-                             &color, pattern, 0, 0);
+                             &color, pattern, 0, 0, NULL);
 
   gimp_drawable_update (drawable, 0, 0, -1, -1);
 }
 
 void
-gimp_drawable_fill_buffer (GimpDrawable  *drawable,
-                           GeglBuffer    *buffer,
-                           const GimpRGB *color,
-                           GimpPattern   *pattern,
-                           gint           pattern_offset_x,
-                           gint           pattern_offset_y)
+gimp_drawable_fill_buffer (GimpDrawable    *drawable,
+                           GeglBuffer      *buffer,
+                           const GimpRGB   *color,
+                           GimpPattern     *pattern,
+                           gint             pattern_offset_x,
+                           gint             pattern_offset_y,
+                           GimpFillOptions *options)
 {
   g_return_if_fail (GIMP_IS_DRAWABLE (drawable));
   g_return_if_fail (GEGL_IS_BUFFER (buffer));
@@ -96,6 +97,12 @@ gimp_drawable_fill_buffer (GimpDrawable  *drawable,
       GeglBuffer       *dest_buffer;
       GimpColorProfile *src_profile;
       GimpColorProfile *dest_profile;
+      GeglBuffer       *final_buffer;
+      GeglNode         *gegl;
+      GeglNode         *source;
+      GeglNode         *scale;
+      GeglNode         *sink;
+      gdouble           pattern_size;
 
       src_buffer = gimp_pattern_create_buffer (pattern);
 
@@ -122,11 +129,23 @@ gimp_drawable_fill_buffer (GimpDrawable  *drawable,
         }
 
       g_object_unref (src_profile);
+      if (options)
+        {
+          gegl   = gegl_node_new ();
+          pattern_size = gimp_fill_options_get_pattern_size (options);
+          source = gegl_node_new_child (gegl, "operation", "gegl:buffer-source", "buffer", dest_buffer, NULL);
+          scale  = gegl_node_new_child (gegl, "operation", "gegl:scale-ratio", "x", pattern_size, "y", pattern_size, NULL);
+          sink   = gegl_node_new_child (gegl, "operation", "gegl:buffer-sink", "buffer", &final_buffer, NULL);
 
-      gegl_buffer_set_pattern (buffer, NULL, dest_buffer,
+          gegl_node_link_many (source, scale, sink, NULL);
+          gegl_node_process (sink);
+        }
+      gegl_buffer_set_pattern (buffer, NULL, final_buffer,
                                pattern_offset_x, pattern_offset_y);
 
       g_object_unref (src_buffer);
+      g_object_unref (final_buffer);
+      g_object_unref (gegl);
       g_object_unref (dest_buffer);
     }
   else

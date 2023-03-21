@@ -32,10 +32,14 @@
 #include "gimp-intl.h"
 
 
+#define DEFAULT_PATTERN_SIZE  1.0
+#define PATTERN_MAX_SIZE      1000
+
 enum
 {
   PROP_0,
-  PROP_CLONE_TYPE
+  PROP_CLONE_TYPE,
+  PROP_PATTERN_SIZE,
 };
 
 
@@ -69,6 +73,13 @@ gimp_clone_options_class_init (GimpCloneOptionsClass *klass)
                          GIMP_TYPE_CLONE_TYPE,
                          GIMP_CLONE_IMAGE,
                          GIMP_PARAM_STATIC_STRINGS);
+
+  GIMP_CONFIG_PROP_DOUBLE (object_class, PROP_PATTERN_SIZE,
+                           "pattern-size",
+                           _("Size"),
+                           _("Pattern Size"),
+                           0.1, PATTERN_MAX_SIZE, DEFAULT_PATTERN_SIZE,
+                           GIMP_PARAM_STATIC_STRINGS);
 }
 
 static void
@@ -89,6 +100,9 @@ gimp_clone_options_set_property (GObject      *object,
     case PROP_CLONE_TYPE:
       options->clone_type = g_value_get_enum (value);
       break;
+    case PROP_PATTERN_SIZE:
+      options->pattern_size = g_value_get_double (value);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
       break;
@@ -108,8 +122,18 @@ gimp_clone_options_get_property (GObject    *object,
     case PROP_CLONE_TYPE:
       g_value_set_enum (value, options->clone_type);
       break;
+    case PROP_PATTERN_SIZE:
+      g_value_set_double (value, options->pattern_size);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
       break;
     }
+}
+void
+gimp_clone_options_set_default_pattern_size (GimpCloneOptions *options)
+{
+  g_return_if_fail (GIMP_IS_CLONE_OPTIONS (options));
+
+  g_object_set (options, "pattern-size", DEFAULT_PATTERN_SIZE, NULL);
 }

@@ -60,6 +60,10 @@ gboolean          gimp_fill_options_get_antialias    (GimpFillOptions     *optio
 void              gimp_fill_options_set_antialias    (GimpFillOptions     *options,
                                                       gboolean             antialias);
 
+gdouble           gimp_fill_options_get_pattern_size (GimpFillOptions     *options);
+void              gimp_fill_options_set_pattern_size (GimpFillOptions     *options,
+                                                      gdouble              pattern_size);
+
 gboolean          gimp_fill_options_get_feather      (GimpFillOptions     *options,
                                                       gdouble             *radius);
 void              gimp_fill_options_set_feather      (GimpFillOptions     *options,

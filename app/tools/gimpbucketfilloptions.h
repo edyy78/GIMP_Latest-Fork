@@ -65,6 +65,8 @@ struct _GimpBucketFillOptions
 
   GimpSelectCriterion           fill_criterion;
 
+  gdouble                       pattern_size;
+
   GimpBucketFillOptionsPrivate *priv;
 };
 
