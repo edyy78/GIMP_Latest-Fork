@@ -49,6 +49,7 @@ pointer foreign_diropenstream(scheme *sc, pointer args);
 pointer foreign_dirreadentry(scheme *sc, pointer args);
 pointer foreign_dirrewind(scheme *sc, pointer args);
 pointer foreign_dirclosestream(scheme *sc, pointer args);
+pointer foreign_dirlist(scheme *sc, pointer args);
 pointer foreign_mkdir(scheme *sc, pointer args);
 
 pointer foreign_getenv(scheme *sc, pointer args);
@@ -245,6 +246,116 @@ pointer foreign_dirclosestream(scheme *sc, pointer args)
   return sc->T;
 }
 
+
+/* Open and return a GDir for given name.
+ * Returns NULL on error.
+ *
+ * Script errors and filesystem errors are logged using glogging,
+ * but the script does not stop (does not return a foreign_error)
+ * i.e. for Gimp users this fails quietly.
+ * Error messages are not i18n translated.
+ */
+static GDir *
+open_dir (scheme *sc, pointer args)
+{
+  pointer first_arg;
+  char   *dirpath;
+  GDir   *result = NULL;
+
+  if (args == sc->NIL)
+    {
+      g_warning ("Missing directory name arg.");
+      return result;
+    }
+
+  first_arg = sc->vptr->pair_car(args);
+  if (!sc->vptr->is_string(first_arg))
+    {
+      g_warning ("Expected string arg");
+      return result;
+    }
+
+  dirpath = sc->vptr->string_value(first_arg);
+  dirpath = g_filename_from_utf8 (dirpath, -1, NULL, NULL, NULL);
+
+  result = g_dir_open (dirpath, 0, NULL);
+  if (result == NULL)
+    {
+      g_warning ("Dir name invalid or permissions or other filesystem error");
+    }
+  return result;
+}
+
+
+/* Return scheme string for next entry in GDir.
+ * GDirs are stateful iterators.
+ * Return NIL on the terminating condition of the iterator.
+ */
+static pointer
+string_from_next_entry_in_dir (scheme *sc, GDir *dir)
+{
+  gchar  *entry;
+
+  if (dir == NULL)
+    return sc->NIL;
+
+  entry = (gchar *)g_dir_read_name(dir);
+  if (entry == NULL)
+    return sc->NIL;
+
+  entry = g_filename_to_utf8 (entry, -1, NULL, NULL, NULL);
+  return (sc->vptr->mk_string (sc, entry));
+}
+
+
+/* Return list similar to "ls" unix command for given directory name.
+ * args must be a single string, a path to a directory.
+ *
+ * Returns NIL on errors, and when dir is empty.
+ * Never returns an empty list.
+ * (NIL and empty list are not the same, and are both truthy)
+ *
+ * Returned list elements are names, not paths.
+ * May be file names or dir names or link names.
+ * Encoded UTF-8, and may have whitespace on some platforms.
+ * Unlike the ls command, "*" and "**" are not returned.
+ *
+ * Not a recursive search through subdirectories, just the top directory.
+ *
+ * Similar to directory-list in Racket.
+ *
+ * Depends on glib GDir for portability.
+ */
+pointer foreign_dirlist (scheme *sc, pointer args)
+{
+  GDir   *dir;
+  pointer result = sc->NIL;
+
+  dir = open_dir (sc, args);
+  if (dir == NULL)
+    {
+      /* Error already announced. */
+      return result;
+    }
+
+  /* Iterate on dir, appending to list. */
+  {
+    pointer entry;
+
+    while ( (entry = string_from_next_entry_in_dir (sc, dir)) != sc->NIL)
+    {
+      result = sc->vptr->cons (sc,
+                               entry,
+                               result);
+    }
+  }
+
+  g_dir_close (dir);
+
+  /* ensure result is NIL, or non-empty list. */
+  return result;
+}
+
 pointer foreign_mkdir(scheme *sc, pointer args)
 {
   pointer     first_arg;
@@ -402,6 +513,9 @@ void init_ftx (scheme *sc)
   sc->vptr->scheme_define(sc, sc->global_env,
                                sc->vptr->mk_symbol(sc,"dir-close-stream"),
                                sc->vptr->mk_foreign_func(sc, foreign_dirclosestream));
+  sc->vptr->scheme_define(sc, sc->global_env,
+                               sc->vptr->mk_symbol(sc,"dir-list"),
+                               sc->vptr->mk_foreign_func(sc, foreign_dirlist));
   sc->vptr->scheme_define(sc, sc->global_env,
                                sc->vptr->mk_symbol(sc,"dir-make"),
                                sc->vptr->mk_foreign_func(sc, foreign_mkdir));
