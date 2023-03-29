@@ -148,7 +148,7 @@
   )
 
   (let* (
-        (dir-stream (dir-open-stream dir))
+        (in-files (dir-list dir))
         (sheet-num 1)
         (img-count 0)
         (pos-x 0)
@@ -174,6 +174,13 @@
         (file-path 0)
         (tmp-layer 0)
         )
+
+    ; quit early if nothing to do
+    (if (null? in-files)
+      ((gimp-message (string-append _"Unable to open directory or empty directory" dir))
+       (quit))
+      ()
+    )
 
     (gimp-context-push)
     (gimp-context-set-defaults)
@@ -206,113 +213,133 @@
 
     (init-sheet-img sheet-img sheet-num sheet-width border-y off-y)
 
-    (if (not dir-stream)
-      (gimp-message (string-append _"Unable to open directory " dir))
-      (begin
-        (do
-          ( (file (dir-read-entry dir-stream) (dir-read-entry dir-stream)) )
-          ( (eof-object? file) )
+    ; require in-files not empty because in init clause we car and cdr it
+    ; and TS not allow car an empty list
+    (begin
+      ; Iterate over non-empty list of in images
+      ; Iterative form, not recursive form
+      ; because this is a hack around a body already structured for iteration
+      (do
+        ; let bindings
+        ( (rest (cdr in-files) (cond ((null? rest) rest)
+                                 (else (cdr rest))))
+          (file (car in-files) (cond ((null? rest) rest)
+                                 (else (car rest)))))
+        ; terminating condition
+        ( (null? file) )
+        ; body
 
-          (set! file-path (string-append dir DIR-SEPARATOR file))
-          ; file-path is a full path, file is filename
-          (if (and (not (re-match "index.*" file))
-                   (= (file-type file-path) FILE-TYPE-FILE)
-              )
-            (catch ()
-              (set! new-img
-                    (car (gimp-file-load RUN-NONINTERACTIVE file-path)))
+        (set! file-path (string-append dir DIR-SEPARATOR file))
+        ; file-path is a full path, file is filename
 
-              (make-thumbnail-size new-img thumb-w thumb-h)
+        ; file-path can be to subdirectories, links, and files that are not image formats.
+        ; Formerly checked file-type, now just catching all errors opening non-image files
+        ; i.e. was (if (= (file-type file-path) FILE-TYPE-FILE)))
 
-              (if (> (car (gimp-image-get-layers new-img)) 1)
-                (gimp-image-flatten new-img)
-              )
-              (set! tmp-layer
-                (car (gimp-layer-new-from-drawable
-                        (aref (cadr (gimp-image-get-selected-drawables new-img)) 0)
-                        sheet-img)))
+        ; Formerly we skipped the "index<x>.jpg" we are creating
+        ; Now the contact sheet will recursively include "index<x>.jpg"
+        ; files created in earlier sessions of contact-sheet
+        ;
+        ; !!! Note we generate file names "index<x>.jpg"
+        ; and gimp-file-save will NOT ask user before overwriting.
 
-              (gimp-image-insert-layer sheet-img tmp-layer 0 0)
+        ; ignore errors trying to load paths that are not images.
+        (catch ()
+          (set! new-img
+                (car (gimp-file-load RUN-NONINTERACTIVE file-path)))
 
-              ;Move thumbnail in to position and center it in area available.
-              (gimp-layer-set-offsets tmp-layer
-                (+ border-x off-x (* pos-x (+ thumb-w border-x))
-                   (/ (- thumb-w (car (gimp-image-get-width new-img))) 2)
-                )
-                (+ border-y off-y (* pos-y (+ thumb-h border-y))
-                   (/ (- thumb-h (car (gimp-image-get-height new-img))) 2)
-                )
-              )
+          (make-thumbnail-size new-img thumb-w thumb-h)
 
-              (gimp-image-delete new-img)
+          (if (> (car (gimp-image-get-layers new-img)) 1)
+            (gimp-image-flatten new-img)
+          )
+          (set! tmp-layer
+            (car (gimp-layer-new-from-drawable
+                    (aref (cadr (gimp-image-get-selected-drawables new-img)) 0)
+                    sheet-img)))
 
-              (set! tmp-layer (car (gimp-text-fontname sheet-img -1 0 0 file
-                                     0 TRUE 12 PIXELS legend-font)))
-              (gimp-layer-set-offsets tmp-layer
-                (+ border-x off-x (* pos-x (+ thumb-w border-x))
-                   (/ (- thumb-w (car (gimp-drawable-get-width tmp-layer))) 2))
-                (+ border-y off-y (* pos-y (+ thumb-h border-y)) thumb-h 6)
-              )
+          (gimp-image-insert-layer sheet-img tmp-layer 0 0)
 
-              (set! img-count (+ img-count 1))
+          ;Move thumbnail in to position and center it in area available.
+          (gimp-layer-set-offsets tmp-layer
+            (+ border-x off-x (* pos-x (+ thumb-w border-x))
+                (/ (- thumb-w (car (gimp-image-get-width new-img))) 2)
+            )
+            (+ border-y off-y (* pos-y (+ thumb-h border-y))
+                (/ (- thumb-h (car (gimp-image-get-height new-img))) 2)
+            )
+          )
 
-              (set! pos-x (+ pos-x 1))
-              (if (> pos-x max-x)
+          (gimp-image-delete new-img)
+
+          (set! tmp-layer (car (gimp-text-fontname sheet-img -1 0 0 file
+                                  0 TRUE 12 PIXELS legend-font)))
+          (gimp-layer-set-offsets tmp-layer
+            (+ border-x off-x (* pos-x (+ thumb-w border-x))
+                (/ (- thumb-w (car (gimp-drawable-get-width tmp-layer))) 2))
+            (+ border-y off-y (* pos-y (+ thumb-h border-y)) thumb-h 6)
+          )
+
+          (set! img-count (+ img-count 1))
+
+          (set! pos-x (+ pos-x 1))
+          (if (> pos-x max-x)
+            (begin
+              (set! pos-x 0)
+              (set! pos-y (+ pos-y 1))
+
+              ; paginate on y i.e. rows
+              (if (> pos-y max-y)
                 (begin
-                  (set! pos-x 0)
-                  (set! pos-y (+ pos-y 1))
-                  (if (> pos-y max-y)
-                    (begin
-                      (set! pos-y 0)
-                      (set! sheet-layer (car (gimp-image-flatten sheet-img)))
-                      (gimp-file-save
-                        RUN-NONINTERACTIVE
-                        sheet-img
-                        1 (vector sheet-layer)
-                        (string-append dir DIR-SEPARATOR
-                            "index" (number->string sheet-num) ".jpg")
-                      )
-
-                      (set! sheet-num (+ sheet-num 1))
-                      (init-sheet-img sheet-img sheet-num sheet-width
-                                      border-y off-y)
-                      (set! img-count 0)
-                    )
+                  (set! pos-y 0)
+                  (set! sheet-layer (car (gimp-image-flatten sheet-img)))
+                  (gimp-file-save
+                    RUN-NONINTERACTIVE
+                    sheet-img
+                    1 (vector sheet-layer)
+                    (string-append dir DIR-SEPARATOR
+                        "index" (number->string sheet-num) ".jpg")
                   )
+
+                  (set! sheet-num (+ sheet-num 1))
+                  (init-sheet-img sheet-img sheet-num sheet-width
+                                  border-y off-y)
+                  (set! img-count 0)
                 )
               )
             )
           )
-        )
+        ) ; end catch exception opening non-image
+      ) ; end do for each file
 
-        (dir-close-stream dir-stream)
-
-        (if (> img-count 0)
-          (begin
-            (set! sheet-layer (car (gimp-image-flatten sheet-img)))
-            (gimp-file-save
-              RUN-NONINTERACTIVE
-              sheet-img
-              1 (vector sheet-layer)
-              (string-append dir DIR-SEPARATOR
-                  "index" (number->string sheet-num) ".jpg")
-            )
+      ; write partial last page
+      (if (> img-count 0)
+        (begin
+          (set! sheet-layer (car (gimp-image-flatten sheet-img)))
+          (gimp-file-save
+            RUN-NONINTERACTIVE
+            sheet-img
+            1 (vector sheet-layer)
+            (string-append dir DIR-SEPARATOR
+                "index" (number->string sheet-num) ".jpg")
           )
         )
       )
-
-      (gimp-image-undo-enable sheet-img)
-      (gimp-image-delete sheet-img)
-
-      (display (string-append _"Created " (number->string sheet-num)
-                              _" contact sheets from a total of "
-                              (number->string img-count) _" images"))
-      (newline)
     )
 
-    (gimp-context-pop)
+    (gimp-image-undo-enable sheet-img)
+    (gimp-image-delete sheet-img)
+
+    ; Formerly: (display ...) (newline) which has no visible effect
+    ; and leaves cruft on the gimp status bar.
+    (gimp-message (string-append _"Created " (number->string sheet-num)
+                                 _" contact sheets from a total of "
+                                (number->string img-count) _" images"))
   )
+
+  (gimp-context-pop)
 )
+
 
 (script-fu-register "script-fu-contactsheet"
     _"_Contact Sheet..."
