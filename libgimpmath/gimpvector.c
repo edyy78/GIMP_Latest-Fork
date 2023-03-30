@@ -517,6 +517,19 @@ gimp_vector2_normal_val (GimpVector2 vector)
 
   return result;
 }
+
+gboolean
+gimp_vector2_is_equal (GimpVector2 *vector1,
+                       GimpVector2 *vector2)
+{
+  return (vector1->x == vector2->x && vector1->y == vector2->y);
+}
+
+guint
+gimp_vector2_get_hash (GimpVector2 *vector)
+{
+  return ((guint)vector->x) ^ ((guint)vector->y);
+}
 /**************************************/
 /* Three dimensional vector functions */
 /**************************************/

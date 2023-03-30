@@ -108,6 +108,7 @@ gimp_stroke_editor_constructed (GObject *object)
   GEnumValue        *value;
   GtkWidget         *scale;
   GtkWidget         *box;
+  GtkWidget         *vbox;
   GtkWidget         *size;
   GtkWidget         *label;
   GtkWidget         *frame;
@@ -150,11 +151,23 @@ gimp_stroke_editor_constructed (GObject *object)
                             _("_Cap style:"), 0.0, 0.5,
                             box, 2);
 
+  vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 6);
+  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++, _("_Join style:"), 0.0,
+                            0.5, vbox, 2);
+
+  button = gimp_prop_check_button_new (G_OBJECT (options),
+                                       "autoselect-join-style",
+                                       _("_Autoselect join style"));
+  gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, TRUE, 0);
+  gtk_widget_show (button);
+
   box = gimp_prop_enum_icon_box_new (G_OBJECT (options), "join-style",
                                      "gimp-join", 0, 0);
-  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++,
-                            _("_Join style:"), 0.0, 0.5,
-                            box, 2);
+  gtk_box_pack_start (GTK_BOX (vbox), box, FALSE, TRUE, 0);
+  gtk_widget_show (button);
+
+  g_object_bind_property (button, "active", box, "sensitive",
+                          G_BINDING_SYNC_CREATE | G_BINDING_INVERT_BOOLEAN);
 
   scale = gimp_prop_scale_entry_new (G_OBJECT (options), "miter-limit",
                                      NULL, 1.0, FALSE, 0.0, 0.0);

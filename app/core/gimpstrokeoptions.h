@@ -49,33 +49,34 @@ struct _GimpStrokeOptionsClass
 };
 
 
-GType               gimp_stroke_options_get_type             (void) G_GNUC_CONST;
+GType               gimp_stroke_options_get_type                  (void) G_GNUC_CONST;
 
-GimpStrokeOptions * gimp_stroke_options_new                  (Gimp              *gimp,
-                                                              GimpContext       *context,
-                                                              gboolean           use_context_color);
+GimpStrokeOptions * gimp_stroke_options_new                       (Gimp              *gimp,
+                                                                   GimpContext       *context,
+                                                                   gboolean           use_context_color);
 
-GimpStrokeMethod    gimp_stroke_options_get_method           (GimpStrokeOptions *options);
+GimpStrokeMethod    gimp_stroke_options_get_method                (GimpStrokeOptions *options);
 
-gdouble             gimp_stroke_options_get_width            (GimpStrokeOptions *options);
-GimpUnit            gimp_stroke_options_get_unit             (GimpStrokeOptions *options);
-GimpCapStyle        gimp_stroke_options_get_cap_style        (GimpStrokeOptions *options);
-GimpJoinStyle       gimp_stroke_options_get_join_style       (GimpStrokeOptions *options);
-gdouble             gimp_stroke_options_get_miter_limit      (GimpStrokeOptions *options);
-gdouble             gimp_stroke_options_get_dash_offset      (GimpStrokeOptions *options);
-GArray            * gimp_stroke_options_get_dash_info        (GimpStrokeOptions *options);
+gdouble             gimp_stroke_options_get_width                 (GimpStrokeOptions *options);
+GimpUnit            gimp_stroke_options_get_unit                  (GimpStrokeOptions *options);
+GimpCapStyle        gimp_stroke_options_get_cap_style             (GimpStrokeOptions *options);
+gboolean            gimp_stroke_options_get_autoselect_join_style (GimpStrokeOptions *options);
+GimpJoinStyle       gimp_stroke_options_get_join_style            (GimpStrokeOptions *options);
+gdouble             gimp_stroke_options_get_miter_limit           (GimpStrokeOptions *options);
+gdouble             gimp_stroke_options_get_dash_offset           (GimpStrokeOptions *options);
+GArray            * gimp_stroke_options_get_dash_info             (GimpStrokeOptions *options);
 
-GimpPaintOptions  * gimp_stroke_options_get_paint_options    (GimpStrokeOptions *options);
-gboolean            gimp_stroke_options_get_emulate_dynamics (GimpStrokeOptions *options);
+GimpPaintOptions  * gimp_stroke_options_get_paint_options         (GimpStrokeOptions *options);
+gboolean            gimp_stroke_options_get_emulate_dynamics      (GimpStrokeOptions *options);
 
-void                gimp_stroke_options_take_dash_pattern    (GimpStrokeOptions *options,
-                                                              GimpDashPreset     preset,
-                                                              GArray            *pattern);
+void                gimp_stroke_options_take_dash_pattern         (GimpStrokeOptions *options,
+                                                                   GimpDashPreset     preset,
+                                                                   GArray            *pattern);
 
-void                gimp_stroke_options_prepare              (GimpStrokeOptions *options,
-                                                              GimpContext       *context,
-                                                              GimpPaintOptions  *paint_options);
-void                gimp_stroke_options_finish               (GimpStrokeOptions *options);
+void                gimp_stroke_options_prepare                   (GimpStrokeOptions *options,
+                                                                   GimpContext       *context,
+                                                                   GimpPaintOptions  *paint_options);
+void                gimp_stroke_options_finish                    (GimpStrokeOptions *options);
 
 
 #endif /* __GIMP_STROKE_OPTIONS_H__ */
