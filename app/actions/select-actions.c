@@ -47,10 +47,16 @@ static const GimpActionEntry select_actions[] =
   { "select-menu", NULL, NC_("select-action", "_Select") },
 
   { "select-all", GIMP_ICON_SELECTION_ALL,
-    NC_("select-action", "_All"), "<primary>A",
+    NC_("select-action", "C_anvas"), "<primary>A",
     NC_("select-action", "Select everything"),
     select_all_cmd_callback,
     GIMP_HELP_SELECTION_ALL },
+
+    { "select-layer", NULL,
+    NC_("select-action", "_Layer"), "<shift>A",
+    NC_("select-action", "Select all highlighted layers"),
+    select_layer_cmd_callback,
+    GIMP_HELP_SELECTION_LAYER },
 
   { "select-none", GIMP_ICON_SELECTION_NONE,
     NC_("select-action", "_None"), "<primary><shift>A",
@@ -184,6 +190,7 @@ select_actions_update (GimpActionGroup *group,
         gimp_action_group_set_action_sensitive (group, action, (condition) != 0, NULL)
 
   SET_SENSITIVE ("select-all",    image);
+  SET_SENSITIVE ("select-layer",  image);
   SET_SENSITIVE ("select-none",   image && sel);
   SET_SENSITIVE ("select-invert", image);
   SET_SENSITIVE ("select-float",  g_list_length (drawables) == 1 && sel                 &&
