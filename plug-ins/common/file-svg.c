@@ -483,7 +483,8 @@ load_rsvg_size (GFile            *file,
                 GError          **error)
 {
   RsvgHandle        *handle;
-  RsvgDimensionData  dim;
+  gdouble            svg_width;
+  gdouble            svg_height;
   gboolean           has_size;
 
   handle = rsvg_handle_new_from_gfile_sync (file, rsvg_flags, NULL, error);
@@ -493,12 +494,12 @@ load_rsvg_size (GFile            *file,
 
   rsvg_handle_set_dpi (handle, vals->resolution);
 
-  rsvg_handle_get_dimensions (handle, &dim);
+  rsvg_handle_get_intrinsic_size_in_pixels (handle, &svg_width, &svg_height);
 
-  if (dim.width > 0 && dim.height > 0)
+  if (svg_width > 0 && svg_height > 0)
     {
-      vals->width  = dim.width;
-      vals->height = dim.height;
+      vals->width  = svg_width;
+      vals->height = svg_height;
       has_size = TRUE;
     }
   else

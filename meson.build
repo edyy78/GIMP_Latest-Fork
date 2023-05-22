@@ -414,7 +414,7 @@ conf.set_quoted('MYPAINT_BRUSHES_DIR', mypaint_brushes_dir)
 pangocairo_minver = '1.44.0'
 pangocairo        = dependency('pangocairo',         version: '>='+pangocairo_minver)
 pangoft2          = dependency('pangoft2',           version: '>=1.29.4')
-rsvg_minver       = '2.40.6'
+rsvg_minver       = '2.52.0'
 rsvg              = dependency('librsvg-2.0',        version: '>='+rsvg_minver)
 
 conf.set('PANGO_DISABLE_DEPRECATED',pangocairo.version().version_compare('<1.43'))
