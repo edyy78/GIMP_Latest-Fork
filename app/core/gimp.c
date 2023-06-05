@@ -29,6 +29,7 @@
 #include "core-types.h"
 
 #include "config/gimprc.h"
+#include "errorlog/error_log.h"
 
 #include "gegl/gimp-babl.h"
 
@@ -286,6 +287,9 @@ gimp_init (Gimp *gimp)
 
   gimp->templates = gimp_list_new (GIMP_TYPE_TEMPLATE, TRUE);
   gimp_object_set_static_name (GIMP_OBJECT (gimp->templates), "templates");
+
+  /* FUTURE keep a reference in gimp struct so can destroy. */
+  (void) error_log_new();
 }
 
 static void

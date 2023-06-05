@@ -354,10 +354,17 @@ script_fu_load_script (GFile *file)
 
       if (! script_fu_run_command (command, &error))
         {
-          gchar *message = g_strdup_printf (_("Error while loading %s:"),
-                                            gimp_file_get_utf8_name (file));
+          /* We can use gimp_message now, while extension-script-fu is starting,
+           * early in Gimp startup.
+           */
+          gchar *message = g_strdup_printf (_("Error while loading %s: %s"),
+                                            gimp_file_get_utf8_name (file),
+                                            error->message);
+          gimp_message (message);
 
-          g_message ("%s\n\n%s", message, error->message);
+          //gchar *message = g_strdup_printf (_("Error while loading %s:"),
+          //                                 gimp_file_get_utf8_name (file));
+          //g_message ("%s\n\n%s", message, error->message);
 
           g_clear_error (&error);
           g_free (message);

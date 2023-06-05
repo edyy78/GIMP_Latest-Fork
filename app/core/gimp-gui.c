@@ -21,6 +21,7 @@
 #include <gegl.h>
 
 #include "libgimpbase/gimpbase.h"
+#include "errorlog/error_log.h"
 
 #include "core-types.h"
 
@@ -146,9 +147,16 @@ gimp_show_message (Gimp                *gimp,
 {
   const gchar *desc = (severity == GIMP_MESSAGE_ERROR) ? "Error" : "Message";
 
+  g_debug ("%s : %s", G_STRFUNC, message);
+
   g_return_if_fail (GIMP_IS_GIMP (gimp));
   g_return_if_fail (handler == NULL || G_IS_OBJECT (handler));
   g_return_if_fail (message != NULL);
+
+  /* Always log.
+   * This hack sometimes logs in duplicate with what follows it.
+   */
+  error_log_add (message);
 
   if (! domain)
     domain = GIMP_ACRONYM;
