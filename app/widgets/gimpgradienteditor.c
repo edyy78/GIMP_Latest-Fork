@@ -2177,7 +2177,7 @@ control_draw_all (GimpGradientEditor *editor,
   gtk_render_background (style, cr, offset, 0, actual_width, height);
 
   gtk_style_context_set_state (style, GTK_STATE_FLAG_SELECTED);
-  gtk_render_background (style, cr, sel_l + offset, 0, sel_r - sel_l + 1, height);
+  gtk_render_background (style, cr, sel_l, 0, sel_r - sel_l + 1, height);
 
   gtk_style_context_restore (style);
 
@@ -2257,11 +2257,8 @@ control_draw_handle (GimpGradientEditor *editor,
                      GtkStateFlags       flags)
 {
   GdkRGBA  color;
-  gint     alloc_width = gtk_widget_get_allocated_width (editor->control);
-  gint     width       = MIN (GRAD_CONTROL_MAX_WIDTH, alloc_width);
-  gint     offset      = (alloc_width - width) / 2;
-  gint     xpos        = offset + control_calc_p_pos (editor, pos);
-  gboolean selected    = (flags & GTK_STATE_FLAG_SELECTED) != 0;
+  gint     xpos     = control_calc_p_pos (editor, pos);
+  gboolean selected = (flags & GTK_STATE_FLAG_SELECTED) != 0;
 
   cairo_save (cr);
 
@@ -2315,10 +2312,12 @@ control_calc_p_pos (GimpGradientEditor *editor,
   GtkAdjustment *adjustment = editor->scroll_data;
   GtkAllocation  allocation;
   gint           pwidth;
+  gint           offset;
 
   gtk_widget_get_allocation (editor->control, &allocation);
 
   pwidth = MIN (GRAD_CONTROL_MAX_WIDTH, allocation.width);
+  offset = (allocation.width - pwidth) / 2;
 
   /* Calculate the position (in widget's coordinates) of the
    * requested point from the gradient.  Rounding is done to
@@ -2326,8 +2325,9 @@ control_calc_p_pos (GimpGradientEditor *editor,
    * and the gradient control's handles.
    */
 
-  return RINT ((pwidth - 1) * (pos - gtk_adjustment_get_value (adjustment)) /
-               gtk_adjustment_get_page_size (adjustment));
+  return offset + RINT ((pwidth - 1) *
+                        (pos - gtk_adjustment_get_value (adjustment)) /
+                        gtk_adjustment_get_page_size (adjustment));
 }
 
 static gdouble
@@ -2341,6 +2341,7 @@ control_calc_g_pos (GimpGradientEditor *editor,
   gtk_widget_get_allocation (editor->control, &allocation);
 
   pwidth = MIN (GRAD_CONTROL_MAX_WIDTH,  allocation.width);
+  pwidth = allocation.width;
 
   /* Calculate the gradient position that corresponds to widget's coordinates */
 
