@@ -2325,9 +2325,9 @@ control_calc_p_pos (GimpGradientEditor *editor,
    * and the gradient control's handles.
    */
 
-  return offset + RINT ((pwidth - 1) *
-                        (pos - gtk_adjustment_get_value (adjustment)) /
-                        gtk_adjustment_get_page_size (adjustment));
+  return offset
+         + RINT ((pwidth - 1) * (pos - gtk_adjustment_get_value (adjustment))
+                 / gtk_adjustment_get_page_size (adjustment));
 }
 
 static gdouble
