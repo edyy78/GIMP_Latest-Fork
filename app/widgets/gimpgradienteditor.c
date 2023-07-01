@@ -2337,11 +2337,40 @@ control_calc_g_pos (GimpGradientEditor *editor,
   GtkAdjustment *adjustment = editor->scroll_data;
   GtkAllocation  allocation;
   gint           pwidth;
+  gint           offset;
 
   gtk_widget_get_allocation (editor->control, &allocation);
 
-  pwidth = MIN (GRAD_CONTROL_MAX_WIDTH,  allocation.width);
   pwidth = allocation.width;
+
+  if (pwidth >= GRAD_CONTROL_MAX_WIDTH)
+    {
+      /* Adjust gradient position when pwidth >= 2048 */
+
+      pwidth = GRAD_CONTROL_MAX_WIDTH;
+      offset = (allocation.width - GRAD_CONTROL_MAX_WIDTH) / 2;
+
+      /* |----------|---------------------|----------|
+       *   lpadding    gradient controls    rpadding
+       *
+       * when pos in
+       * lpadding -> 0 -- offset (maps to 0.0)
+       * rpadding -> offset + 2048 -- allocated width (maps to 1.0)
+       * gradient controls -> 2048px (normalised between 0.0 and 1.0)
+       */
+      if (pos <= offset)
+        {
+          pos = 0.0;
+        }
+      else if (pos >= offset + GRAD_CONTROL_MAX_WIDTH)
+        {
+          pos = pwidth;
+        }
+      else
+        {
+          pos -= offset;
+        }
+    }
 
   /* Calculate the gradient position that corresponds to widget's coordinates */
 
