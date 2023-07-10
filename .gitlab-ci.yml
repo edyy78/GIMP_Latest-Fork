@@ -316,6 +316,9 @@ gimp-meson-debian:
       -Dg-ir-doc=true -Dgi-docgen=enabled
       -Dwindows-installer=true
     - ninja -C _build
+    - ninja -C _build dist
+    - ninja -C _build install
+    # tests.py calls the installed version, so install before testing.
     - ninja -C _build test
     # The src should not be changed by the build. If it is, something is
     # wrong. Let's print out the diff for debugging in such case, and
@@ -324,8 +327,6 @@ gimp-meson-debian:
         git diff;
         exit 1;
       fi
-    - ninja -C _build dist
-    - ninja -C _build install
   artifacts:
     name: "gimp-meson-debian-name-${CI_JOB_NAME}-${CI_COMMIT_REF_NAME}"
     when: always
