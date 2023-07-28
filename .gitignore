@@ -1,5 +1,6 @@
 # Meson
 /_build
+/_ccache
 /compile_commands.json
 
 # Atom editor
