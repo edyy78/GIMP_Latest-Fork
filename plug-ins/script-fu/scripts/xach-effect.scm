@@ -56,13 +56,13 @@
     (gimp-image-undo-group-start image)
     (gimp-layer-add-alpha drawable)
 
-    (if (= (car (gimp-selection-is-empty image)) TRUE)
+    (if (car (gimp-selection-is-empty image))
         (begin
           (gimp-image-select-item image CHANNEL-OP-REPLACE drawable)
           (set! active-selection (car (gimp-selection-save image)))
-          (set! from-selection FALSE))
+          (set! from-selection #f))
         (begin
-          (set! from-selection TRUE)
+          (set! from-selection #t)
           (set! active-selection (car (gimp-selection-save image)))))
 
     (set! hl-layer (car (gimp-layer-new image image-width image-height type _"Highlight" 100 LAYER-MODE-NORMAL)))
@@ -100,12 +100,12 @@
     (gimp-context-set-background ds-color)
     (gimp-drawable-edit-fill shadow-layer FILL-BACKGROUND)
     (gimp-selection-none image)
-    (plug-in-gauss-rle RUN-NONINTERACTIVE image shadow-layer ds-blur TRUE TRUE)
+    (plug-in-gauss-rle RUN-NONINTERACTIVE image shadow-layer ds-blur #t #t)
     (gimp-image-select-item image CHANNEL-OP-REPLACE active-selection)
     (gimp-drawable-edit-clear shadow-layer)
     (gimp-image-lower-item image shadow-layer)
 
-    (if (= keep-selection FALSE)
+    (if keep-selection
         (gimp-selection-none image))
 
     (gimp-image-set-selected-layers image 1 (vector drawable))
@@ -135,7 +135,7 @@
   SF-ADJUSTMENT _"Drop shadow blur radius" '(12 0 255 1 10 0 1)
   SF-ADJUSTMENT _"Drop shadow X offset"    '(5 0 255 1 10 0 1)
   SF-ADJUSTMENT _"Drop shadow Y offset"    '(5 0 255 1 10 0 1)
-  SF-TOGGLE     _"Keep selection"          TRUE
+  SF-TOGGLE     _"Keep selection"          #t
 )
 
 (script-fu-menu-register "script-fu-xach-effect"

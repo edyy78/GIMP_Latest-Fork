@@ -12,7 +12,7 @@
 (define (script-fu-call-always-fail)
   ; call a script that always fails
   (script-fu-always-fail)
-  ; we have not checked the result and declaring the error on our own.
+  ; we have not checked the result and declared the error on our own.
   ; since this is the last expression, the #f from the call should propogate.
 )
 

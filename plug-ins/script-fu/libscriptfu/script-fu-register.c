@@ -209,11 +209,17 @@ script_fu_script_create_formal_args (scheme   *sc,
               break;
 
             case SF_TOGGLE:
+              #ifdef OLD
               if (!sc->vptr->is_integer (sc->vptr->pair_car (a)))
                 return foreign_error (sc, "script-fu-register: toggle default must be an integer value", 0);
 
               arg->default_value.sfa_toggle =
                 (sc->vptr->ivalue (sc->vptr->pair_car (a))) ? TRUE : FALSE;
+              #endif
+              /* Convert truthy to C notion of boolean.
+               * Is the value equivalent to false?
+               */
+              arg->default_value.sfa_toggle = (sc->vptr->pair_car (a) == sc->F ) ? FALSE : TRUE;
               break;
 
             case SF_VALUE:

@@ -25,21 +25,21 @@
     (gimp-context-set-background '(255 255 255))
     (gimp-drawable-edit-fill layer-one FILL-BACKGROUND)
 
-    (plug-in-noisify RUN-NONINTERACTIVE img layer-one FALSE 0.7 0.7 0.7 0.7)
+    (plug-in-noisify RUN-NONINTERACTIVE img layer-one #f 0.7 0.7 0.7 0.7)
 
     (set! layer-two (car (gimp-layer-copy layer-one 0)))
     (gimp-layer-set-mode layer-two LAYER-MODE-MULTIPLY)
     (gimp-image-insert-layer img layer-two 0 0)
 
-    (plug-in-gauss-rle RUN-NONINTERACTIVE img layer-one bx TRUE FALSE)
-    (plug-in-gauss-rle RUN-NONINTERACTIVE img layer-two by FALSE TRUE)
+    (plug-in-gauss-rle RUN-NONINTERACTIVE img layer-one bx #t #f)
+    (plug-in-gauss-rle RUN-NONINTERACTIVE img layer-two by #f #t)
     (gimp-image-flatten img)
     (set! bump-layer (aref (cadr (gimp-image-get-selected-layers img)) 0))
 
     (plug-in-c-astretch RUN-NONINTERACTIVE img bump-layer)
-    (plug-in-noisify RUN-NONINTERACTIVE img bump-layer FALSE 0.2 0.2 0.2 0.2)
+    (plug-in-noisify RUN-NONINTERACTIVE img bump-layer #f 0.2 0.2 0.2 0.2)
 
-    (plug-in-bump-map RUN-NONINTERACTIVE img tdrawable bump-layer azimuth elevation depth 0 0 0 0 FALSE FALSE 0)
+    (plug-in-bump-map RUN-NONINTERACTIVE img tdrawable bump-layer azimuth elevation depth 0 0 0 0 #f #f 0)
     (gimp-image-delete img)
     (gimp-displays-flush)
 

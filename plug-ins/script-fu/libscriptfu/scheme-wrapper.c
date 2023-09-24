@@ -82,6 +82,9 @@ static pointer  script_fu_quit_call                         (scheme    *sc,
                                                              pointer    a);
 static pointer  script_fu_nil_call                          (scheme    *sc,
                                                              pointer    a);
+static pointer  script_fu_script_abort                      (scheme    *sc,
+                                                             pointer    a);
+
 
 static gboolean ts_load_file                                (const gchar *dirname,
                                                              const gchar *basename);
@@ -100,10 +103,6 @@ static const NamedConstant script_constants[] =
   { "MAX-IMAGE-SIZE", GIMP_MAX_IMAGE_SIZE },
   { "MIN-RESOLUTION", GIMP_MIN_RESOLUTION },
   { "MAX-RESOLUTION", GIMP_MAX_RESOLUTION },
-
-  /* Useful misc stuff */
-  { "TRUE",           TRUE  },
-  { "FALSE",          FALSE },
 
   /* Builtin units */
   { "UNIT-PIXEL",     GIMP_UNIT_PIXEL },
@@ -308,6 +307,23 @@ ts_interpret_string (const gchar *expr)
   sc.vptr->load_string (&sc, (char *) expr);
 
   result = sc.retcode;
+
+  /* When result of the last evaluated expression is #f,
+   * treat it as an error result, soon in a GimpPDBStatus.
+   */
+  if (sc.value == sc.F)
+    {
+      if (result == 0)
+        result = -2;  /* Error return from this script itself. */
+      /* else result is already an error code. */
+
+      /* Stream an error message, which ScriptFu will put into a GError.
+       * The script might have already streamed a more specific message.
+       */
+      ts_output_string (TS_OUTPUT_NORMAL,
+                        "Script returned #f", -1);
+      /* Ensure result is not zero. */
+    }
 
   g_debug ("ts_interpret_string returns: %i", result);
   return result;
@@ -571,6 +587,7 @@ ts_define_procedure (sc, "load-extension", scm_load_ext);
   ts_define_procedure (sc, "-gimp-proc-db-call",  script_fu_marshal_procedure_call_permissive);
   ts_define_procedure (sc, "--gimp-proc-db-call", script_fu_marshal_procedure_call_deprecated);
 
+  ts_define_procedure (sc, "script-fu-script-abort", script_fu_script_abort);
   proc_list = gimp_pdb_query_procedures (gimp_get_pdb (),
                                          ".*", ".*", ".*", ".*",
                                          ".*", ".*", ".*", ".*");
@@ -791,11 +808,16 @@ script_fu_marshal_procedure_call (scheme   *sc,
         }
       else if (G_VALUE_HOLDS_BOOLEAN (&value))
         {
+          #ifdef OLD
           if (! sc->vptr->is_number (sc->vptr->pair_car (a)))
             return script_type_error (sc, "numeric", i, proc_name);
           else
             g_value_set_boolean (&value,
                                  sc->vptr->ivalue (sc->vptr->pair_car (a)));
+          #endif
+          /* Anything not #f is truthy. */
+          g_value_set_boolean (&value,
+                               (sc->vptr->pair_car (a)) != sc->F );
         }
       else if (G_VALUE_HOLDS_STRING (&value))
         {
@@ -1401,4 +1423,11 @@ script_fu_nil_call (scheme  *sc,
                     pointer  a)
 {
   return sc->NIL;
+}
+
+static pointer
+script_fu_script_abort (scheme  *sc,
+                        pointer  a)
+{
+  return foreign_error (sc, "Aborted", 0);
 }
