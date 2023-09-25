@@ -546,7 +546,8 @@ size_adjustment_callback (GtkAdjustment      *adjustment,
       adj->guides = g_new (gint32, adj->nguides);
       for (i = 0; i < adj->nguides; i++)
         adj->guides[i] = gimp_image_add_vguide (adj->image,
-                                                *(adj->value) * (i+1));
+                                                *(adj->value) * (i+1),
+                                                NULL);
     }
   else
     {
@@ -556,7 +557,8 @@ size_adjustment_callback (GtkAdjustment      *adjustment,
       adj->guides = g_new (gint32, adj->nguides);
       for (i = 0; i < adj->nguides; i++)
         adj->guides[i] = gimp_image_add_hguide (adj->image,
-                                                *(adj->value) * (i+1));
+                                                *(adj->value) * (i+1),
+                                                NULL);
     }
   gimp_displays_flush ();
   g_snprintf (buf, sizeof (buf), "%2d", newn);
