@@ -98,6 +98,7 @@ static GtkWidget *pm_check;
 static GtkWidget *alpha_coverage_check;
 static GtkWidget *alpha_test_threshold_spin;
 
+
 static struct
 {
   gint         format;
@@ -123,7 +124,8 @@ static struct
   { DDS_FORMAT_L8,      DXGI_FORMAT_R8_UNORM,          1, 0, 0x000000ff, 0x000000ff, 0x000000ff, 0x00000000},
   { DDS_FORMAT_L8A8,    DXGI_FORMAT_UNKNOWN,           2, 1, 0x000000ff, 0x000000ff, 0x000000ff, 0x0000ff00},
   { DDS_FORMAT_AEXP,    DXGI_FORMAT_B8G8R8A8_UNORM,    4, 1, 0x00ff0000, 0x0000ff00, 0x000000ff, 0xff000000},
-  { DDS_FORMAT_YCOCG,   DXGI_FORMAT_B8G8R8A8_UNORM,    4, 1, 0x00ff0000, 0x0000ff00, 0x000000ff, 0xff000000}
+  { DDS_FORMAT_YCOCG,   DXGI_FORMAT_B8G8R8A8_UNORM,    4, 1, 0x00ff0000, 0x0000ff00, 0x000000ff, 0xff000000},
+  { DDS_FORMAT_RGBA16F, DXGI_FORMAT_R16G16B16A16_FLOAT,8, 1, 0x00000000, 0x00000000, 0x00000000, 0x00000000},
 };
 
 
@@ -849,6 +851,71 @@ get_mipmap_chain (unsigned char *dst,
     }
 }
 
+
+uint16_t f32_to_f16(const float value);
+
+uint16_t f32_to_f16(const float value)
+{
+    int32_t i;
+    memcpy(&i, &value, sizeof(float));
+
+    int32_t s = (i >> 16) & 0x00008000;
+    int32_t e = ((i >> 23) & 0x000000ff) - (127 - 15);
+    int32_t m = i & 0x007fffff;
+    if (e <= 0) {
+        if (e < -10) {
+            uint16_t ret;
+            memcpy(&ret, &s, sizeof(uint16_t));
+            return ret;
+        }
+
+        m = (m | 0x00800000) >> (1 - e);
+
+        if (m & 0x00001000)
+            m += 0x00002000;
+
+        s = s | (m >> 13);
+        uint16_t ret;
+        memcpy(&ret, &s, sizeof(uint16_t));
+        return ret;
+    } else if (e == 0xff - (127 - 15)) {
+        if (m == 0) {
+            s = s | 0x7c00;
+            uint16_t ret;
+            memcpy(&ret, &s, sizeof(uint16_t));
+            return ret;
+        } else {
+            m >>= 13;
+
+            s = s | 0x7c00 | m | (m == 0);
+            uint16_t ret;
+            memcpy(&ret, &s, sizeof(uint16_t));
+            return ret;
+        }
+    } else {
+        if (m & 0x00001000) {
+            m += 0x00002000;
+
+            if (m & 0x00800000) {
+                m = 0;  // overflow in significand,
+                e += 1; // adjust exponent
+            }
+        }
+
+        if (e > 30) {
+            s = s | 0x7c00;
+            uint16_t ret;
+            memcpy(&ret, &s, sizeof(uint16_t));
+            return ret;
+        }
+
+        s = s | (e << 10) | (m >> 13);
+        uint16_t ret;
+        memcpy(&ret, &s, sizeof(uint16_t));
+        return ret;
+    }
+}
+
 static void
 write_layer (FILE         *fp,
              GimpImage    *image,
@@ -903,8 +970,10 @@ write_layer (FILE         *fp,
     format = babl_format ("Y'A u8");
   else if (bpp == 3)
     format = babl_format ("R'G'B' u8");
-  else
+  else if (bpp == 4)
     format = babl_format ("R'G'B'A u8");
+  else if (bpp == 8)
+    format = babl_format ("RGBA half");
 
   gegl_buffer_get (buffer, GEGL_RECTANGLE (0, 0, w, h), 1.0, format, src,
                    GEGL_AUTO_ROWSTRIDE, GEGL_ABYSS_NONE);
@@ -1093,6 +1162,17 @@ write_layer (FILE         *fp,
               fmtdst = g_malloc (h * w * fmtbpp);
               convert_pixels (fmtdst, src, pixel_format, w, h, 0, bpp,
                               palette, 1);
+
+              const uint16_t *in_fp16 = (const uint16_t *)src;
+              uint16_t *out_fp16 = (uint16_t *)fmtdst;
+              for (int i = 0; i < h * w; ++i)
+              {
+                out_fp16[4 * i + 0] = in_fp16[3 * i + 0];
+                out_fp16[4 * i + 1] = in_fp16[3 * i + 1];
+                out_fp16[4 * i + 2] = in_fp16[3 * i + 2];
+                out_fp16[4 * i + 3] = 0;
+              }
+
               g_free (src);
               src = fmtdst;
               bpp = fmtbpp;
@@ -1324,8 +1404,10 @@ write_image (FILE         *fp,
 {
   GimpImageType      drawable_type;
   GimpImageBaseType  basetype;
+  GimpPrecision      precision;
   gint               i, w, h;
   gint               bpp = 0;
+  gint               bpc = 0;
   gint               fmtbpp = 0;
   gint               has_alpha = 0;
   gint               num_mipmaps;
@@ -1380,16 +1462,35 @@ write_image (FILE         *fp,
     }
 
   basetype = gimp_image_get_base_type (image);
+  precision = gimp_image_get_precision (image);
   drawable_type = gimp_drawable_type (drawable);
+
+  switch (precision)
+    {
+      case GIMP_PRECISION_U8_LINEAR:    bpc = 1; break;
+      case GIMP_PRECISION_U8_GAMMA:     bpc = 1; break;
+      case GIMP_PRECISION_U16_LINEAR:   bpc = 2; break;
+      case GIMP_PRECISION_U16_GAMMA:    bpc = 2; break;
+      case GIMP_PRECISION_U32_LINEAR:   bpc = 4; break;
+      case GIMP_PRECISION_U32_GAMMA:    bpc = 4; break;
+      case GIMP_PRECISION_HALF_LINEAR:  bpc = 2; break;
+      case GIMP_PRECISION_HALF_GAMMA:   bpc = 2; break;
+      case GIMP_PRECISION_FLOAT_LINEAR: bpc = 4; break;
+      case GIMP_PRECISION_FLOAT_GAMMA:  bpc = 4; break;
+      case GIMP_PRECISION_DOUBLE_LINEAR:bpc = 8; break;
+      case GIMP_PRECISION_DOUBLE_GAMMA: bpc = 8; break;
+      default:
+                                        break;
+    }
 
   switch (drawable_type)
     {
-    case GIMP_RGB_IMAGE:      bpp = 3; break;
-    case GIMP_RGBA_IMAGE:     bpp = 4; break;
-    case GIMP_GRAY_IMAGE:     bpp = 1; break;
-    case GIMP_GRAYA_IMAGE:    bpp = 2; break;
-    case GIMP_INDEXED_IMAGE:  bpp = 1; break;
-    case GIMP_INDEXEDA_IMAGE: bpp = 2; break;
+    case GIMP_RGB_IMAGE:      bpp = 3 * bpc; break;
+    case GIMP_RGBA_IMAGE:     bpp = 4 * bpc; break;
+    case GIMP_GRAY_IMAGE:     bpp = 1 * bpc; break;
+    case GIMP_GRAYA_IMAGE:    bpp = 2 * bpc; break;
+    case GIMP_INDEXED_IMAGE:  bpp = 1 * bpc; break;
+    case GIMP_INDEXEDA_IMAGE: bpp = 2 * bpc; break;
     default:
                               break;
     }
@@ -1475,7 +1576,14 @@ write_image (FILE         *fp,
 
   if (compression == DDS_COMPRESS_NONE)
     {
-      PUTL32(hdr + 88,  fmtbpp << 3);
+      if (dds_write_vals.format == DDS_FORMAT_RGBA16F)
+        {
+          PUTL32(hdr + 88,  0);
+        }
+      else
+        {
+          PUTL32(hdr + 88,  fmtbpp << 3);
+        }
       PUTL32(hdr + 92,  rmask);
       PUTL32(hdr + 96,  gmask);
       PUTL32(hdr + 100, bmask);
@@ -1560,9 +1668,19 @@ write_image (FILE         *fp,
       if (has_alpha)
         pflags |= DDPF_ALPHAPIXELS;
 
+      if (dds_write_vals.format == DDS_FORMAT_RGBA16F)
+        {
+          pflags |= DDPF_FOURCC;
+        }
+
       PUTL32 (hdr + 8,  flags);
       PUTL32 (hdr + 20, w * fmtbpp); /* pitch */
       PUTL32 (hdr + 80, pflags);
+
+      if (dds_write_vals.format == DDS_FORMAT_RGBA16F)
+        {
+          PUTL32 (hdr + 84, 113);
+        }
 
       /*
        * write extra fourcc info - this is special to GIMP DDS. When the image
@@ -2086,7 +2204,6 @@ save_dialog (GimpImage     *image,
   combo_set_item_sensitive (mipmap_opt, DDS_MIPMAP_EXISTING,
                             ! (is_volume || is_cubemap) &&
                             is_mipmap_chain_valid);
-
 
   hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
   gtk_box_pack_start (GTK_BOX (vbox), hbox, FALSE, FALSE, 0);
