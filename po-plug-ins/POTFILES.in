@@ -30,7 +30,6 @@ plug-ins/common/file-cel.c
 plug-ins/common/file-csource.c
 plug-ins/common/file-compressor.c
 plug-ins/common/file-desktop-link.c
-plug-ins/common/file-dicom.c
 plug-ins/common/file-farbfeld.c
 plug-ins/common/file-gbr.c
 plug-ins/common/file-gegl.c
@@ -96,6 +95,7 @@ plug-ins/file-dds/dds.c
 plug-ins/file-dds/ddsread.c
 plug-ins/file-dds/ddswrite.c
 plug-ins/file-dds/misc.c
+plug-ins/file-dicom/file-dicom.c
 plug-ins/file-exr/file-exr.c
 plug-ins/file-faxg3/faxg3.c
 plug-ins/file-fits/fits.c

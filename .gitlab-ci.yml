@@ -184,6 +184,7 @@ deps-debian:
             libarchive-dev
             libbz2-dev
             libcfitsio-dev
+            libgdcm-dev
             libgexiv2-dev
             libgirepository1.0-dev
             libgs10
