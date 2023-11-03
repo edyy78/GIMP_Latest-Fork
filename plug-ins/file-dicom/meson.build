@@ -5,8 +5,7 @@ if have_gdcm
     'file-dicom.c',
     'gdcm-wrapper.cc',
   ]
-  
-  gdcm_charls_dep = meson.get_compiler('cpp').find_library('libgdcmcharls', required: true)
+
   gdcm_jpeg12_dep = meson.get_compiler('cpp').find_library('libgdcmjpeg12', required: true)
   gdcm_common_dep = meson.get_compiler('cpp').find_library('libgdcmCommon', required: true)
   gdcm_jpeg16_dep = meson.get_compiler('cpp').find_library('libgdcmjpeg16', required: true)
@@ -15,7 +14,6 @@ if have_gdcm
   gdcm_dsed_dep = meson.get_compiler('cpp').find_library('libgdcmDSED', required: true)
   gdcm_msff_dep = meson.get_compiler('cpp').find_library('libgdcmMSFF', required: true)
   gdcm_iod_dep = meson.get_compiler('cpp').find_library('libgdcmIOD', required: true)
-  gdcm_openjp2_dep = meson.get_compiler('cpp').find_library('libgdcmopenjp2', required: true)
   gdcm_mexd_dep = meson.get_compiler('cpp').find_library('libgdcmMEXD', required: true)
 
   if platform_windows
@@ -36,7 +34,6 @@ if have_gdcm
     plugin_sources,
     dependencies: [
       libgimpui_dep,
-      gdcm_charls_dep,
       gdcm_jpeg12_dep,
       gdcm_common_dep,
       gdcm_jpeg16_dep, 
@@ -45,7 +42,6 @@ if have_gdcm
       gdcm_dsed_dep,
       gdcm_msff_dep,
       gdcm_iod_dep,
-      gdcm_openjp2_dep,
       gdcm_mexd_dep,
     ],
     install: true,
