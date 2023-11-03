@@ -64,7 +64,7 @@ struct _DicomClass
 
 
 #define DICOM_TYPE  (dicom_get_type ())
-#define DICOM (obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), DICOM_TYPE, Dicom))
+#define DICOM(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), DICOM_TYPE, Dicom))
 
 GType                   dicom_get_type         (void) G_GNUC_CONST;
 
@@ -88,7 +88,7 @@ static GimpValueArray * dicom_export           (GimpProcedure         *procedure
                                                 GimpProcedureConfig   *config,
                                                 gpointer               run_data);
 
-static GimpImage      * load_image            (GFile                 *file,
+static GimpImage      * load_image             (GFile                 *file,
                                                 GError               **error);
 static const Babl     * dicom_get_format       (gchar                 *type,
                                                 GDCMPIType             model);

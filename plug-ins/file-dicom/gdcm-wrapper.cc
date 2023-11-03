@@ -137,9 +137,9 @@ struct _GDCMLoader
 
   GDCMTag * get_tag (int index) const
     {
-      gdcm::StringFilter           sf           = gdcm::StringFilter();
+      gdcm::StringFilter           sf    = gdcm::StringFilter();
       gdcm::DataSet::ConstIterator iter;
-      int                          count        = 0;
+      int                          count = 0;
 
       sf.SetFile (reader_.GetFile ());
       iter = dataset_.Begin();
