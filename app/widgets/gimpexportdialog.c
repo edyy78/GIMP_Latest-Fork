@@ -165,16 +165,19 @@ gimp_export_dialog_set_image (GimpExportDialog *dialog,
    *   4. Default file type set in Preferences
    */
 
-  ext_file = gimp_image_get_exported_file (image);
+  if (! image->gimp->config->export_file_type_always)
+    {
+      ext_file = gimp_image_get_exported_file (image);
 
-  if (! ext_file)
-    ext_file = gimp_image_get_imported_file (image);
+      if (ext_file == NULL)
+        ext_file = gimp_image_get_imported_file (image);
 
-  if (! ext_file)
-    ext_file = g_object_get_data (G_OBJECT (file_dialog->gimp),
-                                  GIMP_FILE_EXPORT_LAST_FILE_KEY);
+      if (ext_file == NULL)
+        ext_file = g_object_get_data (G_OBJECT (file_dialog->gimp),
+                                      GIMP_FILE_EXPORT_LAST_FILE_KEY);
+    }
 
-  if (ext_file)
+  if (ext_file != NULL)
     {
       g_object_ref (ext_file);
     }
@@ -193,7 +196,7 @@ gimp_export_dialog_set_image (GimpExportDialog *dialog,
       g_free (uri);
     }
 
-  if (ext_file)
+  if (ext_file != NULL)
     {
       GFile *tmp_file = gimp_file_with_new_extension (name_file, ext_file);
       basename = g_path_get_basename (gimp_file_get_utf8_name (tmp_file));

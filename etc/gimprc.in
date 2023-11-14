@@ -365,6 +365,11 @@
 # 
 # (export-file-type png)
 
+# Always offer the default file type when exporting an image file. Possible
+# values are yes and no
+#
+# (export-file-type-always no)
+
 # Export the image's color profile by default.  Possible values are yes and
 # no.
 # 

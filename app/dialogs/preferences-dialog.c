@@ -1685,6 +1685,15 @@ prefs_dialog_new (Gimp       *gimp,
                             _("Default export file t_ype:"),
                             GTK_GRID (grid), 0, size_group);
 
+  button = prefs_check_button_add (object, "export-file-type-always",
+                                   /* Translators: label for
+                                    * configuration option (checkbox).
+                                    * If selected the default export file type is always
+                                    * offered when exporting even if the file type is known..
+                                    */
+                                   _("Always offer the default file type when exporting"),
+                                   GTK_BOX (vbox2));
+
   /*  Raw Image Importer  */
   vbox2 = prefs_frame_new (_("Raw Image Importer"),
                            GTK_CONTAINER (vbox), TRUE);
