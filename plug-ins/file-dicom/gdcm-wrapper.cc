@@ -32,6 +32,7 @@
 
 #include "gdcm-3.0/gdcmImage.h"
 #include "gdcm-3.0/gdcmImageChangePhotometricInterpretation.h"
+#include "gdcm-3.0/gdcmImageChangePlanarConfiguration.h"
 #include "gdcm-3.0/gdcmImageReader.h"
 #include "gdcm-3.0/gdcmPixmap.h"
 #include "gdcm-3.0/gdcmPixmapReader.h"
@@ -45,32 +46,40 @@ struct _GDCMLoader
 {
   _GDCMLoader (const char* filename)
   {
-      reader_.SetFileName (filename);
-      reader_.Read();
-      pix_reader_.SetFileName (filename);
-      pix_reader_.Read();
+    is_initialized_ = 0;
 
-      ir_ = reader_.GetImage();
+    reader_.SetFileName (filename);
+    pix_reader_.SetFileName (filename);
+    if (! reader_.Read() || ! pix_reader_.Read())
+      return;
 
-      pixeltype_ = ir_.GetPixelFormat();
-      pi_        = ir_.GetPhotometricInterpretation();
+    ir_ = reader_.GetImage();
 
-      dataset_ = reader_.GetFile().GetDataSet();
+    pixeltype_ = ir_.GetPixelFormat();
+    pi_        = ir_.GetPhotometricInterpretation();
 
-      refcount_ = 1;
+    dataset_ = reader_.GetFile().GetDataSet();
+
+    refcount_       = 1;
+    is_initialized_ = 1;
   }
 
-  int get_width() const
+  int get_initialized () const
+    {
+      return is_initialized_;
+    }
+
+  int get_width( ) const
     {
       return ir_.GetDimension (0);
     }
 
-  int get_height() const
+  int get_height () const
     {
       return ir_.GetDimension (1);
     }
 
-  GDCMScalarType get_precision() const
+  GDCMScalarType get_precision () const
     {
       GDCMScalarType precision;
 
@@ -79,7 +88,7 @@ struct _GDCMLoader
       return precision;
     }
 
-  GDCMPIType get_image_type() const
+  GDCMPIType get_image_type () const
     {
       GDCMPIType type;
 
@@ -88,35 +97,58 @@ struct _GDCMLoader
       return type;
     }
 
-  unsigned long get_buffer_size() const
+  unsigned long get_palette_size () const
+    {
+      const gdcm::LookupTable &lut = ir_.GetLUT();
+
+      return lut.GetLUTLength (gdcm::LookupTable::RED);
+    }
+
+  int get_palette (guchar *palette) const
+    {
+      const gdcm::LookupTable &lut = ir_.GetLUT();
+
+      lut.GetBufferAsRGBA (palette);
+
+      return 0;
+    }
+
+  unsigned long get_buffer_size () const
     {
       return ir_.GetBufferLength ();
     }
 
   int get_buffer (char *pixel) const
     {
-      gdcm::ImageChangePhotometricInterpretation pifilt;
+      const gdcm::Pixmap &pr_ = pix_reader_.GetPixmap();
 
-      /* Standardize monochrome input to black == 0, white == 255 */
+      /* Standardize monochrome input to black == 0, white == 1.0 */
       if (pi_.GetType () == gdcm::PhotometricInterpretation::MONOCHROME1)
         {
-          gdcm::PhotometricInterpretation  pi_temp (gdcm::PhotometricInterpretation::MONOCHROME2);
-          const gdcm::Pixmap              &pr_ = pix_reader_.GetPixmap();
+          gdcm::ImageChangePhotometricInterpretation pifilt;
+          gdcm::PhotometricInterpretation            pi_temp (gdcm::PhotometricInterpretation::MONOCHROME2);
 
-          pifilt.SetInput(pr_);
-          pifilt.SetPhotometricInterpretation(pi_temp);
-          pifilt.Change();
-          pr_.GetBuffer(pixel);
-
-          return 0;
+          pifilt.SetInput (pr_);
+          pifilt.SetPhotometricInterpretation (pi_temp);
+          pifilt.Change ();
         }
 
-      ir_.GetBuffer(pixel);
+      /* Make sure planar configuration is set to non-planar (0) */
+      if (ir_.GetPlanarConfiguration () != 0)
+        {
+          gdcm::ImageChangePlanarConfiguration  plafilt;
+
+          plafilt.SetInput (pr_);
+          plafilt.SetPlanarConfiguration (0);
+          plafilt.Change ();
+        }
+
+      pr_.GetBuffer (pixel);
 
       return 0;
     }
 
-  int get_dataset_size() const
+  int get_dataset_size () const
     {
       gdcm::DataSet::ConstIterator iter;
       int                          dataset_size = 0;
@@ -200,6 +232,7 @@ struct _GDCMLoader
   gdcm::PixmapReader              pix_reader_;
   gdcm::PixelFormat               pixeltype_;
   gdcm::PhotometricInterpretation pi_;
+  int                             is_initialized_;
   size_t                          refcount_;
 };
 
@@ -230,6 +263,11 @@ gdcm_loader_unref (GDCMLoader *loader)
     }
 }
 
+int
+gdcm_loader_get_initialized (GDCMLoader *loader)
+{
+  return loader->get_initialized ();
+}
 
 int
 gdcm_loader_get_width (GDCMLoader *loader)
@@ -275,6 +313,41 @@ GDCMPIType
 gdcm_loader_get_image_type (GDCMLoader *loader)
 {
   return loader->get_image_type();
+}
+
+unsigned long
+gdcm_loader_get_palette_size (GDCMLoader *loader)
+{
+  unsigned long palette_size;
+
+  try
+    {
+       palette_size = loader->get_palette_size ();
+    }
+  catch (...)
+    {
+      palette_size = -1;
+    }
+
+  return palette_size;
+}
+
+int
+gdcm_loader_get_palette (GDCMLoader *loader,
+                         guchar     *palette)
+{
+  int retval = -1;
+
+  try
+    {
+      retval = loader->get_palette (palette);
+    }
+  catch (...)
+    {
+      retval = -1;
+    }
+
+  return retval;
 }
 
 unsigned long

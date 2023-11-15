@@ -71,12 +71,17 @@ typedef enum
 GDCMLoader *   gdcm_loader_new              (const char *filename);
 
 void           gdcm_loader_unref            (GDCMLoader *loader);
+int            gdcm_loader_get_initialized  (GDCMLoader *loader);
 
 int            gdcm_loader_get_width        (GDCMLoader *loader);
 int            gdcm_loader_get_height       (GDCMLoader *loader);
 
 GDCMScalarType gdcm_loader_get_precision    (GDCMLoader *loader);
 GDCMPIType     gdcm_loader_get_image_type   (GDCMLoader *loader);
+
+unsigned long  gdcm_loader_get_palette_size (GDCMLoader *loader);
+int            gdcm_loader_get_palette      (GDCMLoader *loader,
+                                             guchar     *palette);
 
 unsigned long  gdcm_loader_get_buffer_size  (GDCMLoader *loader);
 int            gdcm_loader_get_buffer       (GDCMLoader *loader,

@@ -321,6 +321,15 @@ load_image (GFile   *file,
                    gimp_file_get_utf8_name (file), g_strerror (errno));
       return NULL;
     }
+  /* Notify if GDCM could not read the DICOM file */
+  if (! gdcm_loader_get_initialized (loader))
+    {
+      g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                   _("Could not read image from '%s'"),
+                   gimp_file_get_utf8_name (file));
+      return NULL;
+    }
+
 
   width  = gdcm_loader_get_width (loader);
   height = gdcm_loader_get_height (loader);
@@ -339,7 +348,7 @@ load_image (GFile   *file,
     case UINT8:
     case INT8:
     case SINGLEBIT:
-      image_precision = GIMP_PRECISION_U8_LINEAR;
+      image_precision = GIMP_PRECISION_U8_NON_LINEAR;
       type = "u8";
       break;
 
@@ -348,28 +357,28 @@ load_image (GFile   *file,
     case UINT16:
     case INT16:
       type = "u16";
-      image_precision = GIMP_PRECISION_U16_LINEAR;
+      image_precision = GIMP_PRECISION_U16_NON_LINEAR;
       break;
 
     case UINT32:
     case INT32:
       type = "u32";
-      image_precision = GIMP_PRECISION_U32_LINEAR;
+      image_precision = GIMP_PRECISION_U32_NON_LINEAR;
       break;
 
     case FLOAT16:
       type = "half";
-      image_precision = GIMP_PRECISION_HALF_LINEAR;
+      image_precision = GIMP_PRECISION_HALF_NON_LINEAR;
       break;
 
     case FLOAT32:
       type = "float";
-      image_precision = GIMP_PRECISION_FLOAT_LINEAR;
+      image_precision = GIMP_PRECISION_FLOAT_NON_LINEAR;
       break;
 
     case FLOAT64:
       type = "double";
-      image_precision = GIMP_PRECISION_DOUBLE_LINEAR;
+      image_precision = GIMP_PRECISION_DOUBLE_NON_LINEAR;
       break;
 
     default:
@@ -389,6 +398,10 @@ load_image (GFile   *file,
       break;
 
     case GDCM_PALETTE_COLOR:
+      image_type = GIMP_INDEXED;
+      layer_type = GIMP_INDEXED_IMAGE;
+      break;
+
     case GDCM_RGB:
     case GDCM_HSV:
     case GDCM_ARGB:
@@ -419,6 +432,29 @@ load_image (GFile   *file,
                           layer_type, 100,
                           gimp_image_get_default_new_layer_mode (image));
   gimp_image_insert_layer (image, layer, NULL, 0);
+
+  if (gdcm_image_type == GDCM_PALETTE_COLOR)
+    {
+      guint32  palette_size;
+      guchar  *rgba_palette;
+      guchar   palette[768];
+
+      palette_size = gdcm_loader_get_palette_size (loader);
+
+      rgba_palette = g_new0 (guchar, palette_size * 4);
+      gdcm_loader_get_palette (loader, rgba_palette);
+
+      for (gint i = 0; i < palette_size; i++)
+        {
+          palette[i * 3] = rgba_palette[i * 4];
+          palette[(i * 3) + 1] = rgba_palette[(i * 4) + 1];
+          palette[(i * 3) + 2] = rgba_palette[(i * 4) + 2];
+          /* Skipping alpha channel */
+        }
+
+      gimp_image_set_colormap (image, palette, palette_size);
+      g_free (rgba_palette);
+    }
 
   buffer_length = gdcm_loader_get_buffer_size (loader);
 
@@ -477,7 +513,6 @@ dicom_get_format (gchar      *type,
       format_name = g_strdup_printf ("Y %s", type);
       break;
 
-    case GDCM_PALETTE_COLOR:
     case GDCM_RGB:
       format_name = g_strdup_printf ("RGB %s", type);
       break;
