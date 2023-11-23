@@ -52,6 +52,8 @@ static void gimp_clone_options_gui_src_changed           (GimpSourceOptions *opt
 static void gimp_clone_options_gui_context_image_changed (GimpContext       *context,
                                                           GimpImage         *image,
                                                           GimpSourceOptions *options);
+static void gimp_clone_options_gui_reset_pattern_size    (GtkWidget         *button,
+                                                          GimpCloneOptions  *options);
 
 static gboolean gimp_clone_options_gui_update_src_label  (GimpSourceOptions *options);
 
@@ -217,7 +219,12 @@ gimp_clone_options_gui_update_src_label (GimpSourceOptions *options)
 
   return G_SOURCE_REMOVE;
 }
-
+static void
+gimp_clone_options_gui_reset_pattern_size (GtkWidget         *button,
+                                           GimpCloneOptions  *options)
+{
+  gimp_clone_options_set_default_pattern_size (options);
+}
 
 /* Public functions. */
 
@@ -225,15 +232,17 @@ gimp_clone_options_gui_update_src_label (GimpSourceOptions *options)
 GtkWidget *
 gimp_clone_options_gui (GimpToolOptions *tool_options)
 {
-  GObject   *config = G_OBJECT (tool_options);
-  GtkWidget *vbox   = gimp_paint_options_gui (tool_options);
-  GtkWidget *frame;
-  GtkWidget *label;
-  GtkWidget *combo;
-  GtkWidget *source_vbox;
-  GtkWidget *button;
-  GtkWidget *hbox;
-  gchar     *str;
+  GObject      *config = G_OBJECT (tool_options);
+  GtkWidget    *vbox   = gimp_paint_options_gui (tool_options);
+  GtkWidget    *frame;
+  GtkWidget    *label;
+  GtkWidget    *combo;
+  GtkWidget    *source_vbox;
+  GtkWidget    *button;
+  GtkWidget    *hbox;
+  GtkWidget    *scale;
+  gchar        *str;
+  GtkSizeGroup *link_group;
 
   /*  the source frame  */
   frame = gimp_frame_new (NULL);
@@ -292,6 +301,21 @@ gimp_clone_options_gui (GimpToolOptions *tool_options)
 
   g_object_bind_property_full (config, "clone-type",
                                hbox,   "visible",
+                               G_BINDING_SYNC_CREATE,
+                               gimp_clone_options_sync_source,
+                               NULL,
+                               GINT_TO_POINTER (GIMP_CLONE_PATTERN), NULL);
+
+  link_group = gtk_size_group_new (GTK_SIZE_GROUP_HORIZONTAL);
+  scale = gimp_paint_options_gui_scale_with_buttons
+      (config, "pattern-size", NULL,
+       _("Reset size to pattern's native size"),
+       0.1, 10.0, 2, 0.1, 1000.0, 1.0, 1.7,
+       gimp_clone_options_gui_reset_pattern_size, link_group);
+  gtk_box_pack_start (GTK_BOX (source_vbox), scale, FALSE, FALSE, 0);
+
+  g_object_bind_property_full (config, "clone-type",
+                               scale,   "visible",
                                G_BINDING_SYNC_CREATE,
                                gimp_clone_options_sync_source,
                                NULL,

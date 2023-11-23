@@ -611,7 +611,8 @@ gimp_drawable_resize (GimpItem     *item,
 
       gimp_get_fill_params (context, fill_type, &color, &pattern, NULL);
       gimp_drawable_fill_buffer (drawable, new_buffer,
-                                 &color, pattern, 0, 0);
+                                 &color, pattern, 0, 0,
+                                 NULL);
     }
 
   if (intersect && copy_width && copy_height)

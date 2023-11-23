@@ -645,6 +645,7 @@ gimp_bucket_fill_tool_button_press (GimpTool            *tool,
       GError          *error = NULL;
 
       fill_options = gimp_fill_options_new (image->gimp, NULL, FALSE);
+      gimp_fill_options_set_pattern_size (fill_options, options->pattern_size);
 
       if (gimp_fill_options_set_by_fill_mode (fill_options, context,
                                               options->fill_mode,

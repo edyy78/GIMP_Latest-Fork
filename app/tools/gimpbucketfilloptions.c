@@ -56,6 +56,8 @@
 
 #include "gimp-intl.h"
 
+#define DEFAULT_PATTERN_SIZE  1.0
+#define PATTERN_MAX_SIZE      1000
 
 enum
 {
@@ -79,6 +81,7 @@ enum
   PROP_FILL_CRITERION,
   PROP_FILL_COLOR_AS_LINE_ART,
   PROP_FILL_COLOR_AS_LINE_ART_THRESHOLD,
+  PROP_PATTERN_SIZE,
 };
 
 struct _GimpBucketFillOptionsPrivate
@@ -92,30 +95,32 @@ struct _GimpBucketFillOptionsPrivate
   GtkWidget *line_art_detect_opacity;
 };
 
-static void   gimp_bucket_fill_options_config_iface_init (GimpConfigInterface *config_iface);
+static void   gimp_bucket_fill_options_config_iface_init      (GimpConfigInterface   *config_iface);
 
-static void   gimp_bucket_fill_options_finalize          (GObject               *object);
-static void   gimp_bucket_fill_options_set_property      (GObject               *object,
-                                                          guint                  property_id,
-                                                          const GValue          *value,
-                                                          GParamSpec            *pspec);
-static void   gimp_bucket_fill_options_get_property      (GObject               *object,
-                                                          guint                  property_id,
-                                                          GValue                *value,
-                                                          GParamSpec            *pspec);
-static gboolean
-             gimp_bucket_fill_options_select_stroke_tool (GimpContainerView     *view,
-                                                          GList                 *items,
-                                                          GList                 *paths,
-                                                          GimpBucketFillOptions *options);
-static void  gimp_bucket_fill_options_tool_cell_renderer (GtkCellLayout         *layout,
-                                                          GtkCellRenderer       *cell,
-                                                          GtkTreeModel          *model,
-                                                          GtkTreeIter           *iter,
-                                                          gpointer               data);
-static void gimp_bucket_fill_options_image_changed       (GimpContext           *context,
-                                                          GimpImage             *image,
-                                                          GimpBucketFillOptions *options);
+static void   gimp_bucket_fill_options_finalize               (GObject               *object);
+static void   gimp_bucket_fill_options_set_property           (GObject               *object,
+                                                               guint                  property_id,
+                                                               const GValue          *value,
+                                                               GParamSpec            *pspec);
+static void   gimp_bucket_fill_options_get_property           (GObject               *object,
+                                                               guint                  property_id,
+                                                               GValue                *value,
+                                                               GParamSpec            *pspec);
+static gboolean gimp_bucket_fill_options_select_stroke_tool   (GimpContainerView     *view,
+                                                               GList                 *items,
+                                                               GList                 *paths,
+                                                               GimpBucketFillOptions *options);
+static void  gimp_bucket_fill_options_tool_cell_renderer      (GtkCellLayout         *layout,
+                                                               GtkCellRenderer       *cell,
+                                                               GtkTreeModel          *model,
+                                                               GtkTreeIter           *iter,
+                                                               gpointer               data);
+static void gimp_bucket_fill_options_image_changed            (GimpContext           *context,
+                                                               GimpImage             *image,
+                                                               GimpBucketFillOptions *options);
+static void gimp_bucket_fill_options_gui_reset_pattern_size   (GtkWidget             *button,
+                                                               GimpBucketFillOptions *options);
+static void gimp_bucket_fill_options_set_default_pattern_size (GimpBucketFillOptions *options);
 
 
 static void   gimp_bucket_fill_options_reset             (GimpConfig            *config);
@@ -282,6 +287,13 @@ gimp_bucket_fill_options_class_init (GimpBucketFillOptionsClass *klass)
                          GIMP_TYPE_SELECT_CRITERION,
                          GIMP_SELECT_CRITERION_COMPOSITE,
                          GIMP_PARAM_STATIC_STRINGS);
+
+  GIMP_CONFIG_PROP_DOUBLE (object_class, PROP_PATTERN_SIZE,
+                          "pattern-size",
+                          _("Size"),
+                          _("Pattern Size"),
+                          0.1, PATTERN_MAX_SIZE, DEFAULT_PATTERN_SIZE,
+                          GIMP_PARAM_STATIC_STRINGS);
 }
 
 static void
@@ -401,6 +413,9 @@ gimp_bucket_fill_options_set_property (GObject      *object,
     case PROP_FILL_COLOR_AS_LINE_ART_THRESHOLD:
       options->fill_as_line_art_threshold = g_value_get_double (value);
       break;
+    case PROP_PATTERN_SIZE:
+      options->pattern_size = g_value_get_double (value);
+      break;
 
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
@@ -474,6 +489,9 @@ gimp_bucket_fill_options_get_property (GObject    *object,
       break;
     case PROP_FILL_COLOR_AS_LINE_ART_THRESHOLD:
       g_value_set_double (value, options->fill_as_line_art_threshold);
+      break;
+    case PROP_PATTERN_SIZE:
+      g_value_set_double (value, options->pattern_size);
       break;
 
     default:
@@ -572,6 +590,21 @@ gimp_bucket_fill_options_reset (GimpConfig *config)
 
   parent_config_iface->reset (config);
 }
+static void
+gimp_bucket_fill_options_gui_reset_pattern_size (GtkWidget              *button,
+                                                 GimpBucketFillOptions  *options)
+{
+  gimp_bucket_fill_options_set_default_pattern_size (options);
+}
+static void
+gimp_bucket_fill_options_set_default_pattern_size (GimpBucketFillOptions *options)
+{
+  g_return_if_fail (GIMP_IS_BUCKET_FILL_OPTIONS (options));
+
+  g_object_set (options, "pattern-size", DEFAULT_PATTERN_SIZE, NULL);
+
+}
+
 
 static void
 gimp_bucket_fill_options_update_area (GimpBucketFillOptions *options)
@@ -672,6 +705,7 @@ gimp_bucket_fill_options_gui (GimpToolOptions *tool_options)
   gboolean               bold;
   GdkModifierType        extend_mask = gimp_get_extend_selection_mask ();
   GdkModifierType        toggle_mask = GDK_MOD1_MASK;
+  GtkWidget             *source_vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
 
   /*  fill type  */
   str = g_strdup_printf (_("Fill Type  (%s)"),
@@ -683,9 +717,19 @@ gimp_bucket_fill_options_gui (GimpToolOptions *tool_options)
   hbox = gimp_prop_pattern_box_new (NULL, GIMP_CONTEXT (tool_options),
                                     NULL, 2,
                                     "pattern-view-type", "pattern-view-size");
-  gimp_enum_radio_frame_add (GTK_FRAME (frame), hbox,
-                             GIMP_BUCKET_FILL_PATTERN, TRUE);
 
+
+  GtkSizeGroup *link_group = gtk_size_group_new (GTK_SIZE_GROUP_HORIZONTAL);
+  scale = gimp_paint_options_gui_scale_with_buttons
+      (config, "pattern-size", NULL,
+       _("Reset size to pattern's native size"),
+       0.1, 10.0, 2, 1.0, 1000.0, 1.0, 1.7,
+       gimp_bucket_fill_options_gui_reset_pattern_size, link_group);
+  gtk_widget_show(scale);
+  gtk_box_pack_start (GTK_BOX (source_vbox), hbox, FALSE, FALSE, 0);
+  gtk_box_pack_start (GTK_BOX (source_vbox), scale, FALSE, FALSE, 0);
+  gimp_enum_radio_frame_add (GTK_FRAME (frame), source_vbox,
+                             GIMP_BUCKET_FILL_PATTERN, TRUE);
   /*  fill selection  */
   str = g_strdup_printf (_("Affected Area  (%s)"),
                          gimp_get_mod_string (extend_mask));

@@ -74,20 +74,6 @@ static GtkWidget * jitter_options_gui          (GimpPaintOptions *paint_options,
 static GtkWidget * smoothing_options_gui       (GimpPaintOptions *paint_options,
                                                 GType             tool_type);
 
-static GtkWidget * gimp_paint_options_gui_scale_with_buttons
-                                               (GObject      *config,
-                                                gchar        *prop_name,
-                                                gchar        *link_prop_name,
-                                                gchar        *reset_tooltip,
-                                                gdouble       step_increment,
-                                                gdouble       page_increment,
-                                                gint          digits,
-                                                gdouble       scale_min,
-                                                gdouble       scale_max,
-                                                gdouble       factor,
-                                                gdouble       gamma,
-                                                GCallback     reset_callback,
-                                                GtkSizeGroup *link_group);
 
 
 /*  public functions  */
@@ -485,7 +471,7 @@ gimp_paint_options_gui_reset_force (GtkWidget        *button,
                 NULL);
 }
 
-static GtkWidget *
+GtkWidget *
 gimp_paint_options_gui_scale_with_buttons (GObject      *config,
                                            gchar        *prop_name,
                                            gchar        *link_prop_name,

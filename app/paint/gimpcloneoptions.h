@@ -37,6 +37,8 @@ struct _GimpCloneOptions
   GimpSourceOptions  parent_instance;
 
   GimpCloneType      clone_type;
+
+  gdouble            pattern_size;
 };
 
 struct _GimpCloneOptionsClass
@@ -44,6 +46,7 @@ struct _GimpCloneOptionsClass
   GimpSourceOptionsClass  parent_class;
 };
 
+void    gimp_clone_options_set_default_pattern_size (GimpCloneOptions *options);
 
 GType   gimp_clone_options_get_type (void) G_GNUC_CONST;
 

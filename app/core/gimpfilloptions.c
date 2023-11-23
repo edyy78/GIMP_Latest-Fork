@@ -53,7 +53,8 @@ enum
   PROP_FEATHER,
   PROP_FEATHER_RADIUS,
   PROP_PATTERN_VIEW_TYPE,
-  PROP_PATTERN_VIEW_SIZE
+  PROP_PATTERN_VIEW_SIZE,
+  PROP_PATTERN_SIZE
 };
 
 
@@ -69,6 +70,7 @@ struct _GimpFillOptionsPrivate
 
   GimpViewType  pattern_view_type;
   GimpViewSize  pattern_view_size;
+  gdouble       pattern_size;
 
   const gchar  *undo_desc;
 };
@@ -76,6 +78,8 @@ struct _GimpFillOptionsPrivate
 #define GET_PRIVATE(options) \
         ((GimpFillOptionsPrivate *) gimp_fill_options_get_instance_private ((GimpFillOptions *) (options)))
 
+#define DEFAULT_PATTERN_SIZE  1.0
+#define PATTERN_MAX_SIZE      1000
 
 static void     gimp_fill_options_config_init  (GimpConfigInterface *iface);
 
@@ -160,6 +164,13 @@ gimp_fill_options_class_init (GimpFillOptionsClass *klass)
                                                      GIMP_VIEW_SIZE_SMALL,
                                                      G_PARAM_CONSTRUCT |
                                                      GIMP_PARAM_READWRITE));
+
+  GIMP_CONFIG_PROP_DOUBLE (object_class, PROP_PATTERN_SIZE,
+                           "pattern-size",
+                           _("Size"),
+                           _("Pattern Size"),
+                           0.1, PATTERN_MAX_SIZE, DEFAULT_PATTERN_SIZE,
+                           GIMP_PARAM_STATIC_STRINGS);
 }
 
 static void
@@ -207,6 +218,9 @@ gimp_fill_options_set_property (GObject      *object,
     case PROP_PATTERN_VIEW_SIZE:
       private->pattern_view_size = g_value_get_int (value);
       break;
+    case PROP_PATTERN_SIZE:
+      private->pattern_size = g_value_get_double (value);
+      break;
 
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
@@ -245,6 +259,9 @@ gimp_fill_options_get_property (GObject    *object,
       break;
     case PROP_PATTERN_VIEW_SIZE:
       g_value_set_int (value, private->pattern_view_size);
+      break;
+    case PROP_PATTERN_SIZE:
+      g_value_set_double (value, private->pattern_size);
       break;
 
     default:
@@ -366,6 +383,23 @@ gimp_fill_options_set_feather (GimpFillOptions *options,
 
   g_object_set (options, "feather", feather, NULL);
   g_object_set (options, "feather-radius", radius, NULL);
+}
+
+gdouble
+gimp_fill_options_get_pattern_size (GimpFillOptions *options)
+{
+  g_return_val_if_fail (GIMP_IS_FILL_OPTIONS (options), FALSE);
+
+  return GET_PRIVATE (options)->pattern_size;
+}
+
+void
+gimp_fill_options_set_pattern_size (GimpFillOptions *options,
+                                    gdouble          pattern_size)
+{
+  g_return_if_fail (GIMP_IS_FILL_OPTIONS (options));
+
+  g_object_set (options, "pattern_size", pattern_size, NULL);
 }
 
 gboolean
@@ -593,7 +627,7 @@ gimp_fill_options_fill_buffer (GimpFillOptions *options,
         gimp_palettes_add_color_history (GIMP_CONTEXT (options)->gimp, &color);
 
         gimp_drawable_fill_buffer (drawable, buffer,
-                                   &color, NULL, 0, 0);
+                                   &color, NULL, 0, 0, NULL);
       }
       break;
 
@@ -618,7 +652,7 @@ gimp_fill_options_fill_buffer (GimpFillOptions *options,
         gimp_drawable_fill_buffer (drawable, buffer,
                                    NULL, pattern,
                                    pattern_offset_x,
-                                   pattern_offset_y);
+                                   pattern_offset_y, options);
       }
       break;
     }
