@@ -37,13 +37,17 @@ enum
 {
   PROP_0,
   PROP_TOOL,
-  PROP_TOOL_INFO
+  PROP_TOOL_INFO,
+  PROP_USE_SMOOTHING,
+  PROP_SMOOTHING_QUALITY,
+  PROP_SMOOTHING_FACTOR
 };
 
 
 static void   gimp_tool_options_config_iface_init (GimpConfigInterface *iface);
 
 static void   gimp_tool_options_dispose           (GObject         *object);
+static void   gimp_tool_options_finalize          (GObject          *object);
 static void   gimp_tool_options_set_property      (GObject         *object,
                                                    guint            property_id,
                                                    const GValue    *value,
@@ -70,7 +74,7 @@ static void
 gimp_tool_options_class_init (GimpToolOptionsClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
-
+  object_class->finalize     = gimp_tool_options_finalize;
   object_class->dispose      = gimp_tool_options_dispose;
   object_class->set_property = gimp_tool_options_set_property;
   object_class->get_property = gimp_tool_options_get_property;
@@ -82,7 +86,28 @@ gimp_tool_options_class_init (GimpToolOptionsClass *klass)
                                                         NULL, NULL,
                                                         GIMP_TYPE_TOOL_INFO,
                                                         GIMP_PARAM_READWRITE));
-
+  GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_USE_SMOOTHING,
+                            "use-smoothing",
+                            _("Smooth stroke"),
+                            _("Paint smoother strokes"),
+                            FALSE,
+                            GIMP_PARAM_STATIC_STRINGS);
+  GIMP_CONFIG_PROP_INT (object_class, PROP_SMOOTHING_QUALITY,
+                        "smoothing-quality",
+                        _("Quality"),
+                        _("Depth of smoothing"),
+                        1, 100, DEFAULT_SMOOTHING_QUALITY,
+                        GIMP_PARAM_STATIC_STRINGS);
+  GIMP_CONFIG_PROP_DOUBLE (object_class, PROP_SMOOTHING_FACTOR,
+                           "smoothing-factor",
+                           _("Weight"),
+                           _("Gravity of the pen"),
+                           /* Max velocity is set to 3; allowing for
+                            * smoothing factor to be less than velcoty
+                            * results in numeric instablility
+                            */
+                           3.0, 1000.0, DEFAULT_SMOOTHING_FACTOR,
+                           GIMP_PARAM_STATIC_STRINGS);
 }
 
 static void
@@ -93,6 +118,7 @@ gimp_tool_options_init (GimpToolOptions *options)
   g_signal_connect (options, "notify::tool",
                     G_CALLBACK (gimp_tool_options_tool_notify),
                     NULL);
+  options->smoothing_options = g_slice_new0 (GimpSmoothingOptions);
 }
 
 static void
@@ -152,12 +178,21 @@ gimp_tool_options_check_tool_info (GimpToolOptions *options,
 }
 
 static void
+gimp_tool_options_finalize (GObject *object)
+{
+  GimpToolOptions *options = GIMP_TOOL_OPTIONS (object);
+
+  g_slice_free (GimpSmoothingOptions, options->smoothing_options);
+}
+
+static void
 gimp_tool_options_set_property (GObject      *object,
                                 guint         property_id,
                                 const GValue *value,
                                 GParamSpec   *pspec)
 {
-  GimpToolOptions *options = GIMP_TOOL_OPTIONS (object);
+  GimpToolOptions      *options           = GIMP_TOOL_OPTIONS (object);
+  GimpSmoothingOptions *smoothing_options = options->smoothing_options;
 
   switch (property_id)
     {
@@ -197,6 +232,18 @@ gimp_tool_options_set_property (GObject      *object,
       }
       break;
 
+    case PROP_USE_SMOOTHING:
+      smoothing_options->use_smoothing = g_value_get_boolean (value);
+      break;
+
+    case PROP_SMOOTHING_QUALITY:
+      smoothing_options->smoothing_quality = g_value_get_int (value);
+      break;
+
+    case PROP_SMOOTHING_FACTOR:
+      smoothing_options->smoothing_factor = g_value_get_double (value);
+      break;
+
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
       break;
@@ -209,7 +256,8 @@ gimp_tool_options_get_property (GObject    *object,
                                 GValue     *value,
                                 GParamSpec *pspec)
 {
-  GimpToolOptions *options = GIMP_TOOL_OPTIONS (object);
+  GimpToolOptions      *options           = GIMP_TOOL_OPTIONS (object);
+  GimpSmoothingOptions *smoothing_options = options->smoothing_options;
 
   switch (property_id)
     {
@@ -219,6 +267,18 @@ gimp_tool_options_get_property (GObject    *object,
 
     case PROP_TOOL_INFO:
       g_value_set_object (value, options->tool_info);
+      break;
+
+    case PROP_USE_SMOOTHING:
+      g_value_set_boolean (value, smoothing_options->use_smoothing);
+      break;
+
+    case PROP_SMOOTHING_QUALITY:
+      g_value_set_int (value, smoothing_options->smoothing_quality);
+      break;
+
+    case PROP_SMOOTHING_FACTOR:
+      g_value_set_double (value, smoothing_options->smoothing_factor);
       break;
 
     default:

@@ -26,9 +26,12 @@
 
 #include "tools-types.h"
 
+#include "core/gimptoolinfo.h"
+
 #include "widgets/gimppropwidgets.h"
 #include "widgets/gimpwidgets-utils.h"
 
+#include "gimppaintoptions-gui.h"
 #include "gimpselectionoptions.h"
 #include "gimptooloptions-gui.h"
 
@@ -285,6 +288,11 @@ gimp_selection_options_gui (GimpToolOptions *tool_options)
                                            scale, NULL);
     gtk_box_pack_start (GTK_BOX (vbox), frame, FALSE, FALSE, 0);
   }
+  GtkWidget *frame;
+
+  frame = smoothing_options_gui (tool_options, tool_options->tool_info->tool_type);
+  gtk_box_pack_start (GTK_BOX (vbox), frame, FALSE, FALSE, 0);
+  gtk_widget_show (frame);
 
   return vbox;
 }

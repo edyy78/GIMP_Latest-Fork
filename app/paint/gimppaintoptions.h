@@ -34,7 +34,6 @@
 typedef struct _GimpJitterOptions        GimpJitterOptions;
 typedef struct _GimpFadeOptions          GimpFadeOptions;
 typedef struct _GimpGradientPaintOptions GimpGradientPaintOptions;
-typedef struct _GimpSmoothingOptions     GimpSmoothingOptions;
 
 struct _GimpJitterOptions
 {
@@ -55,13 +54,6 @@ struct _GimpGradientPaintOptions
   gboolean                    gradient_reverse;
   GimpGradientBlendColorSpace gradient_blend_color_space;
   GimpRepeatMode              gradient_repeat; /* only used by gradient tool */
-};
-
-struct _GimpSmoothingOptions
-{
-  gboolean use_smoothing;
-  gint     smoothing_quality;
-  gdouble  smoothing_factor;
 };
 
 
@@ -110,7 +102,6 @@ struct _GimpPaintOptions
   gboolean                  dynamics_enabled;
   GimpFadeOptions          *fade_options;
   GimpGradientPaintOptions *gradient_options;
-  GimpSmoothingOptions     *smoothing_options;
 
   GimpViewType              brush_view_type;
   GimpViewSize              brush_view_size;

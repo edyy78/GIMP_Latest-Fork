@@ -71,8 +71,6 @@ static GtkWidget * dynamics_options_gui        (GimpPaintOptions *paint_options,
                                                 GType             tool_type);
 static GtkWidget * jitter_options_gui          (GimpPaintOptions *paint_options,
                                                 GType             tool_type);
-static GtkWidget * smoothing_options_gui       (GimpPaintOptions *paint_options,
-                                                GType             tool_type);
 
 static GtkWidget * gimp_paint_options_gui_scale_with_buttons
                                                (GObject      *config,
@@ -226,7 +224,7 @@ gimp_paint_options_gui (GimpToolOptions *tool_options)
     {
       GtkWidget *frame;
 
-      frame = smoothing_options_gui (options, tool_type);
+      frame = smoothing_options_gui (tool_options, tool_type);
       gtk_box_pack_start (GTK_BOX (vbox), frame, FALSE, FALSE, 0);
       gtk_widget_show (frame);
     }
@@ -401,30 +399,6 @@ jitter_options_gui (GimpPaintOptions *paint_options,
   return frame;
 }
 
-static GtkWidget *
-smoothing_options_gui (GimpPaintOptions *paint_options,
-                       GType             tool_type)
-{
-  GObject   *config = G_OBJECT (paint_options);
-  GtkWidget *frame;
-  GtkWidget *vbox;
-  GtkWidget *scale;
-
-  vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
-
-  frame = gimp_prop_expanding_frame_new (config, "use-smoothing", NULL,
-                                         vbox, NULL);
-
-  scale = gimp_prop_spin_scale_new (config, "smoothing-quality",
-                                    1, 10, 1);
-  gtk_box_pack_start (GTK_BOX (vbox), scale, FALSE, FALSE, 0);
-
-  scale = gimp_prop_spin_scale_new (config, "smoothing-factor",
-                                    1, 10, 1);
-  gtk_box_pack_start (GTK_BOX (vbox), scale, FALSE, FALSE, 0);
-
-  return frame;
-}
 
 static void
 gimp_paint_options_gui_reset_size (GtkWidget        *button,

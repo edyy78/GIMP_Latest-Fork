@@ -76,9 +76,6 @@
 #define DYNAMIC_MAX_VALUE               1.0
 #define DYNAMIC_MIN_VALUE               0.0
 
-#define DEFAULT_SMOOTHING_QUALITY       20
-#define DEFAULT_SMOOTHING_FACTOR        50
-
 enum
 {
   PROP_0,
@@ -127,10 +124,6 @@ enum
   PROP_PATTERN_VIEW_SIZE,
   PROP_GRADIENT_VIEW_TYPE,
   PROP_GRADIENT_VIEW_SIZE,
-
-  PROP_USE_SMOOTHING,
-  PROP_SMOOTHING_QUALITY,
-  PROP_SMOOTHING_FACTOR
 };
 
 
@@ -418,29 +411,6 @@ gimp_paint_options_class_init (GimpPaintOptionsClass *klass)
                         GIMP_VIEWABLE_MAX_BUTTON_SIZE,
                         GIMP_VIEW_SIZE_LARGE,
                         GIMP_PARAM_STATIC_STRINGS);
-
-  GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_USE_SMOOTHING,
-                            "use-smoothing",
-                            _("Smooth stroke"),
-                            _("Paint smoother strokes"),
-                            FALSE,
-                            GIMP_PARAM_STATIC_STRINGS);
-  GIMP_CONFIG_PROP_INT (object_class, PROP_SMOOTHING_QUALITY,
-                        "smoothing-quality",
-                        _("Quality"),
-                        _("Depth of smoothing"),
-                        1, 100, DEFAULT_SMOOTHING_QUALITY,
-                        GIMP_PARAM_STATIC_STRINGS);
-  GIMP_CONFIG_PROP_DOUBLE (object_class, PROP_SMOOTHING_FACTOR,
-                           "smoothing-factor",
-                           _("Weight"),
-                           _("Gravity of the pen"),
-                           /* Max velocity is set to 3; allowing for
-                            * smoothing factor to be less than velcoty
-                            * results in numeric instablility
-                            */
-                           3.0, 1000.0, DEFAULT_SMOOTHING_FACTOR,
-                           GIMP_PARAM_STATIC_STRINGS);
 }
 
 static void
@@ -464,7 +434,6 @@ gimp_paint_options_init (GimpPaintOptions *options)
   options->jitter_options    = g_slice_new0 (GimpJitterOptions);
   options->fade_options      = g_slice_new0 (GimpFadeOptions);
   options->gradient_options  = g_slice_new0 (GimpGradientPaintOptions);
-  options->smoothing_options = g_slice_new0 (GimpSmoothingOptions);
 }
 
 static void
@@ -493,7 +462,6 @@ gimp_paint_options_finalize (GObject *object)
   g_slice_free (GimpJitterOptions,        options->jitter_options);
   g_slice_free (GimpFadeOptions,          options->fade_options);
   g_slice_free (GimpGradientPaintOptions, options->gradient_options);
-  g_slice_free (GimpSmoothingOptions,     options->smoothing_options);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -508,8 +476,6 @@ gimp_paint_options_set_property (GObject      *object,
   GimpFadeOptions          *fade_options      = options->fade_options;
   GimpJitterOptions        *jitter_options    = options->jitter_options;
   GimpGradientPaintOptions *gradient_options  = options->gradient_options;
-  GimpSmoothingOptions     *smoothing_options = options->smoothing_options;
-
   switch (property_id)
     {
     case PROP_PAINT_INFO:
@@ -628,16 +594,6 @@ gimp_paint_options_set_property (GObject      *object,
       options->gradient_view_size = g_value_get_int (value);
       break;
 
-    case PROP_USE_SMOOTHING:
-      smoothing_options->use_smoothing = g_value_get_boolean (value);
-      break;
-    case PROP_SMOOTHING_QUALITY:
-      smoothing_options->smoothing_quality = g_value_get_int (value);
-      break;
-    case PROP_SMOOTHING_FACTOR:
-      smoothing_options->smoothing_factor = g_value_get_double (value);
-      break;
-
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
       break;
@@ -654,7 +610,6 @@ gimp_paint_options_get_property (GObject    *object,
   GimpFadeOptions          *fade_options      = options->fade_options;
   GimpJitterOptions        *jitter_options    = options->jitter_options;
   GimpGradientPaintOptions *gradient_options  = options->gradient_options;
-  GimpSmoothingOptions     *smoothing_options = options->smoothing_options;
 
   switch (property_id)
     {
@@ -772,16 +727,6 @@ gimp_paint_options_get_property (GObject    *object,
       break;
     case PROP_GRADIENT_VIEW_SIZE:
       g_value_set_int (value, options->gradient_view_size);
-      break;
-
-    case PROP_USE_SMOOTHING:
-      g_value_set_boolean (value, smoothing_options->use_smoothing);
-      break;
-    case PROP_SMOOTHING_QUALITY:
-      g_value_set_int (value, smoothing_options->smoothing_quality);
-      break;
-    case PROP_SMOOTHING_FACTOR:
-      g_value_set_double (value, smoothing_options->smoothing_factor);
       break;
 
     default:

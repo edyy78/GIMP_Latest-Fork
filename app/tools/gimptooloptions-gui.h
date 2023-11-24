@@ -21,6 +21,6 @@
 
 GtkWidget * gimp_tool_options_gui       (GimpToolOptions *tool_options);
 GtkWidget * gimp_tool_options_empty_gui (GimpToolOptions *tool_options);
-
-
+GtkWidget * smoothing_options_gui       (GimpToolOptions *tool_options,
+                                         GType            tool_type);
 #endif  /*  __GIMP_TOOL_OPTIONS_GUI_H__  */
