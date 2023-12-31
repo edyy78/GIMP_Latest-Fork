@@ -44,6 +44,11 @@ app_tests = [
   'xcf',
 ]
 
+python_tests = [
+  ''
+]
+
+
 cmd = run_command('create_test_env.sh', check: false)
 if cmd.returncode() != 0
  error(cmd.stderr().strip())
@@ -51,6 +56,26 @@ endif
 
 # Prevent parallel builds for the tests
 # The tests must not be run in parallel or in a different order as specified
+
+if host_machine.system() == 'linux'
+  python_exe = find_program('tests.py')
+  test('crop-canvas',
+    python_exe,
+    args: [
+      meson.project_source_root() + '/app/tests/tools/crop_canvas.txt'
+    ],
+    env: [
+      'GIMP_TESTING_ABS_TOP_SRCDIR='  + meson.project_source_root(),
+      'GIMP_TESTING_ABS_TOP_BUILDDIR='+ meson.project_build_root(),
+      'GIMP_TESTING_PLUGINDIRS=' +      meson.project_build_root()/'plug-ins'/'common',
+      'GIMP_TESTING_PLUGINDIRS_BASENAME_IGNORES=mkgen.pl',
+      'UI_TEST=yes',
+    ],
+    suite: 'app',
+    timeout: 60,
+    is_parallel : false
+  )
+endif
 
 prio = 1000
 foreach test_name : app_tests

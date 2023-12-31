@@ -1,0 +1,9 @@
+title:crop example
+author:Jehan
+action:image-new
+keyboard:Enter
+toolbox:crop
+canvas:click(10,10)
+canvas:drag(30,40)
+keyboard:Enter
+test:image.width == 20 and image.height == 30

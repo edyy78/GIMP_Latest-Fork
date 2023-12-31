@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 
 # Copy tests resources
-for dir in files gimpdir gimpdir-empty; do
+for dir in files gimpdir gimpdir-empty tools; do
     rm -rf "${MESON_BUILD_ROOT}/${MESON_SUBDIR}/${dir}"
     cp -r "${MESON_SOURCE_ROOT}/${MESON_SUBDIR}/${dir}" \
         "${MESON_BUILD_ROOT}/${MESON_SUBDIR}"
