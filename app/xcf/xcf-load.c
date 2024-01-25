@@ -991,7 +991,7 @@ xcf_load_image (Gimp     *gimp,
        fonts_str = g_string_new(NULL);
 
        for (GSList *list = missing_fonts; list; list = g_slist_next (list))
-         g_string_append (fonts_str, g_strdup_printf ("- %s\n", (gchar *) list->data));
+         g_string_append (fonts_str, g_strdup_printf ("%s\n", (gchar *) list->data));
 
        if (missing_fonts)
          gimp_message (gimp, NULL,

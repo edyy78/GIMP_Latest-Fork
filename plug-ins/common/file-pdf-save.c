@@ -563,73 +563,6 @@ write_func (void                *fp,
                                             : CAIRO_STATUS_WRITE_ERROR;
 }
 
-static GList *
-get_missing_fonts (GList *layers)
-{
-  GList *missing_fonts = NULL;
-  GList *iter;
-
-  for (iter = layers; iter; iter = iter->next)
-    {
-      GimpLayer *layer = iter->data;
-
-      if (gimp_item_is_group (GIMP_ITEM (layer)))
-        {
-          GList *child_missing_fonts;
-          GList *iter2;
-
-          child_missing_fonts = get_missing_fonts (gimp_item_list_children (GIMP_ITEM (layer)));
-          for (iter2 = child_missing_fonts; iter2; iter2 = iter2->next)
-            {
-              gchar *missing = iter2->data;
-
-              if (g_list_find_custom (missing_fonts, missing, (GCompareFunc) g_strcmp0) == NULL)
-                missing_fonts = g_list_prepend (missing_fonts, missing);
-              else
-                g_free (missing);
-            }
-          g_list_free (child_missing_fonts);
-        }
-      else if (gimp_item_is_text_layer (GIMP_ITEM (layer)))
-        {
-          GimpFont             *gimp_font;
-          PangoFontDescription *font_description;
-          PangoFontDescription *font_description2;
-          PangoFontMap         *fontmap;
-          PangoFont            *font;
-          PangoContext         *context;
-
-          fontmap = pango_cairo_font_map_new_for_font_type (CAIRO_FONT_TYPE_FT);
-          context = pango_font_map_create_context (fontmap);
-
-          gimp_font        = gimp_text_layer_get_font (GIMP_TEXT_LAYER (layer));
-          font_description = gimp_font_get_pango_font_description (gimp_font);
-
-          font = pango_font_map_load_font (fontmap, context, font_description);
-          font_description2 = pango_font_describe (font);
-          if (g_strcmp0 (pango_font_description_get_family (font_description),
-                         pango_font_description_get_family (font_description2)) != 0)
-            {
-              const gchar *missing = pango_font_description_get_family (font_description);
-
-              if (g_list_find_custom (missing_fonts, missing, (GCompareFunc) g_strcmp0) == NULL)
-                missing_fonts = g_list_prepend (missing_fonts,
-                                                g_strdup (missing));
-            }
-
-          g_object_unref (font);
-          pango_font_description_free (font_description);
-          pango_font_description_free (font_description2);
-          g_object_unref (context);
-          g_object_unref (fontmap);
-        }
-    }
-
-  g_list_free (layers);
-
-  return missing_fonts;
-}
-
 static GimpPDBStatusType
 pdf_save_image (GimpProcedure        *procedure,
                 GimpProcedureConfig  *config,
@@ -885,7 +818,6 @@ gui_single (GimpProcedure       *procedure,
   GtkWidget  *window;
   GtkWidget  *widget;
   GimpLayer **layers;
-  GList      *missing_fonts;
   GList      *dialog_props = NULL;
   gboolean    run;
   gint32      n_layers;
@@ -916,61 +848,7 @@ gui_single (GimpProcedure       *procedure,
 
   gtk_widget_set_sensitive (widget, n_layers > 1);
 
-  /* Warning for missing fonts (non-embeddable with rasterization
-   * possible).
-   */
-  missing_fonts = get_missing_fonts (gimp_image_list_layers (multi_page.images[0]));
-  if (missing_fonts != NULL)
-    {
-      GList *iter;
-      gchar *font_list = NULL;
-      gchar *text;
-
-      for (iter = missing_fonts; iter; iter = iter->next)
-        {
-          gchar *fontname = iter->data;
-
-          if (font_list == NULL)
-            {
-              font_list = g_strdup (fontname);
-            }
-          else
-            {
-              gchar *tmp = font_list;
-
-              font_list = g_strjoin (", ", tmp, fontname, NULL);
-              g_free (tmp);
-            }
-        }
-
-      text = g_strdup_printf (_("The following fonts cannot be found: %s.\n"
-                                "It is recommended to convert your text layers to image "
-                                "or to install the missing fonts before exporting, "
-                                "otherwise your design may not look right."),
-                              font_list);
-      /* TODO: we used to have a GtkImage showing a GIMP_ICON_WILBER_EEK
-       * icon in GTK_ICON_SIZE_BUTTON size, next to the label, to make
-       * the warning more obvious.
-       */
-      widget = gimp_procedure_dialog_get_label (GIMP_PROCEDURE_DIALOG (window),
-                                                "missing-fonts-label",
-                                                text, FALSE, FALSE);
-      gtk_label_set_line_wrap (GTK_LABEL (widget), TRUE);
-      gimp_procedure_dialog_fill_frame (GIMP_PROCEDURE_DIALOG (window),
-                                        "convert-text-layers-frame",
-                                        "convert-text-layers", TRUE,
-                                        "missing-fonts-label");
-
-      dialog_props = g_list_prepend (dialog_props, "convert-text-layers-frame");
-
-      g_list_free_full (missing_fonts, g_free);
-      g_free (text);
-      g_free (font_list);
-    }
-  else
-    {
-      dialog_props = g_list_prepend (dialog_props, "convert-text-layers");
-    }
+  dialog_props = g_list_prepend (dialog_props, "convert-text-layers");
 
   dialog_props = g_list_prepend (dialog_props, "fill-background-color");
   dialog_props = g_list_prepend (dialog_props, "ignore-hidden");
