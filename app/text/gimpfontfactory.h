@@ -44,6 +44,8 @@ struct _GimpFontFactory
   gchar                  *conf;
   gchar                  *sysconf;
 
+  GimpContext            *global_context;
+
   GimpFontFactoryPrivate *priv;
 };
 
@@ -63,5 +65,6 @@ void              gimp_font_factory_get_custom_config_path     (GimpFontFactory 
                                                                 gchar           **sysconf);
 gchar           * gimp_font_factory_get_fonts_renaming_config  (GimpFontFactory  *factory);
 
+GimpContext     * gimp_font_factory_get_context                (GimpFontFactory  *factory);
 
 #endif  /*  __GIMP_FONT_FACTORY_H__  */

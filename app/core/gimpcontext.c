@@ -824,6 +824,8 @@ gimp_context_init (GimpContext *context)
 
   context->line_art            = NULL;
   context->line_art_timeout_id = 0;
+
+  context->xcf_missing_fonts = NULL;
 }
 
 static void
@@ -3333,6 +3335,22 @@ gimp_context_real_set_font (GimpContext *context,
   gimp_context_font_changed (context);
 }
 
+void
+gimp_context_add_font_to_xcf_missing_font_names (GimpContext *context,
+                                                 gchar       *name)
+{
+  if (! g_slist_find_custom (context->xcf_missing_fonts, name, (GCompareFunc) g_strcmp0))
+    context->xcf_missing_fonts = g_slist_prepend (context->xcf_missing_fonts, name);
+}
+
+GSList *
+gimp_context_get_missing_font_names (GimpContext  *context)
+{
+   GSList *list = context->xcf_missing_fonts;
+   context->xcf_missing_fonts = NULL;
+
+   return list;
+}
 
 /********************************************************************************/
 /*  tool preset *****************************************************************/

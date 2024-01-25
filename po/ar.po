@@ -25306,6 +25306,11 @@ msgid ""
 "Substituting grayscale map."
 msgstr ""
 
+#: ../app/xcf/xcf-load.c:939
+msgid ""
+"Could not find the following fonts:\n%s\nThey will be substituted with the default font."
+msgstr "لم يتمكّن من إيجاد الخطوط التالية:\n%s\nسيتّم إستبدالها بالخطّ الإفتراضي."
+
 #: ../app/xcf/xcf-read.c:189
 msgid "Invalid UTF-8 string in XCF file"
 msgstr "سلسلة UTF-8 غير صحيحة في ملف XCF"

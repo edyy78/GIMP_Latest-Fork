@@ -105,6 +105,8 @@ struct _GimpContext
 
   GimpLineArt          *line_art;
   guint                 line_art_timeout_id;
+
+  GSList               *xcf_missing_fonts;
 };
 
 struct _GimpContextClass
@@ -323,14 +325,16 @@ void             gimp_context_palette_changed     (GimpContext     *context);
 
 
 /*  font  */
-GimpFont       * gimp_context_get_font            (GimpContext     *context);
-void             gimp_context_set_font            (GimpContext     *context,
-                                                   GimpFont        *font);
-const gchar    * gimp_context_get_font_name       (GimpContext     *context);
-void             gimp_context_set_font_name       (GimpContext     *context,
-                                                   const gchar     *name);
-void             gimp_context_font_changed        (GimpContext     *context);
-
+GimpFont       * gimp_context_get_font                           (GimpContext     *context);
+void             gimp_context_set_font                           (GimpContext     *context,
+                                                                  GimpFont        *font);
+const gchar    * gimp_context_get_font_name                      (GimpContext     *context);
+void             gimp_context_set_font_name                      (GimpContext     *context,
+                                                                  const gchar     *name);
+void             gimp_context_font_changed                       (GimpContext     *context);
+void             gimp_context_add_font_to_xcf_missing_font_names (GimpContext     *context,
+                                                                  gchar           *name);
+GSList         * gimp_context_get_missing_font_names             (GimpContext     *context);
 
 /*  tool_preset  */
 GimpToolPreset * gimp_context_get_tool_preset     (GimpContext     *context);

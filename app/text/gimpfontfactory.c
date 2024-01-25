@@ -133,6 +133,8 @@ gimp_font_factory_data_init (GimpDataFactory *factory,
                             error->message);
       g_error_free (error);
     }
+
+  GIMP_FONT_FACTORY (factory)->global_context = context;
 }
 
 static void
@@ -229,6 +231,12 @@ gimp_font_factory_new (Gimp        *gimp,
                        "get-standard-func",  gimp_font_get_standard,
                        "unique-names",       FALSE,
                        NULL);
+}
+
+GimpContext *
+gimp_font_factory_get_context (GimpFontFactory  *factory)
+{
+  return factory->global_context;
 }
 
 GList *
@@ -1007,5 +1015,5 @@ gimp_font_factory_load_names (GimpFontFactory *factory,
 
   FcFontSetDestroy (fontset);
 
-  gimp_font_class_set_font_factory (container);
+  gimp_font_class_set_font_factory (factory);
 }
