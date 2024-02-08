@@ -272,6 +272,7 @@ color_area_color_clicked (GimpFgBgEditor  *editor,
 
   gtk_window_set_title (GTK_WINDOW (color_dialog), title);
   gimp_color_dialog_set_color (GIMP_COLOR_DIALOG (color_dialog), &color);
+  gimp_color_dialog_set_old_color (GIMP_COLOR_DIALOG (color_dialog), &color);
 
   gtk_window_present (GTK_WINDOW (color_dialog));
   color_dialog_active = TRUE;

@@ -193,11 +193,6 @@ static void    gimp_text_tool_buffer_begin_edit (GimpTextBuffer    *buffer,
 static void    gimp_text_tool_buffer_end_edit   (GimpTextBuffer    *buffer,
                                                  GimpTextTool      *text_tool);
 
-static void    gimp_text_tool_buffer_color_applied
-                                                (GimpTextBuffer    *buffer,
-                                                 const GimpRGB     *color,
-                                                 GimpTextTool      *text_tool);
-
 
 G_DEFINE_TYPE (GimpTextTool, gimp_text_tool, GIMP_TYPE_DRAW_TOOL)
 
@@ -258,9 +253,6 @@ gimp_text_tool_init (GimpTextTool *text_tool)
                     text_tool);
   g_signal_connect (text_tool->buffer, "end-user-action",
                     G_CALLBACK (gimp_text_tool_buffer_end_edit),
-                    text_tool);
-  g_signal_connect (text_tool->buffer, "color-applied",
-                    G_CALLBACK (gimp_text_tool_buffer_color_applied),
                     text_tool);
 
   text_tool->handle_rectangle_change_complete = TRUE;
@@ -1999,16 +1991,6 @@ gimp_text_tool_buffer_end_edit (GimpTextBuffer *buffer,
 
   gimp_text_tool_unblock_drawing (text_tool);
 }
-
-static void
-gimp_text_tool_buffer_color_applied (GimpTextBuffer *buffer,
-                                     const GimpRGB  *color,
-                                     GimpTextTool   *text_tool)
-{
-  gimp_palettes_add_color_history (GIMP_TOOL (text_tool)->tool_info->gimp,
-                                   color);
-}
-
 
 /*  public functions  */
 

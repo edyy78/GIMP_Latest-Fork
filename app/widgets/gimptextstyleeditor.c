@@ -225,11 +225,11 @@ gimp_text_style_editor_init (GimpTextStyleEditor *editor)
                     editor);
 
   /*  lower row  */
-
   editor->lower_hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 2);
   gtk_box_pack_start (GTK_BOX (editor), editor->lower_hbox, FALSE, FALSE, 0);
   gtk_widget_show (editor->lower_hbox);
 
+  /*  clear style button  */
   editor->clear_button = gtk_button_new ();
   gtk_widget_set_can_focus (editor->clear_button, FALSE);
   gtk_box_pack_start (GTK_BOX (editor->lower_hbox), editor->clear_button,
@@ -247,10 +247,14 @@ gimp_text_style_editor_init (GimpTextStyleEditor *editor)
   gtk_container_add (GTK_CONTAINER (editor->clear_button), image);
   gtk_widget_show (image);
 
+  /*  "change color" color panel */
   gimp_rgba_set (&color, 0.0, 0.0, 0.0, 1.0);
   editor->color_button = gimp_color_panel_new (_("Change color of selected text"),
                                                &color,
                                                GIMP_COLOR_AREA_FLAT, 20, 20);
+
+  gimp_color_button_set_update (GIMP_COLOR_BUTTON(editor->color_button), TRUE);
+
   gimp_widget_set_fully_opaque (editor->color_button, TRUE);
 
   gtk_box_pack_end (GTK_BOX (editor->lower_hbox), editor->color_button,
@@ -264,6 +268,7 @@ gimp_text_style_editor_init (GimpTextStyleEditor *editor)
                     G_CALLBACK (gimp_text_style_editor_color_changed),
                     editor);
 
+  /*  kerning adjustment control */
   editor->kerning_adjustment = gtk_adjustment_new (0.0, -1000.0, 1000.0,
                                                    1.0, 10.0, 0.0);
   editor->kerning_spinbutton =
@@ -280,6 +285,7 @@ gimp_text_style_editor_init (GimpTextStyleEditor *editor)
                     G_CALLBACK (gimp_text_style_editor_kerning_changed),
                     editor);
 
+  /*  baseline adjustment control */
   editor->baseline_adjustment = gtk_adjustment_new (0.0, -1000.0, 1000.0,
                                                     1.0, 10.0, 0.0);
   editor->baseline_spinbutton =
@@ -746,6 +752,7 @@ gimp_text_style_editor_color_changed (GimpColorButton     *button,
       gtk_text_buffer_get_selection_bounds (buffer, &start, &end);
 
       gimp_color_button_get_color (button, &color);
+
       gimp_text_buffer_set_color (editor->buffer, &start, &end, &color);
     }
 

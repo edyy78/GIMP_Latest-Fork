@@ -77,10 +77,12 @@ GtkWidget * gimp_color_dialog_new       (GimpViewable      *viewable,
                                          gboolean           wants_update,
                                          gboolean           show_alpha);
 
-void        gimp_color_dialog_set_color (GimpColorDialog   *dialog,
-                                         const GimpRGB     *color);
-void        gimp_color_dialog_get_color (GimpColorDialog   *dialog,
-                                         GimpRGB           *color);
+void        gimp_color_dialog_set_color     (GimpColorDialog   *dialog,
+                                             const GimpRGB     *color);
+void        gimp_color_dialog_get_color     (GimpColorDialog   *dialog,
+                                             GimpRGB           *color);
 
+void        gimp_color_dialog_set_old_color (GimpColorDialog   *dialog,
+                                             const GimpRGB     *color);
 
 #endif /* __GIMP_COLOR_DIALOG_H__ */
