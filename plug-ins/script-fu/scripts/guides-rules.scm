@@ -64,7 +64,7 @@
   "February 2024"
   "*"
   SF-ONE-OR-MORE-DRAWABLE  ; doesn't matter how many drawables are selected
-  SF-OPTION     _"_Rule"       '(_"Centre lines"
+  SF-OPTION     _"_Rule"       '(_"Center lines"
                                  _"Rule of thirds"
                                  _"Rule of fifths"
                                  _"Golden sections")
