@@ -22,6 +22,7 @@ scripts = [
   'gradient-example.scm',
   'guides-from-selection.scm',
   'guides-new-percent.scm',
+  'guides-rules.scm',
   'guides-new.scm',
   'guides-remove-all.scm',
   'lava.scm',
