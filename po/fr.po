@@ -29754,6 +29754,11 @@ msgstr ""
 "les palettes indexées. Une palette en niveaux\n"
 "de gris a été utilisée en remplacement."
 
+#: ../app/xcf/xcf-load.c:939
+msgid ""
+"Could not find the following fonts:\n%s\nThey will be substituted with the default font."
+msgstr "Impossible de trouver les polices suivantes :\n%s\nElles seront remplacées par la police par défaut."
+
 #: ../app/xcf/xcf-read.c:195
 msgid "Invalid UTF-8 string in XCF file"
 msgstr "Chaîne de caractères UTF-8 non valide dans le fichier XCF"

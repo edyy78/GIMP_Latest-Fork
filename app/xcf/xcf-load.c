@@ -36,6 +36,7 @@
 #include "gegl/gimp-gegl-tile-compat.h"
 
 #include "core/gimp.h"
+#include "core/gimpcontext.h"
 #include "core/gimpcontainer.h"
 #include "core/gimpdrawable-filters.h"
 #include "core/gimpdrawable-private.h" /* eek */
@@ -219,6 +220,8 @@ xcf_load_image (Gimp     *gimp,
   GList              *group_layers            = NULL;
   GList              *syms;
   GList              *iter;
+  GString            *fonts_str               = NULL;
+  GSList             *missing_fonts           = NULL;
 
   /* read in the image width, height and type */
   xcf_read_int32 (info, (guint32 *) &width, 1);
@@ -960,6 +963,21 @@ xcf_load_image (Gimp     *gimp,
   if (info->tattoo_state > 0)
     gimp_image_set_tattoo_state (image, info->tattoo_state);
 
+  fonts_str = g_string_new(NULL);
+  missing_fonts = gimp_context_get_missing_font_names (gimp_get_user_context (gimp));
+
+  for (GSList *list = missing_fonts; list; list = g_slist_next (list))
+    g_string_append (fonts_str, g_strdup_printf ("%s\n", (gchar *) list->data));
+
+  if (missing_fonts)
+    gimp_message (gimp, NULL,
+                  GIMP_MESSAGE_WARNING,
+                  _("Could not find the following fonts:\n%s\nThey will be substituted with the default font."),
+                  fonts_str->str);
+
+  g_slist_free_full (missing_fonts, (GDestroyNotify) g_free);
+  g_string_free (fonts_str, TRUE);
+
   if (n_broken_layers > 0 || n_broken_channels > 0 || n_broken_vectors > 0)
     goto error;
 
@@ -968,6 +986,23 @@ xcf_load_image (Gimp     *gimp,
   return image;
 
  error:
+  if ((missing_fonts = gimp_context_get_missing_font_names (gimp_get_user_context (gimp))))
+    {
+       fonts_str = g_string_new(NULL);
+
+       for (GSList *list = missing_fonts; list; list = g_slist_next (list))
+         g_string_append (fonts_str, g_strdup_printf ("%s\n", (gchar *) list->data));
+
+       if (missing_fonts)
+         gimp_message (gimp, NULL,
+                       GIMP_MESSAGE_WARNING,
+                       _("Could not find the following fonts:\n%s\nThey will be substituted with the default font."),
+                       fonts_str->str);
+
+       g_slist_free_full (missing_fonts, (GDestroyNotify) g_free);
+       g_string_free (fonts_str, TRUE);
+    }
+
   if (num_successful_elements == 0)
     goto hard_error;
 

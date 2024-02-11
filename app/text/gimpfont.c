@@ -46,6 +46,10 @@
 #include "core/gimp-memsize.h"
 #include "core/gimpcontainer.h"
 
+#include "core/gimpcontext.h"
+
+#include "gimpfontfactory.h"
+
 #include "gimpfont.h"
 
 #include "gimp-intl.h"
@@ -111,7 +115,7 @@ struct _GimpFontClass
 {
   GimpDataClass   parent_class;
 
-  GimpContainer  *fontfactory;
+  GimpFontFactory *fontfactory;
 };
 
 
@@ -236,26 +240,28 @@ gimp_font_deserialize_create (GType     type,
                               gint      nest_level,
                               gpointer  data)
 {
-  GimpFont      *font;
-  GimpContainer *fonts_container         = GIMP_FONT_CLASS (g_type_class_peek (GIMP_TYPE_FONT))->fontfactory;
-  gint           most_similar_font_index = -1;
-  gint           font_count              = gimp_container_get_n_children (fonts_container);
-  gint           largest_similarity      = 0;
-  GList         *similar_fonts           = NULL;
-  GList         *iter;
-  gint           i;
-  gchar         *fonthash                = NULL;
-  gchar         *fullname                = NULL;
-  gchar         *family                  = NULL;
-  gchar         *psname                  = NULL;
-  gchar         *style                   = NULL;
-  gint           index                   = -1;
-  gint           weight                  = -1;
-  gint           slant                   = -1;
-  gint           width                   = -1;
-  gint           fontversion             = -1;
-  guint          scope_id;
-  guint          old_scope_id;
+  GimpFont        *font;
+  GimpFontFactory *factory                 = GIMP_FONT_CLASS (g_type_class_peek (GIMP_TYPE_FONT))->fontfactory;
+  GimpContainer   *fonts_container         = gimp_data_factory_get_container (GIMP_DATA_FACTORY (factory));
+  GimpContext     *global_context          = gimp_font_factory_get_context (factory);
+  gint             most_similar_font_index = -1;
+  gint             font_count              = gimp_container_get_n_children (fonts_container);
+  gint             largest_similarity      = 0;
+  GList           *similar_fonts           = NULL;
+  GList           *iter;
+  gint             i;
+  gchar           *fonthash                = NULL;
+  gchar           *fullname                = NULL;
+  gchar           *family                  = NULL;
+  gchar           *psname                  = NULL;
+  gchar           *style                   = NULL;
+  gint             index                   = -1;
+  gint             weight                  = -1;
+  gint             slant                   = -1;
+  gint             width                   = -1;
+  gint             fontversion             = -1;
+  guint            scope_id;
+  guint            old_scope_id;
 
   /* This is for backward compatibility with older xcf files.
    * The font used to be serialized as a string containing
@@ -278,7 +284,10 @@ gimp_font_deserialize_create (GType     type,
         }
 
       if (font == NULL)
-        font = GIMP_FONT (gimp_font_get_standard ());
+        {
+           font = GIMP_FONT (gimp_font_get_standard ());
+           gimp_context_add_font_to_xcf_missing_font_names (global_context, g_strdup (font_name));
+        }
       else
         g_object_ref (font);
 
@@ -473,6 +482,13 @@ gimp_font_deserialize_create (GType     type,
     }
   else
     {
+      if (fullname)
+        gimp_context_add_font_to_xcf_missing_font_names (global_context, g_strdup (fullname));
+      else if (psname)
+        gimp_context_add_font_to_xcf_missing_font_names (global_context, g_strdup (psname));
+      else if (family && style)
+        gimp_context_add_font_to_xcf_missing_font_names (global_context, g_strdup_printf ("%s %s", family, style));
+
       font = GIMP_FONT (gimp_font_get_standard ());
     }
 
@@ -487,7 +503,7 @@ gimp_font_deserialize_create (GType     type,
 }
 
 void
-gimp_font_class_set_font_factory (GimpContainer *factory)
+gimp_font_class_set_font_factory (GimpFontFactory *factory)
 {
   GimpFontClass *klass = GIMP_FONT_CLASS (g_type_class_peek (GIMP_TYPE_FONT));
   klass->fontfactory   = factory;
