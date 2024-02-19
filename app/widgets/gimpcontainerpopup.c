@@ -46,25 +46,28 @@
 #include "gimp-intl.h"
 
 
-static void   gimp_container_popup_finalize         (GObject            *object);
+static void     gimp_container_popup_finalize         (GObject            *object);
 
-static void   gimp_container_popup_confirm          (GimpPopup          *popup);
+static void     gimp_container_popup_confirm          (GimpPopup          *popup);
 
-static void   gimp_container_popup_create_view      (GimpContainerPopup *popup);
+static void     gimp_container_popup_create_view      (GimpContainerPopup *popup);
 
-static void   gimp_container_popup_smaller_clicked  (GtkWidget          *button,
-                                                     GimpContainerPopup *popup);
-static void   gimp_container_popup_larger_clicked   (GtkWidget          *button,
-                                                     GimpContainerPopup *popup);
-static void   gimp_container_popup_view_type_toggled(GtkWidget          *button,
-                                                     GimpContainerPopup *popup);
-static void   gimp_container_popup_dialog_clicked   (GtkWidget          *button,
-                                                     GimpContainerPopup *popup);
+static void     gimp_container_popup_smaller_clicked  (GtkWidget          *button,
+                                                       GimpContainerPopup *popup);
+static void     gimp_container_popup_larger_clicked   (GtkWidget          *button,
+                                                       GimpContainerPopup *popup);
+static void     gimp_container_popup_view_type_toggled(GtkWidget          *button,
+                                                       GimpContainerPopup *popup);
+static void     gimp_container_popup_dialog_clicked   (GtkWidget          *button,
+                                                       GimpContainerPopup *popup);
 
-static void   gimp_container_popup_context_changed  (GimpContext        *context,
-                                                     GimpViewable       *viewable,
-                                                     GimpContainerPopup *popup);
+static void     gimp_container_popup_context_changed  (GimpContext        *context,
+                                                       GimpViewable       *viewable,
+                                                       GimpContainerPopup *popup);
 
+static gboolean gimp_container_popup_button_released  (GtkWidget          *widget,
+                                                       GdkEvent           *event,
+                                                       GimpContainerPopup *popup);
 
 G_DEFINE_TYPE (GimpContainerPopup, gimp_container_popup, GIMP_TYPE_POPUP)
 
@@ -253,6 +256,17 @@ gimp_container_popup_set_view_size (GimpContainerPopup *popup,
 
 /*  private functions  */
 
+/* This is just to handle the case of selecting an  already selected item (e.g. when searching) */
+static gboolean
+gimp_container_popup_button_released (GtkWidget          *widget,
+                                      GdkEvent           *event,
+                                      GimpContainerPopup *popup)
+{
+  g_signal_emit_by_name (popup, "confirm");
+
+  return TRUE;
+}
+
 static void
 gimp_container_popup_create_view (GimpContainerPopup *popup)
 {
@@ -284,6 +298,9 @@ gimp_container_popup_create_view (GimpContainerPopup *popup)
       gtk_tree_view_set_search_entry (GTK_TREE_VIEW (GIMP_CONTAINER_TREE_VIEW (GIMP_CONTAINER_VIEW (popup->editor->view))->view),
                                       GTK_ENTRY (search_entry));
       gtk_widget_show (search_entry);
+
+      g_signal_connect (GTK_TREE_VIEW (GIMP_CONTAINER_TREE_VIEW (GIMP_CONTAINER_VIEW (popup->editor->view))->view),
+                        "button-release-event", G_CALLBACK (gimp_container_popup_button_released), popup);
     }
 
   /* lame workaround for bug #761998 */
