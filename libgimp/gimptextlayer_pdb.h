@@ -85,6 +85,9 @@ gboolean                       gimp_text_layer_resize             (GimpTextLayer
                                                                    gdouble                width,
                                                                    gdouble                height);
 gboolean                       gimp_text_layer_is_dynamic         (GimpTextLayer         *layer);
+gboolean                       gimp_text_layer_get_offsets        (GimpTextLayer         *layer,
+                                                                   gint                  *x,
+                                                                   gint                  *y);
 
 
 G_END_DECLS
