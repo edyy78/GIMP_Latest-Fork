@@ -731,7 +731,7 @@ static const GimpStringActionEntry filters_interactive_actions[] =
 static const GimpEnumActionEntry filters_repeat_actions[] =
 {
   { "filters-repeat", GIMP_ICON_SYSTEM_RUN,
-    NC_("filters-action", "Re_peat Last"), NULL, { "<primary>F", NULL },
+    NC_("filters-action", "Re_peat Last"), NULL, { "<shift><alt>F", NULL },
     NC_("filters-action",
         "Rerun the last used filter using the same settings"),
     GIMP_RUN_WITH_LAST_VALS, FALSE,
