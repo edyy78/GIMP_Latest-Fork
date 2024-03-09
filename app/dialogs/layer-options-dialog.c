@@ -92,6 +92,7 @@ static void   layer_options_dialog_mode_notify    (GtkWidget          *widget,
                                                    LayerOptionsDialog *private);
 static void   layer_options_dialog_rename_toggled (GtkWidget          *widget,
                                                    LayerOptionsDialog *private);
+static void   layer_options_name_entry_changed    (GtkWidget          *widget);
 
 
 /*  public functions  */
@@ -426,6 +427,8 @@ layer_options_dialog_new (GimpImage                *image,
   /*  For text layers add a toggle to control "auto-rename"  */
   if (layer && gimp_item_is_text_layer (GIMP_ITEM (layer)))
     {
+      GtkWidget *name_entry = item_options_dialog_get_name_entry (dialog);
+
       button = item_options_dialog_add_switch (dialog,
                                                GIMP_ICON_TOOL_TEXT,
                                                _("Set name from _text"));
@@ -438,6 +441,10 @@ layer_options_dialog_new (GimpImage                *image,
       g_signal_connect (button, "toggled",
                         G_CALLBACK (layer_options_dialog_rename_toggled),
                         private);
+
+      g_signal_connect_swapped (name_entry, "changed",
+                                G_CALLBACK (layer_options_name_entry_changed),
+                                button);
     }
 
   return dialog;
@@ -565,9 +572,24 @@ layer_options_dialog_rename_toggled (GtkWidget          *widget,
 
           name_entry = item_options_dialog_get_name_entry (dialog);
 
+          g_signal_handlers_block_by_func (name_entry,
+                                           layer_options_name_entry_changed,
+                                           widget);
+
           gtk_entry_set_text (GTK_ENTRY (name_entry), name);
+
+          g_signal_handlers_unblock_by_func (name_entry,
+                                             layer_options_name_entry_changed,
+                                             widget);
 
           g_free (name);
         }
     }
+}
+
+static void
+layer_options_name_entry_changed (GtkWidget *widget)
+{
+  if (gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (widget)))
+    gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (widget), FALSE);
 }
