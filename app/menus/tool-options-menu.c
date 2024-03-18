@@ -85,8 +85,9 @@ tool_options_menu_update_after (GimpUIManager *manager,
   context   = gimp_get_user_context (manager->gimp);
   tool_info = gimp_context_get_tool (context);
 
-  if (! tool_info->presets)
-    return;
+   // Removed the condition to always execute the menu update logic
+  //   if (! tool_info->presets)
+    // return;
 
   tool_options_menu_update_presets (manager, "Save Tool Preset",
                                     "save", tool_info->presets);
