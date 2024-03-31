@@ -460,13 +460,10 @@ gimp_mandala_update_strokes (GimpSymmetry *sym,
   gdouble      slice_angle;
   gdouble      mid_slice_angle = 0.0;
   gdouble      center_x, center_y;
-  gint         offset_x, offset_y;
   gint         i;
 
-  gimp_item_get_offset (GIMP_ITEM (drawable), &offset_x, &offset_y);
-
-  center_x = mandala->center_x - offset_x;
-  center_y = mandala->center_y - offset_y;
+  center_x = mandala->center_x;
+  center_y = mandala->center_y;
 
   g_list_free_full (sym->strokes, g_free);
   sym->strokes = NULL;
