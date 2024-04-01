@@ -105,6 +105,7 @@ typedef struct
   GimpLayerColorSpace    blend_space;
   GimpLayerColorSpace    composite_space;
   GimpLayerCompositeMode composite_mode;
+  gboolean               clip;
   GimpFilterRegion       region;
 
   gboolean               unsupported_operation;
@@ -1092,6 +1093,7 @@ xcf_load_add_effects (XcfInfo   *info,
                                                  data->blend_space,
                                                  data->composite_space,
                                                  data->composite_mode);
+                  gimp_drawable_filter_set_clip (filter, data->clip);
                   gimp_drawable_filter_set_region (filter, data->region);
 
                   gimp_drawable_filter_apply (filter, NULL);
@@ -1103,6 +1105,8 @@ xcf_load_add_effects (XcfInfo   *info,
                   gimp_drawable_filter_commit (filter, TRUE, NULL, FALSE);
 
                   gimp_drawable_filter_layer_mask_freeze (filter);
+
+                  gimp_filter_set_active (GIMP_FILTER (filter), data->is_visible);
 
                   g_object_unref (filter);
                 }
@@ -2496,8 +2500,8 @@ xcf_load_effect_props (XcfInfo      *info,
                               "XCF Warning: filter \"%s\" does not "
                               "have the %s property. It was not set.",
                               filter->operation_name, filter_prop_name);
-                g_free (filter_prop_name);
-                break;
+                valid_prop_value = FALSE;
+                goto set_or_seek_node_property;
               }
 
             switch (filter_type)
@@ -2704,6 +2708,7 @@ xcf_load_effect_props (XcfInfo      *info,
                   break;
               }
 
+set_or_seek_node_property:
             if (valid_prop_value)
               gegl_node_set_property (filter->operation, filter_prop_name,
                                       &filter_prop_value);
@@ -2712,6 +2717,15 @@ xcf_load_effect_props (XcfInfo      *info,
 
             g_value_unset (&filter_prop_value);
             g_free (filter_prop_name);
+          }
+          break;
+
+        case PROP_FILTER_CLIP:
+          {
+            gboolean clip;
+
+            xcf_read_int32 (info, (guint32 *) &clip, 1);
+            filter->clip = clip;
           }
           break;
 

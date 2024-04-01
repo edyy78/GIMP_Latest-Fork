@@ -404,6 +404,7 @@ gimp_drawable_filter_duplicate (GimpDrawable       *drawable,
   filter = gimp_drawable_filter_new (drawable, undo_desc, node, icon_name);
   g_object_unref (node);
 
+  gimp_drawable_filter_set_clip (filter, prior_filter->clip);
   gimp_drawable_filter_set_opacity (filter, prior_filter->opacity);
   gimp_drawable_filter_set_mode (filter,
                                  prior_filter->paint_mode,
@@ -486,6 +487,14 @@ gimp_drawable_filter_get_composite_mode (GimpDrawableFilter *filter)
   g_return_val_if_fail (GIMP_IS_DRAWABLE_FILTER (filter), 0);
 
   return filter->composite_mode;
+}
+
+gboolean
+gimp_drawable_filter_get_clip (GimpDrawableFilter *filter)
+{
+  g_return_val_if_fail (GIMP_IS_DRAWABLE_FILTER (filter), FALSE);
+
+  return filter->clip;
 }
 
 GimpFilterRegion

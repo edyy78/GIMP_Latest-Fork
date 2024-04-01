@@ -852,6 +852,8 @@ xcf_save_effect_props (XcfInfo      *info,
                                   gimp_drawable_filter_get_composite_space (GIMP_DRAWABLE_FILTER (filter))), ;);
   xcf_check_error (xcf_save_prop (info, image, PROP_COMPOSITE_MODE, error,
                                   gimp_drawable_filter_get_composite_mode (GIMP_DRAWABLE_FILTER (filter))), ;);
+  xcf_check_error (xcf_save_prop (info, image, PROP_FILTER_CLIP, error,
+                                  gimp_drawable_filter_get_clip (GIMP_DRAWABLE_FILTER (filter))), ;);
   xcf_check_error (xcf_save_prop (info, image, PROP_FILTER_REGION, error,
                                   gimp_drawable_filter_get_region (GIMP_DRAWABLE_FILTER (filter))), ;);
 
@@ -1851,10 +1853,10 @@ xcf_save_prop (XcfInfo    *info,
 
                     bytes = gegl_color_get_bytes (color, format);
                     data  = (guint8 *) g_bytes_get_data (bytes, &data_length);
-                    g_bytes_unref (bytes);
 
                     xcf_write_int32_check_error (info, (guint32 *) &data_length, 1, ;);
                     xcf_write_int8_check_error (info, (const guint8 *) data, data_length, ;);
+                    g_bytes_unref (bytes);
 
                     space = babl_format_get_space (format);
                     if (space != babl_space ("sRGB"))
@@ -1897,6 +1899,20 @@ xcf_save_prop (XcfInfo    *info,
 
         xcf_check_error (xcf_seek_pos (info, base + size, error), va_end (args));
       }
+      break;
+
+    case PROP_FILTER_CLIP:
+      {
+        guint32 visible = va_arg (args, guint32);
+
+        size = 4;
+
+        xcf_write_prop_type_check_error (info, prop_type, va_end (args));
+        xcf_write_int32_check_error (info, &size, 1, va_end (args));
+
+        xcf_write_int32_check_error (info, &visible, 1, va_end (args));
+      }
+      break;
     }
 
   va_end (args);

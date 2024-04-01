@@ -44,7 +44,7 @@
 #define PLUG_IN_BINARY "blinds"
 #define PLUG_IN_ROLE   "gimp-blinds"
 
-#define MAX_FANS       100
+#define MAX_FANS       1024
 
 
 typedef struct _Blinds      Blinds;
@@ -153,13 +153,13 @@ blinds_create_procedure (GimpPlugIn  *plug_in,
       GIMP_PROC_ARG_INT (procedure, "angle-displacement",
                          _("_Displacement"),
                          _("Angle of Displacement"),
-                         0, 360, 30,
+                         0, 90, 30,
                          G_PARAM_READWRITE);
 
       GIMP_PROC_ARG_INT (procedure, "num-segments",
                          _("_Number of segments"),
                          _("Number of segments in blinds"),
-                         1, 1024, 3,
+                         1, MAX_FANS, 3,
                          G_PARAM_READWRITE);
 
       GIMP_PROC_ARG_INT (procedure, "orientation",
@@ -305,8 +305,6 @@ blinds_dialog (GimpProcedure *procedure,
                                                         "preview", drawable);
   gtk_widget_set_margin_bottom (preview, 12);
 
-  g_object_set_data (config, "drawable", drawable);
-
   g_signal_connect (preview, "invalidated",
                     G_CALLBACK (dialog_update_preview),
                     config);
@@ -445,28 +443,27 @@ static void
 dialog_update_preview (GtkWidget *widget,
                        GObject   *config)
 {
-  GimpPreview        *preview  = GIMP_PREVIEW (widget);
-  GimpDrawable       *drawable = g_object_get_data (config, "drawable");
-  gint                y;
-  const guchar       *p;
-  guchar             *buffer;
-  GBytes             *cache;
-  const guchar       *cache_start;
-  GeglColor          *color;
-  GimpRGB             background;
-  guchar              bg[4];
-  gint                width;
-  gint                height;
-  gint                bpp;
-  GimpOrientationType orientation;
-  gint                bg_trans;
+  GimpDrawablePreview *preview  = GIMP_DRAWABLE_PREVIEW (widget);
+  GimpDrawable        *drawable = gimp_drawable_preview_get_drawable (preview);
+  gint                 y;
+  const guchar        *p;
+  guchar              *buffer;
+  GBytes              *cache;
+  const guchar        *cache_start;
+  GeglColor           *color;
+  guchar               bg[4];
+  gint                 width;
+  gint                 height;
+  gint                 bpp;
+  GimpOrientationType  orientation;
+  gint                 bg_trans;
 
   g_object_get (config,
                 "bg-transparent", &bg_trans,
                 "orientation",    &orientation,
                 NULL);
 
-  gimp_preview_get_size (preview, &width, &height);
+  gimp_preview_get_size (GIMP_PREVIEW (preview), &width, &height);
   cache = gimp_drawable_get_thumbnail_data (drawable,
                                             width, height,
                                             &width, &height, &bpp);
@@ -477,18 +474,19 @@ dialog_update_preview (GtkWidget *widget,
   if (bg_trans)
     gimp_color_set_alpha (color, 0.0);
 
-  gegl_color_get_pixel (color, babl_format_with_space ("R'G'B'A double", NULL), &background);
-  g_object_unref (color);
-
   if (gimp_drawable_is_gray (drawable))
     {
-      bg[0] = gimp_rgb_luminance_uchar (&background);
-      gimp_rgba_get_uchar (&background, NULL, NULL, NULL, bg + 3);
+      guchar luminance[2];
+
+      gegl_color_get_pixel (color, babl_format ("Y'A u8"), luminance);
+      bg[0] = luminance[0];
+      bg[3] = luminance[1];
     }
   else
     {
-      gimp_rgba_get_uchar (&background, bg, bg + 1, bg + 2, bg + 3);
+      gegl_color_get_pixel (color, babl_format ("R'G'B'A u8"), bg);
     }
+  g_object_unref (color);
 
   buffer = g_new (guchar, width * height * bpp);
 
@@ -561,7 +559,9 @@ dialog_update_preview (GtkWidget *widget,
       g_free (dr);
     }
 
-  gimp_preview_draw_buffer (preview, buffer, width * bpp);
+  gimp_preview_draw_buffer (GIMP_PREVIEW (preview), buffer, width * bpp);
+  gimp_preview_set_bounds (GIMP_PREVIEW (preview), 0, 0, width, height);
+  gimp_preview_set_size (GIMP_PREVIEW (preview), width, height);
 
   g_free (buffer);
   g_bytes_unref (cache);

@@ -1,7 +1,7 @@
 project('gimp',
   'c', 'cpp',
   version: '2.99.19',
-  meson_version: '>=0.59.0',
+  meson_version: '>=0.61.0',
   default_options: [
     'cpp_std=gnu++14',
     'buildtype=debugoptimized',
@@ -103,6 +103,9 @@ cxx       = meson.get_compiler('cpp')
 prefix    = get_option('prefix')
 buildtype = get_option('buildtype')
 exec_ver  = '-' + gimp_app_version
+
+gimpconsole_exe_name = 'gimp-console' + exec_ver
+gimpmain_exe_name    = 'gimp' + exec_ver
 
 compiler_args = []
 linker_args = []
@@ -1203,10 +1206,6 @@ else
   warnings += vec_warning
 endif
 
-native_glib_minver = '2.2.0'
-native_glib = dependency('glib-2.0',    version: '>='+native_glib_minver, native: true)
-native_rsvg = dependency('librsvg-2.0', version: '>='+rsvg_minver, native: true)
-
 # Running tests headless
 xvfb_run = find_program('xvfb-run', required: get_option('headless-tests'))
 dbus_run_session = find_program('dbus-run-session', required: get_option('headless-tests'))
@@ -1816,13 +1815,14 @@ subdir('po-script-fu')
 subdir('po-tags')
 subdir('po-tips')
 # Data / Desktop / xml files
-subdir('cursors')
 subdir('data')
 subdir('desktop')
 subdir('etc')
-subdir('icons')
 subdir('menus')
 subdir('themes')
+
+# gimp-data submodule part 1
+subdir('gimp-data')
 
 # Libraries (order here is important!)
 subdir('libgimpcolor')
@@ -1840,6 +1840,9 @@ subdir('plug-ins')
 subdir('app')
 subdir('app-tools')
 
+# gimp-data submodule part 2
+subdir('gimp-data/images/')
+
 # Unit testing
 subdir('libgimp/tests')
 
@@ -1850,7 +1853,7 @@ subdir('devel-docs')
 # Windows installer
 if get_option('windows-installer')
   subdir('po-windows-installer')
-  subdir('build/windows/installer')
+  subdir('build/windows/installer/lang')
 endif
 
 pkgconfig.generate(libgimp,

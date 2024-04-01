@@ -21,11 +21,14 @@
 
 #include "stamp-pdbgen.h"
 
+#include <cairo.h>
 #include <string.h>
 
 #include <gegl.h>
 
 #include <gdk-pixbuf/gdk-pixbuf.h>
+
+#include "libgimpcolor/gimpcolor.h"
 
 #include "libgimpbase/gimpbase.h"
 
@@ -94,8 +97,8 @@ palette_get_by_name_invoker (GimpProcedure         *procedure,
       palette = GIMP_PALETTE (gimp_pdb_get_resource (gimp, GIMP_TYPE_PALETTE, name,
                                                      GIMP_PDB_DATA_ACCESS_READ, error));
 
-      if (! palette)
-        success = FALSE;
+      /* Ignore "not found" error, just return NULL. */
+      g_clear_error (error);
     }
 
   return_vals = gimp_procedure_get_return_values (procedure, success,
@@ -493,7 +496,7 @@ register_palette_procs (GimpPDB *pdb)
                                "gimp-palette-get-by-name");
   gimp_procedure_set_static_help (procedure,
                                   "Returns the palette with the given name.",
-                                  "Returns the palette with the given name.",
+                                  "Returns an existing palette having the given name. Returns %NULL when no palette exists of that name.",
                                   NULL);
   gimp_procedure_set_static_attribution (procedure,
                                          "Michael Natterer <mitch@gimp.org>",
@@ -510,7 +513,7 @@ register_palette_procs (GimpPDB *pdb)
                                    gimp_param_spec_palette ("palette",
                                                             "palette",
                                                             "The palette",
-                                                            FALSE,
+                                                            TRUE,
                                                             GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
