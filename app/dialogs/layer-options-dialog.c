@@ -92,7 +92,7 @@ static void   layer_options_dialog_mode_notify    (GtkWidget          *widget,
                                                    LayerOptionsDialog *private);
 static void   layer_options_dialog_rename_toggled (GtkWidget          *widget,
                                                    LayerOptionsDialog *private);
-
+static void   layer_options_name_entry_changed    (GtkWidget          *widget);
 
 /*  public functions  */
 
@@ -425,8 +425,8 @@ layer_options_dialog_new (GimpImage                *image,
 
   /*  For text layers add a toggle to control "auto-rename"  */
   if (layer && gimp_item_is_text_layer (GIMP_ITEM (layer)))
-    {
-      button = item_options_dialog_add_switch (dialog,
+    { GtkWidget *name_entry =       item_options_dialog_get_name_entry (dialog);
+      GtkWidget *button = item_options_dialog_add_switch (dialog,
                                                GIMP_ICON_TOOL_TEXT,
                                                _("Set name from _text"));
       gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (button),
@@ -438,6 +438,10 @@ layer_options_dialog_new (GimpImage                *image,
       g_signal_connect (button, "toggled",
                         G_CALLBACK (layer_options_dialog_rename_toggled),
                         private);
+
+      g_signal_connect_swapped (name_entry, "changed",
+                        G_CALLBACK (layer_options_name_entry_changed),
+                        button);                  
     }
 
   return dialog;
@@ -568,6 +572,20 @@ layer_options_dialog_rename_toggled (GtkWidget          *widget,
           gtk_entry_set_text (GTK_ENTRY (name_entry), name);
 
           g_free (name);
+        }
+    }
+}
+
+static void
+layer_options_name_entry_changed (GtkWidget *widget)
+{
+  if (widget)
+    {
+      GtkWidget *toggle_button = GTK_WIDGET(g_object_get_data(G_OBJECT(widget), "toggle_button"));
+
+      if (toggle_button && gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (toggle_button)))
+        {
+          gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (toggle_button), FALSE);
         }
     }
 }
