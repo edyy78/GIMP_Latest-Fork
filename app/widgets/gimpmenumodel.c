@@ -1254,16 +1254,12 @@ gimp_menu_model_ui_removed (GimpUIManager *manager,
               else
                 g_clear_object (&subsection);
             }
-          else if (g_menu_item_get_attribute (iter->data,
-                                              G_MENU_ATTRIBUTE_ACTION,
-                                              "&s", &action) &&
-                   /* "action" attribute will start with "app." prefix. */
-                   g_strcmp0 (action + 4, action_name) == 0)
-            {
-              item = iter->data;
-              break;
-            }
-        }
+          else if (g_menu_item_get_attribute(iter->data, G_MENU_ATTRIBUTE_ACTION, "&s", &action) && g_strcmp0(action + 4, action_name) == 0)
+              {
+            item = iter->data;
+            break;
+              }
+
 
       if (item)
         {
