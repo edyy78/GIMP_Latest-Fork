@@ -427,6 +427,7 @@ jpeg_export (GimpProcedure        *procedure,
   GimpExportReturn   export = GIMP_EXPORT_CANCEL;
   GError            *error  = NULL;
 
+  gboolean               has_alpha             = FALSE;
   gint                   orig_num_quant_tables = -1;
   gint                   orig_quality          = -1;
   JpegSubsampling        orig_subsmp           = JPEG_SUBSAMPLING_2x2_1x1_1x1;
@@ -437,6 +438,7 @@ jpeg_export (GimpProcedure        *procedure,
   preview_layer = NULL;
 
   orig_image = image;
+  has_alpha = gimp_drawable_has_alpha (drawables[0]);
 
   switch (run_mode)
     {
@@ -565,7 +567,7 @@ jpeg_export (GimpProcedure        *procedure,
       drawable_global   = drawables[0];
 
       /*  First acquire information with a dialog  */
-      if (! save_dialog (procedure, config, drawables[0], orig_image))
+      if (! save_dialog (procedure, config, drawables[0], orig_image, has_alpha))
         {
           status = GIMP_PDB_CANCEL;
         }
