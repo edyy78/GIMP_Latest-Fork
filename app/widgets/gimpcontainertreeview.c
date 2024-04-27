@@ -249,7 +249,7 @@ gimp_container_tree_view_init (GimpContainerTreeView *tree_view)
   gtk_scrolled_window_set_shadow_type (GTK_SCROLLED_WINDOW (box->scrolled_win),
                                        GTK_SHADOW_IN);
   gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (box->scrolled_win),
-                                  GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+                                  GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
 
   gimp_widget_track_monitor (GTK_WIDGET (tree_view),
                              G_CALLBACK (gimp_container_tree_view_monitor_changed),
@@ -302,6 +302,7 @@ gimp_container_tree_view_constructed (GObject *object)
 
   tree_view->priv->name_cell = gtk_cell_renderer_text_new ();
   g_object_set (tree_view->priv->name_cell, "xalign", 0.0, NULL);
+  g_object_set (tree_view->priv->name_cell, "ellipsize", PANGO_ELLIPSIZE_END, NULL);
   gtk_tree_view_column_pack_end (tree_view->main_column,
                                  tree_view->priv->name_cell,
                                  FALSE);
