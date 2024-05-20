@@ -303,6 +303,10 @@ GtkWidget * dialogs_gradient_editor_get         (GimpDialogFactory *factory,
                                                  GimpContext       *context,
                                                  GimpUIManager     *ui_manager,
                                                  gint               view_size);
+GtkWidget * dialogs_glyphs_panel_new            (GimpDialogFactory *factory,
+                                                 GimpContext       *context,
+                                                 GimpUIManager     *ui_manager,
+                                                 gint               view_size);
 GtkWidget * dialogs_palette_editor_get          (GimpDialogFactory *factory,
                                                  GimpContext       *context,
                                                  GimpUIManager     *ui_manager,

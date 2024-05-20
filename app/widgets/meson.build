@@ -114,6 +114,7 @@ libappwidgets_sources = [
   'gimpfilleditor.c',
   'gimpfontfactoryview.c',
   'gimpfontselect.c',
+  'gimpglyphspanel.c',
   'gimpgradienteditor.c',
   'gimpgradientselect.c',
   'gimpgrideditor.c',
@@ -256,6 +257,6 @@ libappwidgets = static_library('appwidgets',
   include_directories: [ rootInclude, rootAppInclude, ],
   c_args: '-DG_LOG_DOMAIN="Gimp-Widgets"',
   dependencies: [
-    gegl, gtk3,
+    gegl, gtk3, pangocairo,
   ],
 )

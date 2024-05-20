@@ -171,6 +171,12 @@ gimp_text_buffer_finalize (GObject *object)
       buffer->font_tags = NULL;
     }
 
+  if (buffer->font_features_tags)
+    {
+      g_list_free (buffer->font_features_tags);
+      buffer->font_features_tags = NULL;
+    }
+
   if (buffer->color_tags)
     {
       g_list_free (buffer->color_tags);
@@ -955,6 +961,100 @@ gimp_text_buffer_get_iter_color (GimpTextBuffer     *buffer,
 }
 
 GtkTextTag *
+gimp_text_buffer_get_font_features_tag (GimpTextBuffer *buffer,
+                                        const gchar    *font_features)
+{
+  GList      *list;
+  GtkTextTag *tag;
+
+  for (list = buffer->font_features_tags; list; list = g_list_next (list))
+    {
+      gchar *tag_font_features;
+
+      tag = list->data;
+
+      tag_font_features = gimp_text_tag_get_font_features (tag);
+
+      if (! strcmp (font_features, tag_font_features))
+        {
+          g_free (tag_font_features);
+          return tag;
+        }
+
+      g_free (tag_font_features);
+    }
+
+  tag = gtk_text_buffer_create_tag (GTK_TEXT_BUFFER (buffer),
+                                    font_features,
+                                    "font-features", font_features,
+                                    NULL);
+  gtk_text_tag_set_priority (tag, 0);
+  buffer->font_features_tags = g_list_prepend (buffer->font_features_tags, tag);
+
+  return tag;
+}
+
+GtkTextTag *
+gimp_text_buffer_get_iter_font_features (GimpTextBuffer     *buffer,
+                                         const GtkTextIter  *iter,
+                                         gchar             **font_features)
+{
+  GList *list;
+
+  for (list = buffer->font_features_tags; list; list = g_list_next (list))
+    {
+      GtkTextTag *tag = list->data;
+
+      if (gtk_text_iter_has_tag (iter, tag))
+        {
+          if (font_features)
+            *font_features = gimp_text_tag_get_font_features (tag);
+
+          return tag;
+        }
+    }
+
+  if (font_features)
+    *font_features = NULL;
+
+  return NULL;
+}
+
+void
+gimp_text_buffer_set_font_features (GimpTextBuffer    *buffer,
+                                    const GtkTextIter *start,
+                                    const GtkTextIter *end,
+                                    const gchar       *font_features)
+{
+  GList *list;
+
+  g_return_if_fail (GIMP_IS_TEXT_BUFFER (buffer));
+  g_return_if_fail (start != NULL);
+  g_return_if_fail (end != NULL);
+
+  if (gtk_text_iter_equal (start, end))
+    return;
+
+  gtk_text_buffer_begin_user_action (GTK_TEXT_BUFFER (buffer));
+  /*TODO is this the best thing to do?*/
+  for (list = buffer->font_features_tags; list; list = g_list_next (list))
+    {
+      gtk_text_buffer_remove_tag (GTK_TEXT_BUFFER (buffer), list->data,
+                                  start, end);
+    }
+
+  if (font_features)
+    {
+      GtkTextTag *tag = gimp_text_buffer_get_font_features_tag (buffer, font_features);
+
+      gtk_text_buffer_apply_tag (GTK_TEXT_BUFFER (buffer), tag,
+                                 start, end);
+    }
+
+  gtk_text_buffer_end_user_action (GTK_TEXT_BUFFER (buffer));
+}
+
+GtkTextTag *
 gimp_text_buffer_get_color_tag (GimpTextBuffer *buffer,
                                 GeglColor      *color)
 {
@@ -1172,15 +1272,16 @@ gimp_text_buffer_set_preedit_bg_color (GimpTextBuffer    *buffer,
 
 /*  Pango markup attribute names  */
 
-#define GIMP_TEXT_ATTR_NAME_SIZE      "size"
-#define GIMP_TEXT_ATTR_NAME_BASELINE  "rise"
-#define GIMP_TEXT_ATTR_NAME_KERNING   "letter_spacing"
-#define GIMP_TEXT_ATTR_NAME_FONT      "font"
-#define GIMP_TEXT_ATTR_NAME_STYLE     "style"
-#define GIMP_TEXT_ATTR_NAME_COLOR     "foreground"
-#define GIMP_TEXT_ATTR_NAME_FG_COLOR  "fgcolor"
-#define GIMP_TEXT_ATTR_NAME_BG_COLOR  "background"
-#define GIMP_TEXT_ATTR_NAME_UNDERLINE "underline"
+#define GIMP_TEXT_ATTR_NAME_SIZE          "size"
+#define GIMP_TEXT_ATTR_NAME_BASELINE      "rise"
+#define GIMP_TEXT_ATTR_NAME_KERNING       "letter_spacing"
+#define GIMP_TEXT_ATTR_NAME_FONT          "font"
+#define GIMP_TEXT_ATTR_NAME_FONT_FEATURES "font_features"
+#define GIMP_TEXT_ATTR_NAME_STYLE         "style"
+#define GIMP_TEXT_ATTR_NAME_COLOR         "foreground"
+#define GIMP_TEXT_ATTR_NAME_FG_COLOR      "fgcolor"
+#define GIMP_TEXT_ATTR_NAME_BG_COLOR      "background"
+#define GIMP_TEXT_ATTR_NAME_UNDERLINE     "underline"
 
 const gchar *
 gimp_text_buffer_tag_to_name (GimpTextBuffer  *buffer,
@@ -1250,6 +1351,16 @@ gimp_text_buffer_tag_to_name (GimpTextBuffer  *buffer,
 
       if (value)
         *value = gimp_text_tag_get_font (tag);
+
+      return "span";
+    }
+  else if (g_list_find (buffer->font_features_tags, tag))
+    {
+      if (attribute)
+        *attribute = GIMP_TEXT_ATTR_NAME_FONT_FEATURES;
+
+      if (value)
+        *value = gimp_text_tag_get_font_features (tag);
 
       return "span";
     }
@@ -1369,6 +1480,10 @@ gimp_text_buffer_name_to_tag (GimpTextBuffer *buffer,
         {
           return gimp_text_buffer_get_font_tag (buffer, value);
         }
+      else if (! strcmp (attribute, GIMP_TEXT_ATTR_NAME_FONT_FEATURES))
+        {
+          return gimp_text_buffer_get_font_features_tag (buffer, value);
+        }
       else if (! strcmp (attribute, GIMP_TEXT_ATTR_NAME_COLOR))
         {
           GtkTextTag *tag;
@@ -1424,17 +1539,28 @@ gimp_text_buffer_clear_insert_tags (GimpTextBuffer *buffer)
 
 void
 gimp_text_buffer_insert (GimpTextBuffer *buffer,
-                         const gchar    *text)
+                         const gchar    *text,
+                         gboolean        is_markup)
 {
-  GtkTextIter  iter, start;
-  gint         start_offset;
-  gboolean     insert_tags_set;
-  GList       *insert_tags;
-  GList       *remove_tags;
-  GSList      *tags_off = NULL;
-  GeglColor   *color;
+  GtkTextIter    iter, start;
+  gint           start_offset;
+  gboolean       insert_tags_set;
+  GList         *insert_tags;
+  GList         *remove_tags;
+  GSList        *tags_off = NULL;
+  GeglColor     *color;
+  PangoAttrList *attrs;
+  GSList        *attrs_list;
+  gchar         *extracted_text;
+  gchar         *font_name;
+  gchar         *font_features;
+  GtkTextTag    *font_tag;
+  GtkTextTag    *font_features_tag;
 
   g_return_if_fail (GIMP_IS_TEXT_BUFFER (buffer));
+
+  if (is_markup && !pango_parse_markup (text, -1, 0, &attrs, &extracted_text, NULL, NULL))
+    return;
 
   gtk_text_buffer_get_iter_at_mark (GTK_TEXT_BUFFER (buffer), &iter,
                                     gtk_text_buffer_get_insert (GTK_TEXT_BUFFER (buffer)));
@@ -1445,6 +1571,12 @@ gimp_text_buffer_insert (GimpTextBuffer *buffer,
   insert_tags     = buffer->insert_tags;
   remove_tags     = buffer->remove_tags;
 
+  for (GList *list = buffer->font_features_tags; list; list = g_list_next (list))
+    {
+      GtkTextTag *tag = list->data;
+      remove_tags = g_list_prepend(remove_tags, tag);
+    }
+
   buffer->insert_tags_set = FALSE;
   buffer->insert_tags     = NULL;
   buffer->remove_tags     = NULL;
@@ -1453,10 +1585,34 @@ gimp_text_buffer_insert (GimpTextBuffer *buffer,
 
   gtk_text_buffer_begin_user_action (GTK_TEXT_BUFFER (buffer));
 
-  gtk_text_buffer_insert (GTK_TEXT_BUFFER (buffer), &iter, text, -1);
+  if (is_markup)
+    {
+       gtk_text_buffer_insert (GTK_TEXT_BUFFER (buffer), &iter, extracted_text, -1);
+       gtk_text_buffer_get_iter_at_offset (GTK_TEXT_BUFFER (buffer), &start, start_offset);
 
-  gtk_text_buffer_get_iter_at_offset (GTK_TEXT_BUFFER (buffer), &start,
-                                      start_offset);
+       attrs_list = pango_attr_list_get_attributes (attrs);
+       font_name = pango_font_description_to_string (pango_attribute_as_font_desc (attrs_list->data)->desc);
+       font_features = pango_attribute_as_font_features (attrs_list->next->data)->features;
+
+       gimp_text_buffer_set_font (buffer, &start, &iter, font_name);
+       gimp_text_buffer_set_font_features (buffer, &start, &iter, font_features);
+
+       font_tag = gimp_text_buffer_get_font_tag (buffer, font_name);
+       font_features_tag = gimp_text_buffer_get_font_features_tag (buffer, font_features);
+
+
+       g_free (font_name);
+       g_free (extracted_text);
+       pango_attribute_destroy (attrs_list->data);
+       pango_attribute_destroy (attrs_list->next->data);
+       g_slist_free (attrs_list);
+    }
+  else
+    {
+       gtk_text_buffer_insert (GTK_TEXT_BUFFER (buffer), &iter, text, -1);
+       gtk_text_buffer_get_iter_at_offset (GTK_TEXT_BUFFER (buffer), &start,
+                                           start_offset);
+    }
 
   if (insert_tags_set)
     {
@@ -1466,6 +1622,9 @@ gimp_text_buffer_insert (GimpTextBuffer *buffer,
         {
           GtkTextTag *tag = list->data;
 
+          if (is_markup && (tag == font_tag || tag == font_features_tag))
+            continue;
+
           gtk_text_buffer_remove_tag (GTK_TEXT_BUFFER (buffer), tag,
                                       &start, &iter);
         }
@@ -1473,6 +1632,9 @@ gimp_text_buffer_insert (GimpTextBuffer *buffer,
       for (list = insert_tags; list; list = g_list_next (list))
         {
           GtkTextTag *tag = list->data;
+
+          if (is_markup && (g_list_find (buffer->font_tags, tag) || g_list_find (buffer->font_features_tags, tag)))
+            continue;
 
           gtk_text_buffer_apply_tag (GTK_TEXT_BUFFER (buffer), tag,
                                      &start, &iter);
@@ -1486,6 +1648,9 @@ gimp_text_buffer_insert (GimpTextBuffer *buffer,
       for (slist = tags_off; slist; slist = g_slist_next (slist))
         {
           GtkTextTag *tag = slist->data;
+
+          if (is_markup && g_list_find (buffer->font_tags, tag))
+            continue;
 
           if (! g_list_find (remove_tags, tag) &&
               ! g_list_find (buffer->kerning_tags, tag))
@@ -1836,6 +2001,7 @@ gimp_text_buffer_get_all_tags (GimpTextBuffer *buffer)
   result = g_list_concat (result, g_list_copy (buffer->baseline_tags));
   result = g_list_concat (result, g_list_copy (buffer->kerning_tags));
   result = g_list_concat (result, g_list_copy (buffer->font_tags));
+  result = g_list_concat (result, g_list_copy (buffer->font_features_tags));
   result = g_list_concat (result, g_list_copy (buffer->color_tags));
 
   return result;

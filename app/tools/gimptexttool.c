@@ -1049,7 +1049,6 @@ gimp_text_tool_start (GimpTextTool  *text_tool,
   g_signal_connect (widget, "change-complete",
                     G_CALLBACK (gimp_text_tool_rectangle_change_complete),
                     text_tool);
-
   gimp_draw_tool_start (GIMP_DRAW_TOOL (tool), display);
 
   if (layer)
@@ -2007,7 +2006,6 @@ gimp_text_tool_buffer_color_applied (GimpTextBuffer *buffer,
 {
   gimp_palettes_add_color_history (GIMP_TOOL (text_tool)->tool_info->gimp, color);
 }
-
 
 /*  public functions  */
 

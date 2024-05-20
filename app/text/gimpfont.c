@@ -106,6 +106,12 @@ struct _GimpFont
 
   /*for backward compatibility*/
   gchar        *desc;
+
+  /*for extracting glyphs*/
+  hb_font_t    *hb_font;
+  hb_face_t    *hb_face;
+  GList        *alternates_sets;
+  GList        *codepoints;
 };
 
 struct _GimpFontClass
@@ -116,49 +122,49 @@ struct _GimpFontClass
 };
 
 
-static void          gimp_font_finalize           (GObject               *object);
-static void          gimp_font_set_property       (GObject               *object,
-                                                   guint                  property_id,
-                                                   const GValue          *value,
-                                                   GParamSpec            *pspec);
+static void          gimp_font_finalize                   (GObject               *object);
+static void          gimp_font_set_property               (GObject               *object,
+                                                           guint                  property_id,
+                                                           const GValue          *value,
+                                                           GParamSpec            *pspec);
 
-static void          gimp_font_get_preview_size   (GimpViewable          *viewable,
-                                                   gint                   size,
-                                                   gboolean               popup,
-                                                   gboolean               dot_for_dot,
-                                                   gint                  *width,
-                                                   gint                  *height);
-static gboolean      gimp_font_get_popup_size     (GimpViewable          *viewable,
-                                                   gint                   width,
-                                                   gint                   height,
-                                                   gboolean               dot_for_dot,
-                                                   gint                  *popup_width,
-                                                   gint                  *popup_height);
-static GimpTempBuf * gimp_font_get_new_preview    (GimpViewable          *viewable,
-                                                   GimpContext           *context,
-                                                   gint                   width,
-                                                   gint                   height);
+static void          gimp_font_get_preview_size           (GimpViewable          *viewable,
+                                                           gint                   size,
+                                                           gboolean               popup,
+                                                           gboolean               dot_for_dot,
+                                                           gint                  *width,
+                                                           gint                  *height);
+static gboolean      gimp_font_get_popup_size             (GimpViewable          *viewable,
+                                                           gint                   width,
+                                                           gint                   height,
+                                                           gboolean               dot_for_dot,
+                                                           gint                  *popup_width,
+                                                           gint                  *popup_height);
+static GimpTempBuf * gimp_font_get_new_preview            (GimpViewable          *viewable,
+                                                           GimpContext           *context,
+                                                           gint                   width,
+                                                           gint                   height);
 
-static void          gimp_font_config_iface_init  (GimpConfigInterface  *iface);
-static gboolean      gimp_font_serialize          (GimpConfig           *config,
-                                                   GimpConfigWriter     *writer,
-                                                   gpointer              data);
-static GimpConfig  * gimp_font_deserialize_create (GType                 type,
-                                                   GScanner             *scanner,
-                                                   gint                  nest_level,
-                                                   gpointer              data);
+static void          gimp_font_config_iface_init          (GimpConfigInterface  *iface);
+static gboolean      gimp_font_serialize                  (GimpConfig           *config,
+                                                           GimpConfigWriter     *writer,
+                                                           gpointer              data);
+static GimpConfig  * gimp_font_deserialize_create         (GType                 type,
+                                                           GScanner             *scanner,
+                                                           gint                  nest_level,
+                                                           gpointer              data);
 
-static gint64        gimp_font_get_memsize        (GimpObject           *object,
-                                                   gint64               *gui_size);
+static gint64        gimp_font_get_memsize                (GimpObject           *object,
+                                                           gint64               *gui_size);
 
-static inline gboolean gimp_font_covers_string    (PangoFont            *font,
-                                                   const gchar          *sample);
-static hb_tag_t      get_hb_table_type            (PangoOTTableType      table_type);
-static const gchar * gimp_font_get_sample_string  (PangoContext         *context,
-                                                   PangoFontDescription *font_desc);
-
-static const gchar * gimp_font_get_hash           (GimpFont             *font);
-
+static inline gboolean gimp_font_covers_string            (PangoFont            *font,
+                                                           const gchar          *sample);
+static hb_tag_t      get_hb_table_type                    (PangoOTTableType      table_type);
+static const gchar * gimp_font_get_sample_string          (PangoContext         *context,
+                                                           PangoFontDescription *font_desc);
+static GList       * gimp_font_get_codepoints             (GimpFont             *font);
+static const gchar * gimp_font_get_hash                   (GimpFont             *font);
+static inline void   gimp_font_get_harfbuzz_font_and_face (GimpFont             *font);
 
 G_DEFINE_TYPE_WITH_CODE (GimpFont, gimp_font, GIMP_TYPE_DATA,
                          G_IMPLEMENT_INTERFACE (GIMP_TYPE_CONFIG,
@@ -564,6 +570,8 @@ gimp_font_finalize (GObject *object)
 {
   GimpFont *font = GIMP_FONT (object);
 
+  hb_face_destroy (font->hb_face);
+  hb_font_destroy (font->hb_font);
   g_clear_object (&font->pango_context);
   g_clear_object (&font->popup_layout);
   g_free (font->lookup_name);
@@ -573,6 +581,8 @@ gimp_font_finalize (GObject *object)
   g_free (font->style);
   g_free (font->psname);
   g_free (font->desc);
+  g_list_free_full (font->alternates_sets, (GDestroyNotify)g_free);
+  g_list_free (font->codepoints);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -613,6 +623,8 @@ gimp_font_get_memsize (GimpObject *object,
   memsize += gimp_string_get_memsize (font->style);
   memsize += gimp_string_get_memsize (font->psname);
   memsize += gimp_string_get_memsize (font->desc);
+  memsize += gimp_g_list_get_memsize (font->codepoints, 0);
+  memsize += gimp_g_list_get_memsize_foreach (font->alternates_sets, (GimpMemsizeFunc)g_utf8_strlen, (gint64*)-1);
 
   return memsize + GIMP_OBJECT_CLASS (parent_class)->get_memsize (object,
                                                                   gui_size);
@@ -1329,4 +1341,269 @@ gimp_font_get_hash (GimpFont *font)
     }
 
   return font->hash;
+}
+
+static inline void
+gimp_font_get_harfbuzz_font_and_face (GimpFont *font)
+{
+  PangoFontDescription *pfd        = NULL;
+  PangoFont            *pango_font = NULL;
+  PangoFontMap         *fontmap    = NULL;
+  PangoContext         *context    = NULL;
+
+  if (font->hb_font)
+    return;
+
+  /*This is initialization code, ideally it should be part of the constructor, but calling into pango
+   * to retrieve the PangoFont object is too slow and alternate glyphs might not be needed so it's only done
+   * if the user wants to see/use the glyphs in the font from the glyphs panel (at least for now)
+   * this will be reworked when we move from pango*/
+  fontmap    = pango_cairo_font_map_new_for_font_type (CAIRO_FONT_TYPE_FT);
+  context    = pango_font_map_create_context (fontmap);
+  pfd        = pango_font_description_from_string (font->lookup_name);
+  pango_font = pango_context_load_font (context, pfd);
+
+  font->hb_font = hb_font_create_sub_font (pango_font_get_hb_font (pango_font));
+  hb_ft_font_set_funcs (font->hb_font);
+
+  font->hb_face = hb_ft_face_create (hb_ft_font_get_face (font->hb_font), NULL);
+
+  pango_font_description_free (pfd);
+  g_object_unref (pango_font);
+  g_object_unref (context);
+  g_object_unref (fontmap);
+}
+
+static GList*
+gimp_font_get_codepoints (GimpFont *font)
+{
+  /* TODO: maybe handle variation-selectors?*/
+  hb_set_t      *unicodes = NULL;
+  hb_map_t      *cmap     = NULL;
+  hb_codepoint_t u        = HB_SET_VALUE_INVALID;
+
+  if (font->codepoints)
+    return font->codepoints;
+
+  gimp_font_get_harfbuzz_font_and_face (font);
+
+  unicodes = hb_set_create ();
+  cmap     = hb_map_create ();
+
+  hb_face_collect_nominal_glyph_mapping (font->hb_face, cmap, unicodes);
+
+  hb_set_next (unicodes, &u); /*skip 0*/
+
+  for (; hb_set_next (unicodes, &u);)
+    font->codepoints = g_list_append (font->codepoints, (gpointer)u);
+
+  hb_map_destroy (cmap);
+  hb_set_destroy (unicodes);
+
+  return font->codepoints;
+}
+
+GList*
+gimp_font_get_alternates_sets (GimpFont *font)
+{
+  hb_set_t  *features           = NULL;
+  hb_tag_t   feature_array[256] = {0};
+  guint      feature_count      = 256; /*Anything will do*/
+  guint      feature_offset     = 0;
+
+  if (font->alternates_sets)
+    return font->alternates_sets;
+
+  gimp_font_get_harfbuzz_font_and_face (font);
+
+  features = hb_set_create ();
+
+  while (feature_count == 256) /*if we get less than that it means we are done*/
+    {
+      hb_ot_layout_table_get_feature_tags (font->hb_face,
+                                           HB_OT_TAG_GSUB,
+                                           feature_offset,
+                                           &feature_count,
+                                           feature_array);
+
+      for (unsigned feature_index = 0; feature_index < feature_count; feature_index++)
+        {
+          if (hb_set_has (features, feature_array[feature_index]))
+            continue;
+
+          hb_set_add (features, feature_array[feature_index]);
+
+          font->alternates_sets = g_list_append (font->alternates_sets,
+                                                 g_strdup_printf ("%c%c%c%c",
+                                                                  HB_UNTAG (feature_array[feature_index])));
+        }
+
+      feature_offset += feature_count;
+    }
+
+  hb_set_destroy (features);
+
+  return font->alternates_sets;
+}
+
+GList*
+gimp_font_get_nominal_glyphs (GimpFont *font)
+{
+  GList *nominal_glyphs = NULL;
+  gchar *markup_format  = "<span font='%s' font_features=''>&#x%x;</span>";
+
+  for (GList *codepoints = gimp_font_get_codepoints (font); codepoints; codepoints = codepoints->next)
+    nominal_glyphs = g_list_append (nominal_glyphs,
+                                    g_strdup_printf (markup_format,
+                                                     font->lookup_name,
+                                                     (hb_codepoint_t)(codepoints->data)));
+
+  return nominal_glyphs;
+}
+
+GList*
+gimp_font_get_glyphs_in_feature (GimpFont   *font,
+                                 const gchar feature[4])
+{
+  hb_set_t       *lookups_set    = hb_set_create ();
+  hb_codepoint_t  lookup         = HB_SET_VALUE_INVALID;
+  hb_tag_t        feature_tag[]  = {HB_TAG(feature[0],feature[1],feature[2],feature[3]), HB_TAG_NONE};
+  gchar          *markup_format  = "<markup><span font='%s' font_features='%s %d' >&#x%x;</span></markup>";
+  GList          *codepoints     = gimp_font_get_codepoints (font);
+  GList          *alternates     = NULL;
+
+  hb_ot_layout_collect_lookups (font->hb_face,
+                                HB_OT_TAG_GSUB,
+                                NULL,
+                                NULL,
+                                feature_tag,
+                                lookups_set);
+
+  for (; codepoints; codepoints = codepoints->next)
+    {
+      hb_set_t       *lookups_copy = NULL;
+      hb_buffer_t    *buffer         = hb_buffer_create ();
+      guint           glyphs_count = 0;
+      hb_glyph_info_t *glyphs_info   = NULL;
+
+      hb_buffer_add_codepoints (buffer, (hb_codepoint_t*)&(codepoints->data), 1, 0, 1);
+      hb_buffer_guess_segment_properties (buffer);
+      hb_shape (font->hb_font, buffer, NULL, 0);
+      glyphs_info = hb_buffer_get_glyph_infos (buffer, &glyphs_count);
+
+      for (lookups_copy = hb_set_copy (lookups_set); hb_set_next (lookups_copy, &lookup);)
+        {
+          guint alternates_count = 0;
+          if ((alternates_count = hb_ot_layout_lookup_get_glyph_alternates (font->hb_face,
+                                                                            lookup,
+                                                                            glyphs_info->codepoint,
+                                                                            0,
+                                                                            NULL,
+                                                                            NULL)))
+            {
+              for (guint alternate_index = 1; alternate_index <= alternates_count; ++alternate_index)
+                alternates = g_list_append (alternates,
+                                            g_strdup_printf (markup_format,
+                                                             font->lookup_name,
+                                                             feature,
+                                                             alternate_index,
+                                                             (hb_codepoint_t)(codepoints->data)));
+              break;
+            }
+        }
+      hb_set_destroy (lookups_copy);
+      hb_buffer_destroy (buffer);
+      lookup = HB_SET_VALUE_INVALID;
+    }
+
+  hb_set_destroy (lookups_set);
+
+  return alternates;
+}
+
+GList*
+gimp_font_get_string_substitutes (GimpFont    *font,
+                                  const gchar *str,
+                                  const gchar  feature[4])
+{
+  hb_buffer_t    *buffer           = hb_buffer_create ();
+  hb_codepoint_t  lookup           = HB_SET_VALUE_INVALID;
+  hb_tag_t        feature_tag[]    = {HB_TAG(feature[0],feature[1],feature[2],feature[3]), HB_TAG_NONE};
+  gchar          *markup_format    = "<markup><span font='%s' font_features='%s %d' >%s</span></markup>";
+  GList          *alternates       = NULL;
+  guint           alternates_count = 0;
+  guint           glyphs_count     = 0;
+  hb_glyph_info_t *glyphs_info     = NULL;
+
+  hb_buffer_add_utf8 (buffer, str, -1, 0, -1);
+  hb_buffer_guess_segment_properties (buffer);
+  hb_shape (font->hb_font, buffer, NULL, 0);
+  glyphs_info = hb_buffer_get_glyph_infos (buffer, &glyphs_count);
+
+  if (!g_strcmp0 (feature, "aalt") || !g_strcmp0 (feature, "salt"))
+    {
+      for (guint glyph_index = 0; glyph_index < glyphs_count; glyph_index++)
+        {
+          hb_set_t       *lookups_set    = hb_set_create ();
+
+          hb_ot_layout_collect_lookups (font->hb_face,
+                                        HB_OT_TAG_GSUB,
+                                        NULL,
+                                        NULL,
+                                        feature_tag,
+                                        lookups_set);
+
+          for (lookup = HB_SET_VALUE_INVALID; hb_set_next (lookups_set, &lookup);)
+            {
+              guint lookup_alternates_count = 0;
+              if ((lookup_alternates_count = hb_ot_layout_lookup_get_glyph_alternates (font->hb_face,
+                                                                                       lookup,
+                                                                                       glyphs_info[glyph_index].codepoint,
+                                                                                       0,
+                                                                                       NULL,
+                                                                                       NULL)))
+                {
+                  alternates_count = MAX (alternates_count, lookup_alternates_count);
+                  break;
+                }
+            }
+          hb_set_destroy (lookups_set);
+        }
+    }
+  else
+    {
+      hb_codepoint_t *glyphs_array = malloc (sizeof(hb_codepoint_t)*glyphs_count);
+      hb_set_t       *lookups_set  = hb_set_create ();
+
+      for (guint i = 0; i < glyphs_count; ++i)
+        glyphs_array[i] = glyphs_info[i].codepoint;
+
+      hb_ot_layout_collect_lookups (font->hb_face,
+                                    HB_OT_TAG_GSUB,
+                                    NULL,
+                                    NULL,
+                                    feature_tag,
+                                    lookups_set);
+
+      for (lookup = HB_SET_VALUE_INVALID; hb_set_next (lookups_set, &lookup);)
+        if ((alternates_count = hb_ot_layout_lookup_would_substitute (font->hb_face,
+                                                                      lookup,
+                                                                      glyphs_array,
+                                                                      glyphs_count,
+                                                                      FALSE)))
+          break;
+      hb_set_destroy (lookups_set);
+      g_free (glyphs_array);
+    }
+
+  for (guint alternate_index = 1; alternate_index <= alternates_count; ++alternate_index)
+    alternates = g_list_append (alternates,
+                                g_strdup_printf (markup_format,
+                                                 font->lookup_name,
+                                                 feature,
+                                                 alternate_index,
+                                                 str));
+  hb_buffer_destroy (buffer);
+
+  return alternates;
 }

@@ -71,6 +71,7 @@
 #include "file-actions.h"
 #include "filters-actions.h"
 #include "fonts-actions.h"
+#include "glyphs-panel-actions.h"
 #include "gradient-editor-actions.h"
 #include "gradients-actions.h"
 #include "help-actions.h"
@@ -202,6 +203,10 @@ static const GimpActionFactoryEntry action_groups[] =
   { "palette-editor", N_("Palette Editor"), GIMP_ICON_PALETTE,
     palette_editor_actions_setup,
     palette_editor_actions_update },
+    /*TODO:find a better icon*/
+  { "glyphs-panel", N_("Glyphs Panel"), GIMP_ICON_PALETTE,
+    glyphs_panel_actions_setup,
+    glyphs_panel_actions_update },
   { "palettes", N_("Palettes"), GIMP_ICON_PALETTE,
     palettes_actions_setup,
     palettes_actions_update },

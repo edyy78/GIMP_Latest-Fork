@@ -28,6 +28,7 @@
     <item><attribute name="action">@GROUP@.dialogs-tool-presets</attribute></item>
     <item><attribute name="action">@GROUP@.dialogs-buffers</attribute></item>
   </section>
+  <item><attribute name="action">@GROUP@.dialogs-glyphs-panel</attribute></item>
   <item><attribute name="action">@GROUP@.dialogs-images</attribute></item>
   <item><attribute name="action">@GROUP@.dialogs-document-history</attribute></item>
   <item><attribute name="action">@GROUP@.dialogs-templates</attribute></item>

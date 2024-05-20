@@ -438,6 +438,11 @@ static const GimpDialogFactoryEntry entries[] =
             N_("Palette Editor"), NULL, GIMP_ICON_PALETTE,
             GIMP_HELP_PALETTE_EDITOR_DIALOG,
             dialogs_palette_editor_get, 0, TRUE),
+  /*FIXME:dialog and icon*/
+  DOCKABLE ("gimp-glyphs-panel",
+            N_("Glyphs Panel"), NULL, GIMP_ICON_PALETTE,
+            GIMP_HELP_PALETTE_EDITOR_DIALOG,
+            dialogs_glyphs_panel_new, 0, TRUE),
   DOCKABLE ("gimp-tool-preset-editor",
             N_("Tool Preset Editor"), NULL, GIMP_ICON_TOOL_PRESET,
             GIMP_HELP_TOOL_PRESET_EDITOR_DIALOG,
