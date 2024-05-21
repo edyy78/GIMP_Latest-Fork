@@ -620,6 +620,11 @@ gimp_text_style_editor_list_tags (GimpTextStyleEditor  *editor,
   return g_list_reverse (tags);
 }
 
+GimpFont*
+gimp_text_style_editor_get_current_font (GimpTextStyleEditor  *editor)
+{
+  return gimp_context_get_font (editor->context);
+}
 
 /*  private functions  */
 

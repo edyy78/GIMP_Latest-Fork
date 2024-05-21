@@ -71,6 +71,8 @@ struct _GimpTextTool
   GtkWidget      *style_overlay;
   GtkWidget      *style_editor;
 
+  GtkWidget      *glyphs_alternates;
+  GtkWidget      *glyphs_alternates_overlay;
   gboolean        selecting;
   GtkTextIter     select_start_iter;
   gboolean        select_words;

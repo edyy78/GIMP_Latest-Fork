@@ -36,26 +36,29 @@
 
 typedef struct _GimpFontClass GimpFontClass;
 
-GType         gimp_font_get_type               (void) G_GNUC_CONST;
+GType         gimp_font_get_type                   (void) G_GNUC_CONST;
 
-GimpData    * gimp_font_get_standard           (void);
-const gchar * gimp_font_get_lookup_name        (GimpFont        *font);
-void          gimp_font_set_lookup_name        (GimpFont        *font,
-                                                gchar           *name);
-gboolean      gimp_font_match_by_lookup_name   (GimpFont        *font,
-                                                const gchar     *name);
-void          gimp_font_set_font_info          (GimpFont        *font,
-                                                gpointer         font_info[]);
-void          gimp_font_class_set_font_factory (GimpFontFactory *factory);
-GList       * gimp_font_get_alternates_sets    (GimpFont        *font);
-GList       * gimp_font_get_nominal_glyphs     (GimpFont        *font);
-GList       * gimp_font_get_all_glyphs         (GimpFont        *font,
-                                                const gchar      feature[4]);
-GList       * gimp_font_get_glyphs_in_feature  (GimpFont        *font,
-                                                const gchar      feature[4]);
-GList       * gimp_font_get_string_substitutes (GimpFont        *font,
-                                                const gchar     *str,
-                                                const gchar      feature[4]);
+GimpData    * gimp_font_get_standard               (void);
+const gchar * gimp_font_get_lookup_name            (GimpFont        *font);
+void          gimp_font_set_lookup_name            (GimpFont        *font,
+                                                    gchar           *name);
+gboolean      gimp_font_match_by_lookup_name       (GimpFont        *font,
+                                                    const gchar     *name);
+void          gimp_font_set_font_info              (GimpFont        *font,
+                                                    gpointer         font_info[]);
+void          gimp_font_class_set_font_factory     (GimpFontFactory *factory);
+GList       * gimp_font_get_alternates_sets        (GimpFont        *font);
+GList       * gimp_font_get_nominal_glyphs         (GimpFont        *font);
+GList       * gimp_font_get_all_glyphs             (GimpFont        *font,
+                                                    const gchar      feature[4]);
+GList       * gimp_font_get_glyphs_in_feature      (GimpFont        *font,
+                                                    const gchar      feature[4]);
+GList       * gimp_font_get_string_substitutes     (GimpFont        *font,
+                                                    const gchar     *str,
+                                                    const gchar      feature[4]);
+GList       * gimp_font_get_all_string_substitutes (GimpFont        *font,
+                                                    const gchar     *str);
+
 enum
 {
   /* properties for serialization*/

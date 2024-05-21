@@ -55,13 +55,18 @@
 #include "text/gimptextlayer.h"
 #include "text/gimptextlayout.h"
 #include "text/gimptextundo.h"
+#include "text/gimpfont.h"
 
 #include "vectors/gimpstroke.h"
 #include "vectors/gimpvectors.h"
 #include "vectors/gimpvectors-warp.h"
 
+#include "widgets/gimpoverlaybox.h"
+#include "widgets/gimpoverlayframe.h"
 #include "widgets/gimpdialogfactory.h"
 #include "widgets/gimpdockcontainer.h"
+#include "widgets/gimptextstyleeditor.h"
+#include "widgets/gimpalternateglyphspopup.h"
 #include "widgets/gimphelp-ids.h"
 #include "widgets/gimpmenufactory.h"
 #include "widgets/gimptextbuffer.h"
@@ -890,6 +895,9 @@ gimp_text_tool_draw (GimpDrawTool *draw_tool)
       gboolean          overwrite;
       GimpTextDirection direction;
 
+      if (text_tool->glyphs_alternates)
+        g_clear_pointer (&text_tool->glyphs_alternates, gtk_widget_destroy);
+
       gimp_text_tool_editor_get_cursor_rect (text_tool,
                                              text_tool->overwrite_mode,
                                              &cursor_rect);
@@ -927,6 +935,11 @@ gimp_text_tool_draw_selection (GimpDrawTool *draw_tool)
   gint              min, max;
   gint              i;
   GimpTextDirection direction;
+  GimpTool         *tool     = GIMP_TOOL (text_tool);
+  GimpContext      *context  = GIMP_CONTEXT (gimp_get_user_context (tool->tool_info->gimp));
+  GimpDisplayShell *shell    = gimp_display_get_shell (tool->display);
+  GimpTextOptions  *options  = GIMP_TEXT_TOOL_GET_OPTIONS (tool);
+  gchar            *selected_text;
 
   group = gimp_draw_tool_add_stroke_group (draw_tool);
   gimp_canvas_item_set_highlight (GIMP_CANVAS_ITEM (group), TRUE);
@@ -1008,6 +1021,40 @@ gimp_text_tool_draw_selection (GimpDrawTool *draw_tool)
   gimp_draw_tool_pop_group (draw_tool);
 
   pango_layout_iter_free (iter);
+
+  if (!text_tool->glyphs_alternates && options->enable_alternates_popup)
+    {
+      text_tool->glyphs_alternates = gimp_glyphs_alternates_popup_new (context);
+      gimp_display_shell_add_overlay (shell,
+                                      text_tool->glyphs_alternates,
+                                      0, 0,
+                                      GIMP_HANDLE_ANCHOR_NORTH, 0, 0);
+
+      gimp_overlay_box_set_child_opacity (GIMP_OVERLAY_BOX (shell->canvas),
+                                          text_tool->glyphs_alternates, 1);
+
+      gtk_widget_show (text_tool->glyphs_alternates);
+    }
+
+  if (options->enable_alternates_popup)
+    {
+      PangoRectangle cursor_rect;
+
+      gimp_text_tool_editor_get_cursor_rect (text_tool,
+                                             text_tool->overwrite_mode,
+                                             &cursor_rect);
+      gimp_item_get_offset (GIMP_ITEM (text_tool->layer), &off_x, &off_y);
+      gimp_display_shell_move_overlay (shell,
+                                       text_tool->glyphs_alternates,
+                                       cursor_rect.x+off_x, cursor_rect.y+off_y+cursor_rect.height,
+                                       GIMP_HANDLE_ANCHOR_NORTH, 0, 0);
+
+      selected_text = gtk_text_buffer_get_slice (buffer, &sel_start, &sel_end, FALSE);
+
+      gimp_glyphs_alternates_popup_draw_selection (GIMP_GLYPHS_ALTERNATES_POPUP (text_tool->glyphs_alternates),
+                                                   gimp_text_style_editor_get_current_font (GIMP_TEXT_STYLE_EDITOR (text_tool->style_editor)),
+                                                   selected_text);
+    }
 }
 
 static gboolean
@@ -1072,6 +1119,9 @@ gimp_text_tool_halt (GimpTextTool *text_tool)
 
   if (gimp_draw_tool_is_active (GIMP_DRAW_TOOL (tool)))
     gimp_draw_tool_stop (GIMP_DRAW_TOOL (tool));
+
+  if (text_tool->glyphs_alternates)
+    g_clear_pointer (&text_tool->glyphs_alternates, gtk_widget_destroy);
 
   gimp_draw_tool_set_widget (GIMP_DRAW_TOOL (tool), NULL);
   g_clear_object (&text_tool->widget);
@@ -1337,6 +1387,9 @@ gimp_text_tool_connect (GimpTextTool  *text_tool,
                                    text_tool, 0);
         }
     }
+
+  if (text_tool->glyphs_alternates)
+    g_clear_pointer (&text_tool->glyphs_alternates, gtk_widget_destroy);
 }
 
 static void

@@ -67,6 +67,7 @@ struct _GimpTextOptions
 
   gboolean               use_editor;
   gboolean               show_on_canvas;
+  gboolean               enable_alternates_popup;
 
   /*  options gui  */
   GtkWidget             *size_entry;

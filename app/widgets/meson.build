@@ -26,6 +26,7 @@ libappwidgets_sources = [
   'gimpactiongroup.c',
   'gimpactionimpl.c',
   'gimpactionview.c',
+  'gimpalternateglyphspopup.c',
   'gimpblobeditor.c',
   'gimpbrusheditor.c',
   'gimpbrushfactoryview.c',

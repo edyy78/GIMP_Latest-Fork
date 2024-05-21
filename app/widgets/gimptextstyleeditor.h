@@ -73,17 +73,18 @@ struct _GimpTextStyleEditorClass
 };
 
 
-GType       gimp_text_style_editor_get_type  (void) G_GNUC_CONST;
+GType       gimp_text_style_editor_get_type         (void) G_GNUC_CONST;
 
-GtkWidget * gimp_text_style_editor_new       (Gimp                 *gimp,
-                                              GimpText             *text,
-                                              GimpTextBuffer       *buffer,
-                                              GimpContainer        *fonts,
-                                              gdouble               resolution_x,
-                                              gdouble               resolution_y);
+GtkWidget * gimp_text_style_editor_new              (Gimp                 *gimp,
+                                                     GimpText             *text,
+                                                     GimpTextBuffer       *buffer,
+                                                     GimpContainer        *fonts,
+                                                     gdouble               resolution_x,
+                                                     gdouble               resolution_y);
 
-GList     * gimp_text_style_editor_list_tags (GimpTextStyleEditor  *editor,
-                                              GList               **remove_tags);
+GList     * gimp_text_style_editor_list_tags        (GimpTextStyleEditor  *editor,
+                                                     GList               **remove_tags);
 
+GimpFont  * gimp_text_style_editor_get_current_font (GimpTextStyleEditor  *editor);
 
 #endif /*  __GIMP_TEXT_STYLE_EDITOR_H__  */

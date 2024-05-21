@@ -1535,6 +1535,8 @@ gimp_font_get_string_substitutes (GimpFont    *font,
   guint           glyphs_count     = 0;
   hb_glyph_info_t *glyphs_info     = NULL;
 
+  gimp_font_get_harfbuzz_font_and_face (font);
+
   hb_buffer_add_utf8 (buffer, str, -1, 0, -1);
   hb_buffer_guess_segment_properties (buffer);
   hb_shape (font->hb_font, buffer, NULL, 0);
@@ -1605,5 +1607,22 @@ gimp_font_get_string_substitutes (GimpFont    *font,
                                                  str));
   hb_buffer_destroy (buffer);
 
+  return alternates;
+}
+
+GList*
+gimp_font_get_all_string_substitutes (GimpFont    *font,
+                                      const gchar *str)
+{
+  GList *alternates = NULL;
+
+  if (g_list_length (gimp_font_get_alternates_sets (font)) == 0)
+    return NULL;
+
+  for (GList *set = gimp_font_get_alternates_sets (font)->next; set; set = set->next)
+    alternates = g_list_concat (alternates,
+                                gimp_font_get_string_substitutes (font,
+                                                                  str,
+                                                                  (gchar*)set->data));
   return alternates;
 }
