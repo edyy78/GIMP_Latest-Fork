@@ -54,6 +54,7 @@
 #include "widgets/gimplayertreeview.h"
 #include "widgets/gimpmenudock.h"
 #include "widgets/gimppaletteeditor.h"
+#include "widgets/gimpglyphspanel.h"
 #include "widgets/gimppatternfactoryview.h"
 #include "widgets/gimpsamplepointeditor.h"
 #include "widgets/gimpselectioneditor.h"
@@ -728,6 +729,14 @@ dialogs_template_grid_view_new (GimpDialogFactory *factory,
                                  menus_get_global_menu_factory (context->gimp));
 }
 
+GtkWidget *
+dialogs_glyphs_panel_new (GimpDialogFactory *factory,
+                          GimpContext       *context,
+                          GimpUIManager     *ui_manager,
+                          gint               view_size)
+{
+  return gimp_glyphs_panel_new (context);
+}
 
 /*****  image related dialogs  *****/
 

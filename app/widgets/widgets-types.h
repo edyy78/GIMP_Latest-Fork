@@ -66,6 +66,7 @@ typedef struct _GimpBrushEditor              GimpBrushEditor;
 typedef struct _GimpDataEditor               GimpDataEditor;
 typedef struct _GimpDynamicsEditor           GimpDynamicsEditor;
 typedef struct _GimpGradientEditor           GimpGradientEditor;
+typedef struct _GimpGlyphsPanel              GimpGlyphsPanel;
 typedef struct _GimpPaletteEditor            GimpPaletteEditor;
 typedef struct _GimpToolPresetEditor         GimpToolPresetEditor;
 
@@ -199,6 +200,7 @@ typedef struct _GimpFgBgView                 GimpFgBgView;
 typedef struct _GimpFileProcView             GimpFileProcView;
 typedef struct _GimpFillEditor               GimpFillEditor;
 typedef struct _GimpGridEditor               GimpGridEditor;
+typedef struct _GimpGlyphsAlternatesPopup    GimpGlyphsAlternatesPopup;
 typedef struct _GimpHandleBar                GimpHandleBar;
 typedef struct _GimpHighlightableButton      GimpHighlightableButton;
 typedef struct _GimpHistogramBox             GimpHistogramBox;
@@ -257,16 +259,16 @@ typedef struct _GimpView                     GimpView;
 
 /*  view renderers  */
 
-typedef struct _GimpViewRenderer             GimpViewRenderer;
-typedef struct _GimpViewRendererBrush        GimpViewRendererBrush;
-typedef struct _GimpViewRendererBuffer       GimpViewRendererBuffer;
-typedef struct _GimpViewRendererDrawable     GimpViewRendererDrawable;
-typedef struct _GimpViewRendererGradient     GimpViewRendererGradient;
-typedef struct _GimpViewRendererImage        GimpViewRendererImage;
-typedef struct _GimpViewRendererImagefile    GimpViewRendererImagefile;
-typedef struct _GimpViewRendererLayer        GimpViewRendererLayer;
-typedef struct _GimpViewRendererPalette      GimpViewRendererPalette;
-typedef struct _GimpViewRendererVectors      GimpViewRendererVectors;
+typedef struct _GimpViewRenderer              GimpViewRenderer;
+typedef struct _GimpViewRendererBrush         GimpViewRendererBrush;
+typedef struct _GimpViewRendererBuffer        GimpViewRendererBuffer;
+typedef struct _GimpViewRendererDrawable      GimpViewRendererDrawable;
+typedef struct _GimpViewRendererGradient      GimpViewRendererGradient;
+typedef struct _GimpViewRendererImage         GimpViewRendererImage;
+typedef struct _GimpViewRendererImagefile     GimpViewRendererImagefile;
+typedef struct _GimpViewRendererLayer         GimpViewRendererLayer;
+typedef struct _GimpViewRendererPalette       GimpViewRendererPalette;
+typedef struct _GimpViewRendererVectors       GimpViewRendererVectors;
 
 
 /*  cell renderers  */

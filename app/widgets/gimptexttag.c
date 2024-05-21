@@ -80,6 +80,18 @@ gimp_text_tag_get_font (GtkTextTag *tag)
   return font;
 }
 
+gchar *
+gimp_text_tag_get_font_features (GtkTextTag *tag)
+{
+  gchar *font_features;
+
+  g_object_get (tag,
+                GIMP_TEXT_PROP_NAME_FONT_FEATURES, &font_features,
+                NULL);
+
+  return font_features;
+}
+
 gboolean
 gimp_text_tag_get_fg_color (GtkTextTag  *tag,
                             GeglColor  **color)

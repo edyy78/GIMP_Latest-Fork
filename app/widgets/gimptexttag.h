@@ -24,22 +24,24 @@
 
 /*  GtkTextTag property names  */
 
-#define GIMP_TEXT_PROP_NAME_SIZE     "size"
-#define GIMP_TEXT_PROP_NAME_BASELINE "rise"
-#define GIMP_TEXT_PROP_NAME_KERNING  "rise" /* FIXME */
-#define GIMP_TEXT_PROP_NAME_FONT     "font"
-#define GIMP_TEXT_PROP_NAME_FG_COLOR "foreground-rgba"
-#define GIMP_TEXT_PROP_NAME_BG_COLOR "background-rgba"
+#define GIMP_TEXT_PROP_NAME_SIZE          "size"
+#define GIMP_TEXT_PROP_NAME_BASELINE      "rise"
+#define GIMP_TEXT_PROP_NAME_KERNING       "rise" /* FIXME */
+#define GIMP_TEXT_PROP_NAME_FONT          "font"
+#define GIMP_TEXT_PROP_NAME_FONT_FEATURES "font-features"
+#define GIMP_TEXT_PROP_NAME_FG_COLOR      "foreground-rgba"
+#define GIMP_TEXT_PROP_NAME_BG_COLOR      "background-rgba"
 
 
-gint       gimp_text_tag_get_size     (GtkTextTag  *tag);
-gint       gimp_text_tag_get_baseline (GtkTextTag  *tag);
-gint       gimp_text_tag_get_kerning  (GtkTextTag  *tag);
-gchar    * gimp_text_tag_get_font     (GtkTextTag  *tag);
-gboolean   gimp_text_tag_get_fg_color (GtkTextTag  *tag,
-                                       GeglColor  **color);
-gboolean   gimp_text_tag_get_bg_color (GtkTextTag  *tag,
-                                       GeglColor  **color);
+gint       gimp_text_tag_get_size          (GtkTextTag  *tag);
+gint       gimp_text_tag_get_baseline      (GtkTextTag  *tag);
+gint       gimp_text_tag_get_kerning       (GtkTextTag  *tag);
+gchar    * gimp_text_tag_get_font          (GtkTextTag  *tag);
+gchar    * gimp_text_tag_get_font_features (GtkTextTag  *tag);
+gboolean   gimp_text_tag_get_fg_color      (GtkTextTag  *tag,
+                                            GeglColor  **color);
+gboolean   gimp_text_tag_get_bg_color      (GtkTextTag  *tag,
+                                            GeglColor  **color);
 
 
 #endif /* __GIMP_TEXT_TAG_H__ */

@@ -44,6 +44,7 @@ struct _GimpTextBuffer
   GList         *baseline_tags;
   GList         *kerning_tags;
   GList         *font_tags;
+  GList         *font_features_tags;
   GList         *color_tags;
 
   GtkTextTag    *preedit_underline_tag;
@@ -138,6 +139,16 @@ void             gimp_text_buffer_set_color            (GimpTextBuffer     *buff
                                                         const GtkTextIter  *end,
                                                         GeglColor          *color);
 
+GtkTextTag * gimp_text_buffer_get_iter_font_features   (GimpTextBuffer     *buffer,
+                                                        const GtkTextIter  *iter,
+                                                        gchar             **font_features);
+GtkTextTag * gimp_text_buffer_get_font_features_tag    (GimpTextBuffer    *buffer,
+                                                        const gchar       *font_features);
+void         gimp_text_buffer_set_font_features        (GimpTextBuffer    *buffer,
+                                                        const GtkTextIter *start,
+                                                        const GtkTextIter *end,
+                                                        const gchar       *font_features);
+
 GtkTextTag * gimp_text_buffer_get_preedit_color_tag    (GimpTextBuffer     *buffer,
                                                         GeglColor          *color);
 void         gimp_text_buffer_set_preedit_color        (GimpTextBuffer     *buffer,
@@ -165,7 +176,8 @@ void             gimp_text_buffer_set_insert_tags      (GimpTextBuffer     *buff
                                                         GList              *remove_tags);
 void             gimp_text_buffer_clear_insert_tags    (GimpTextBuffer     *buffer);
 void             gimp_text_buffer_insert               (GimpTextBuffer     *buffer,
-                                                        const gchar        *text);
+                                                        const gchar        *text,
+                                                        gboolean            is_markup);
 
 gint             gimp_text_buffer_get_iter_index       (GimpTextBuffer     *buffer,
                                                         GtkTextIter        *iter,

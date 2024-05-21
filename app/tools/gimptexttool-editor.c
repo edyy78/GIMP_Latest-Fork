@@ -91,8 +91,12 @@ static void     gimp_text_tool_options_notify     (GimpTextOptions *options,
 static void     gimp_text_tool_editor_dialog      (GimpTextTool    *text_tool);
 static void     gimp_text_tool_editor_destroy     (GtkWidget       *dialog,
                                                    GimpTextTool    *text_tool);
+static void     gimp_text_tool_enter_markup       (GimpContext     *context,
+                                                   const gchar     *markup,
+                                                   GimpTextTool    *text_tool);
 static void     gimp_text_tool_enter_text         (GimpTextTool    *text_tool,
-                                                   const gchar     *str);
+                                                   const gchar     *str,
+                                                   gboolean         is_markup);
 static void     gimp_text_tool_xy_to_iter         (GimpTextTool    *text_tool,
                                                    gdouble          x,
                                                    gdouble          y,
@@ -197,6 +201,14 @@ gimp_text_tool_editor_start (GimpTextTool *text_tool)
                     G_CALLBACK (gimp_text_tool_options_notify),
                     text_tool);
 
+  if (! g_signal_handler_find (G_OBJECT (gimp_get_user_context (tool->tool_info->gimp)),
+                               G_SIGNAL_MATCH_FUNC, 0,
+                               0, NULL,
+                               G_CALLBACK (gimp_text_tool_enter_markup), NULL))
+    g_signal_connect (G_OBJECT (gimp_get_user_context (tool->tool_info->gimp)), "glyph-changed",
+                      G_CALLBACK (gimp_text_tool_enter_markup),
+                      text_tool);
+
   if (! text_tool->style_overlay)
     {
       Gimp          *gimp = GIMP_CONTEXT (options)->gimp;
@@ -277,6 +289,7 @@ void
 gimp_text_tool_editor_halt (GimpTextTool *text_tool)
 {
   GimpTextOptions *options = GIMP_TEXT_TOOL_GET_OPTIONS (text_tool);
+  GimpTool        *tool    = GIMP_TOOL (text_tool);
 
   if (text_tool->style_overlay)
     {
@@ -287,6 +300,10 @@ gimp_text_tool_editor_halt (GimpTextTool *text_tool)
 
   g_signal_handlers_disconnect_by_func (options,
                                         gimp_text_tool_options_notify,
+                                        text_tool);
+
+  g_signal_handlers_disconnect_by_func (gimp_get_user_context (tool->tool_info->gimp),
+                                        gimp_text_tool_enter_markup,
                                         text_tool);
 
   if (text_tool->editor_dialog)
@@ -505,14 +522,14 @@ gimp_text_tool_editor_key_press (GimpTextTool *text_tool,
     case GDK_KEY_KP_Enter:
     case GDK_KEY_ISO_Enter:
       gimp_text_tool_reset_im_context (text_tool);
-      gimp_text_tool_enter_text (text_tool, "\n");
+      gimp_text_tool_enter_text (text_tool, "\n", FALSE);
       break;
 
     case GDK_KEY_Tab:
     case GDK_KEY_KP_Tab:
     case GDK_KEY_ISO_Left_Tab:
       gimp_text_tool_reset_im_context (text_tool);
-      gimp_text_tool_enter_text (text_tool, "\t");
+      gimp_text_tool_enter_text (text_tool, "\t", FALSE);
       break;
 
     case GDK_KEY_Escape:
@@ -1072,7 +1089,7 @@ static void
 gimp_text_tool_insert_at_cursor (GimpTextTool *text_tool,
                                  const gchar  *str)
 {
-  gimp_text_buffer_insert (text_tool->buffer, str);
+  gimp_text_buffer_insert (text_tool->buffer, str, FALSE);
 }
 
 static gboolean
@@ -1399,8 +1416,16 @@ gimp_text_tool_editor_destroy (GtkWidget    *dialog,
 }
 
 static void
+gimp_text_tool_enter_markup (GimpContext  *context,
+                             const gchar  *markup,
+                             GimpTextTool *text_tool)
+{
+  gimp_text_tool_enter_text (text_tool, markup, TRUE);
+}
+static void
 gimp_text_tool_enter_text (GimpTextTool *text_tool,
-                           const gchar  *str)
+                           const gchar  *str,
+                           gboolean      is_markup)
 {
   GtkTextBuffer *buffer;
   gboolean       had_selection;
@@ -1439,7 +1464,7 @@ gimp_text_tool_enter_text (GimpTextTool *text_tool,
                                         insert_tags, remove_tags);
     }
 
-  gimp_text_buffer_insert (text_tool->buffer, str);
+  gimp_text_buffer_insert (text_tool->buffer, str, is_markup);
 
   gtk_text_buffer_end_user_action (buffer);
 }
@@ -1665,7 +1690,7 @@ gimp_text_tool_im_commit (GtkIMContext *context,
   if (preedit_active)
     gimp_text_tool_im_preedit_end (context, text_tool);
 
-  gimp_text_tool_enter_text (text_tool, str);
+  gimp_text_tool_enter_text (text_tool, str, FALSE);
 
   if (preedit_active)
     gimp_text_tool_im_preedit_start (context, text_tool);

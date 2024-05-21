@@ -253,6 +253,14 @@ const GimpStringActionEntry dialogs_dockable_actions[] =
     "gimp-font-list|gimp-font-grid",
     GIMP_HELP_FONT_DIALOG },
 
+  { "dialogs-glyphs-panel", GIMP_ICON_PALETTE,
+    NC_("dialogs-action", "_Glyphs Dialog"),
+    NC_("dialogs-action", "_Glyphs"),
+    { NULL },
+    NC_("dialogs-action", "Open the glyphs dialog"),
+    "gimp-glyphs-panel",
+    GIMP_HELP_GLYPH_DIALOG },
+
   { "dialogs-buffers", GIMP_ICON_BUFFER,
     NC_("dialogs-action", "B_uffers Dialog"),
     NC_("dialogs-action", "B_uffers"),

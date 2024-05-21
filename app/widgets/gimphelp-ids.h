@@ -577,6 +577,8 @@
 #define GIMP_HELP_FONT_DIALOG                     "gimp-font-dialog"
 #define GIMP_HELP_FONT_REFRESH                    "gimp-font-refresh"
 
+#define GIMP_HELP_GLYPH_DIALOG                    "gimp-glyph-dialog"
+
 #define GIMP_HELP_BUFFER_DIALOG                   "gimp-buffer-dialog"
 #define GIMP_HELP_BUFFER_CUT                      "gimp-buffer-cut"
 #define GIMP_HELP_BUFFER_COPY                     "gimp-buffer-copy"

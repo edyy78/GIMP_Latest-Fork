@@ -87,6 +87,7 @@ enum
   PROP_OUTLINE_DASH_INFO,
   PROP_USE_EDITOR,
   PROP_SHOW_ON_CANVAS_EDITOR,
+  PROP_ENABLE_ALTERNATES_POPUP,
 
   PROP_FONT_VIEW_TYPE,
   PROP_FONT_VIEW_SIZE
@@ -257,6 +258,13 @@ gimp_text_options_class_init (GimpTextOptionsClass *klass)
                             _("Show on-canvas editor"),
                             _("Show on-canvas text editor"),
                             TRUE,
+                            GIMP_PARAM_STATIC_STRINGS);
+
+  GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_ENABLE_ALTERNATES_POPUP,
+                            "enable-alternates-popup",
+                            _("Enable alternates on selection"),
+                            _("Show on-canvas popup listing alternates on selection"),
+                            FALSE,
                             GIMP_PARAM_STATIC_STRINGS);
 
   GIMP_CONFIG_PROP_ENUM (object_class, PROP_FONT_VIEW_TYPE,
@@ -475,6 +483,9 @@ gimp_text_options_get_property (GObject    *object,
     case PROP_SHOW_ON_CANVAS_EDITOR:
       g_value_set_boolean (value, options->show_on_canvas);
       break;
+    case PROP_ENABLE_ALTERNATES_POPUP:
+      g_value_set_boolean (value, options->enable_alternates_popup);
+      break;
 
     case PROP_FONT_VIEW_TYPE:
       g_value_set_enum (value, options->font_view_type);
@@ -589,6 +600,9 @@ gimp_text_options_set_property (GObject      *object,
       break;
     case PROP_SHOW_ON_CANVAS_EDITOR:
       options->show_on_canvas = g_value_get_boolean (value);
+      break;
+    case PROP_ENABLE_ALTERNATES_POPUP:
+      options->enable_alternates_popup = g_value_get_boolean (value);
       break;
 
     case PROP_FONT_VIEW_TYPE:
@@ -823,6 +837,9 @@ gimp_text_options_gui (GimpToolOptions *tool_options)
   gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
 
   button = gimp_prop_check_button_new (config, "antialias", NULL);
+  gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
+
+  button = gimp_prop_check_button_new (config, "enable-alternates-popup", NULL);
   gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
 
   grid = gtk_grid_new ();

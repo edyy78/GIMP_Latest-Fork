@@ -335,6 +335,7 @@ enum
   IMAGEFILE_CHANGED,
   TEMPLATE_CHANGED,
   PROP_NAME_CHANGED,
+  GLYPH_CHANGED,
   LAST_SIGNAL
 };
 
@@ -407,6 +408,15 @@ gimp_context_class_init (GimpContextClass *klass)
   GimpObjectClass *gimp_object_class = GIMP_OBJECT_CLASS (klass);
   GeglColor       *black             = gegl_color_new ("black");
   GeglColor       *white             = gegl_color_new ("white");
+
+  gimp_context_signals[GLYPH_CHANGED] =
+          g_signal_new ("glyph-changed",
+                        G_TYPE_FROM_CLASS (klass),
+                        G_SIGNAL_RUN_FIRST,
+                        0,
+                        NULL, NULL, NULL,
+                        G_TYPE_NONE, 1,
+                        G_TYPE_STRING);
 
   gimp_context_signals[IMAGE_CHANGED] =
     g_signal_new ("image-changed",

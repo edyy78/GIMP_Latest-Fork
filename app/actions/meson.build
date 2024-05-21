@@ -44,6 +44,7 @@ libappactions_sources = [
   'gradient-editor-commands.c',
   'gradients-actions.c',
   'gradients-commands.c',
+  'glyphs-panel-actions.c',
   'help-actions.c',
   'help-commands.c',
   'image-actions.c',
