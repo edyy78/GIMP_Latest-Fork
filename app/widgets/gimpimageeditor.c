@@ -115,8 +115,7 @@ gimp_image_editor_dispose (GObject *object)
 {
   GimpImageEditor *editor = GIMP_IMAGE_EDITOR (object);
 
-  if (editor->image)
-    gimp_image_editor_set_image (editor, NULL);
+  g_clear_weak_pointer (&editor->image);
 
   G_OBJECT_CLASS (parent_class)->dispose (object);
 }
@@ -130,7 +129,7 @@ gimp_image_editor_real_set_image (GimpImageEditor *editor,
                                           gimp_image_editor_image_flush,
                                           editor);
 
-  editor->image = image;
+  g_set_weak_pointer (&editor->image, image);
 
   if (editor->image)
     g_signal_connect (editor->image, "flush",

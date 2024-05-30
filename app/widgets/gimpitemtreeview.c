@@ -909,8 +909,7 @@ gimp_item_tree_view_dispose (GObject *object)
 {
   GimpItemTreeView *view = GIMP_ITEM_TREE_VIEW (object);
 
-  if (view->priv->image)
-    gimp_item_tree_view_set_image (view, NULL);
+  g_clear_weak_pointer (&view->priv->image);
 
   if (view->priv->lock_popover)
     {
@@ -1413,8 +1412,7 @@ gimp_item_tree_view_real_set_image (GimpItemTreeView *view,
                                             G_CALLBACK (gimp_item_tree_view_floating_selection_changed),
                                             view);
     }
-
-  view->priv->image                          = image;
+  g_set_weak_pointer (&view->priv->image, image);
   view->priv->effects_drawable               = NULL;
   view->priv->effects_filter                 = NULL;
   view->priv->filters_active_changed_handler = NULL;

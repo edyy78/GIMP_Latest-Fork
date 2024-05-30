@@ -390,6 +390,7 @@ gimp_cursor_view_dispose (GObject *object)
   view->priv->color_frame_1 = NULL;
   view->priv->color_frame_2 = NULL;
 
+  g_clear_weak_pointer (&view->priv->image);
   g_clear_object (&view->priv->cursor_image);
 
   G_OBJECT_CLASS (parent_class)->dispose (object);
@@ -632,7 +633,7 @@ gimp_cursor_view_image_changed (GimpCursorView *view,
                                             view);
     }
 
-  view->priv->image = image;
+  g_set_weak_pointer (&view->priv->image, image);
 
   if (view->priv->image)
     {
