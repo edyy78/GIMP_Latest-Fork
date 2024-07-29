@@ -569,30 +569,6 @@ gimp_drawable_scale (GimpItem              *item,
                                                  0,            0),
                                  TRUE);
   g_object_unref (new_buffer);
-
-  if (GIMP_IS_LAYER (drawable))
-    {
-      GList *list;
-
-      for (list = GIMP_LIST (drawable->private->filter_stack)->queue->tail;
-           list; list = g_list_previous (list))
-        {
-          if (GIMP_IS_DRAWABLE_FILTER (list->data))
-            {
-              GimpDrawableFilter *filter = list->data;
-              GimpChannel        *mask   = gimp_drawable_filter_get_mask (filter);
-              GeglRectangle      *rect   = GEGL_RECTANGLE (0, 0,
-                                                           new_width,
-                                                           new_height);
-
-              /* Don't resize partial layer effects */
-              if (gimp_channel_is_empty (mask))
-                gimp_drawable_filter_refresh_crop (filter, rect);
-            }
-        }
-      if (list)
-        g_list_free (list);
-    }
 }
 
 static void
@@ -678,28 +654,6 @@ gimp_drawable_resize (GimpItem     *item,
                                                  0,            0),
                                  TRUE);
   g_object_unref (new_buffer);
-
-  if (GIMP_IS_LAYER (drawable))
-    {
-      GList *list;
-
-      for (list = GIMP_LIST (drawable->private->filter_stack)->queue->tail;
-           list; list = g_list_previous (list))
-        {
-          if (GIMP_IS_DRAWABLE_FILTER (list->data))
-            {
-              GimpDrawableFilter *filter = list->data;
-              GimpChannel        *mask   = gimp_drawable_filter_get_mask (filter);
-              GeglRectangle       rect   = {0, 0, new_width, new_height};
-
-              /* Don't resize partial layer effects */
-              if (gimp_channel_is_empty (mask))
-                gimp_drawable_filter_refresh_crop (filter, &rect);
-            }
-        }
-      if (list)
-        g_list_free (list);
-    }
 }
 
 static void
