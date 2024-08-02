@@ -1536,7 +1536,6 @@ drawText (GimpLayer *layer,
   gdouble               indent;
   gdouble               line_spacing;
   gdouble               letter_spacing;
-  PangoAttribute       *letter_spacing_at;
   PangoAttrList        *attr_list = pango_attr_list_new ();
   PangoFontMap         *fontmap;
 
@@ -1548,6 +1547,10 @@ drawText (GimpLayer *layer,
 
   /* Position */
   gimp_drawable_get_offsets (GIMP_DRAWABLE (layer), &x, &y);
+  cairo_translate (cr, x, y);
+
+  /* Offset */
+  gimp_text_layer_get_offsets (GIMP_TEXT_LAYER (layer), &x, &y);
   cairo_translate (cr, x, y);
 
   /* Color */
@@ -1676,16 +1679,18 @@ drawText (GimpLayer *layer,
 
   pango_layout_set_font_description (layout, font_description);
 
-  /* Width */
-  if (! PANGO_GRAVITY_IS_VERTICAL (pango_context_get_base_gravity (context)))
-    pango_layout_set_width (layout,
-                            gimp_drawable_get_width (GIMP_DRAWABLE (layer)) *
-                            PANGO_SCALE);
-  else
-    pango_layout_set_width (layout,
-                            gimp_drawable_get_height (GIMP_DRAWABLE (layer)) *
-                            PANGO_SCALE);
-
+  if (! gimp_text_layer_is_dynamic (GIMP_TEXT_LAYER (layer)))
+    {
+       /* Width */
+       if (! PANGO_GRAVITY_IS_VERTICAL (pango_context_get_base_gravity (context)))
+         pango_layout_set_width (layout,
+                                 gimp_drawable_get_width (GIMP_DRAWABLE (layer)) *
+                                 PANGO_SCALE);
+       else
+         pango_layout_set_width (layout,
+                                 gimp_drawable_get_height (GIMP_DRAWABLE (layer)) *
+                                 PANGO_SCALE);
+    }
   /* Justification, and Alignment */
   justify = FALSE;
   j = gimp_text_layer_get_justification (GIMP_TEXT_LAYER (layer));
@@ -1711,16 +1716,29 @@ drawText (GimpLayer *layer,
 
   /* Indentation */
   indent = gimp_text_layer_get_indent (GIMP_TEXT_LAYER (layer));
-  pango_layout_set_indent (layout, (int)(PANGO_SCALE * indent));
+  pango_layout_set_indent (layout, pango_units_from_double (gimp_units_to_pixels (indent, unit, y_res)));
 
   /* Line Spacing */
   line_spacing = gimp_text_layer_get_line_spacing (GIMP_TEXT_LAYER (layer));
-  pango_layout_set_spacing (layout, (int)(PANGO_SCALE * line_spacing));
+  pango_layout_set_spacing (layout, pango_units_from_double (gimp_units_to_pixels (line_spacing, unit, y_res)));
 
   /* Letter Spacing */
   letter_spacing = gimp_text_layer_get_letter_spacing (GIMP_TEXT_LAYER (layer));
-  letter_spacing_at = pango_attr_letter_spacing_new ((int)(PANGO_SCALE * letter_spacing));
-  pango_attr_list_insert (attr_list, letter_spacing_at);
+  /*
+   * for some reason if the letter spacing is not specified in the pango markup
+   * (and is instead set for the pango layout) it is ignored.
+   */
+  if (fabs (letter_spacing) > 0.1)
+    {
+       if (markup != NULL && markup[0] != '\0')
+         markup = g_strdup_printf ("<span letter_spacing=\"%d\">%s</span>",
+                                   (gint) (letter_spacing * PANGO_SCALE),
+                                   markup);
+       else
+         markup = g_strdup_printf ("<span letter_spacing=\"%d\">%s</span>",
+                                   (gint) (letter_spacing * PANGO_SCALE),
+                                   text);
+    }
 
 
   pango_layout_set_attributes (layout, attr_list);
@@ -1747,6 +1765,9 @@ drawText (GimpLayer *layer,
     }
 
   pango_cairo_show_layout (cr, layout);
+
+  if (fabs (letter_spacing) > 0.1)
+    g_free (markup);
 
   g_free (text);
   g_free (language);
