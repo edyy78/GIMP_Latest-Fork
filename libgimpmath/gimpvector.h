@@ -76,7 +76,9 @@ GimpVector2 gimp_vector2_rotate_val        (GimpVector2        vector,
                                             gdouble            alpha);
 GimpVector2 gimp_vector2_normal            (GimpVector2       *vector);
 GimpVector2 gimp_vector2_normal_val        (GimpVector2        vector);
-
+guint       gimp_vector2_get_hash          (GimpVector2       *vector);
+gboolean    gimp_vector2_is_equal          (GimpVector2       *vector1,
+                                            GimpVector2       *vector2);
 /* Three dimensional vector functions */
 /* ================================== */
 

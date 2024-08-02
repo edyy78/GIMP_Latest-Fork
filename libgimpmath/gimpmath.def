@@ -34,9 +34,11 @@ EXPORTS
 	gimp_vector2_add_val
 	gimp_vector2_cross_product
 	gimp_vector2_cross_product_val
+	gimp_vector2_get_hash
 	gimp_vector2_get_type
 	gimp_vector2_inner_product
 	gimp_vector2_inner_product_val
+	gimp_vector2_is_equal
 	gimp_vector2_length
 	gimp_vector2_length_val
 	gimp_vector2_mul

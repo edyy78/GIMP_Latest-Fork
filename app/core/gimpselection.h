@@ -72,5 +72,6 @@ GimpLayer   * gimp_selection_float    (GimpSelection *selection,
                                        gint           off_y,
                                        GError       **error);
 
+gboolean      gimp_selection_has_corners (GimpChannel *selection);
 
 #endif /* __GIMP_SELECTION_H__ */

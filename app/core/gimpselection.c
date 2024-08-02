@@ -20,8 +20,10 @@
 #include <cairo.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <gegl.h>
+#include <math.h>
 
 #include "libgimpcolor/gimpcolor.h"
+#include "libgimpmath/gimpmath.h"
 
 #include "core-types.h"
 
@@ -44,6 +46,8 @@
 #include "gimplayer-floating-selection.h"
 #include "gimppickable.h"
 #include "gimpselection.h"
+#include "gimpchannel.h"
+#include "gimpboundary.h"
 
 #include "gimp-intl.h"
 
@@ -942,4 +946,134 @@ gimp_selection_float (GimpSelection *selection,
     g_object_unref (temp_image);
 
   return layer;
+}
+
+gboolean
+gimp_selection_has_corners (GimpChannel *selection)
+{
+  GHashTable     *hashTable;
+  GHashTableIter  iter;
+  gboolean        flag;
+  gfloat          angle;
+  gint            numSegments;
+  GimpBoundSeg   *boundSegArray;
+  GimpVector2    *point1;
+  GimpVector2    *point2;
+  GimpVector2    *point3;
+  GimpVector2     a;
+  GimpVector2     b;
+  GList          *list;
+
+  hashTable     = g_hash_table_new ((GHashFunc) gimp_vector2_get_hash,
+                                    (GEqualFunc) gimp_vector2_is_equal);
+  numSegments   = selection->num_segs_in;
+  boundSegArray = selection->segs_in;
+
+  for (int i = 0; i < numSegments; i++)
+    {
+      point1    = malloc (sizeof (GimpVector2));
+      point2    = malloc (sizeof (GimpVector2));
+      point1->x = boundSegArray[i].x1;
+      point1->y = boundSegArray[i].y1;
+      point2->x = boundSegArray[i].x2;
+      point2->y = boundSegArray[i].y2;
+
+      /* If the element already exists, free the memory and change the pointer */
+      if (g_hash_table_lookup_extended (hashTable, point1, (gpointer*) &point3, NULL))
+        {
+          g_free (point1);
+          point1 = point3;
+        }
+
+      if (g_hash_table_lookup_extended (hashTable, point2, (gpointer*) &point3, NULL))
+        {
+          g_free (point2);
+          point2 = point3;
+        }
+
+      if (!g_hash_table_lookup_extended (hashTable, point1, NULL, (gpointer*) &list))
+        {
+          list = g_list_prepend (list, point2);
+          g_hash_table_insert (hashTable, point1, list);
+        }
+      else
+        {
+          list = g_list_prepend (list, point2);
+          g_hash_table_insert (hashTable, point1, list);
+        }
+
+      if (!g_hash_table_lookup_extended (hashTable, point2, NULL, (gpointer*) &list))
+        {
+          list = g_list_prepend (list, point1);
+          g_hash_table_insert (hashTable, point2, list);
+        }
+      else
+        {
+          list = g_list_prepend (list, point1);
+          g_hash_table_insert (hashTable, point2, list);
+        }
+    }
+
+  /* Traverse through graph and check angle at every node */
+  flag = FALSE;
+  g_hash_table_iter_init (&iter, hashTable);
+  while (g_hash_table_iter_next (&iter, (gpointer*) &point3, (gpointer*) &list))
+    {
+      if (g_list_length (list) != 2)
+        {
+          flag = TRUE;
+          break;
+        }
+      point1 = (GimpVector2*)list->data;
+      point2 = (GimpVector2*)list->next->data;
+
+      list = g_hash_table_lookup (hashTable, list->data);
+      while (list != NULL)
+        {
+          if (!gimp_vector2_is_equal (list->data, point3))
+            {
+              point1 = list->data;
+              break;
+            }
+          list = list->next;
+        }
+
+      list = g_hash_table_lookup (hashTable, point2);
+      while (list != NULL)
+        {
+          if (!gimp_vector2_is_equal (list->data, point3))
+            {
+              point2 = list->data;
+              break;
+            }
+          list = list->next;
+        }
+      a = gimp_vector2_sub_val (*point1, *point3);
+      b = gimp_vector2_sub_val (*point2, *point3);
+      a = gimp_vector2_normalize_val (a);
+      b = gimp_vector2_normalize_val (b);
+
+      angle = acos (gimp_vector2_inner_product_val (a, b));
+      if (isnan (angle))
+        {
+          angle = gimp_vector2_inner_product_val (a, b) > 1 ? 0 : M_PI;
+        }
+
+      /* threshold is 120 degrees */
+      if ( angle < M_PI * 0.66 )
+        {
+          flag = TRUE;
+          break;
+        }
+    }
+
+  g_hash_table_iter_init (&iter, hashTable);
+  while (g_hash_table_iter_next (&iter, (gpointer*) &point3, (gpointer*) &list))
+    {
+      g_free (point3);
+      g_list_free (list);
+    }
+  g_hash_table_destroy (hashTable);
+
+  return flag;
 }

@@ -37,6 +37,8 @@
 #include "gimppaintinfo.h"
 #include "gimpparamspecs.h"
 #include "gimpstrokeoptions.h"
+#include "gimpimage.h"
+#include "gimpselection.h"
 
 #include "paint/gimppaintoptions.h"
 
@@ -53,6 +55,7 @@ enum
   PROP_WIDTH,
   PROP_UNIT,
   PROP_CAP_STYLE,
+  PROP_AUTOSELECT_JOIN_STYLE,
   PROP_JOIN_STYLE,
   PROP_MITER_LIMIT,
   PROP_ANTIALIAS,
@@ -82,6 +85,7 @@ struct _GimpStrokeOptionsPrivate
   GimpUnit          unit;
 
   GimpCapStyle      cap_style;
+  gboolean          autoselect_join_style;
   GimpJoinStyle     join_style;
 
   gdouble           miter_limit;
@@ -176,6 +180,13 @@ gimp_stroke_options_class_init (GimpStrokeOptionsClass *klass)
                          NULL,
                          GIMP_TYPE_CAP_STYLE, GIMP_CAP_BUTT,
                          GIMP_PARAM_STATIC_STRINGS);
+
+  GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_AUTOSELECT_JOIN_STYLE,
+                            "autoselect-join-style",
+                            _("Autoselect join style"),
+                            NULL,
+                            FALSE,
+                            GIMP_PARAM_STATIC_STRINGS);
 
   GIMP_CONFIG_PROP_ENUM (object_class, PROP_JOIN_STYLE,
                          "join-style",
@@ -283,6 +294,9 @@ gimp_stroke_options_set_property (GObject      *object,
     case PROP_CAP_STYLE:
       private->cap_style = g_value_get_enum (value);
       break;
+    case PROP_AUTOSELECT_JOIN_STYLE:
+      private->autoselect_join_style = g_value_get_boolean (value);
+      break;
     case PROP_JOIN_STYLE:
       private->join_style = g_value_get_enum (value);
       break;
@@ -340,6 +354,9 @@ gimp_stroke_options_get_property (GObject    *object,
       break;
     case PROP_CAP_STYLE:
       g_value_set_enum (value, private->cap_style);
+      break;
+    case PROP_AUTOSELECT_JOIN_STYLE:
+      g_value_set_boolean (value, private->autoselect_join_style);
       break;
     case PROP_JOIN_STYLE:
       g_value_set_enum (value, private->join_style);
@@ -466,6 +483,14 @@ gimp_stroke_options_get_cap_style (GimpStrokeOptions *options)
   return GET_PRIVATE (options)->cap_style;
 }
 
+gboolean
+gimp_stroke_options_get_autoselect_join_style (GimpStrokeOptions *options)
+{
+  g_return_val_if_fail (GIMP_IS_STROKE_OPTIONS (options), FALSE);
+
+  return GET_PRIVATE (options)->autoselect_join_style;
+}
+
 GimpJoinStyle
 gimp_stroke_options_get_join_style (GimpStrokeOptions *options)
 {
@@ -557,6 +582,7 @@ gimp_stroke_options_prepare (GimpStrokeOptions *options,
                              GimpPaintOptions  *paint_options)
 {
   GimpStrokeOptionsPrivate *private;
+  GimpChannel *selection;
 
   g_return_if_fail (GIMP_IS_STROKE_OPTIONS (options));
   g_return_if_fail (GIMP_IS_CONTEXT (context));
@@ -568,6 +594,14 @@ gimp_stroke_options_prepare (GimpStrokeOptions *options,
   switch (private->method)
     {
     case GIMP_STROKE_LINE:
+      if (private->autoselect_join_style)
+        {
+          selection = gimp_image_get_mask (context->image);
+          if (gimp_selection_has_corners (selection))
+            private->join_style = GIMP_JOIN_MITER;
+          else
+            private->join_style = GIMP_JOIN_ROUND;
+        }
       break;
 
     case GIMP_STROKE_PAINT_METHOD:
