@@ -101,6 +101,8 @@ GType gimp_thumb_state_get_type (void) G_GNUC_CONST;
 
 typedef enum
 {
+  GIMP_THUMB_STATE_ERROR = -2,
+  GIMP_THUMB_STATE_NONE = -1,
   GIMP_THUMB_STATE_UNKNOWN,
   GIMP_THUMB_STATE_REMOTE,
   GIMP_THUMB_STATE_FOLDER,
