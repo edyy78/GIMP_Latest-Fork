@@ -493,14 +493,14 @@ gimp_dialog_config_class_init (GimpDialogConfigClass *klass)
                            "selection-grow-radius",
                            "Selection grow radius",
                            SELECTION_GROW_RADIUS_BLURB,
-                           1.0, 32767.0, 1.0,
+                           1.0, 2342.0, 1.0,
                            GIMP_PARAM_STATIC_STRINGS);
 
   GIMP_CONFIG_PROP_DOUBLE (object_class, PROP_SELECTION_SHRINK_RADIUS,
                            "selection-shrink-radius",
                            "Selection shrink radius",
                            SELECTION_SHRINK_RADIUS_BLURB,
-                           1.0, 32767.0, 1.0,
+                           1.0, 2342.0, 1.0,
                            GIMP_PARAM_STATIC_STRINGS);
 
   GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_SELECTION_SHRINK_EDGE_LOCK,
@@ -514,7 +514,7 @@ gimp_dialog_config_class_init (GimpDialogConfigClass *klass)
                            "selection-border-radius",
                            "Selection border radius",
                            SELECTION_BORDER_RADIUS_BLURB,
-                           1.0, 32767.0, 5.0,
+                           1.0, 2342.0, 5.0,
                            GIMP_PARAM_STATIC_STRINGS);
 
   GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_SELECTION_BORDER_EDGE_LOCK,
