@@ -175,8 +175,6 @@ gimp_colormap_editor_set_context (GimpDocked  *docked,
 {
   GimpColormapEditor *editor = GIMP_COLORMAP_EDITOR (docked);
 
-  parent_docked_iface->set_context (docked, context);
-
   if (editor->selection)
     gtk_widget_destroy (editor->selection);
   editor->selection = NULL;
@@ -204,6 +202,8 @@ gimp_colormap_editor_set_context (GimpDocked  *docked,
                         G_CALLBACK (gimp_colormap_editor_notify_index),
                         editor);
     }
+
+  parent_docked_iface->set_context (docked, context);
 }
 
 
