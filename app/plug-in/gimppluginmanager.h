@@ -108,6 +108,8 @@ void    gimp_plug_in_manager_add_temp_proc        (GimpPlugInManager      *manag
                                                    GimpTemporaryProcedure *procedure);
 void    gimp_plug_in_manager_remove_temp_proc     (GimpPlugInManager      *manager,
                                                    GimpTemporaryProcedure *procedure);
+void    gimp_plug_in_manager_remove_procedure     (GimpPlugInManager      *manager,
+                                                   GimpProcedure          *procedure);
 
 void    gimp_plug_in_manager_add_open_plug_in     (GimpPlugInManager   *manager,
                                                    GimpPlugIn          *plug_in);
