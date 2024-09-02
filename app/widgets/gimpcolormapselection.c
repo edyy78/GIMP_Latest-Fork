@@ -638,9 +638,12 @@ gimp_colormap_selection_entry_selected (GimpPaletteView       *view,
   GimpPalette *palette;
   gint         index = 0;
 
-  palette = gimp_image_get_colormap_palette (selection->active_image);
-  if (entry)
-    index = gimp_palette_get_entry_position (palette, entry);
+  if (selection->active_image)
+  {
+    palette = gimp_image_get_colormap_palette (selection->active_image);
+    if (entry)
+      index = gimp_palette_get_entry_position (palette, entry);
+  }
 
   gimp_colormap_selection_set_index (selection, index, NULL);
 }
