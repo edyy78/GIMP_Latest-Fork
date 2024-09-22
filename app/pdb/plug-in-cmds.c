@@ -36,10 +36,14 @@
 
 #include "core/gimp.h"
 #include "core/gimpparamspecs.h"
+#include "plug-in/gimpplugin-install.h"
 #include "plug-in/gimpplugin.h"
 #include "plug-in/gimpplugindef.h"
+#include "plug-in/gimppluginmanager-call.h"
+#include "plug-in/gimppluginmanager-install.h"
 #include "plug-in/gimppluginmanager-menu-branch.h"
 #include "plug-in/gimppluginmanager-query.h"
+#include "plug-in/gimppluginmanager-restore.h"
 #include "plug-in/gimppluginmanager.h"
 #include "plug-in/gimppluginprocedure.h"
 
@@ -212,6 +216,66 @@ plug_in_get_pdb_error_handler_invoker (GimpProcedure         *procedure,
   return return_vals;
 }
 
+static GimpValueArray *
+plug_in_install_invoker (GimpProcedure         *procedure,
+                         Gimp                  *gimp,
+                         GimpContext           *context,
+                         GimpProgress          *progress,
+                         const GimpValueArray  *args,
+                         GError               **error)
+{
+  gboolean success = TRUE;
+  GFile *plug_in_origin_file;
+
+  plug_in_origin_file = g_value_get_object (gimp_value_array_index (args, 0));
+
+  GFile *installed_file = gimp_install_plug_in_file (plug_in_origin_file);
+
+  /* Query the installed file, not the source. */
+  if (installed_file != NULL)
+    gimp_plug_in_manager_install_plugin (gimp->plug_in_manager, context, installed_file);
+  else
+    success = FALSE;
+
+  return gimp_procedure_get_return_values (procedure, success,
+                                           error ? *error : NULL);
+}
+
+static GimpValueArray *
+plug_in_remove_invoker (GimpProcedure         *procedure,
+                        Gimp                  *gimp,
+                        GimpContext           *context,
+                        GimpProgress          *progress,
+                        const GimpValueArray  *args,
+                        GError               **error)
+{
+  gboolean success = TRUE;
+  const gchar *menu_label;
+
+  menu_label = g_value_get_string (gimp_value_array_index (args, 0));
+
+  {
+    GFile *file = gimp_plug_in_manager_get_file_by_menu_label (gimp->plug_in_manager, menu_label);
+
+    if (file == NULL)
+      {
+        g_debug ("%s fail", G_STRFUNC);
+        success = FALSE;
+      }
+    else
+      {
+        /* Opposite order from install: remove from manager, then delete file. */
+        if ( gimp_plug_in_manager_remove_plugin (gimp->plug_in_manager, file))
+          gimp_remove_plug_in_file (file);
+        else
+          success = FALSE;
+    }
+  }
+
+  return gimp_procedure_get_return_values (procedure, success,
+                                           error ? *error : NULL);
+}
+
 void
 register_plug_in_procs (GimpPDB *pdb)
 {
@@ -376,6 +440,53 @@ register_plug_in_procs (GimpPDB *pdb)
                                                       GIMP_TYPE_PDB_ERROR_HANDLER,
                                                       GIMP_PDB_ERROR_HANDLER_INTERNAL,
                                                       GIMP_PARAM_READWRITE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
+   * gimp-plug-in-install
+   */
+  procedure = gimp_procedure_new (plug_in_install_invoker);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-plug-in-install");
+  gimp_procedure_set_static_help (procedure,
+                                  "Installs a third-party plug-in file.",
+                                  "Copies origin file and registers it, for user only.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Lloyd Konneker",
+                                         "Lloyd Konneker",
+                                         "2024");
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_object ("plug-in-origin-file",
+                                                    "plug in origin file",
+                                                    "Binary or interpretable text file, origin of plug-in",
+                                                    G_TYPE_FILE,
+                                                    GIMP_PARAM_READWRITE | GIMP_PARAM_NO_VALIDATE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
+   * gimp-plug-in-remove
+   */
+  procedure = gimp_procedure_new (plug_in_remove_invoker);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-plug-in-remove");
+  gimp_procedure_set_static_help (procedure,
+                                  "Removes a third-party plug-in installed by user.",
+                                  "Unregisters and deletes GIMPs files of plug-in installed by user.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Lloyd Konneker",
+                                         "Lloyd Konneker",
+                                         "2024");
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_string ("menu-label",
+                                                       "menu label",
+                                                       "Menu label of the plug-in to remove.",
+                                                       FALSE, FALSE, FALSE,
+                                                       NULL,
+                                                       GIMP_PARAM_READWRITE | GIMP_PARAM_NO_VALIDATE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 }

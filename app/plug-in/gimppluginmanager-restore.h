@@ -25,5 +25,8 @@ void    gimp_plug_in_manager_restore (GimpPlugInManager  *manager,
                                       GimpContext        *context,
                                       GimpInitStatusFunc  status_callback);
 
+void    gimp_plug_in_manager_add_to_db (GimpPlugInManager    *manager,
+                                        GimpContext          *context,
+                                        GimpPlugInProcedure  *proc);
 
 #endif  /* __GIMP_PLUG_IN_MANAGER_RESTORE_H__ */

@@ -374,6 +374,30 @@ gimp_plug_in_manager_add_temp_proc (GimpPlugInManager      *manager,
                                                  g_object_ref (procedure));
 }
 
+/* Remove a procedure.
+ * Usually only a user installed procedure.
+ * Other procedures, except temporary, are never removed.
+ */
+void
+gimp_plug_in_manager_remove_procedure (GimpPlugInManager *manager,
+                                       GimpProcedure     *procedure)
+{
+  g_return_if_fail (GIMP_IS_PLUG_IN_MANAGER (manager));
+  g_return_if_fail (GIMP_IS_PROCEDURE (procedure));
+
+  /* FIXME: refuse to remove procedure not installed by user. */
+  g_debug ("%s", G_STRFUNC);
+
+  manager->plug_in_procedures = g_slist_remove (manager->plug_in_procedures,
+                                                procedure);
+
+  gimp_filter_history_remove (manager->gimp, procedure);
+
+  gimp_pdb_unregister_procedure (manager->gimp->pdb, procedure);
+
+  g_object_unref (procedure);
+}
+
 void
 gimp_plug_in_manager_remove_temp_proc (GimpPlugInManager      *manager,
                                        GimpTemporaryProcedure *procedure)

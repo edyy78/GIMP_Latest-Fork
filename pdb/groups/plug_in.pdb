@@ -211,15 +211,93 @@ CODE
     );
 }
 
+sub plug_in_install {
+    $blurb = 'Installs a third-party plug-in file.';
+    $help  = 'Copies origin file and registers it, for user only.';
+
+    &bootchk_pdb_misc('2024');
+
+    $lib_private = 1;
+
+    @inargs = (
+	{ name  => 'plug_in_origin_file',
+    type => 'file',
+    no_validate => 1,
+	  desc  => 'Binary or interpretable text file, origin of plug-in' }
+    );
+
+    @outargs = ();
+
+    %invoke = (
+	code => <<'CODE'
+{
+  GFile *installed_file = gimp_install_plug_in_file (plug_in_origin_file);
+
+  /* Query the installed file, not the source. */
+  if (installed_file != NULL)
+    gimp_plug_in_manager_install_plugin (gimp->plug_in_manager, context, installed_file);
+  else
+    success = FALSE;
+}
+CODE
+    );
+}
+
+sub plug_in_remove {
+    $blurb = 'Removes a third-party plug-in installed by user.';
+    $help  = 'Unregisters and deletes GIMPs files of plug-in installed by user.';
+
+    &bootchk_pdb_misc('2024');
+
+    $lib_private = 1;
+
+    @inargs = (
+	{ name  => 'menu_label',
+    type => 'string',
+    no_validate => 1,
+	  desc  => 'Menu label of the plug-in to remove.' }
+    );
+
+    @outargs = ();
+
+    %invoke = (
+	code => <<'CODE'
+{
+  {
+    GFile *file = gimp_plug_in_manager_get_file_by_menu_label (gimp->plug_in_manager, menu_label);
+
+    if (file == NULL)
+      {
+        g_debug ("%s fail", G_STRFUNC);
+        success = FALSE;
+      }
+    else
+      {
+        /* Opposite order from install: remove from manager, then delete file. */
+        if ( gimp_plug_in_manager_remove_plugin (gimp->plug_in_manager, file))
+          gimp_remove_plug_in_file (file);
+        else
+          success = FALSE;
+    }
+  }
+}
+CODE
+    );
+}
+
 @headers = qw(<string.h>
               <stdlib.h>
               "libgimpbase/gimpbase.h"
               "core/gimp.h"
               "plug-in/gimpplugin.h"
+              "plug-in/gimpplugin-install.h"
               "plug-in/gimpplugindef.h"
               "plug-in/gimppluginmanager.h"
+              "plug-in/gimppluginmanager-call.h"
+              "plug-in/gimppluginmanager-install.h"
               "plug-in/gimppluginmanager-menu-branch.h"
               "plug-in/gimppluginmanager-query.h"
+              "plug-in/gimppluginmanager-restore.h"
               "plug-in/gimppluginprocedure.h"
               "gimppdb-utils.h");
 
@@ -227,7 +305,10 @@ CODE
             plug_in_help_register
             plug_in_menu_branch_register
             plug_in_set_pdb_error_handler
-            plug_in_get_pdb_error_handler);
+            plug_in_get_pdb_error_handler
+            plug_in_install
+            plug_in_remove
+            );
 
 %exports = (app => [@procs], lib => [@procs[1,2,3,4]]);
 

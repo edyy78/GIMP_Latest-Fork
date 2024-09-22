@@ -73,9 +73,6 @@ static void    gimp_plug_in_manager_add_from_file     (GimpPlugInManager    *man
                                                        guint64               mtime);
 static void    gimp_plug_in_manager_add_from_rc       (GimpPlugInManager    *manager,
                                                        GimpPlugInDef        *plug_in_def);
-static void    gimp_plug_in_manager_add_to_db         (GimpPlugInManager    *manager,
-                                                       GimpContext          *context,
-                                                       GimpPlugInProcedure  *proc);
 static void    gimp_plug_in_manager_sort_file_procs   (GimpPlugInManager    *manager);
 static gint    gimp_plug_in_manager_file_proc_compare (gconstpointer         a,
                                                        gconstpointer         b,
@@ -788,7 +785,7 @@ gimp_plug_in_manager_add_from_rc (GimpPlugInManager *manager,
 }
 
 
-static void
+void
 gimp_plug_in_manager_add_to_db (GimpPlugInManager   *manager,
                                 GimpContext         *context,
                                 GimpPlugInProcedure *proc)
