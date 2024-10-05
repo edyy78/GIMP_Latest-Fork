@@ -820,9 +820,23 @@ gimp_procedure_dialog_get_widget (GimpProcedureDialog *dialog,
     }
   else if (G_IS_PARAM_SPEC_OBJECT (pspec) && pspec->value_type == G_TYPE_FILE)
     {
-      widget = gimp_prop_file_chooser_button_new (G_OBJECT (priv->config),
-                                                  property, NULL,
-                                                  GTK_FILE_CHOOSER_ACTION_OPEN);
+      GtkWidget *inner_prop_widget =
+        gimp_prop_file_chooser_button_new (G_OBJECT (priv->config), property,
+                                           /* dialog title same as label */
+                                           g_param_spec_get_nick (pspec),
+                                           GTK_FILE_CHOOSER_ACTION_OPEN);
+
+      /* Expand inner widget to fill the second column.
+       * Its text, could be long, minimize user scrolling.
+       */
+      gtk_widget_set_vexpand (inner_prop_widget, FALSE);
+      gtk_widget_set_hexpand (inner_prop_widget, TRUE);
+
+      widget = gimp_labeled_prop_widget_new (g_param_spec_get_nick (pspec),
+                                             inner_prop_widget);
+
+      gtk_size_group_add_widget (priv->label_group,
+                                 gimp_labeled_get_label (GIMP_LABELED (widget)));
     }
   else if (G_PARAM_SPEC_TYPE (pspec) == GIMP_TYPE_PARAM_CHOICE)
     {
@@ -831,6 +845,10 @@ gimp_procedure_dialog_get_widget (GimpProcedureDialog *dialog,
           widget = gimp_prop_choice_combo_box_new (G_OBJECT (priv->config), property);
           gtk_widget_set_vexpand (widget, FALSE);
           gtk_widget_set_hexpand (widget, TRUE);
+          /* FIXME: use gimp_labeled_prop_widget_new:
+           * The labeled widget doesn't actually need a string property.
+           * It is a property of the inner widget that is bound to the config's property.
+           */
           widget = gimp_label_string_widget_new (g_param_spec_get_nick (pspec), widget);
         }
       else if (widget_type == GIMP_TYPE_INT_RADIO_FRAME)
@@ -867,6 +885,23 @@ gimp_procedure_dialog_get_widget (GimpProcedureDialog *dialog,
                                               pspec->value_type == GIMP_TYPE_CHANNEL))
     {
       widget = gimp_prop_drawable_chooser_new (G_OBJECT (priv->config), property, NULL);
+    }
+  else if (G_IS_PARAM_SPEC_OBJECT (pspec) && (pspec->value_type == GIMP_TYPE_IMAGE))
+    {
+      GtkWidget *inner_widget;
+
+      inner_widget = gimp_prop_image_combo_box_new (G_OBJECT (priv->config), property);
+      /* FUTURE filter by image types. Currently, pass NULL, NULL, NULL to ImageComboBox.*/
+
+      /* Expand inner widget to fill the second column.
+       * Its long text of image names, minimize user scrolling.
+       */
+      gtk_widget_set_vexpand (inner_widget, FALSE);
+      gtk_widget_set_hexpand (inner_widget, TRUE);
+
+      widget = gimp_labeled_prop_widget_new (g_param_spec_get_nick (pspec),
+                                             inner_widget);
+
     }
   else  if (G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_ENUM)
     {
@@ -1622,14 +1657,25 @@ gimp_procedure_dialog_get_file_chooser (GimpProcedureDialog  *dialog,
   if (widget)
     return widget;
 
-  widget = gimp_prop_file_chooser_button_new (G_OBJECT (priv->config),
-                                              property, NULL, action);
+  {
+    GtkWidget *inner_prop_widget =
+      gimp_prop_file_chooser_button_new (G_OBJECT (priv->config), property,
+                                         /* dialog title same as label */
+                                         g_param_spec_get_nick (pspec),
+                                         action); /* kind of file/dir chooser. */
 
-  /* TODO: make is a file chooser with label. */
-  /*gtk_size_group_add_widget (priv->label_group,
-                             gimp_labeled_get_label (GIMP_LABELED (widget)));
+    /* Expand inner widget to fill the second column. */
+    gtk_widget_set_vexpand (inner_prop_widget, FALSE);
+    gtk_widget_set_hexpand (inner_prop_widget, TRUE);
 
-  gimp_procedure_dialog_check_mnemonic (dialog, widget, property, NULL);*/
+    widget = gimp_labeled_prop_widget_new (g_param_spec_get_nick (pspec),
+                                           inner_prop_widget);
+
+    gtk_size_group_add_widget (priv->label_group,
+                               gimp_labeled_get_label (GIMP_LABELED (widget)));
+  }
+
+  gimp_procedure_dialog_check_mnemonic (dialog, widget, property, NULL);
   g_hash_table_insert (priv->widgets, g_strdup (property), widget);
   if (g_object_is_floating (widget))
     g_object_ref_sink (widget);
