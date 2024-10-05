@@ -16,11 +16,8 @@
 ; (car (...)) => (...) in many places
 
 
-; v3 >>> signature of GimpImageProcedure
-; drawables is a vector
+; v3 >>> signature of GimpProcedure
 (define (script-fu-test-sphere-v3
-                               image
-                               drawables
                                radius
                                light
                                shadow
@@ -42,7 +39,8 @@
                                unused-image
                                unused-layer
                                unused-channel
-                               unused-drawable)
+                               unused-drawable
+                               unused-vectors)
   (script-fu-use-v3)
   (let* (
         (width (* radius 3.75))
@@ -66,6 +64,21 @@
         (shadow-w 0)
         (shadow-x 0)
         )
+    ; testing the widgets, print choices to the terminal
+    (newline)
+    (display "Unused user choices from Examples In Scheme")
+    (newline)
+    ; if an image was chosen and ID is valid
+    (if (> unused-image 0)
+      (display (gimp-image-get-name unused-image))
+      (display "No image chosen"))
+    (newline)
+    ; empty string if not chosen
+    (display unused-filename)
+    (newline)
+    ; empty string if not chosen
+    (display unused-dirname)
+    (newline)
 
     (gimp-context-push)
     (gimp-context-set-defaults)
@@ -142,22 +155,22 @@
   )
 )
 
-; v3 >>> use script-fu-register-filter
+; v3 >>> use script-fu-register-procedure
 ; v3 >>> menu item is v3, alongside old one
 ; v3 >>> not yet localized
 
 ; Translate the menu item and help, but not the dialog labels,
 ; since only plugin authors will read the dialog labels.
 
-(script-fu-register-filter "script-fu-test-sphere-v3"
+; The plugin is a renderer, requiring no open image/drawable.
+; Thus, register-procedure
+
+(script-fu-register-procedure "script-fu-test-sphere-v3"
   ; Translator: this means "in the Scheme programming language" aka ScriptFu.
   _"Plug-In Example in _Scheme"
   _"Plug-in example in Scheme"
   "Spencer Kimball, Sven Neumann"
-  "Spencer Kimball"
   "1996, 1998"
-  "*"  ; image types any
-  SF-ONE-OR-MORE-DRAWABLE  ; v3 >>> additional argument
   SF-ADJUSTMENT "Radius (in pixels)" (list 100 1 5000 1 10 0 SF-SPINNER)
   SF-ADJUSTMENT "Lighting (degrees)" (list 45 0 360 1 10 1 SF-SLIDER)
   SF-TOGGLE     "Shadow"             #t    ; v3 >>>
@@ -180,7 +193,7 @@
                                        "Vertical")
   SF-ENUM       "Interpolation"      '("InterpolationType" "linear")
   SF-DIRNAME    "Output directory"   "/var/tmp/"
-  SF-IMAGE      "Image"              -1
+  SF-IMAGE      "Second Image"       -1
   SF-LAYER      "Layer"              -1
   SF-CHANNEL    "Channel"            -1
   SF-DRAWABLE   "Drawable"           -1
