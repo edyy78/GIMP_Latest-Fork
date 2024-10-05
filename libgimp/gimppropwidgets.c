@@ -40,6 +40,11 @@ static GtkWidget  * gimp_prop_resource_chooser_factory   (GimpResourceWidgetCrea
                                                           const gchar               *chooser_title);
 static gchar      * gimp_utils_make_canonical_menu_label (const gchar               *path);
 
+static void         gimp_bind_props_convert_ID_to_object (GObject                   *config,
+                                                          const gchar               *config_property_name,
+                                                          GtkWidget                 *prop_widget,
+                                                          const gchar               *widget_property_name);
+
 
 /**
  * gimp_prop_brush_chooser_new:
@@ -211,6 +216,110 @@ gimp_prop_drawable_chooser_new (GObject     *config,
   return prop_chooser;
 }
 
+/* A special function to hide complexity, but not generally useful.
+ * Not needed if GimpImageComboBox behaved differently.
+ *
+ * The binding of properties initializes the widget from the config.
+ * When the config is NULL, and exists no open images, the widget shows "(None)"
+ * When the config is NULL, and exists an open image,
+ * the widget will show an arbitrary active image that the user has not selected,
+ * but doesn't set its property (thus no update config) and doesn't emit "changed".
+ * So initialize the config from the widget.
+ * Must be called after the widget has created its model.
+ */
+static void
+init_config_property_from_image_ID_widget (GObject          *config,
+                                           const gchar      *config_property_name,
+                                           GimpIntComboBox  *prop_widget)
+{
+  gint image_ID;
+
+  /* Call super of GimpImageComboBox. */
+  gimp_int_combo_box_get_active (prop_widget, &image_ID);
+  g_object_set (config,
+                config_property_name, gimp_image_get_by_id (image_ID),
+                NULL);
+}
+
+/**
+ * gimp_prop_image_combo_box_new:
+ * @config:        Object to which property is attached.
+ * @property_name: Name of a property of @config, of type [class@Gimp.Image]
+ *
+ * Creates a [class@GimpUi.GimpImageComboBox] controlled by the @config property.
+ * Decorates the widget to have trait PropWidget.
+ *
+ * Returns: (transfer full): A new [class@GimpUi.GimpImageComboBox].
+ *
+ * Since: 3.0
+ */
+
+/* FIXME: Initial value, from config to widget.
+ *
+ * It is not clear that we should let an OtherImage argument have a default.
+ * 1. An image is not currently serializable, to the Config/Settings.
+ * 2. There is no way to sensitize a generic Procedure by whether some image is open.
+ * 3. ImageComboBox doesn't select "(None)" when there is an open image.
+ *
+ * It is not clear that binding properties will initialize the prop widget
+ * and make the default active.
+ * E.G. when the default is NULL, the prop widget seems to select
+ * some arbitrary open image,
+ * and doesn't show (None) when at least one image is open.
+ */
+
+/* FIXME: Reset
+ *
+ * Reset the config (e.g. in the dialog, "Reset>Initial value") does not work.
+ * Probably because Image is not now serializable.
+ * A serialization by the name of the image might work within the GIMP session.
+ * We could assume that any OtherImage argument was read only,
+ * and not worry that a user would unintentionally destroy images.
+ */
+
+/* FIXME: synced with GIMP app.
+ *
+ * A GimpImageComboBox is on the libgimp side, and asks the GIMP app once
+ * for the model/store of open images.
+ * The model can go stale, when a user opens/closes images in GIMP app.
+ * This is unlike Resource Chooser widgets, which are on the core side
+ * and are synced with user changes to resources.
+ */
+
+GtkWidget *
+gimp_prop_image_combo_box_new (GObject     *config,
+                               const gchar *property_name)
+{
+  GParamSpec   *param_spec;
+  GtkWidget    *prop_widget;
+
+  param_spec = g_object_class_find_property (G_OBJECT_GET_CLASS (config),
+                                             property_name);
+
+  g_return_val_if_fail (param_spec != NULL, NULL);
+  g_return_val_if_fail (g_type_is_a (G_TYPE_FROM_INSTANCE (param_spec), G_TYPE_PARAM_OBJECT) &&
+                        g_type_is_a (param_spec->value_type, GIMP_TYPE_IMAGE), NULL);
+
+  /* Not filter images in the model. */
+  prop_widget = gimp_image_combo_box_new (NULL, NULL, NULL);
+
+  /* Decorate with trait PropWidget by binding properties with conversions of types.
+   * The target property is named "value", is type Int, and on GimpIntComboBox.
+   * The property is an image ID.
+   */
+  gimp_bind_props_convert_ID_to_object (config,      property_name,
+                                        prop_widget, "value");
+
+  /* The binding inits the widget property.
+   * But the widget may then set an arbitrary image active.
+   * Ensure the config is init from that arbitrary choice.
+   */
+  init_config_property_from_image_ID_widget (config, property_name,
+                                             (GimpIntComboBox*) prop_widget);
+
+  return prop_widget;
+}
+
 /*******************************/
 /*  private utility functions  */
 /*******************************/
@@ -270,4 +379,61 @@ gimp_utils_make_canonical_menu_label (const gchar *path)
   g_strfreev (split_path);
 
   return canon_path;
+}
+
+
+/* GValue transformation functions.
+ * Type is GBindingTransformFunc.
+ * Transforms GValues.  Side effect on the to_value.
+ * The transformed to_value may be None value: NULL for object*, or 0 for int ID.
+ * Functions never return FALSE.
+ */
+
+static gboolean
+transform_image_ID_to_object (GBinding*     binding,  /* not used. */
+                              const GValue *from_value,
+                              GValue       *to_value,
+                              gpointer      user_data) /* not used. */
+{
+  /* Require to_value already holds GIMP_TYPE_IMAGE. */
+  g_value_set_object (to_value,
+                      (GObject*) gimp_image_get_by_id (
+                        g_value_get_int (from_value)));
+
+  return TRUE;
+}
+
+static gboolean
+transform_image_object_to_ID (GBinding*     binding,  /* not used. */
+                              const GValue *from_value,
+                              GValue       *to_value,
+                              gpointer      user_data) /* not used. */
+{
+  /* Require to_value already holds G_TYPE_INT */
+  g_value_set_int (to_value,
+                   gimp_image_get_id (g_value_get_object (from_value)));
+  return TRUE;
+}
+
+
+/* Bind two properties bidirectionally with conversion.
+ * First  property belongs to Config and is type GObject* / GimpImage*
+ * Second property belongs to Widget and is type Int i.e. an ID
+ *
+ * Order is important because on create, initializes second from first.
+ */
+static void
+gimp_bind_props_convert_ID_to_object (GObject     *config,
+                                      const gchar *config_property_name,
+                                      GtkWidget   *prop_widget,
+                                      const gchar *widget_property_name)
+{
+  g_object_bind_property_full (
+    config,       config_property_name,
+    prop_widget,  widget_property_name,
+    G_BINDING_BIDIRECTIONAL | G_BINDING_SYNC_CREATE,
+    transform_image_object_to_ID,
+    transform_image_ID_to_object,
+    NULL,   /* user_data */
+    NULL);  /* GDestroyNotify */
 }
