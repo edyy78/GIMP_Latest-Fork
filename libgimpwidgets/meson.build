@@ -63,6 +63,7 @@ libgimpwidgets_sources_introspectable = files(
   'gimplabeled.c',
   'gimplabelintwidget.c',
   'gimplabelspin.c',
+  'gimplabeledpropwidget.c',
   'gimplabelstringwidget.c',
   'gimplabelentry.c',
   'gimpmemsizeentry.c',

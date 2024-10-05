@@ -280,6 +280,9 @@ EXPORTS
 	gimp_labeled_get_label
 	gimp_labeled_get_text
 	gimp_labeled_get_type
+	gimp_labeled_prop_widget_get_inner_widget
+	gimp_labeled_prop_widget_get_type
+	gimp_labeled_prop_widget_new
 	gimp_labeled_set_text
 	gimp_memsize_entry_get_spinbutton
 	gimp_memsize_entry_get_type
