@@ -246,10 +246,10 @@ init_config_property_from_image_ID_widget (GObject          *config,
  * @config:        Object to which property is attached.
  * @property_name: Name of a property of @config, of type [class@Gimp.Image]
  *
- * Creates a [class@GimpUi.GimpImageComboBox] controlled by the @config property.
+ * Creates a [class@GimpUi.ImageComboBox] controlled by the @config property.
  * Decorates the widget to have trait PropWidget.
  *
- * Returns: (transfer full): A new [class@GimpUi.GimpImageComboBox].
+ * Returns: (transfer full): A new [class@GimpUi.ImageComboBox].
  *
  * Since: 3.0
  */
