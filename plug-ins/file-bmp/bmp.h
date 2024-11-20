@@ -46,6 +46,13 @@
 #define BI_OS2_HUFFMAN (100 + BI_BITFIELDS)
 #define BI_OS2_RLE24   (100 + BI_JPEG)
 
+/* bV4CSType values */
+#define V4CS_CALIBRATED_RGB      0x00000000 /* = use gamma and endpoint values */
+#define V4CS_sRGB                0x73524742 /* 'sRGB' */
+#define V4CS_WINDOWS_COLOR_SPACE 0x57696e20 /* 'Win ' */
+#define V4CS_PROFILE_LINKED      0x4c494e4b /* 'LINK' */
+#define V4CS_PROFILE_EMBEDDED    0x4d424544 /* 'MBED' */
+
 typedef struct
 {
   gchar    zzMagic[2];  /* 00 "BM" */
@@ -79,6 +86,16 @@ typedef struct
   guint32  bV5ProfileSize;
   guint32  bV5Reserved;
 } BitmapHead;
+
+#define EP_RED_X   0
+#define EP_RED_Y   1
+#define EP_RED_Z   2
+#define EP_GREEN_X 3
+#define EP_GREEN_Y 4
+#define EP_GREEN_Z 5
+#define EP_BLUE_X  6
+#define EP_BLUE_Y  7
+#define EP_BLUE_Z  8
 
 typedef struct
 {

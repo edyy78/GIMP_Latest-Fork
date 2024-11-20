@@ -26,6 +26,7 @@
 #include <string.h>
 
 #include <glib/gstdio.h>
+#include "lcms2.h"
 
 #include <libgimp/gimp.h>
 
@@ -62,28 +63,29 @@ enum Bmpformat
 
 struct Fileinfo
 {
-  FILE         *file;
-  gint          width;
-  gint          height;
-  guchar       *rowbuf;
-  guint64       bytes_per_row;
-  gint          bpp;
-  gint          channels;
-  gint          bytesperchannel;
-  gint          ncolors;
-  guchar        colormap[3 * 256];
-  gboolean      gray;
-  BitmapChannel masks[4];
-  gint          tile_height;
-  gint          tile_n;
+  FILE             *file;
+  gint              width;
+  gint              height;
+  guchar           *rowbuf;
+  guint64           bytes_per_row;
+  gint              bpp;
+  gint              channels;
+  gint              bytesperchannel;
+  gint              ncolors;
+  guchar            colormap[3 * 256];
+  gboolean          gray;
+  BitmapChannel     masks[4];
+  GimpColorProfile *profile;
+  gint              tile_height;
+  gint              tile_n;
   /* RLE state */
-  gint          xpos;
-  gint          file_ypos;
-  gboolean      needs_alpha;
+  gint              xpos;
+  gint              file_ypos;
+  gboolean          needs_alpha;
   /* Huffman state */
-  guint32       bitbuf;
-  gint          buflen;
-  gint          black;
+  guint32           bitbuf;
+  gint              buflen;
+  gint              black;
 };
 
 static GimpImage * ReadImage     (struct Fileinfo  *fi,
@@ -247,6 +249,159 @@ digest_masks (BitmapChannel *masks)
       masks[i].shiftin   = offset;
       masks[i].max_value = (gfloat) ((1 << nbits) - 1);
       masks[i].nbits     = nbits;
+    }
+}
+
+static gint
+check_no_zero_sum_in_endpoints (gdouble endpoints[])
+{
+  gint          i, j;
+  gdouble       rowsum[3] = { 0.0, 0.0, 0.0 };
+  gdouble       totsum    = 0.0;
+  const gdouble epsilon   = 1.0e-5;
+
+  for (i = 0; i < 3; i++)
+    {
+      for (j = 0; j < 3; j++)
+        {
+          totsum    += endpoints[3 * i + j];
+          rowsum[i] += endpoints[3 * i + j];
+        }
+    }
+
+  if (fabs (totsum) < epsilon)
+    return FALSE;
+
+  for (i = 0; i < 3; i++)
+    {
+      if (fabs (rowsum[i]) < epsilon)
+        return FALSE;
+    }
+
+  return TRUE;
+}
+
+static void
+load_color_profile (struct Fileinfo *fi, BitmapHead *ih)
+{
+  if (ih->biSize < 108) /* lower than BITMAPV4HEADER, can't have profile */
+    return;
+
+  if (ih->biSize >= 124 && ih->bV4CSType == V4CS_PROFILE_EMBEDDED)
+    {
+      guint8     *profile_buff = NULL;
+      const gsize max_size     = 2UL << 20; /* 2MB, arbitrary limit */
+
+      /* File contains an embedded icc profile */
+
+      if (ih->bV5ProfileSize > max_size || ih->bV5ProfileSize == 0)
+        return;
+
+      if (fseek (fi->file, 14L + ih->bV5ProfileData, SEEK_SET))
+        return;
+
+      profile_buff = g_new (guint8, ih->bV5ProfileSize);
+
+      if (fread (profile_buff, ih->bV5ProfileSize, 1, fi->file) != 1)
+        {
+          /* very likely, the offset in bV5ProfileData contained garbage */
+          g_free (profile_buff);
+          return;
+        }
+
+      fi->profile = gimp_color_profile_new_from_icc_profile (profile_buff,
+                                                             ih->bV5ProfileSize, NULL);
+      g_free (profile_buff);
+    }
+  else if (ih->bV4CSType == V4CS_CALIBRATED_RGB)
+    {
+      cmsToneCurve   *gamma_curve[3];
+      gdouble        *ep;
+      cmsCIExyY       d65_whitepoint = { 0.3127, 0.3290, 1.0 };
+      cmsCIExyYTRIPLE primaries;
+      cmsHPROFILE     cms_profile = NULL;
+
+      /* File should contain gamma and 'endpoint' values.
+       *
+       * Note: MS chose to give LCS_CALIBRATED_RGB the value 0, so we can
+       * expect most BMPs with color space type LCS_CALIBRATED_RGB to be
+       * accidental and actually mean to be LCS_WINDOWS_COLOR_SPACE
+       * (which would be the "probably sRGB / don't care" choice). Therefore,
+       * we silently ignore missing gamma/endpoint values.
+       */
+      if (! check_no_zero_sum_in_endpoints (ih->bV4Endpoints))
+        return;
+
+      ep = ih->bV4Endpoints;
+
+      gamma_curve[0] = cmsBuildGamma (NULL, ih->bV4GammaRed);
+      gamma_curve[1] = cmsBuildGamma (NULL, ih->bV4GammaGreen);
+      gamma_curve[2] = cmsBuildGamma (NULL, ih->bV4GammaBlue);
+
+      /* BMP provides XYZ coordinates of RGB 'endpoints', but no whitepoint.
+       * Use sRGB/D65 whitepoint, instead. (This is what e.g. Firefox does,
+       * and it also agrees with the BmpSuite sample. But there doesn't seem
+       * to be any documentation on this.)
+       */
+
+      primaries.Red.x   = ep[EP_RED_X];
+      primaries.Red.y   = ep[EP_RED_Y];
+      primaries.Red.Y   = ep[EP_RED_Z];
+      primaries.Green.x = ep[EP_GREEN_X];
+      primaries.Green.y = ep[EP_GREEN_Y];
+      primaries.Green.Y = ep[EP_GREEN_Z];
+      primaries.Blue.x  = ep[EP_BLUE_X];
+      primaries.Blue.y  = ep[EP_BLUE_Y];
+      primaries.Blue.Y  = ep[EP_BLUE_Z];
+
+      if (fi->gray) /* use green gamma curve for gray profile */
+        cms_profile = cmsCreateGrayProfile (&d65_whitepoint, gamma_curve[1]);
+      else
+        cms_profile = cmsCreateRGBProfile (&d65_whitepoint, &primaries, gamma_curve);
+
+      cmsFreeToneCurveTriple (gamma_curve);
+      g_warn_if_fail (cms_profile != NULL);
+
+      if (cms_profile != NULL)
+        {
+          /* Customize the profile description to show it is generated
+           * from BMP metadata.
+           */
+          gchar     *profile_desc;
+          cmsMLU    *description_mlu;
+          cmsContext context_id = cmsGetProfileContextID (cms_profile);
+
+          /* Original comment from file-png.c:
+           * Note that I am not trying to localize these strings on purpose
+           * because cmsMLUsetASCII() expects ASCII. Maybe we should move to
+           * using cmsMLUsetWide() if we want the generated profile
+           * descriptions to be localized. XXX
+           */
+          profile_desc = g_strdup_printf ("Generated RGB profile from BMP Endpoint values");
+
+          description_mlu = cmsMLUalloc (context_id, 1);
+
+          cmsMLUsetASCII (description_mlu, "en", "US", profile_desc);
+          cmsWriteTag (cms_profile, cmsSigProfileDescriptionTag, description_mlu);
+
+          fi->profile = gimp_color_profile_new_from_lcms_profile (cms_profile, NULL);
+
+          g_free (profile_desc);
+          cmsMLUfree (description_mlu);
+          cmsCloseProfile (cms_profile);
+        }
+    }
+  else if (ih->bV4CSType == V4CS_PROFILE_LINKED)
+    {
+      ; /* never try to load externally linked profile */
+    }
+  else if (ih->bV4CSType == V4CS_sRGB || ih->bV4CSType == V4CS_WINDOWS_COLOR_SPACE)
+    {
+      ; /* sRGB, do nothing */
+    }
+  else
+    {
+      g_printerr ("Invalid CSType (0x%08lx)", (unsigned long) ih->bV4CSType);
     }
 }
 
@@ -617,6 +772,8 @@ load_image (GFile *gfile, GError **error)
       goto out;
     }
 
+  load_color_profile (&fi, &bitmap_head);
+
   if (fseek (fi.file, bitmap_file_head.bfOffs, SEEK_SET))
     {
       g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
@@ -658,6 +815,9 @@ load_image (GFile *gfile, GError **error)
 out:
   if (fi.file)
     fclose (fi.file);
+
+  if (fi.profile)
+    g_object_unref (fi.profile);
 
   return image;
 }
@@ -805,6 +965,12 @@ ReadImage (struct Fileinfo *fi,
     }
 
   image = gimp_image_new_with_precision (fi->width, fi->height, base_type, precision_type);
+
+  if (fi->profile)
+    {
+      gimp_image_set_color_profile (image, fi->profile);
+      g_clear_object (&fi->profile);
+    }
 
   layer = gimp_layer_new (image, _("Background"),
                           fi->width, fi->height,
