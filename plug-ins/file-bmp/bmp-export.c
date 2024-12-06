@@ -1167,27 +1167,6 @@ write_info_header (FILE *file, BitmapHead *bih, enum BmpInfoVer version)
   return TRUE;
 }
 
-static gboolean
-format_sensitive_callback (GObject *config,
-                           gpointer data)
-{
-  gint value;
-  gint allow_alpha = GPOINTER_TO_INT (data);
-
-  value = gimp_procedure_config_get_choice_id (GIMP_PROCEDURE_CONFIG (config),
-                                               "rgb-format");
-
-  switch (value)
-    {
-    case RGBA_5551:
-    case RGBA_8888:
-      return allow_alpha;
-
-    default:
-      return TRUE;
-    };
-}
-
 static void
 config_notify (GObject          *config,
                const GParamSpec *pspec,
@@ -1229,12 +1208,13 @@ save_dialog (GimpProcedure *procedure,
              gboolean       allow_alpha,
              gboolean       allow_rle)
 {
-  GtkWidget *dialog;
-  GtkWidget *toggle;
-  GtkWidget *vbox;
-  GtkWidget *combo;
-  gboolean   is_format_sensitive;
-  gboolean   run;
+  GtkWidget  *dialog;
+  GtkWidget  *toggle;
+  GtkWidget  *vbox;
+  GtkWidget  *combo;
+  GParamSpec *cspec;
+  GimpChoice *choice;
+  gboolean    run;
 
   dialog = gimp_export_procedure_dialog_new (GIMP_EXPORT_PROCEDURE (procedure),
                                              GIMP_PROCEDURE_CONFIG (config),
@@ -1271,13 +1251,11 @@ save_dialog (GimpProcedure *procedure,
                                             "rgb-format", G_TYPE_NONE);
   g_object_set (combo, "margin", 12, NULL);
 
-  /* Determine if RGB Format combo should be initially sensitive */
-  is_format_sensitive = format_sensitive_callback (config,
-                                                   GINT_TO_POINTER (allow_alpha));
-  gimp_procedure_dialog_set_sensitive (GIMP_PROCEDURE_DIALOG (dialog),
-                                       "rgb-format",
-                                       is_format_sensitive,
-                                       NULL, NULL, FALSE);
+  cspec  = g_object_class_find_property (G_OBJECT_GET_CLASS (config), "rgb-format");
+  choice = gimp_param_spec_choice_get_choice (cspec);
+
+  gimp_choice_set_sensitive (choice, "rgba-5551", allow_alpha);
+  gimp_choice_set_sensitive (choice, "rgba-8888", allow_alpha);
 
   gimp_procedure_dialog_set_sensitive (GIMP_PROCEDURE_DIALOG (dialog),
                                        "rgb-format",
