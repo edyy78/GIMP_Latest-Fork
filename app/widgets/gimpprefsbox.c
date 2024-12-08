@@ -210,7 +210,7 @@ gimp_prefs_box_init (GimpPrefsBox *box)
   /* The main preferences stack */
   private->stack = gtk_stack_new ();
   gtk_stack_set_transition_type (GTK_STACK (private->stack),
-                                 GTK_STACK_TRANSITION_TYPE_SLIDE_UP_DOWN);
+                                 GTK_STACK_TRANSITION_TYPE_NONE);
   gtk_box_pack_start (GTK_BOX (vbox), private->stack, TRUE, TRUE, 0);
   gtk_widget_show (private->stack);
 
