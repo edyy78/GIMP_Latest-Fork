@@ -2020,6 +2020,8 @@ subdir('gimp-data/images/')
 
 # Unit testing
 subdir('libgimp/tests')
+subdir('app/operations/layer-modes-legacy/tests')
+subdir('app/operations/layer-modes/tests')
 
 # Docs
 subdir('docs')
