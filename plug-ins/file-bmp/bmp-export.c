@@ -770,22 +770,32 @@ write_image (FILE          *f,
   gint    cur_progress;
   gint    max_progress;
   gint    padding;
+  gint    alpha;
 
-  xpos = 0;
   rowstride = width * channels;
+
+  channel_val[3] = 0xff; /* default alpha = opaque */
+  alpha          = channels == 4 || channels == 2 ? 1 : 0;
+
+  if (! use_run_length_encoding)
+    {
+      padding = bytes_per_row - ((guint64) width * bpp + 7) / 8;
+    }
+  else
+    {
+      padding = 0; /* RLE does its own pixel-based padding */
+      row     = g_new (guchar, width / (8 / bpp) + 10);
+      chains  = g_new (guchar, width / (8 / bpp) + 10);
+      length  = 0;
+    }
 
   cur_progress = 0;
   max_progress = height;
 
-  /* We'll begin with the 16/24/32 bit Bitmaps, they are easy :-) */
-
-  if (bpp > 8)
+  for (ypos = height - 1; ypos >= 0; ypos--)
     {
-      gint alpha = channels == 4 || channels == 2 ? 1 : 0;
-
-      padding        = bytes_per_row - ((gsize) width * (bpp / 8));
-      channel_val[3] = 0xff; /* default alpha = opaque */
-      for (ypos = height - 1; ypos >= 0; ypos--)
+      /* We'll begin with the 16/24/32 bit Bitmaps, they are easy :-) */
+      if (bpp > 8)
         {
           for (xpos = 0; xpos < width; xpos++)
             {
@@ -820,76 +830,41 @@ write_image (FILE          *f,
                 }
             }
 
-          for (int j = 0; j < padding; j++)
-            {
-              if (EOF == putc (0, f))
-                goto abort;
-            }
-
-          cur_progress++;
-          if ((cur_progress % 5) == 0)
-            gimp_progress_update ((gdouble) cur_progress /
-                                  (gdouble) max_progress);
         }
-    }
-  else
-    {
-      /* now it gets more difficult */
-      if (! use_run_length_encoding || bpp == 1)
+      else /* indexed */
         {
-          /* uncompressed 1,4 and 8 bit */
-
-          padding = bytes_per_row - ((guint64) width * bpp + 7) / 8;
-
-          for (ypos = height - 1; ypos >= 0; ypos--) /* for each row */
+          /* now it gets more difficult */
+          if (! use_run_length_encoding || bpp == 1)
             {
+              /* uncompressed 1,4 and 8 bit */
+
               for (xpos = 0; xpos < width;)  /* for each _byte_ */
                 {
                   v = 0;
                   for (i = 1;
-                       (i <= (8 / bpp)) && (xpos < width);
+                       i <= (8 / bpp) && xpos < width;
                        i++, xpos++)  /* for each pixel */
                     {
                       temp = src + (ypos * rowstride) + (xpos * channels);
-                      if (channels > 1 && *(temp+1) == 0) *temp = 0x0;
-                      v=v | ((guchar) *temp << (8 - (i * bpp)));
+
+                      if (channels > 1 && *(temp + 1) == 0)
+                        *temp = 0x0;
+
+                      v = v | ((guchar) *temp << (8 - (i * bpp)));
                     }
 
                   if (fwrite (&v, 1, 1, f) != 1)
                     goto abort;
                 }
-
-              for (int j = 0; j < padding; j++)
-                {
-                  if (EOF == putc (0, f))
-                    goto abort;
-                }
-
-              xpos = 0;
-
-              cur_progress++;
-              if ((cur_progress % 5) == 0)
-                gimp_progress_update ((gdouble) cur_progress /
-                                        (gdouble) max_progress);
             }
-        }
-      else
-        {
-          /* Save RLE encoded file, quite difficult */
-
-          length = 0;
-
-          row    = g_new (guchar, width / (8 / bpp) + 10);
-          chains = g_new (guchar, width / (8 / bpp) + 10);
-
-          for (ypos = height - 1; ypos >= 0; ypos--)
+          else
             {
-              /* each row separately */
-              j = 0;
+              /* Save RLE encoded file, quite difficult */
 
               /* first copy the pixels to a buffer, making one byte
                * from two 4bit pixels
                */
+              j = 0;
               for (xpos = 0; xpos < width;)
                 {
                   v = 0;
@@ -901,7 +876,10 @@ write_image (FILE          *f,
                       /* for each pixel */
 
                       temp = src + (ypos * rowstride) + (xpos * channels);
-                      if (channels > 1 && *(temp+1) == 0) *temp = 0x0;
+
+                      if (channels > 1 && *(temp + 1) == 0)
+                        *temp = 0x0;
+
                       v = v | ((guchar) * temp << (8 - (i * bpp)));
                     }
 
@@ -1004,47 +982,58 @@ write_image (FILE          *f,
                 goto abort;
               length += 2;
 
-              cur_progress++;
-              if ((cur_progress % 5) == 0)
-                gimp_progress_update ((gdouble) cur_progress /
-                                      (gdouble) max_progress);
-            }
+            } /* RLE */
+        }
 
-          if (fseek (f, -2, SEEK_CUR))                  /* Overwrite last End of row ... */
+      for (int j = 0; j < padding; j++)
+        {
+          if (EOF == putc (0, f))
             goto abort;
-          if (EOF == putc (0, f) || EOF == putc (1, f))   /* ... with End of file */
+        }
+
+      cur_progress++;
+      if ((cur_progress % 5) == 0)
+        gimp_progress_update ((gdouble) cur_progress /
+                              (gdouble) max_progress);
+
+    }
+
+  if (use_run_length_encoding)
+    {
+      if (fseek (f, -2, SEEK_CUR))                  /* Overwrite last End of row ... */
+        goto abort;
+      if (EOF == putc (0, f) || EOF == putc (1, f)) /* ... with End of file */
+        goto abort;
+
+      if (length <= UINT32_MAX)
+        {
+          /* Write length of image data */
+          if (fseek (f, 0x22, SEEK_SET))
+            goto abort;
+          if (! write_u32_le (f, length))
             goto abort;
 
-          if (length <= UINT32_MAX)
-            {
-              /* Write length of image data */
-              if (fseek (f, 0x22, SEEK_SET))
-                goto abort;
-              if (! write_u32_le (f, length))
-                goto abort;
-
-              /* Write length of file */
-              if (fseek (f, 0x02, SEEK_SET))
-                goto abort;
-              if (! write_u32_le (f, length + header_size))
-                goto abort;
-            }
-          else
-            {
-              /* RLE data is too big to record the size in biSizeImage.
-               * According to spec, biSizeImage would have to be set for RLE
-               * bmps. In reality, it is neither necessary for interpreting
-               * the file, nor do readers seem to mind when field is not set,
-               * so we just leave it at 0.
-               *
-               * TODO: Issue a warning when this happens.
-               */
-            }
-
-          g_free (chains);
-          g_free (row);
+          /* Write length of file */
+          if (fseek (f, 0x02, SEEK_SET))
+            goto abort;
+          if (! write_u32_le (f, length + header_size))
+            goto abort;
+        }
+      else
+        {
+          /* RLE data is too big to record the size in biSizeImage.
+           * According to spec, biSizeImage would have to be set for RLE
+           * bmps. In reality, it is neither necessary for interpreting
+           * the file, nor do readers seem to mind when field is not set,
+           * so we just leave it at 0.
+           *
+           * TODO: Issue a warning when this happens.
+           */
         }
     }
+
+  g_free (chains);
+  g_free (row);
 
   gimp_progress_update (1.0);
   return TRUE;
