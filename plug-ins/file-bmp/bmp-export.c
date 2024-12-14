@@ -134,7 +134,8 @@ static const enum BmpInfoVer comp_min_header_for_colorspace = BMPINFO_V4;
 
 
 static gboolean write_image                  (FILE           *f,
-                                              guchar         *src,
+                                              GimpDrawable   *drawable,
+                                              const Babl     *format,
                                               gint            width,
                                               gint            height,
                                               gboolean        use_run_length_encoding,
@@ -251,8 +252,6 @@ export_image (GFile         *file,
   gsize             bytes_per_row;
   BitmapChannel     cmasks[4];
   gint              ncolors = 0;
-  guchar           *pixels = NULL;
-  GeglBuffer       *buffer;
   const Babl       *format;
   GimpImageType     drawable_type;
   gint              width, height;
@@ -498,17 +497,6 @@ export_image (GFile         *file,
         info_version = MAX (BMPINFO_V4, info_version);
     }
 
-  /* fetch the image */
-  pixels = g_new (guchar, (gsize) width * height * channels);
-  buffer = gimp_drawable_get_buffer (drawable);
-
-  gegl_buffer_get (buffer,
-                   GEGL_RECTANGLE (0, 0, width, height), 1.0,
-                   format, pixels,
-                   GEGL_AUTO_ROWSTRIDE, GEGL_ABYSS_NONE);
-
-  g_object_unref (buffer);
-
   /* We should consider rejecting any width > (INT32_MAX - 31) / BitsPerPixel,
    * as the resulting BMP will likely cause integer overflow in other
    * readers.(Currently, GIMP's limit is way lower, anyway)
@@ -569,7 +557,8 @@ export_image (GFile         *file,
     goto abort_with_standard_message;
 
   if (! write_image (outfile,
-                     pixels, width, height,
+                     drawable, format,
+                     width, height,
                      use_rle,
                      channels, bitmap_head.biBitCnt, bytes_per_row,
                      ncolors, cmasks,
@@ -577,7 +566,6 @@ export_image (GFile         *file,
     goto abort_with_standard_message;
 
   fclose (outfile);
-  g_free (pixels);
   g_free (cmap);
 
   return GIMP_PDB_SUCCESS;
@@ -591,7 +579,6 @@ abort_with_standard_message:
 abort:
   if (outfile)
     fclose (outfile);
-  g_free (pixels);
   g_free (cmap);
 
   return ret;
@@ -747,7 +734,8 @@ info_header_size (enum BmpInfoVer version)
 
 static gboolean
 write_image (FILE          *f,
-             guchar        *src,
+             GimpDrawable  *drawable,
+             const Babl    *format,
              gint           width,
              gint           height,
              gboolean       use_run_length_encoding,
@@ -758,19 +746,31 @@ write_image (FILE          *f,
              BitmapChannel *cmasks,
              gint           header_size)
 {
-  guchar *temp, v;
-  guchar *row    = NULL;
-  guchar *chains = NULL;
-  gint    xpos, ypos, i, j, rowstride;
-  guint32 px32;
-  guint64 length;
-  gint    breite, k;
-  guchar  n;
-  gint    channel_val[4];
-  gint    cur_progress;
-  gint    max_progress;
-  gint    padding;
-  gint    alpha;
+  guchar     *temp, *src = NULL, v;
+  guchar     *row    = NULL;
+  guchar     *chains = NULL;
+  gint        xpos, ypos, i, j, rowstride;
+  guint32     px32;
+  guint64     length;
+  gint        breite, k;
+  guchar      n;
+  gint        channel_val[4];
+  gint        cur_progress;
+  gint        max_progress;
+  gint        padding;
+  gint        alpha;
+  GeglBuffer *buffer;
+
+  /* fetch the image */
+  src    = g_new (guchar, (gsize) width * height * channels);
+  buffer = gimp_drawable_get_buffer (drawable);
+
+  gegl_buffer_get (buffer,
+                   GEGL_RECTANGLE (0, 0, width, height), 1.0,
+                   format, src,
+                   GEGL_AUTO_ROWSTRIDE, GEGL_ABYSS_NONE);
+
+  g_object_unref (buffer);
 
   rowstride = width * channels;
 
@@ -1034,6 +1034,7 @@ write_image (FILE          *f,
 
   g_free (chains);
   g_free (row);
+  g_free (src);
 
   gimp_progress_update (1.0);
   return TRUE;
@@ -1041,6 +1042,7 @@ write_image (FILE          *f,
 abort:
   g_free (chains);
   g_free (row);
+  g_free (src);
 
   return FALSE;
 }
