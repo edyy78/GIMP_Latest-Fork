@@ -765,9 +765,10 @@ write_image (FILE          *f,
 
   tile_height = MIN (gimp_tile_height (), height);
 
-  /* fetch the image */
-  src    = g_new (guchar, (gsize) width * tile_height * channels);
-  buffer = gimp_drawable_get_buffer (drawable);
+  src = g_new (guchar, (gsize) width * tile_height * channels);
+
+  /* move the following into loop for now, see GEGL#400 */
+  /* buffer = gimp_drawable_get_buffer (drawable); */
 
   rowstride = width * channels;
 
@@ -794,10 +795,18 @@ write_image (FILE          *f,
       if (tile_n == 0)
         {
           tile_n = MIN (ypos + 1, tile_height);
+
+          /* getting and unrefing the buffer here each time (vs doing it
+           * outside the loop and only calling gegl_buffer_get() here) avoids
+           * memory exhaustion for very large images, see GEGL#400
+           */
+          buffer = gimp_drawable_get_buffer (drawable);
           gegl_buffer_get (buffer,
                            GEGL_RECTANGLE (0, ypos + 1 - tile_n, width, tile_n),
                            1.0, format, src,
                            GEGL_AUTO_ROWSTRIDE, GEGL_ABYSS_NONE);
+          g_object_unref (buffer);
+          buffer = NULL;
         }
 
       line_offset = --tile_n * rowstride;
@@ -1007,7 +1016,7 @@ write_image (FILE          *f,
 
     }
 
-  g_object_unref (buffer);
+  /* g_object_unref (buffer); */
 
   if (use_run_length_encoding)
     {
