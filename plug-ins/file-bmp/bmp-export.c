@@ -759,18 +759,15 @@ write_image (FILE          *f,
   gint        max_progress;
   gint        padding;
   gint        alpha;
-  GeglBuffer *buffer;
+  GeglBuffer *buffer = NULL;
+  gint        tile_height, tile_n = 0;
+  gsize       line_offset;
+
+  tile_height = MIN (gimp_tile_height (), height);
 
   /* fetch the image */
-  src    = g_new (guchar, (gsize) width * height * channels);
+  src    = g_new (guchar, (gsize) width * tile_height * channels);
   buffer = gimp_drawable_get_buffer (drawable);
-
-  gegl_buffer_get (buffer,
-                   GEGL_RECTANGLE (0, 0, width, height), 1.0,
-                   format, src,
-                   GEGL_AUTO_ROWSTRIDE, GEGL_ABYSS_NONE);
-
-  g_object_unref (buffer);
 
   rowstride = width * channels;
 
@@ -794,12 +791,24 @@ write_image (FILE          *f,
 
   for (ypos = height - 1; ypos >= 0; ypos--)
     {
+      if (tile_n == 0)
+        {
+          tile_n = MIN (ypos + 1, tile_height);
+          gegl_buffer_get (buffer,
+                           GEGL_RECTANGLE (0, ypos + 1 - tile_n, width, tile_n),
+                           1.0, format, src,
+                           GEGL_AUTO_ROWSTRIDE, GEGL_ABYSS_NONE);
+        }
+
+      line_offset = --tile_n * rowstride;
+
       /* We'll begin with the 16/24/32 bit Bitmaps, they are easy :-) */
       if (bpp > 8)
         {
           for (xpos = 0; xpos < width; xpos++)
             {
-              temp = src + (ypos * rowstride) + (xpos * channels);
+              temp = src + line_offset + xpos * channels;
+
               channel_val[0] = *temp++;
               if (channels > 2)
                 {
@@ -845,7 +854,7 @@ write_image (FILE          *f,
                        i <= (8 / bpp) && xpos < width;
                        i++, xpos++)  /* for each pixel */
                     {
-                      temp = src + (ypos * rowstride) + (xpos * channels);
+                      temp = src + line_offset + xpos * channels;
 
                       if (channels > 1 && *(temp + 1) == 0)
                         *temp = 0x0;
@@ -875,7 +884,7 @@ write_image (FILE          *f,
                     {
                       /* for each pixel */
 
-                      temp = src + (ypos * rowstride) + (xpos * channels);
+                      temp = src + line_offset + (xpos * channels);
 
                       if (channels > 1 && *(temp + 1) == 0)
                         *temp = 0x0;
@@ -998,6 +1007,8 @@ write_image (FILE          *f,
 
     }
 
+  g_object_unref (buffer);
+
   if (use_run_length_encoding)
     {
       if (fseek (f, -2, SEEK_CUR))                  /* Overwrite last End of row ... */
@@ -1040,6 +1051,8 @@ write_image (FILE          *f,
   return TRUE;
 
 abort:
+  if (buffer)
+    g_object_unref (buffer);
   g_free (chains);
   g_free (row);
   g_free (src);
