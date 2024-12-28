@@ -749,7 +749,9 @@ write_image (FILE          *f,
   guchar     *temp, *src = NULL, v;
   guchar     *row    = NULL;
   guchar     *chains = NULL;
-  gint        xpos, ypos, i, j, rowstride;
+  gint        xpos, ypos, i, j;
+  gsize       rowstride;
+  gint        bytesperchannel = 1;
   guint32     px32;
   guint64     length;
   gint        breite, k;
@@ -770,7 +772,7 @@ write_image (FILE          *f,
   /* move the following into loop for now, see GEGL#400 */
   /* buffer = gimp_drawable_get_buffer (drawable); */
 
-  rowstride = width * channels;
+  rowstride = (gsize) width * channels * bytesperchannel;
 
   channel_val[3] = 0xff; /* default alpha = opaque */
   alpha          = channels == 4 || channels == 2 ? 1 : 0;
@@ -809,7 +811,7 @@ write_image (FILE          *f,
           buffer = NULL;
         }
 
-      line_offset = --tile_n * rowstride;
+      line_offset = rowstride * --tile_n;
 
       /* We'll begin with the 16/24/32 bit Bitmaps, they are easy :-) */
       if (bpp > 8)
