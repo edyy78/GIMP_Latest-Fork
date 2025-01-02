@@ -33,6 +33,10 @@
 # GitLab is quite sensitive about the "if" order so we organize them
 # in a way to avoid as much as possible hardcoding and leaks in "rules"
 workflow:
+  rules:
+    - if: $CI_MERGE_REQUEST_ID
+      when: never
+    - when: always
   auto_cancel:
     on_new_commit: interruptible
 
