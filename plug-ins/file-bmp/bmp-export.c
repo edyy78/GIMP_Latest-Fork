@@ -191,6 +191,9 @@ static gboolean write_rgb                    (const guchar    *src,
 static gboolean write_indexed                (const guchar    *src,
                                               struct Fileinfo *fi);
 
+static gboolean write_rle                    (const guchar    *src,
+                                              struct Fileinfo *fi);
+
 static gboolean write_u16_le                 (FILE            *file,
                                               guint16          u16);
 
@@ -749,11 +752,9 @@ write_image (struct Fileinfo *fi,
              const Babl      *format,
              gint             frontmatter_size)
 {
-  guchar     *temp, *src = NULL, v;
-  gint        xpos, ypos, i, j;
+  guchar     *src = NULL;
+  gint        ypos;
   gsize       rowstride;
-  gint        breite, k;
-  guchar      n;
   gint        cur_progress;
   gint        max_progress;
   gint        padding;
@@ -786,7 +787,6 @@ write_image (struct Fileinfo *fi,
       padding    = 0; /* RLE does its own pixel-based padding */
       fi->row    = g_new (guchar, fi->width / (8 / fi->bpp) + 10);
       fi->chains = g_new (guchar, fi->width / (8 / fi->bpp) + 10);
-      fi->length = 0;
     }
 
   cur_progress = 0;
@@ -827,130 +827,9 @@ write_image (struct Fileinfo *fi,
             }
           else
             {
-              /* Save RLE encoded file, quite difficult */
-
-              /* first copy the pixels to a buffer, making one byte
-               * from two 4bit pixels
-               */
-              j = 0;
-              for (xpos = 0; xpos < fi->width;)
-                {
-                  v = 0;
-
-                  for (i = 1;
-                       (i <= (8 / fi->bpp)) && (xpos < fi->width);
-                       i++, xpos++)
-                    {
-                      /* for each pixel */
-
-                      temp = src + line_offset + (xpos * fi->channels);
-
-                      if (fi->channels > 1 && *(temp + 1) == 0)
-                        *temp = 0x0;
-
-                      v = v | ((guchar) *temp << (8 - (i * fi->bpp)));
-                    }
-
-                  fi->row[j++] = v;
-                }
-
-              breite = fi->width / (8 / fi->bpp);
-              if (fi->width % (8 / fi->bpp))
-                breite++;
-
-              /* then check for strings of equal bytes */
-              for (i = 0; i < breite; i += j)
-                {
-                  j = 0;
-
-                  while ((i + j < breite) &&
-                         (j < (255 / (8 / fi->bpp))) &&
-                         (fi->row[i + j] == fi->row[i]))
-                    j++;
-
-                  fi->chains[i] = j;
-                }
-
-              /* then write the strings and the other pixels to the file */
-              for (i = 0; i < breite;)
-                {
-                  if (fi->chains[i] < 3)
-                    {
-                      /* strings of different pixels ... */
-
-                      j = 0;
-
-                      while ((i + j < breite) &&
-                             (j < (255 / (8 / fi->bpp))) &&
-                             (fi->chains[i + j] < 3))
-                        j += fi->chains[i + j];
-
-                      /* this can only happen if j jumps over the end
-                       * with a 2 in chains[i+j]
-                       */
-                      if (j > (255 / (8 / fi->bpp)))
-                        j -= 2;
-
-                      /* 00 01 and 00 02 are reserved */
-                      if (j > 2)
-                        {
-                          n = j * (8 / fi->bpp);
-                          if (n + i * (8 / fi->bpp) > fi->width)
-                            n--;
-
-                          if (EOF == putc (0, fi->file) || EOF == putc (n, fi->file))
-                            goto abort;
-
-                          fi->length += 2;
-
-                          if (fwrite (&fi->row[i], 1, j, fi->file) != j)
-                            goto abort;
-
-                          fi->length += j;
-                          if ((j) % 2)
-                            {
-                              if (EOF == putc (0, fi->file))
-                                goto abort;
-                              fi->length++;
-                            }
-                        }
-                      else
-                        {
-                          for (k = i; k < i + j; k++)
-                            {
-                              n = (8 / fi->bpp);
-                              if (n + i * (8 / fi->bpp) > fi->width)
-                                n--;
-
-                              if (EOF == putc (n, fi->file) || EOF == putc (fi->row[k], fi->file))
-                                goto abort;
-                              fi->length += 2;
-                            }
-                        }
-
-                      i += j;
-                    }
-                  else
-                    {
-                      /* strings of equal pixels */
-
-                      n = fi->chains[i] * (8 / fi->bpp);
-                      if (n + i * (8 / fi->bpp) > fi->width)
-                        n--;
-
-                      if (EOF == putc (n, fi->file) || EOF == putc (fi->row[i], fi->file))
-                        goto abort;
-
-                      i += fi->chains[i];
-                      fi->length += 2;
-                    }
-                }
-
-              if (EOF == putc (0, fi->file) || EOF == putc (0, fi->file)) /* End of row */
+              if (! write_rle (src + line_offset, fi))
                 goto abort;
-              fi->length += 2;
-
-            } /* RLE */
+            }
         }
 
       for (int j = 0; j < padding; j++)
@@ -1118,6 +997,135 @@ write_indexed (const guchar *src, struct Fileinfo *fi)
           pxi  = 0;
         }
     }
+  return TRUE;
+}
+
+static gboolean
+write_rle (const guchar *src, struct Fileinfo *fi)
+{
+  gint xpos, i, j, k, n, val, ndup;
+  gint byte = 0, pxi = 0;
+  gint pxperbyte = 8 / fi->bpp;
+  gint bytewidth; /* width in bytes of packed row */
+
+  /* first copy the pixels to a buffer, making one byte
+   * from two 4bit pixels
+   */
+  for (xpos = 0, i = 0; xpos < fi->width; xpos++)
+    {
+      val = *src++;
+
+      if (fi->alpha > 0 && *src++ == 0)
+        val = 0;
+
+      byte |= val << (8 - ++pxi * fi->bpp);
+
+      if (pxi == pxperbyte || xpos == fi->width - 1)
+        {
+          fi->row[i++] = byte;
+
+          byte = 0;
+          pxi  = 0;
+        }
+    }
+
+  bytewidth = (fi->width + pxperbyte - 1) / pxperbyte;
+
+  /* then check for strings of equal bytes */
+  for (i = 0; i < bytewidth; i += ndup)
+    {
+      ndup = 0;
+
+      while (i + ndup < bytewidth   &&
+             ndup < 255 / pxperbyte &&
+             fi->row[i + ndup] == fi->row[i])
+        {
+          ndup++;
+        }
+
+      fi->chains[i] = ndup;
+    }
+
+  /* then write the strings and the other pixels to the file */
+  for (i = 0; i < bytewidth;)
+    {
+      if (fi->chains[i] < 3)
+        {
+          /* strings of different pixels ... */
+
+          j = 0;
+
+          while (i + j < bytewidth   &&
+                 j < 255 / pxperbyte &&
+                 fi->chains[i + j] < 3)
+            {
+              j += fi->chains[i + j];
+            }
+
+          /* this can only happen if j jumps over the end
+           * with a 2 in chains[i+j]
+           */
+          if (j > 255 / pxperbyte)
+            j -= 2;
+
+          /* 00 01 and 00 02 are reserved */
+          if (j > 2)
+            {
+              n = j * pxperbyte;
+              if (n + i * pxperbyte > fi->width)
+                n--;
+
+              if (EOF == putc (0, fi->file) || EOF == putc (n, fi->file))
+                return FALSE;
+
+              fi->length += 2;
+
+              if (fwrite (&fi->row[i], 1, j, fi->file) != j)
+                return FALSE;
+
+              fi->length += j;
+              if (j % 2)
+                {
+                  if (EOF == putc (0, fi->file))
+                    return FALSE;
+                  fi->length++;
+                }
+            }
+          else
+            {
+              for (k = i; k < i + j; k++)
+                {
+                  n = pxperbyte;
+                  if (n + i * pxperbyte > fi->width)
+                    n--;
+
+                  if (EOF == putc (n, fi->file) || EOF == putc (fi->row[k], fi->file))
+                    return FALSE;
+                  fi->length += 2;
+                }
+            }
+
+          i += j;
+        }
+      else
+        {
+          /* strings of equal pixels */
+
+          n = fi->chains[i] * pxperbyte;
+          if (n + i * pxperbyte > fi->width)
+            n--;
+
+          if (EOF == putc (n, fi->file) || EOF == putc (fi->row[i], fi->file))
+            return FALSE;
+
+          i += fi->chains[i];
+          fi->length += 2;
+        }
+    }
+
+  if (EOF == putc (0, fi->file) || EOF == putc (0, fi->file)) /* End of row */
+    return FALSE;
+  fi->length += 2;
   return TRUE;
 }
 
