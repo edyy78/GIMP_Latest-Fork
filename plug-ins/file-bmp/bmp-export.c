@@ -185,6 +185,9 @@ static void     set_info_resolution          (BitmapHead      *bih,
 
 static gint     info_header_size             (enum BmpInfoVer  version);
 
+static gboolean write_rgb                    (const guchar    *src,
+                                              struct Fileinfo *fi);
+
 static gboolean write_u16_le                 (FILE            *file,
                                               guint16          u16);
 
@@ -746,10 +749,8 @@ write_image (struct Fileinfo *fi,
   guchar     *temp, *src = NULL, v;
   gint        xpos, ypos, i, j;
   gsize       rowstride;
-  guint32     px32;
   gint        breite, k;
   guchar      n;
-  gint        channel_val[4];
   gint        cur_progress;
   gint        max_progress;
   gint        padding;
@@ -771,8 +772,7 @@ write_image (struct Fileinfo *fi,
 
   rowstride = (gsize) fi->width * fi->channels * fi->bytesperchannel;
 
-  channel_val[3] = 0xff; /* default alpha = opaque */
-  fi->alpha      = fi->channels == 4 || fi->channels == 2 ? 1 : 0;
+  fi->alpha = fi->channels == 4 || fi->channels == 2 ? 1 : 0;
 
   if (! fi->use_rle)
     {
@@ -810,43 +810,10 @@ write_image (struct Fileinfo *fi,
 
       line_offset = rowstride * --tile_n;
 
-      /* We'll begin with the 16/24/32 bit Bitmaps, they are easy :-) */
       if (fi->bpp > 8)
         {
-          for (xpos = 0; xpos < fi->width; xpos++)
-            {
-              temp = src + line_offset + xpos * fi->channels;
-
-              channel_val[0] = *temp++;
-              if (fi->channels > 2)
-                {
-                  /* RGB */
-                  channel_val[1] = *temp++;
-                  channel_val[2] = *temp++;
-                }
-              else
-                {
-                  /* fake grayscale */
-                  channel_val[1] = channel_val[2] = channel_val[0];
-                }
-
-              if (fi->alpha)
-                channel_val[3] = *temp++;
-
-              px32 = 0;
-              for (gint c = 0; c < 4; c++)
-                {
-                  px32 |= (guint32) (channel_val[c] / 255. * fi->cmasks[c].max_value + 0.5)
-                          << fi->cmasks[c].shiftin;
-                }
-
-              for (j = 0; j < fi->bpp; j += 8)
-                {
-                  if (EOF == putc ((px32 >> j) & 0xff, fi->file))
-                    goto abort;
-                }
-            }
-
+          if (! write_rgb (src + line_offset, fi))
+            goto abort;
         }
       else /* indexed */
         {
@@ -1070,6 +1037,77 @@ abort:
   g_free (src);
 
   return FALSE;
+}
+
+static guint32
+int32_from_bytes (const guchar *src, gint bytes)
+{
+  guint32 ret;
+
+  switch (bytes)
+    {
+    case 1:
+      ret = *src;
+      break;
+    case 2:
+      ret = *(guint16 *) src;
+      break;
+    case 4:
+      ret = *(guint32 *) src;
+      break;
+    default:
+      ret = 0;
+      g_assert_not_reached ();
+    }
+  return ret;
+}
+
+static gboolean
+write_rgb (const guchar *src, struct Fileinfo *fi)
+{
+  gint    xpos;
+  guint32 channel_val[4], px32;
+
+  channel_val[3] = 0xff; /* default alpha = opaque */
+
+  for (xpos = 0; xpos < fi->width; xpos++)
+    {
+      for (gint c = 0; c < fi->channels - fi->alpha; c++)
+        {
+          channel_val[c] = int32_from_bytes (src, fi->bytesperchannel);
+          src += fi->bytesperchannel;
+        }
+
+      if (fi->channels < 3)
+        {
+          /* fake grayscale */
+          channel_val[1] = channel_val[2] = channel_val[0];
+        }
+
+      if (fi->alpha > 0)
+        {
+          channel_val[3] = int32_from_bytes (src, fi->bytesperchannel);
+          src += fi->bytesperchannel;
+        }
+
+      px32 = 0;
+      for (gint c = 0; c < 4; c++)
+        {
+          gdouble d;
+
+          d = (gdouble) channel_val[c] / ((1 << (fi->bytesperchannel * 8)) - 1);
+          d *= fi->cmasks[c].max_value;
+
+          px32 |= (guint32) (d + 0.5) << fi->cmasks[c].shiftin;
+        }
+
+      for (gint i = 0; i < fi->bpp; i += 8)
+        {
+          if (EOF == putc ((px32 >> i) & 0xff, fi->file))
+            return FALSE;
+        }
+    }
+  return TRUE;
 }
 
 static gboolean
