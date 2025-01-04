@@ -149,7 +149,7 @@ struct Fileinfo
   gsize         bytes_per_row;
   FILE         *file;
   /* RLE state */
-  guint64       length;
+  guint64       img_size;
   guchar       *row;
   guchar       *chains;
 };
@@ -855,20 +855,20 @@ write_image (struct Fileinfo *fi,
       if (EOF == putc (0, fi->file) || EOF == putc (1, fi->file))
         goto abort;
 
-      if (fi->length <= UINT32_MAX)
+      if (fi->img_size <= UINT32_MAX)
         {
-          /* Write length of image data */
+          /* Write size of image data */
           if (fseek (fi->file, 0x22, SEEK_SET))
             goto abort;
-          if (! write_u32_le (fi->file, fi->length))
+          if (! write_u32_le (fi->file, fi->img_size))
             goto abort;
 
-          if (fi->length <= UINT32_MAX - frontmatter_size)
+          if (fi->img_size <= UINT32_MAX - frontmatter_size)
             {
-              /* Write length of file */
+              /* Write size of file */
               if (fseek (fi->file, 0x02, SEEK_SET))
                 goto abort;
-              if (! write_u32_le (fi->file, fi->length + frontmatter_size))
+              if (! write_u32_le (fi->file, fi->img_size + frontmatter_size))
                 goto abort;
             }
         }
@@ -1003,7 +1003,7 @@ write_indexed (const guchar *src, struct Fileinfo *fi)
 static gboolean
 write_rle (const guchar *src, struct Fileinfo *fi)
 {
-  gint xpos, i, j, k, n, val, ndup;
+  gint xpos, i, n, val, byte_run, ndup;
   gint byte = 0, pxi = 0;
   gint pxperbyte = 8 / fi->bpp;
   gint bytewidth; /* width in bytes of packed row */
@@ -1031,7 +1031,11 @@ write_rle (const guchar *src, struct Fileinfo *fi)
 
   bytewidth = (fi->width + pxperbyte - 1) / pxperbyte;
 
-  /* then check for strings of equal bytes */
+  /* then check for runs of identical bytes/pixels
+   *
+   * Note: chains[] is used sparsely. Only the indices corresponding to a
+   * start of a run of repeated bytes/pixels will be used.
+   */
   for (i = 0; i < bytewidth; i += ndup)
     {
       ndup = 0;
@@ -1046,86 +1050,67 @@ write_rle (const guchar *src, struct Fileinfo *fi)
       fi->chains[i] = ndup;
     }
 
-  /* then write the strings and the other pixels to the file */
-  for (i = 0; i < bytewidth;)
+  /* then write the literal runs and repeated pixels to the file */
+  for (i = 0; i < bytewidth; i += byte_run)
     {
       if (fi->chains[i] < 3)
         {
-          /* strings of different pixels ... */
+          /* run of literal pixels */
 
-          j = 0;
+          byte_run = 0;
 
-          while (i + j < bytewidth   &&
-                 j < 255 / pxperbyte &&
-                 fi->chains[i + j] < 3)
+          while (i + byte_run < bytewidth &&
+                 byte_run + fi->chains[i + byte_run] < 256 / pxperbyte &&
+                 fi->chains[i + byte_run] < 3)
             {
-              j += fi->chains[i + j];
+              byte_run += fi->chains[i + byte_run];
             }
 
-          /* this can only happen if j jumps over the end
-           * with a 2 in chains[i+j]
-           */
-          if (j > 255 / pxperbyte)
-            j -= 2;
-
           /* 00 01 and 00 02 are reserved */
-          if (j > 2)
+          if (byte_run > 2)
             {
-              n = j * pxperbyte;
+              n = byte_run * pxperbyte;
               if (n + i * pxperbyte > fi->width)
                 n--;
 
               if (EOF == putc (0, fi->file) || EOF == putc (n, fi->file))
                 return FALSE;
+              fi->img_size += 2;
 
-              fi->length += 2;
-
-              if (fwrite (&fi->row[i], 1, j, fi->file) != j)
+              if (fwrite (&fi->row[i], 1, byte_run, fi->file) != byte_run)
                 return FALSE;
+              fi->img_size += byte_run;
 
-              fi->length += j;
-              if (j % 2)
+              if (byte_run % 2)
                 {
                   if (EOF == putc (0, fi->file))
                     return FALSE;
-                  fi->length++;
+                  fi->img_size++;
                 }
-            }
-          else
-            {
-              for (k = i; k < i + j; k++)
-                {
-                  n = pxperbyte;
-                  if (n + i * pxperbyte > fi->width)
-                    n--;
 
-                  if (EOF == putc (n, fi->file) || EOF == putc (fi->row[k], fi->file))
-                    return FALSE;
-                  fi->length += 2;
-                }
+              continue;
             }
 
-          i += j;
+          /* chain too short for literal pixels, fall through to repeated pixels */
         }
-      else
-        {
-          /* strings of equal pixels */
 
-          n = fi->chains[i] * pxperbyte;
-          if (n + i * pxperbyte > fi->width)
-            n--;
+      /* run of repeated pixels */
 
-          if (EOF == putc (n, fi->file) || EOF == putc (fi->row[i], fi->file))
-            return FALSE;
+      byte_run = fi->chains[i];
 
-          i += fi->chains[i];
-          fi->length += 2;
-        }
+      n = byte_run * pxperbyte;
+      if (n + i * pxperbyte > fi->width)
+        n--;
+
+      if (EOF == putc (n, fi->file) || EOF == putc (fi->row[i], fi->file))
+        return FALSE;
+      fi->img_size += 2;
     }
 
   if (EOF == putc (0, fi->file) || EOF == putc (0, fi->file)) /* End of row */
     return FALSE;
-  fi->length += 2;
+  fi->img_size += 2;
+
   return TRUE;
 }
 
