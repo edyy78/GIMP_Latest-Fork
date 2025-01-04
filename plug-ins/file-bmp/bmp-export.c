@@ -188,6 +188,9 @@ static gint     info_header_size             (enum BmpInfoVer  version);
 static gboolean write_rgb                    (const guchar    *src,
                                               struct Fileinfo *fi);
 
+static gboolean write_indexed                (const guchar    *src,
+                                              struct Fileinfo *fi);
+
 static gboolean write_u16_le                 (FILE            *file,
                                               guint16          u16);
 
@@ -817,29 +820,10 @@ write_image (struct Fileinfo *fi,
         }
       else /* indexed */
         {
-          /* now it gets more difficult */
-          if (! fi->use_rle || fi->bpp == 1)
+          if (! fi->use_rle)
             {
-              /* uncompressed 1,4 and 8 bit */
-
-              for (xpos = 0; xpos < fi->width;) /* for each _byte_ */
-                {
-                  v = 0;
-                  for (i = 1;
-                       i <= (8 / fi->bpp) && xpos < fi->width;
-                       i++, xpos++) /* for each pixel */
-                    {
-                      temp = src + line_offset + xpos * fi->channels;
-
-                      if (fi->channels > 1 && *(temp + 1) == 0)
-                        *temp = 0x0;
-
-                      v = v | ((guchar) *temp << (8 - (i * fi->bpp)));
-                    }
-
-                  if (fwrite (&v, 1, 1, fi->file) != 1)
-                    goto abort;
-                }
+              if (! write_indexed (src + line_offset, fi))
+                goto abort;
             }
           else
             {
@@ -1105,6 +1089,33 @@ write_rgb (const guchar *src, struct Fileinfo *fi)
         {
           if (EOF == putc ((px32 >> i) & 0xff, fi->file))
             return FALSE;
+        }
+    }
+  return TRUE;
+}
+
+static gboolean
+write_indexed (const guchar *src, struct Fileinfo *fi)
+{
+  gint xpos, val;
+  gint byte = 0, pxi = 0;
+  gint pxperbyte = 8 / fi->bpp;
+
+  for (xpos = 0; xpos < fi->width; xpos++)
+    {
+      val = *src++;
+
+      if (fi->alpha > 0 && *src++ == 0)
+        val = 0;
+
+      byte |= val << (8 - ++pxi * fi->bpp);
+
+      if (pxi == pxperbyte || xpos == fi->width - 1)
+        {
+          if (EOF == putc (byte, fi->file))
+            return FALSE;
+          byte = 0;
+          pxi  = 0;
         }
     }
   return TRUE;
