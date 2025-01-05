@@ -242,26 +242,29 @@ export_image (GFile         *file,
               GObject       *config,
               GError       **error)
 {
-  FILE           *outfile = NULL;
-  BitmapFileHead  bitmap_file_head;
-  BitmapHead      bitmap_head;
-  guchar         *cmap = NULL;
-  gint            channels;
-  gsize           bytes_per_row;
-  BitmapChannel   cmasks[4];
-  gint            ncolors = 0;
-  guchar         *pixels = NULL;
-  GeglBuffer     *buffer;
-  const Babl     *format;
-  GimpImageType   drawable_type;
-  gint            width, height;
-  gint            i;
-  gboolean        use_rle;
-  gboolean        write_color_space;
-  RGBMode         rgb_format   = RGB_888;
-  enum BmpInfoVer info_version = BMPINFO_V1;
-  gint            frontmatter_size;
-  gboolean        indexed_bmp = FALSE, allow_alpha = FALSE, allow_rle = FALSE;
+  GimpPDBStatusType ret = GIMP_PDB_EXECUTION_ERROR;
+  FILE             *outfile = NULL;
+  BitmapFileHead    bitmap_file_head;
+  BitmapHead        bitmap_head;
+  guchar           *cmap = NULL;
+  gint              channels;
+  gsize             bytes_per_row;
+  BitmapChannel     cmasks[4];
+  gint              ncolors = 0;
+  guchar           *pixels = NULL;
+  GeglBuffer       *buffer;
+  const Babl       *format;
+  GimpImageType     drawable_type;
+  gint              width, height;
+  gint              i;
+  gboolean          use_rle;
+  gboolean          write_color_space;
+  RGBMode           rgb_format   = RGB_888;
+  enum BmpInfoVer   info_version = BMPINFO_V1;
+  gint              frontmatter_size;
+  gboolean          indexed_bmp = FALSE;
+  gboolean          allow_alpha = FALSE;
+  gboolean          allow_rle   = FALSE;
 
   memset (&bitmap_file_head, 0, sizeof bitmap_file_head);
   memset (&bitmap_head, 0, sizeof bitmap_head);
@@ -316,7 +319,10 @@ export_image (GFile         *file,
           ! warning_dialog (_("Cannot export indexed image with "
                               "transparency in BMP file format."),
                             _("Alpha channel will be ignored.")))
-        return GIMP_PDB_CANCEL;
+        {
+          ret = GIMP_PDB_CANCEL;
+          goto abort;
+        }
 
      /* fallthrough */
 
@@ -347,7 +353,10 @@ export_image (GFile         *file,
           ! warning_dialog (_("Cannot export indexed image with "
                               "transparency in BMP file format."),
                             _("Alpha channel will be ignored.")))
-        return GIMP_PDB_CANCEL;
+        {
+          ret = GIMP_PDB_CANCEL;
+          goto abort;
+        }
 
      /* fallthrough */
 
@@ -381,7 +390,10 @@ export_image (GFile         *file,
   if (run_mode == GIMP_RUN_INTERACTIVE)
     {
       if (! save_dialog (procedure, config, image, indexed_bmp, allow_alpha, allow_rle))
-        return GIMP_PDB_CANCEL;
+        {
+          ret = GIMP_PDB_CANCEL;
+          goto abort;
+        }
     }
 
   g_object_get (config,
@@ -542,19 +554,19 @@ export_image (GFile         *file,
       g_set_error (error, G_FILE_ERROR, g_file_error_from_errno (errno),
                    _("Could not open '%s' for writing: %s"),
                    gimp_file_get_utf8_name (file), g_strerror (errno));
-      return GIMP_PDB_EXECUTION_ERROR;
+      goto abort;
     }
 
   bitmap_file_head.zzMagic[0] = 'B';
   bitmap_file_head.zzMagic[1] = 'M';
   if (! write_file_header (outfile, &bitmap_file_head))
-    goto abort;
+    goto abort_with_standard_message;
 
   if (! write_info_header (outfile, &bitmap_head, info_version))
-    goto abort;
+    goto abort_with_standard_message;
 
   if (ncolors && ! write_color_map (outfile, cmap, ncolors))
-    goto abort;
+    goto abort_with_standard_message;
 
   if (! write_image (outfile,
                      pixels, width, height,
@@ -562,7 +574,7 @@ export_image (GFile         *file,
                      channels, bitmap_head.biBitCnt, bytes_per_row,
                      ncolors, cmasks,
                      frontmatter_size))
-    goto abort;
+    goto abort_with_standard_message;
 
   fclose (outfile);
   g_free (pixels);
@@ -570,16 +582,19 @@ export_image (GFile         *file,
 
   return GIMP_PDB_SUCCESS;
 
+abort_with_standard_message:
+  g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+               _("Error writing to file."));
+
+  /* fall through to abort */
+
 abort:
   if (outfile)
     fclose (outfile);
   g_free (pixels);
   g_free (cmap);
 
-  g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
-               _("Error writing to file."));
-
-  return GIMP_PDB_EXECUTION_ERROR;
+  return ret;
 }
 
 static gboolean
