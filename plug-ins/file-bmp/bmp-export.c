@@ -133,60 +133,73 @@ static const enum BmpInfoVer comp_min_header_for_colorspace = BMPINFO_V4;
 
 
 
-static gboolean write_image                  (FILE           *f,
-                                              GimpDrawable   *drawable,
-                                              const Babl     *format,
-                                              gint            width,
-                                              gint            height,
-                                              gboolean        use_run_length_encoding,
-                                              gint            channels,
-                                              gint            bpp,
-                                              gsize           bytes_per_row,
-                                              gint            ncolors,
-                                              BitmapChannel  *cmasks,
-                                              gint            frontmatter_size);
+struct Fileinfo
+{
+  /* image properties */
+  gint          width;
+  gint          height;
+  gint          channels;
+  gint          bytesperchannel;
+  gint          alpha;
+  gint          ncolors;
+  /* file properties */
+  BitmapChannel cmasks[4];
+  gint          bpp;
+  gboolean      use_rle;
+  gsize         bytes_per_row;
+  FILE         *file;
+  /* RLE state */
+  guint64       length;
+  guchar       *row;
+  guchar       *chains;
+};
 
-static gboolean save_dialog                  (GimpProcedure  *procedure,
-                                              GObject        *config,
-                                              GimpImage      *image,
-                                              gboolean        indexed,
-                                              gboolean        allow_alpha,
-                                              gboolean        allow_rle);
+static gboolean write_image                  (struct Fileinfo *fi,
+                                              GimpDrawable    *drawable,
+                                              const Babl      *format,
+                                              gint             frontmatter_size);
 
-static void     calc_masks_from_bits         (BitmapChannel  *cmasks,
-                                              gint            r,
-                                              gint            g,
-                                              gint            b,
-                                              gint            a);
+static gboolean save_dialog                  (GimpProcedure   *procedure,
+                                              GObject         *config,
+                                              GimpImage       *image,
+                                              gboolean         indexed,
+                                              gboolean         allow_alpha,
+                                              gboolean         allow_rle);
 
-static gint     calc_bitsperpixel_from_masks (BitmapChannel  *cmasks);
+static void     calc_masks_from_bits         (BitmapChannel   *cmasks,
+                                              gint             r,
+                                              gint             g,
+                                              gint             b,
+                                              gint             a);
 
-static gboolean are_masks_well_known         (BitmapChannel  *cmasks,
-                                              gint            bpp);
+static gint     calc_bitsperpixel_from_masks (BitmapChannel   *cmasks);
 
-static gboolean are_masks_v1_standard        (BitmapChannel  *cmasks,
-                                              gint            bpp);
+static gboolean are_masks_well_known         (BitmapChannel   *cmasks,
+                                              gint             bpp);
 
-static void     set_info_resolution          (BitmapHead     *bih,
-                                              GimpImage      *image);
+static gboolean are_masks_v1_standard        (BitmapChannel   *cmasks,
+                                              gint             bpp);
 
-static gint     info_header_size             (enum BmpInfoVer version);
+static void     set_info_resolution          (BitmapHead      *bih,
+                                              GimpImage       *image);
 
-static gboolean write_u16_le                 (FILE           *file,
-                                              guint16         u16);
+static gint     info_header_size             (enum BmpInfoVer  version);
 
-static gboolean write_u32_le                 (FILE           *file,
-                                              guint32         u32);
+static gboolean write_u16_le                 (FILE            *file,
+                                              guint16          u16);
 
-static gboolean write_s32_le                 (FILE           *file,
-                                              gint32          s32);
+static gboolean write_u32_le                 (FILE            *file,
+                                              guint32          u32);
 
-static gboolean write_file_header            (FILE           *file,
-                                              BitmapFileHead *bfh);
+static gboolean write_s32_le                 (FILE            *file,
+                                              gint32           s32);
 
-static gboolean write_info_header            (FILE           *file,
-                                              BitmapHead     *bih,
-                                              enum BmpInfoVer version);
+static gboolean write_file_header            (FILE            *file,
+                                              BitmapFileHead  *bfh);
+
+static gboolean write_info_header            (FILE            *file,
+                                              BitmapHead      *bih,
+                                              enum BmpInfoVer  version);
 
 static gboolean
 write_color_map (FILE   *f,
@@ -235,7 +248,7 @@ warning_dialog (const gchar *primary,
 }
 
 GimpPDBStatusType
-export_image (GFile         *file,
+export_image (GFile         *gfile,
               GimpImage     *image,
               GimpDrawable  *drawable,
               GimpRunMode    run_mode,
@@ -244,19 +257,12 @@ export_image (GFile         *file,
               GError       **error)
 {
   GimpPDBStatusType ret = GIMP_PDB_EXECUTION_ERROR;
-  FILE             *outfile = NULL;
   BitmapFileHead    bitmap_file_head;
   BitmapHead        bitmap_head;
   guchar           *cmap = NULL;
-  gint              channels;
-  gsize             bytes_per_row;
-  BitmapChannel     cmasks[4];
-  gint              ncolors = 0;
   const Babl       *format;
   GimpImageType     drawable_type;
-  gint              width, height;
   gint              i;
-  gboolean          use_rle;
   gboolean          write_color_space;
   RGBMode           rgb_format   = RGB_888;
   enum BmpInfoVer   info_version = BMPINFO_V1;
@@ -264,10 +270,11 @@ export_image (GFile         *file,
   gboolean          indexed_bmp = FALSE;
   gboolean          allow_alpha = FALSE;
   gboolean          allow_rle   = FALSE;
+  struct Fileinfo   fi;
 
   memset (&bitmap_file_head, 0, sizeof bitmap_file_head);
   memset (&bitmap_head, 0, sizeof bitmap_head);
-  memset (&cmasks, 0, sizeof cmasks);
+  memset (&fi, 0, sizeof fi);
 
   /* WINDOWS_COLOR_SPACE is the most "don't care" option available for V4+
    * headers, which seems a reasonable default.
@@ -277,14 +284,14 @@ export_image (GFile         *file,
   bitmap_head.bV4CSType = V4CS_WINDOWS_COLOR_SPACE;
 
   drawable_type = gimp_drawable_type (drawable);
-  width         = gimp_drawable_get_width (drawable);
-  height        = gimp_drawable_get_height (drawable);
+  fi.width      = gimp_drawable_get_width (drawable);
+  fi.height     = gimp_drawable_get_height (drawable);
 
   switch (drawable_type)
     {
     case GIMP_RGBA_IMAGE:
       format       = babl_format ("R'G'B'A u8");
-      channels     = 4;
+      fi.channels  = 4;
       allow_alpha  = TRUE;
 
       if (run_mode == GIMP_RUN_INTERACTIVE)
@@ -300,7 +307,7 @@ export_image (GFile         *file,
 
     case GIMP_RGB_IMAGE:
       format       = babl_format ("R'G'B' u8");
-      channels     = 3;
+      fi.channels  = 3;
 
       if (run_mode == GIMP_RUN_INTERACTIVE)
         g_object_set (config,
@@ -328,21 +335,21 @@ export_image (GFile         *file,
     case GIMP_GRAY_IMAGE:
       if (drawable_type == GIMP_GRAYA_IMAGE)
         {
-          format   = babl_format ("Y'A u8");
-          channels = 2;
+          format      = babl_format ("Y'A u8");
+          fi.channels = 2;
         }
       else
         {
-          format   = babl_format ("Y' u8");
-          channels = 1;
+          format      = babl_format ("Y' u8");
+          fi.channels = 1;
         }
 
       indexed_bmp = TRUE;
-      ncolors     = 256;
+      fi.ncolors  = 256;
 
       /* create a gray-scale color map */
-      cmap = g_malloc (ncolors * 3);
-      for (i = 0; i < ncolors; i++)
+      cmap = g_malloc (fi.ncolors * 3);
+      for (i = 0; i < fi.ncolors; i++)
         cmap[3 * i + 0] = cmap[3 * i + 1] = cmap[3 * i + 2] = i;
 
       break;
@@ -362,12 +369,12 @@ export_image (GFile         *file,
     case GIMP_INDEXED_IMAGE:
       format   = gimp_drawable_get_format (drawable);
       cmap     = gimp_palette_get_colormap (gimp_image_get_palette (image),
-                                            babl_format ("R'G'B' u8"), &ncolors, NULL);
+                                            babl_format ("R'G'B' u8"), &fi.ncolors, NULL);
 
       if (drawable_type == GIMP_INDEXEDA_IMAGE)
-        channels = 2;
+        fi.channels = 2;
       else
-        channels = 1;
+        fi.channels = 1;
 
       indexed_bmp = TRUE;
       break;
@@ -378,7 +385,7 @@ export_image (GFile         *file,
 
   if (indexed_bmp)
     {
-      if (ncolors > 2)
+      if (fi.ncolors > 2)
         allow_rle = TRUE;
       else
         g_object_set (config, "use-rle", FALSE, NULL);
@@ -396,7 +403,7 @@ export_image (GFile         *file,
     }
 
   g_object_get (config,
-                "use-rle",           &use_rle,
+                "use-rle",           &fi.use_rle,
                 "write-color-space", &write_color_space,
                 NULL);
 
@@ -405,24 +412,24 @@ export_image (GFile         *file,
 
   if (indexed_bmp)
     {
-      if (ncolors > 16)
+      if (fi.ncolors > 16)
         {
           bitmap_head.biBitCnt = 8;
         }
-      else if (ncolors > 2)
+      else if (fi.ncolors > 2)
         {
           bitmap_head.biBitCnt = 4;
         }
       else
         {
-          g_assert (! use_rle);
+          g_assert (! fi.use_rle);
           bitmap_head.biBitCnt = 1;
         }
 
-      bitmap_head.biClrUsed = ncolors;
-      bitmap_head.biClrImp  = ncolors;
+      bitmap_head.biClrUsed = fi.ncolors;
+      bitmap_head.biClrImp  = fi.ncolors;
 
-      if (use_rle)
+      if (fi.use_rle)
         bitmap_head.biCompr = bitmap_head.biBitCnt == 8 ? BI_RLE8 : BI_RLE4;
       else
         bitmap_head.biCompr = BI_RGB;
@@ -432,33 +439,33 @@ export_image (GFile         *file,
       switch (rgb_format)
         {
         case RGB_888:
-          calc_masks_from_bits (cmasks, 8, 8, 8, 0);
+          calc_masks_from_bits (fi.cmasks, 8, 8, 8, 0);
           break;
         case RGBA_8888:
-          calc_masks_from_bits (cmasks, 8, 8, 8, 8);
+          calc_masks_from_bits (fi.cmasks, 8, 8, 8, 8);
           break;
         case RGBX_8888:
-          calc_masks_from_bits (cmasks, 8, 8, 8, 0);
+          calc_masks_from_bits (fi.cmasks, 8, 8, 8, 0);
           break;
         case RGB_565:
-          calc_masks_from_bits (cmasks, 5, 6, 5, 0);
+          calc_masks_from_bits (fi.cmasks, 5, 6, 5, 0);
           break;
         case RGBA_5551:
-          calc_masks_from_bits (cmasks, 5, 5, 5, 1);
+          calc_masks_from_bits (fi.cmasks, 5, 5, 5, 1);
           break;
         case RGB_555:
-          calc_masks_from_bits (cmasks, 5, 5, 5, 0);
+          calc_masks_from_bits (fi.cmasks, 5, 5, 5, 0);
           break;
         default:
           g_return_val_if_reached (GIMP_PDB_EXECUTION_ERROR);
         }
-      bitmap_head.biBitCnt = calc_bitsperpixel_from_masks (cmasks);
+      bitmap_head.biBitCnt = calc_bitsperpixel_from_masks (fi.cmasks);
 
       /* pointless, but it exists: */
       if (bitmap_head.biBitCnt == 24 && rgb_format == RGBX_8888)
         bitmap_head.biBitCnt = 32;
 
-      if (are_masks_well_known (cmasks, bitmap_head.biBitCnt) &&
+      if (are_masks_well_known (fi.cmasks, bitmap_head.biBitCnt) &&
           (bitmap_head.biBitCnt == 24 || ! comp_16_and_32_only_as_bitfields))
         {
           bitmap_head.biCompr = BI_RGB;
@@ -467,20 +474,20 @@ export_image (GFile         *file,
         {
           bitmap_head.biCompr = BI_BITFIELDS;
           for (gint c = 0; c < 4; c++)
-            bitmap_head.masks[c] = cmasks[c].mask << cmasks[c].shiftin;
+            bitmap_head.masks[c] = fi.cmasks[c].mask << fi.cmasks[c].shiftin;
 
           info_version = MAX (comp_min_header_for_bitfields, info_version);
 
-          if (cmasks[3].mask) /* have alpha channel, need at least v3 */
+          if (fi.cmasks[3].mask) /* have alpha channel, need at least v3 */
             info_version = MAX (BMPINFO_V3_ADOBE, info_version);
 
-          if (! are_masks_v1_standard (cmasks, bitmap_head.biBitCnt))
+          if (! are_masks_v1_standard (fi.cmasks, bitmap_head.biBitCnt))
             info_version = MAX (comp_min_header_for_non_standard_masks, info_version);
         }
     }
 
   gimp_progress_init_printf (_("Exporting '%s'"),
-                             gimp_file_get_utf8_name (file));
+                             gimp_file_get_utf8_name (gfile));
 
   if (write_color_space)
     {
@@ -501,19 +508,19 @@ export_image (GFile         *file,
    * as the resulting BMP will likely cause integer overflow in other
    * readers.(Currently, GIMP's limit is way lower, anyway)
    */
-  g_assert (width <= (G_MAXSIZE - 31) / bitmap_head.biBitCnt);
+  g_assert (fi.width <= (G_MAXSIZE - 31) / bitmap_head.biBitCnt);
 
-  bytes_per_row = (((guint64) width * bitmap_head.biBitCnt + 31) / 32) * 4;
+  fi.bytes_per_row = (((guint64) fi.width * bitmap_head.biBitCnt + 31) / 32) * 4;
 
   bitmap_head.biSize = info_header_size (info_version);
-  frontmatter_size   = 14 + bitmap_head.biSize + 4 * ncolors;
+  frontmatter_size   = 14 + bitmap_head.biSize + 4 * fi.ncolors;
 
   if (info_version < BMPINFO_V2_ADOBE && bitmap_head.biCompr == BI_BITFIELDS)
     frontmatter_size += 12; /* V1 header stores RGB masks outside header */
 
   bitmap_file_head.bfOffs = frontmatter_size;
 
-  if (use_rle || (guint64) bytes_per_row * height + frontmatter_size > UINT32_MAX)
+  if (fi.use_rle || (guint64) fi.bytes_per_row * fi.height + frontmatter_size > UINT32_MAX)
     {
       /* for RLE, we don't know the size until after writing the image and
        * will update later.
@@ -526,46 +533,44 @@ export_image (GFile         *file,
     }
   else
     {
-      bitmap_file_head.bfSize = frontmatter_size + (bytes_per_row * height);
-      bitmap_head.biSizeIm    = bytes_per_row * height;
+      bitmap_file_head.bfSize = frontmatter_size + (fi.bytes_per_row * fi.height);
+      bitmap_head.biSizeIm    = fi.bytes_per_row * fi.height;
     }
 
-  bitmap_head.biWidth  = width;
-  bitmap_head.biHeight = height;
+  bitmap_head.biWidth  = fi.width;
+  bitmap_head.biHeight = fi.height;
   bitmap_head.biPlanes = 1;
 
   set_info_resolution (&bitmap_head, image);
 
-  outfile = g_fopen (g_file_peek_path (file), "wb");
-  if (! outfile)
+  fi.file = g_fopen (g_file_peek_path (gfile), "wb");
+  if (! fi.file)
     {
       g_set_error (error, G_FILE_ERROR, g_file_error_from_errno (errno),
                    _("Could not open '%s' for writing: %s"),
-                   gimp_file_get_utf8_name (file), g_strerror (errno));
+                   gimp_file_get_utf8_name (gfile), g_strerror (errno));
       goto abort;
     }
 
   bitmap_file_head.zzMagic[0] = 'B';
   bitmap_file_head.zzMagic[1] = 'M';
-  if (! write_file_header (outfile, &bitmap_file_head))
+  if (! write_file_header (fi.file, &bitmap_file_head))
     goto abort_with_standard_message;
 
-  if (! write_info_header (outfile, &bitmap_head, info_version))
+  if (! write_info_header (fi.file, &bitmap_head, info_version))
     goto abort_with_standard_message;
 
-  if (ncolors && ! write_color_map (outfile, cmap, ncolors))
+  if (fi.ncolors && ! write_color_map (fi.file, cmap, fi.ncolors))
     goto abort_with_standard_message;
 
-  if (! write_image (outfile,
-                     drawable, format,
-                     width, height,
-                     use_rle,
-                     channels, bitmap_head.biBitCnt, bytes_per_row,
-                     ncolors, cmasks,
+  fi.bpp = bitmap_head.biBitCnt;
+  if (! write_image (&fi,
+                     drawable,
+                     format,
                      frontmatter_size))
     goto abort_with_standard_message;
 
-  fclose (outfile);
+  fclose (fi.file);
   g_free (cmap);
 
   return GIMP_PDB_SUCCESS;
@@ -577,8 +582,8 @@ abort_with_standard_message:
   /* fall through to abort */
 
 abort:
-  if (outfile)
-    fclose (outfile);
+  if (fi.file)
+    fclose (fi.file);
   g_free (cmap);
 
   return ret;
@@ -733,66 +738,58 @@ info_header_size (enum BmpInfoVer version)
 }
 
 static gboolean
-write_image (FILE          *f,
-             GimpDrawable  *drawable,
-             const Babl    *format,
-             gint           width,
-             gint           height,
-             gboolean       use_run_length_encoding,
-             gint           channels,
-             gint           bpp,
-             gsize          bytes_per_row,
-             gint           ncolors,
-             BitmapChannel *cmasks,
-             gint           header_size)
+write_image (struct Fileinfo *fi,
+             GimpDrawable    *drawable,
+             const Babl      *format,
+             gint             frontmatter_size)
 {
   guchar     *temp, *src = NULL, v;
-  guchar     *row    = NULL;
-  guchar     *chains = NULL;
   gint        xpos, ypos, i, j;
   gsize       rowstride;
-  gint        bytesperchannel = 1;
   guint32     px32;
-  guint64     length;
   gint        breite, k;
   guchar      n;
   gint        channel_val[4];
   gint        cur_progress;
   gint        max_progress;
   gint        padding;
-  gint        alpha;
   GeglBuffer *buffer = NULL;
   gint        tile_height, tile_n = 0;
   gsize       line_offset;
 
-  tile_height = MIN (gimp_tile_height (), height);
+  /* we currently only export 8-bit images; later, bytesperchannel will be
+   * properly set according to the actual image precision.
+   */
+  fi->bytesperchannel = 1;
 
-  src = g_new (guchar, (gsize) width * tile_height * channels);
+  tile_height = MIN (gimp_tile_height (), fi->height);
+
+  src = g_new (guchar, (gsize) fi->width * tile_height * fi->channels);
 
   /* move the following into loop for now, see GEGL#400 */
   /* buffer = gimp_drawable_get_buffer (drawable); */
 
-  rowstride = (gsize) width * channels * bytesperchannel;
+  rowstride = (gsize) fi->width * fi->channels * fi->bytesperchannel;
 
   channel_val[3] = 0xff; /* default alpha = opaque */
-  alpha          = channels == 4 || channels == 2 ? 1 : 0;
+  fi->alpha      = fi->channels == 4 || fi->channels == 2 ? 1 : 0;
 
-  if (! use_run_length_encoding)
+  if (! fi->use_rle)
     {
-      padding = bytes_per_row - ((guint64) width * bpp + 7) / 8;
+      padding = fi->bytes_per_row - ((guint64) fi->width * fi->bpp + 7) / 8;
     }
   else
     {
-      padding = 0; /* RLE does its own pixel-based padding */
-      row     = g_new (guchar, width / (8 / bpp) + 10);
-      chains  = g_new (guchar, width / (8 / bpp) + 10);
-      length  = 0;
+      padding    = 0; /* RLE does its own pixel-based padding */
+      fi->row    = g_new (guchar, fi->width / (8 / fi->bpp) + 10);
+      fi->chains = g_new (guchar, fi->width / (8 / fi->bpp) + 10);
+      fi->length = 0;
     }
 
   cur_progress = 0;
-  max_progress = height;
+  max_progress = fi->height;
 
-  for (ypos = height - 1; ypos >= 0; ypos--)
+  for (ypos = fi->height - 1; ypos >= 0; ypos--)
     {
       if (tile_n == 0)
         {
@@ -804,7 +801,7 @@ write_image (FILE          *f,
            */
           buffer = gimp_drawable_get_buffer (drawable);
           gegl_buffer_get (buffer,
-                           GEGL_RECTANGLE (0, ypos + 1 - tile_n, width, tile_n),
+                           GEGL_RECTANGLE (0, ypos + 1 - tile_n, fi->width, tile_n),
                            1.0, format, src,
                            GEGL_AUTO_ROWSTRIDE, GEGL_ABYSS_NONE);
           g_object_unref (buffer);
@@ -814,14 +811,14 @@ write_image (FILE          *f,
       line_offset = rowstride * --tile_n;
 
       /* We'll begin with the 16/24/32 bit Bitmaps, they are easy :-) */
-      if (bpp > 8)
+      if (fi->bpp > 8)
         {
-          for (xpos = 0; xpos < width; xpos++)
+          for (xpos = 0; xpos < fi->width; xpos++)
             {
-              temp = src + line_offset + xpos * channels;
+              temp = src + line_offset + xpos * fi->channels;
 
               channel_val[0] = *temp++;
-              if (channels > 2)
+              if (fi->channels > 2)
                 {
                   /* RGB */
                   channel_val[1] = *temp++;
@@ -833,19 +830,19 @@ write_image (FILE          *f,
                   channel_val[1] = channel_val[2] = channel_val[0];
                 }
 
-              if (alpha)
+              if (fi->alpha)
                 channel_val[3] = *temp++;
 
               px32 = 0;
               for (gint c = 0; c < 4; c++)
                 {
-                  px32 |= (guint32) (channel_val[c] / 255. * cmasks[c].max_value + 0.5)
-                          << cmasks[c].shiftin;
+                  px32 |= (guint32) (channel_val[c] / 255. * fi->cmasks[c].max_value + 0.5)
+                          << fi->cmasks[c].shiftin;
                 }
 
-              for (j = 0; j < bpp; j += 8)
+              for (j = 0; j < fi->bpp; j += 8)
                 {
-                  if (EOF == putc ((px32 >> j) & 0xff, f))
+                  if (EOF == putc ((px32 >> j) & 0xff, fi->file))
                     goto abort;
                 }
             }
@@ -854,26 +851,26 @@ write_image (FILE          *f,
       else /* indexed */
         {
           /* now it gets more difficult */
-          if (! use_run_length_encoding || bpp == 1)
+          if (! fi->use_rle || fi->bpp == 1)
             {
               /* uncompressed 1,4 and 8 bit */
 
-              for (xpos = 0; xpos < width;)  /* for each _byte_ */
+              for (xpos = 0; xpos < fi->width;) /* for each _byte_ */
                 {
                   v = 0;
                   for (i = 1;
-                       i <= (8 / bpp) && xpos < width;
-                       i++, xpos++)  /* for each pixel */
+                       i <= (8 / fi->bpp) && xpos < fi->width;
+                       i++, xpos++) /* for each pixel */
                     {
-                      temp = src + line_offset + xpos * channels;
+                      temp = src + line_offset + xpos * fi->channels;
 
-                      if (channels > 1 && *(temp + 1) == 0)
+                      if (fi->channels > 1 && *(temp + 1) == 0)
                         *temp = 0x0;
 
-                      v = v | ((guchar) *temp << (8 - (i * bpp)));
+                      v = v | ((guchar) *temp << (8 - (i * fi->bpp)));
                     }
 
-                  if (fwrite (&v, 1, 1, f) != 1)
+                  if (fwrite (&v, 1, 1, fi->file) != 1)
                     goto abort;
                 }
             }
@@ -885,29 +882,29 @@ write_image (FILE          *f,
                * from two 4bit pixels
                */
               j = 0;
-              for (xpos = 0; xpos < width;)
+              for (xpos = 0; xpos < fi->width;)
                 {
                   v = 0;
 
                   for (i = 1;
-                       (i <= (8 / bpp)) && (xpos < width);
+                       (i <= (8 / fi->bpp)) && (xpos < fi->width);
                        i++, xpos++)
                     {
                       /* for each pixel */
 
-                      temp = src + line_offset + (xpos * channels);
+                      temp = src + line_offset + (xpos * fi->channels);
 
-                      if (channels > 1 && *(temp + 1) == 0)
+                      if (fi->channels > 1 && *(temp + 1) == 0)
                         *temp = 0x0;
 
-                      v = v | ((guchar) * temp << (8 - (i * bpp)));
+                      v = v | ((guchar) *temp << (8 - (i * fi->bpp)));
                     }
 
-                  row[j++] = v;
+                  fi->row[j++] = v;
                 }
 
-              breite = width / (8 / bpp);
-              if (width % (8 / bpp))
+              breite = fi->width / (8 / fi->bpp);
+              if (fi->width % (8 / fi->bpp))
                 breite++;
 
               /* then check for strings of equal bytes */
@@ -916,67 +913,67 @@ write_image (FILE          *f,
                   j = 0;
 
                   while ((i + j < breite) &&
-                         (j < (255 / (8 / bpp))) &&
-                         (row[i + j] == row[i]))
+                         (j < (255 / (8 / fi->bpp))) &&
+                         (fi->row[i + j] == fi->row[i]))
                     j++;
 
-                  chains[i] = j;
+                  fi->chains[i] = j;
                 }
 
               /* then write the strings and the other pixels to the file */
               for (i = 0; i < breite;)
                 {
-                  if (chains[i] < 3)
+                  if (fi->chains[i] < 3)
                     {
                       /* strings of different pixels ... */
 
                       j = 0;
 
                       while ((i + j < breite) &&
-                             (j < (255 / (8 / bpp))) &&
-                             (chains[i + j] < 3))
-                        j += chains[i + j];
+                             (j < (255 / (8 / fi->bpp))) &&
+                             (fi->chains[i + j] < 3))
+                        j += fi->chains[i + j];
 
                       /* this can only happen if j jumps over the end
                        * with a 2 in chains[i+j]
                        */
-                      if (j > (255 / (8 / bpp)))
+                      if (j > (255 / (8 / fi->bpp)))
                         j -= 2;
 
                       /* 00 01 and 00 02 are reserved */
                       if (j > 2)
                         {
-                          n = j * (8 / bpp);
-                          if (n + i * (8 / bpp) > width)
+                          n = j * (8 / fi->bpp);
+                          if (n + i * (8 / fi->bpp) > fi->width)
                             n--;
 
-                          if (EOF == putc (0, f) || EOF == putc (n, f))
+                          if (EOF == putc (0, fi->file) || EOF == putc (n, fi->file))
                             goto abort;
 
-                          length += 2;
+                          fi->length += 2;
 
-                          if (fwrite (&row[i], 1, j, f) != j)
+                          if (fwrite (&fi->row[i], 1, j, fi->file) != j)
                             goto abort;
 
-                          length += j;
+                          fi->length += j;
                           if ((j) % 2)
                             {
-                              if (EOF == putc (0, f))
+                              if (EOF == putc (0, fi->file))
                                 goto abort;
-                              length++;
+                              fi->length++;
                             }
                         }
                       else
                         {
                           for (k = i; k < i + j; k++)
                             {
-                              n = (8 / bpp);
-                              if (n + i * (8 / bpp) > width)
+                              n = (8 / fi->bpp);
+                              if (n + i * (8 / fi->bpp) > fi->width)
                                 n--;
 
-                              if (EOF == putc (n, f) || EOF == putc (row[k], f))
+                              if (EOF == putc (n, fi->file) || EOF == putc (fi->row[k], fi->file))
                                 goto abort;
-                              length += 2;
+                              fi->length += 2;
                             }
                         }
 
@@ -986,28 +983,28 @@ write_image (FILE          *f,
                     {
                       /* strings of equal pixels */
 
-                      n = chains[i] * (8 / bpp);
-                      if (n + i * (8 / bpp) > width)
+                      n = fi->chains[i] * (8 / fi->bpp);
+                      if (n + i * (8 / fi->bpp) > fi->width)
                         n--;
 
-                      if (EOF == putc (n, f) || EOF == putc (row[i], f))
+                      if (EOF == putc (n, fi->file) || EOF == putc (fi->row[i], fi->file))
                         goto abort;
 
-                      i += chains[i];
-                      length += 2;
+                      i += fi->chains[i];
+                      fi->length += 2;
                     }
                 }
 
-              if (EOF == putc (0, f) || EOF == putc (0, f))  /* End of row */
+              if (EOF == putc (0, fi->file) || EOF == putc (0, fi->file)) /* End of row */
                 goto abort;
-              length += 2;
+              fi->length += 2;
 
             } /* RLE */
         }
 
       for (int j = 0; j < padding; j++)
         {
-          if (EOF == putc (0, f))
+          if (EOF == putc (0, fi->file))
             goto abort;
         }
 
@@ -1020,26 +1017,30 @@ write_image (FILE          *f,
 
   /* g_object_unref (buffer); */
 
-  if (use_run_length_encoding)
+  if (fi->use_rle)
     {
-      if (fseek (f, -2, SEEK_CUR))                  /* Overwrite last End of row ... */
+      /* Overwrite last End of row with End of file */
+      if (fseek (fi->file, -2, SEEK_CUR))
         goto abort;
-      if (EOF == putc (0, f) || EOF == putc (1, f)) /* ... with End of file */
+      if (EOF == putc (0, fi->file) || EOF == putc (1, fi->file))
         goto abort;
 
-      if (length <= UINT32_MAX)
+      if (fi->length <= UINT32_MAX)
         {
           /* Write length of image data */
-          if (fseek (f, 0x22, SEEK_SET))
+          if (fseek (fi->file, 0x22, SEEK_SET))
             goto abort;
-          if (! write_u32_le (f, length))
+          if (! write_u32_le (fi->file, fi->length))
             goto abort;
 
-          /* Write length of file */
-          if (fseek (f, 0x02, SEEK_SET))
-            goto abort;
-          if (! write_u32_le (f, length + header_size))
-            goto abort;
+          if (fi->length <= UINT32_MAX - frontmatter_size)
+            {
+              /* Write length of file */
+              if (fseek (fi->file, 0x02, SEEK_SET))
+                goto abort;
+              if (! write_u32_le (fi->file, fi->length + frontmatter_size))
+                goto abort;
+            }
         }
       else
         {
@@ -1054,8 +1055,8 @@ write_image (FILE          *f,
         }
     }
 
-  g_free (chains);
-  g_free (row);
+  g_free (fi->chains);
+  g_free (fi->row);
   g_free (src);
 
   gimp_progress_update (1.0);
@@ -1064,8 +1065,8 @@ write_image (FILE          *f,
 abort:
   if (buffer)
     g_object_unref (buffer);
-  g_free (chains);
-  g_free (row);
+  g_free (fi->chains);
+  g_free (fi->row);
   g_free (src);
 
   return FALSE;
