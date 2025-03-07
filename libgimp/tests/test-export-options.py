@@ -9,9 +9,20 @@ image.insert_layer(text_layer, None, 0)
 text_layer = Gimp.TextLayer.new(image, "annyeong uju", Gimp.context_get_font(), 20, Gimp.Unit.point())
 image.insert_layer(text_layer, None, 0)
 
+standard_layer = Gimp.Layer.new(image, "Standard layer",
+                                NEW_IMAGE_WIDTH, NEW_IMAGE_HEIGHT,
+                                Gimp.ImageType.RGBA_IMAGE, 100, Gimp.LayerMode.NORMAL)
+image.insert_layer(standard_layer, None, 0)
+
+layer_mask = Gimp.Layer.create_mask(standard_layer, Gimp.AddMaskType.WHITE)
+standard_layer.add_mask(layer_mask)
+
 images = Gimp.get_images()
 layers = image.get_layers()
-gimp_assert('Verify start state', len(images) == 1 and images[0] == image and len(layers) == 2)
+gimp_assert('Verify start state', len(images) == 1 and
+            images[0] == image and
+            len(layers) == 3 and
+            layers[0].get_mask() != None)
 
 options = Gimp.ExportOptions()
 options.set_property ("capabilities",
@@ -22,7 +33,7 @@ delete, export_image = options.get_image(image)
 
 gimp_assert('Gimp.ExportOptions.get_image() created a new image', delete == Gimp.ExportReturn.EXPORT and export_image != image)
 export_layers = export_image.get_layers()
-gimp_assert('The new image has a single layer', len(export_layers) == 1)
+gimp_assert('The new image has a single layer and no mask', len(export_layers) == 1 and export_layers[0].get_mask() == None)
 
 merged_layer = image.merge_visible_layers(Gimp.MergeType.CLIP_TO_IMAGE)
 merged_layer.resize_to_image_size()
