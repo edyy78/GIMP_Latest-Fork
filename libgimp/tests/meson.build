@@ -13,6 +13,8 @@ tests = [
   'palette',
   'selection-float',
   'unit',
+  'font',
+  'pattern',
 ]
 
 # Unit testing environment is based on gimp_run_env with additional environment
