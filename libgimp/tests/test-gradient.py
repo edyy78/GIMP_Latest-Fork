@@ -57,6 +57,7 @@ gimp_assert("Verify deletion failure", not gradient.delete())
 # test sampling.
 
 samples = gradient.get_uniform_samples(3, False)
+print(type(samples))
 gimp_assert("Verify uniform samples", len(samples) == 3)
 
 samples = gradient.get_custom_samples([0.0, 0.5, 1.0], True)
