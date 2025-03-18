@@ -15,6 +15,7 @@ gimp_c_test_run (GimpProcedure       *procedure,
   GimpGradientSegmentColor  coloring_type;
   GeglColor                *left_color;
   GeglColor                *right_color;
+  GeglColor               **samples;
   gdouble                   red;
   gdouble                   green;
   gdouble                   blue;
@@ -22,6 +23,8 @@ gimp_c_test_run (GimpProcedure       *procedure,
   gdouble                  *left_pos;
   gdouble                  *middle_pos;
   gdouble                  *right_pos;
+  gdouble                  *positions;
+  GimpGradient             *gradient;
 
 
 
@@ -78,6 +81,157 @@ gimp_c_test_run (GimpProcedure       *procedure,
   success = gimp_gradient_segment_set_middle_pos (gradient, 0, 0.0, &middle_pos);
   GIMP_TEST_END (!success);
 
+  GIMP_TEST_START ("Verify range set coloring type failure");
+  success = gimp_gradient_segment_range_set_coloring_type (gradient, 0, 0, 
+                                                           GIMP_GRADIENT_SEGMENT_COLOR_RGB);
+  GIMP_TEST_END (!success);
+
+  
+  GIMP_TEST_START ("Verify range set blending function failure");
+  success = gimp_gradient_segment_range_set_blending_function (gradient, 0, 0, 
+                                                               GIMP_GRADIENT_SEGMENT_TYPE_LINEAR);
+  GIMP_TEST_END (!success);
+
+  GIMP_TEST_START ("Verify Deletion Failure");
+  success = gimp_gradient_delete(gradient);
+  GIMP_TEST_ASSERT (!success);
+
+  /* Test Sampling */
+
+  GIMP_TEST_START ("Verify Uniform samples");
+  samples = gimp_gradient_get_uniform_samples (gradient, 3, 0);
+  GIMP_TEST_END (samples == 3);
+
+  GIMP_TEST_START ("Verify custom samples");
+  positions = g_malloc (3);
+  position[0] = 0.0;
+  position[1] = 0.5;
+  position[2] = 1.0;
+  samples = gimp_gradient_get_custom_samples (gradient, 3, positions, 1);
+  GIMP_TEST_END (samples == 3);
+
+  GIMP_TEST_START ("Verify left pos getter");
+  success = gimp_gradient_segment_get_left_pos (gradient,0, &left_pos);
+  GIMP_TEST_END (success && left_pos == 0.0);
+
+  GIMP_TEST_START ("Verify right pos getter");
+  success = gimp_gradient_segment_get_right_pos (gradient,0, &right_pos);
+  GIMP_TEST_END (success && right_pos == 0.0);
+
+  GIMP_TEST_START ("Verify middle pos getter");
+  success = gimp_gradient_segment_get_middle_pos (gradient,0, &middle_pos);
+  GIMP_TEST_END (success && middle_pos == 0.0);
+
+  /* Test Creation of new gradient */
+
+  gradient_new = gimp_gradient_new("New Gradient");
+  GIMP_TEST_START ("Verify Gradient name and editable property");
+  gradient_name = gimp_resource_get_name ((GimpResource *) gradient_new);
+  success = gimp_resource_is_editable ((GimpResource *) gradient_new);
+  GIMP_TEST_START (g_strcmp0 (gradient_name, "New Gradient") == 0 && success);
+
+  GIMP_TEST_START ("Verify segments for new gradient");
+  GIMP_TEST_END (gimp_gradient_get_number_of_segments (gradient_new) == 1);
+
+  GIMP_TEST_START ("Verify segment setter for left color");
+  GIMP_TEST_END (gimp_gradient_segment_set_left_color (gradient_new, 0, bg_color));
+
+  GIMP_TEST_START ("Verify segment getter for left color");
+  left_color = gimp_gradient_segment_get_left_color (gradient_new, 0, &left_color);
+  gegl_color_get_rgba (left_color, &red, &green, &blue, &alpha);
+  GIMP_TESTS_END (red == 1.0 && green == 1.0 && blue == 1.0 && alpha == 1.0);
+
+  GIMP_TEST_START ("Verify segment setter for right color");
+  GIMP_TEST_END (gimp_gradient_segment_set_right_color (gradient_new, 0, fg_color));
+
+  GIMP_TEST_START ("Verify segment getters for right color");
+  right_color = gimp_gradient_segment_get_right_color (gradient_new, 0, &right_color);
+  gegl_color_get_rgba (right_color, &red, &green, &blue, &alpha);
+  GIMP_TESTS_END (red == 0.0 && green == 0.0 && blue == 0.0 && alpha == 1.0);
+
+  GIMP_TEST_START ("Verify setting left pos");
+  success = gimp_gradient_segment_set_left_pos (gradient_new, 0, 0.01, &left_pos);
+  GIMP_TEST_END (success && left_pos == 0.0);
+
+  GIMP_TEST_START ("Verify setting right pos");
+  success = gimp_gradient_segment_set_right_pos (gradient_new, 0, 0.99, &right_pos);
+  GIMP_TEST_END (success && right_pos == 1.0);
+
+  GIMP_TEST_START ("Verify setting middle pos");
+  success = gimp_gradient_segment_set_middle_pos (gradient_new, 0, 0.49, &middle_pos);
+  GIMP_TEST_END (success && right_pos == 0.49);
+
+  GIMP_TEST_START ("Verify range set coloring type");
+  success = gimp_gradient_segment_range_set_coloring_type (gradient, 0, 0, 
+                                                           GIMP_GRADIENT_SEGMENT_COLOR_HSV_CW);
+  GIMP_TEST_END (success);
+  GIMP_TEST_START ("Verify range get coloring type");
+  success = gimp_gradient_segment_range_get_coloring_type (gradient, 0, &coloring_type);
+  GIMP_TEST_END (success && coloring_type == GIMP_GRADIENT_SEGMENT_COLOR_HSV_CW);
+  
+  GIMP_TEST_START ("Verify range set blending function");
+  success = gimp_gradient_segment_range_set_blending_function (gradient, 0, 0, 
+                                                               GIMP_GRADIENT_SEGMENT_TYPE_CURVED);
+  GIMP_TEST_END (success);
+  GIMP_TEST_START ("Verify range get coloring type");
+  GIMP_TEST_END (success && blend_func == GIMP_GRADIENT_SEGMENT_TYPE_CURVED);
+
+
+  GIMP_TEST_START ("Verify split midpoint");
+  GIMP_TEST_END (gimp_gradient_segment_range_split_midpoint (gradient_new,0, 0)));
+  GIMP_TEST_START ("Verify segments");
+  GIMP_TEST_END (gimp_gradient_get_number_of_segments (gradient_new) == 2);
+
+  GIMP_TEST_START ("Verify range flip");
+  GIMP_TEST_END (gimp_gradient_segment_range_flip (gradient_new, 0, 1));
+  GIMP_TEST_START ("Verify no change after flip");
+  GIMP_TEST_END (gimp_gradient_get_number_of_segments (gradient_new) == 2);
+
+  GIMP_TEST_START ("Verify replication");
+  GIMP_TEST_END (gimp_gradient_segment_range_replicate (gradient_new, 0, 1, 2));
+  GIMP_TEST_START ("Verify segments after replication");
+  GIMP_TEST_END (gimp_gradient_get_number_of_segments (gradient_new) == 4);
+
+  GIMP_TEST_START ("Verify splitting midpoint");
+  GIMP_TEST_END (gimp_gradient_segment_range_split_midpoint (gradient_new, 3, 3));
+  GIMP_TEST_START ("Verify new segments");
+  GIMP_TEST_END (gimp_gradient_get_number_of_segments (gradient_new) == 5);
+
+  GIMP_TEST_START ("Verify range split");
+  GIMP_TEST_END (gimp_gradient_segment_range_split_midpoint (gradient_new, 0, 0));
+  GIMP_TEST_START ("Verify new segment");
+  GIMP_TEST_END (gimp_gradient_get_number_of_segments (gradient_new) == 6);
+  GIMP_TEST_START ("Verify range splitting uniform");
+  GIMP_TEST_END (gimp_gradient_segment_range_split_uniform (gradient_new, 1, 1, 3));
+  GIMP_TEST_START ("Verify new number of segments");
+  GIMP_TEST_END (gimp_gradient_get_number_of_segments (gradient_new) == 8);
+
+  GIMP_TEST_START ("Verify deletion");
+  GIMP_TEST_END (gimp_gradient_segment_range_delete (gradient_new, 6, 6));
+  GIMP_TEST_START ("Verify segments after deletion");
+  GIMP_TEST_END (gimp_gradient_get_number_of_segments (gradient_new) == 7);
+
+  actual_delta = gimp_gradient_segment_range_move (gradient_new, 1, 1, -1.0, False);
+  GIMP_TEST_START ("Verify delta without compression");
+  GIMP_TEST_END (actual_delta == -0.0637499999);
+  GIMP_TEST_START ("Verify no segment count change");
+  GIMP_TEST_END (gimp_gradient_get_number_of_segments () == 7);
+
+  GIMP_TEST_START ("Verify redistribution");
+  GIMP_TEST_END (gimp_gradient_segment_range_redistribute_handles (gradient_new, 0, 5));
+
+  GIMP_TEST_START ("Verify blend");
+  GIMP_TEST_END (gimp_gradient_segment_range_blend_colors (gradient_new, 1, 4))
+
+  GIMP_TEST_START ("Verify blend opacity");
+  GIMP_TEST_END (gimp_gradient_segment_range_blend_opacity (gradient_new, 2, 3));
+
+  GIMP_TEST_START ("Verify out of range fails");
+  GIMP_TEST_END (gimp_gradient_segment_set_left_color (gradient_new, 9, bg_color));
+
+  GIMP_TEST_START ("Delete gradient");
+  gimp_gradient_delete (gradient_new);
+  GIMP_TEST_END (gimp_resource_is_valid ((GimpResource *) gradient_new));
 
   GIMP_TEST_RETURN
 }

@@ -46,9 +46,11 @@ gimp_assert("Verify set failure for right_pos", not success)
 success, position = gradient.segment_set_middle_pos(0, 0.0)
 gimp_assert("Verify set failure for middle_pos", not success)
 
-gimp_assert("Verify range set failure", not gradient.segment_range_set_coloring_type    (0, 0, Gimp.GradientSegmentColor.RGB))
+gimp_assert("Verify range set coloring typefailure",
+            not gradient.segment_range_set_coloring_type (0, 0, Gimp.GradientSegmentColor.RGB))
 
-gimp_assert("Verify range set failure", not gradient.segment_range_set_blending_function(0, 0, Gimp.GradientSegmentType.LINEAR))
+gimp_assert("Verify range set failure",
+            not gradient.segment_range_set_blending_function (0, 0, Gimp.GradientSegmentType.LINEAR))
 
 gimp_assert("Verify deletion failure", not gradient.delete())
 
