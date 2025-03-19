@@ -22,10 +22,10 @@ Expect string
 """
 
 gimp_assert("Verify default brush", brush.get_name()    == 'Clipboard Image')
-gimp_assert("Verify default brush", font.get_name()     == 'Sans-serif')
-gimp_assert("Verify default brush", gradient.get_name() == 'FG to BG (RGB)')
-gimp_assert("Verify default brush", palette.get_name()  == 'Color History')
-gimp_assert("Verify default brush", pattern.get_name()  == 'Clipboard Image')
+gimp_assert("Verify default font", font.get_name()     == 'Sans-serif')
+gimp_assert("Verify default gradient", gradient.get_name() == 'FG to BG (RGB)')
+gimp_assert("Verify default palette", palette.get_name()  == 'Color History')
+gimp_assert("Verify default pattern", pattern.get_name()  == 'Clipboard Image')
 
 """
 Test resource as an arg
@@ -46,7 +46,7 @@ Pass desired name.
 """
 brush_new = Gimp.Brush.new("New Brush")
 gimp_assert("Verify new brush validity", brush_new.is_valid())
-gimp_assert("Verify name of new brush", brush_new.get_name()=="New Brush")
+gimp_assert("Verify new brush name", brush_new.get_name()=="New Brush")
 
 gradient_new = Gimp.Gradient.new("New Gradient")
 gimp_assert("Verify new gradient validity", gradient_new.is_valid())
