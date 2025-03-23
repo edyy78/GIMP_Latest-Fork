@@ -100,6 +100,11 @@ bundle "$GIMP_PREFIX" include/babl-*
 bundle "$GIMP_PREFIX" include/gegl-*
 bundle "$MSYSTEM_PREFIX" include/exiv*
 bundle "$MSYSTEM_PREFIX" include/gexiv*
+bundle "$GIMP_PREFIX" lib/pkgconfig/gimp-*
+bundle "$GIMP_PREFIX" lib/pkgconfig/babl-*
+bundle "$GIMP_PREFIX" lib/pkgconfig/gegl-*
+bundle "$MSYSTEM_PREFIX" lib/pkgconfig/exiv*
+bundle "$MSYSTEM_PREFIX" lib/pkgconfig/gexiv*
 
 
 ## Library data.
