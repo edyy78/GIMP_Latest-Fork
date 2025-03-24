@@ -1089,37 +1089,58 @@ load_image (GFile        *file,
 
   if (png_get_text (pp, info, &text, &num_texts))
     {
-      gchar *comment = NULL;
+      /* Don't try to save multiple comment parasites */
+      guint comment_chunks = 0;
 
-      for (i = 0; i < num_texts && !comment; i++, text++)
+      for (i = 0; i < num_texts; i++, text++)
         {
-          if (text->key == NULL || strcmp (text->key, "Comment"))
+          GimpParasite *parasite;
+          gchar        *contents = NULL;
+
+          if (text->key == NULL)
             continue;
 
           if (text->text_length > 0)   /*  tEXt  */
             {
-              comment = g_convert (text->text, -1,
+              contents = g_convert (text->text, -1,
                                    "UTF-8", "ISO-8859-1",
                                    NULL, NULL, NULL);
             }
           else if (g_utf8_validate (text->text, -1, NULL))
             {                          /*  iTXt  */
-              comment = g_strdup (text->text);
+              contents = g_strdup (text->text);
             }
+
+          /* Don't bother with chunks that have no contents */
+          if (contents == NULL)
+            break;
+
+          if (strcmp (text->key, "Comment") == 0)
+            {
+              /* Don't write multiple comments */
+              if (++comment_chunks > 1)
+                continue;
+
+              parasite = gimp_parasite_new ("gimp-comment", GIMP_PARASITE_PERSISTENT,
+                                            strlen (contents) + 1, contents);
+              gimp_image_attach_parasite ((GimpImage *) image, parasite);
+              gimp_parasite_free (parasite);
+            }
+          else
+            { /* It may not be a comment, but keep it anyways */
+              gchar name[256];
+
+              (void) g_snprintf (name, sizeof (name), "png/text/%s", text->key);
+              parasite = gimp_parasite_new (name, GIMP_PARASITE_PERSISTENT,
+                                            strlen (contents) + 1, contents);
+              safe_to_copy_chunks = g_slist_prepend (safe_to_copy_chunks, parasite);
+            }
+
+          g_free (contents);
         }
 
-      if (comment && *comment)
-        {
-          GimpParasite *parasite;
-
-          parasite = gimp_parasite_new ("gimp-comment",
-                                        GIMP_PARASITE_PERSISTENT,
-                                        strlen (comment) + 1, comment);
-          gimp_image_attach_parasite ((GimpImage *) image, parasite);
-          gimp_parasite_free (parasite);
-        }
-
-      g_free (comment);
+      if (comment_chunks > 1)
+        g_printerr ("file-png: found %u \"Comment\" chunks!\n", comment_chunks);
     }
 
   /*
@@ -1291,7 +1312,7 @@ export_image (GFile        *file,
   gint              num;              /* Number of rows to load */
   FILE             *fp;               /* File pointer */
   GimpColorProfile *profile = NULL;   /* Color profile */
-  gchar           **parasites;        /* Safe-to-copy chunks */
+  GPtrArray        *parasites;        /* Safe-to-copy chunks */
   gboolean          out_linear;       /* Save linear RGB */
   GeglBuffer       *buffer;           /* GEGL buffer for layer */
   const Babl       *file_format = NULL; /* BABL format of file */
@@ -1848,23 +1869,79 @@ export_image (GFile        *file,
       g_object_unref (config);
     }
 
+  /* Some parasites may be tEXt chunks so lets copy those with the best
+   * compression scheme. After we write one of the text chunks we remove it from
+   * this list and let the rest be copied byte by byte to the png file. */
+  parasites = g_ptr_array_new_with_free_func ((GDestroyNotify) g_free);
+  for (gchar **iter = gimp_image_get_parasite_list (image), **list = iter; list; ++iter)
+    {
+      if (*iter == NULL)
+        {
+          g_free (list);
+          break;
+        }
+      g_ptr_array_add (parasites, *iter);
+    }
+
 #ifdef PNG_zTXt_SUPPORTED
 /* Small texts are not worth compressing and will be even bigger if compressed.
    Empirical length limit of a text being worth compressing. */
 #define COMPRESSION_WORTHY_LENGTH 200
 #endif
 
-  if (save_comment && comment && strlen (comment))
+  /* Index -1 represents comment to write */
+  for (gint i = -1; i == -1 || i < parasites->len;)
     {
+      gchar *key, *contents;
       gsize text_length = 0;
 
+      /* Find our key and contents (or skip this index) */
+      if (i == -1)
+        {
+          ++i;
+          if (save_comment && comment && strlen (comment))
+            {
+              key      = g_strdup ("Comment");
+              contents = comment;
+              comment  = NULL;
+            }
+          else
+            {
+              continue;
+            }
+        }
+      else
+        { /* We either consume this text chunk, or advance i */
+          if (strncmp (parasites->pdata[i], "png/text/", sizeof ("png/text/") - 1))
+            {
+              ++i;
+              continue;
+            }
+          else
+            {
+              GimpParasite *parasite;
+              guint32       num_bytes;
+              gchar        *name, *data;
+
+              name     = g_ptr_array_steal_index (parasites, i);
+              parasite = gimp_image_get_parasite (image, name);
+              data = (gchar *) gimp_parasite_get_data (parasite, &num_bytes);
+              key  = g_strdup (name + sizeof ("png/text/") - 1);
+              contents = g_strndup (data, num_bytes);
+
+              gimp_parasite_free (parasite);
+              g_free (name);
+            }
+        }
+
+      /* Write the text chunk now (whatever it may be) */
       text = g_new0 (png_text, 1);
 
-      text[0].key = "Comment";
+      text[0].key = key;
 
 #ifdef PNG_iTXt_SUPPORTED
 
-      text[0].text = g_convert (comment, -1,
+      text[0].text = g_convert (contents, -1,
                                 "ISO-8859-1",
                                 "UTF-8",
                                 NULL,
@@ -1878,7 +1955,7 @@ export_image (GFile        *file,
            */
           g_free (text[0].text);
 
-          text[0].text        = g_strdup (comment);
+          text[0].text        = g_strdup (contents);
           text[0].itxt_length = strlen (text[0].text);
 
 #ifdef PNG_zTXt_SUPPORTED
@@ -1901,7 +1978,7 @@ export_image (GFile        *file,
            * at all, so the conversion does not fail on unknown
            * character.  They are simply ignored.
            */
-          text[0].text = g_convert_with_fallback (comment, -1,
+          text[0].text = g_convert_with_fallback (contents, -1,
                                                   "ISO-8859-1",
                                                   "UTF-8",
                                                   "",
@@ -1924,67 +2001,60 @@ export_image (GFile        *file,
         {
           g_free (text[0].text);
           g_free (text);
-          text = NULL;
         }
-    }
+      else
+        {
+          png_set_text (pp, info, text, 1);
+        }
 
-  g_free (comment);
+      text = NULL;
+      g_free (key);
+      g_free (contents);
+    }
 
 #ifdef PNG_zTXt_SUPPORTED
 #undef COMPRESSION_WORTHY_LENGTH
 #endif
 
-  if (text)
-    png_set_text (pp, info, text, 1);
-
   png_write_info (pp, info);
   if (G_BYTE_ORDER == G_LITTLE_ENDIAN)
     png_set_swap (pp);
 
-  /* Write any safe-to-copy chunks saved from import */
-  parasites = gimp_image_get_parasite_list (image);
-
-  if (parasites)
+  for (gint i = 0; i < parasites->len; i++)
     {
-      gint count;
-
-      count = g_strv_length (parasites);
-      for (gint i = 0; i < count; i++)
+      if (strncmp (parasites->pdata[i], "png", 3) == 0)
         {
-          if (strncmp (parasites[i], "png", 3) == 0)
+          GimpParasite *parasite;
+
+          parasite = gimp_image_get_parasite (image, parasites->pdata[i]);
+
+          if (parasite)
             {
-              GimpParasite *parasite;
+              gchar  buf[1024];
+              gchar *chunk_name;
 
-              parasite = gimp_image_get_parasite (image, parasites[i]);
+              g_strlcpy (buf, parasites->pdata[i], sizeof (buf));
+              chunk_name = strchr (buf, '/');
+              chunk_name++;
 
-              if (parasite)
+              if (chunk_name)
                 {
-                  gchar  buf[1024];
-                  gchar *chunk_name;
+                  png_byte      name[4];
+                  const guint8 *data;
+                  guint32       len;
 
-                  g_strlcpy (buf, parasites[i], sizeof (buf));
-                  chunk_name = strchr (buf, '/');
-                  chunk_name++;
+                  for (gint j = 0; j < 4; j++)
+                    name[j] = chunk_name[j];
 
-                  if (chunk_name)
-                    {
-                      png_byte      name[4];
-                      const guint8 *data;
-                      guint32       len;
+                  data = (const guint8 *) gimp_parasite_get_data (parasite, &len);
 
-                      for (gint j = 0; j < 4; j++)
-                        name[j] = chunk_name[j];
-
-                      data = (const guint8 *) gimp_parasite_get_data (parasite, &len);
-
-                      png_write_chunk (pp, name, data, len);
-                    }
-                  gimp_parasite_free (parasite);
+                  png_write_chunk (pp, name, data, len);
                 }
+              gimp_parasite_free (parasite);
             }
         }
     }
-  g_strfreev (parasites);
+  g_ptr_array_free (parasites, TRUE);
 
   /*
    * Turn on interlace handling...
