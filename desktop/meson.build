@@ -15,7 +15,7 @@ desktopfilein = configure_file(
 
 desktopfile = i18n.merge_file(
   input : desktopfilein,
-  output: desktopfilename,
+  output: desktopfilename.replace('gimp', 'gimp-@0@'.format(gimp_app_version)),
   type: 'desktop',
   po_dir: po_dir,
   install: true,
