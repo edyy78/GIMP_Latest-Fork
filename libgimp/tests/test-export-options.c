@@ -26,7 +26,7 @@ gimp_c_test_run (GimpProcedure        *procedure,
   GimpExportOptions  *options;
   GimpExportReturn    delete;
   gboolean            identical_buffers;
-  GimpLayer          *standard_layer;
+  GimpLayer          *layer_with_mask;
   GimpLayerMask      *layer_mask;
   GimpLayerMask      *mask;
 
@@ -39,13 +39,13 @@ gimp_c_test_run (GimpProcedure        *procedure,
   gimp_image_insert_layer (new_image, GIMP_LAYER (text_layer), NULL, 0);
 
 
-  standard_layer = gimp_layer_new (new_image, "Image layer",
-                                   NEW_IMAGE_WIDTH, NEW_IMAGE_HEIGHT,
-                                   GIMP_RGBA_IMAGE, 100.0, GIMP_LAYER_MODE_NORMAL);
-  gimp_image_insert_layer (new_image, standard_layer, NULL, 0);
+  layer_with_mask = gimp_layer_new (new_image, "Layer with mask",
+                                    NEW_IMAGE_WIDTH, NEW_IMAGE_HEIGHT,
+                                    GIMP_RGBA_IMAGE, 100.0, GIMP_LAYER_MODE_NORMAL);
+  gimp_image_insert_layer (new_image, layer_with_mask, NULL, 0);
 
-  layer_mask = gimp_layer_create_mask (standard_layer, GIMP_ADD_MASK_WHITE);
-  gimp_layer_add_mask (standard_layer, layer_mask);
+  layer_mask = gimp_layer_create_mask (layer_with_mask, GIMP_ADD_MASK_WHITE);
+  gimp_layer_add_mask (layer_with_mask, layer_mask);
 
 
   options = g_object_new (GIMP_TYPE_EXPORT_OPTIONS,
@@ -76,7 +76,7 @@ gimp_c_test_run (GimpProcedure        *procedure,
   GIMP_TEST_END(delete == GIMP_EXPORT_EXPORT && gimp_core_object_array_get_length ((GObject **) images) == 2 && new_image != original_image);
   g_free (images);
 
-  GIMP_TEST_START("The new image has a single layer");
+  GIMP_TEST_START("The new image has a single layer and no mask");
   layers = gimp_image_get_layers (new_image);
   mask = gimp_layer_get_mask (layers[0]);
   GIMP_TEST_END(gimp_core_object_array_get_length ((GObject **) layers) == 1 && mask == NULL);

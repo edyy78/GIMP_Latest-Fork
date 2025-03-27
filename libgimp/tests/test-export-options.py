@@ -9,20 +9,21 @@ image.insert_layer(text_layer, None, 0)
 text_layer = Gimp.TextLayer.new(image, "annyeong uju", Gimp.context_get_font(), 20, Gimp.Unit.point())
 image.insert_layer(text_layer, None, 0)
 
-standard_layer = Gimp.Layer.new(image, "Standard layer",
-                                NEW_IMAGE_WIDTH, NEW_IMAGE_HEIGHT,
-                                Gimp.ImageType.RGBA_IMAGE, 100, Gimp.LayerMode.NORMAL)
-image.insert_layer(standard_layer, None, 0)
+layer_with_mask = Gimp.Layer.new(image, "layer with mask",
+                                 NEW_IMAGE_WIDTH, NEW_IMAGE_HEIGHT,
+                                 Gimp.ImageType.RGBA_IMAGE, 100, Gimp.LayerMode.NORMAL)
+image.insert_layer(layer_with_mask, None, 0)
 
-layer_mask = Gimp.Layer.create_mask(standard_layer, Gimp.AddMaskType.WHITE)
-standard_layer.add_mask(layer_mask)
+layer_mask = Gimp.Layer.create_mask(layer_with_mask, Gimp.AddMaskType.WHITE)
+layer_with_mask.add_mask(layer_mask)
 
 images = Gimp.get_images()
+gimp_assert('Verify start state (1)', len(images) == 1 and images[0] == image)
+
 layers = image.get_layers()
-gimp_assert('Verify start state', len(images) == 1 and
-            images[0] == image and
-            len(layers) == 3 and
-            layers[0].get_mask() != None)
+gimp_assert('Verify start state (2)', len(layers) == 3)
+
+gimp_assert('Verify start state (3)', layers[0].get_mask() != None)
 
 options = Gimp.ExportOptions()
 options.set_property ("capabilities",
