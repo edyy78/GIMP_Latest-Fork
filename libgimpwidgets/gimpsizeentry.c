@@ -87,7 +87,9 @@ typedef struct _GimpSizeEntryField
   gdouble        upper;
 
   GtkAdjustment *value_adjustment;
+  GtkGesture    *value_gesture;
   GtkWidget     *value_spinbutton;
+  gdouble        drag_init_value;
   gdouble        value;
   gdouble        min_value;
   gdouble        max_value;
@@ -141,6 +143,14 @@ static gint      gimp_size_entry_eevl_input_callback (GtkSpinButton      *spinne
 static gboolean  gimp_size_entry_eevl_unit_resolver  (const gchar        *ident,
                                                       GimpEevlQuantity   *factor,
                                                       gdouble            *offset,
+                                                      gpointer            data);
+static void      gimp_size_entry_drag_begin_callback (GtkGestureDrag     *gesture,
+                                                      gdouble             start_x,
+                                                      gdouble             start_y,
+                                                      gpointer            data);
+static void      gimp_size_entry_drag_callback       (GtkGestureDrag*     gesture,
+                                                      gdouble             offset_x,
+                                                      gdouble             offset_y,
                                                       gpointer            data);
 
 
@@ -332,6 +342,8 @@ gimp_size_entry_new (gint                       number_of_fields,
                                                    1.0, 10.0, 0.0);
       gsef->value_spinbutton = gimp_spin_button_new (gsef->value_adjustment,
                                                      1.0, digits);
+      gsef->value_gesture    = gtk_gesture_drag_new(gsef->value_spinbutton);
+
       gtk_spin_button_set_numeric (GTK_SPIN_BUTTON (gsef->value_spinbutton),
                                    TRUE);
 
@@ -352,6 +364,12 @@ gimp_size_entry_new (gint                       number_of_fields,
                        i+1, gse->show_refval+1, 1, 1);
       g_signal_connect (gsef->value_adjustment, "value-changed",
                         G_CALLBACK (gimp_size_entry_value_callback),
+                        gsef);
+      g_signal_connect_after (gsef->value_gesture, "drag-begin",
+                        G_CALLBACK (gimp_size_entry_drag_begin_callback),
+                        gsef);
+      g_signal_connect_after (gsef->value_gesture, "drag-update",
+                        G_CALLBACK (gimp_size_entry_drag_callback),
                         gsef);
 
       gtk_widget_show (gsef->value_spinbutton);
@@ -472,9 +490,16 @@ gimp_size_entry_add_field  (GimpSizeEntry *gse,
 
   gsef->value_adjustment = gtk_spin_button_get_adjustment (value_spinbutton);
   gsef->value_spinbutton = GTK_WIDGET (value_spinbutton);
+  gsef->value_gesture    = gtk_gesture_drag_new(gsef->value_spinbutton);
   g_signal_connect (gsef->value_adjustment, "value-changed",
                     G_CALLBACK (gimp_size_entry_value_callback),
                     gsef);
+  g_signal_connect_after (gsef->value_gesture, "drag-begin",
+          G_CALLBACK (gimp_size_entry_drag_begin_callback),
+          gsef);
+  g_signal_connect_after (gsef->value_gesture, "drag-update",
+          G_CALLBACK (gimp_size_entry_drag_callback),
+          gsef);
 
   gimp_size_entry_attach_eevl (GTK_SPIN_BUTTON (gsef->value_spinbutton),
                                gsef);
@@ -897,6 +922,37 @@ gimp_size_entry_value_callback (GtkAdjustment *adjustment,
 
   if (gsef->value != new_value)
     gimp_size_entry_update_value (gsef, new_value);
+}
+
+static void
+gimp_size_entry_drag_begin_callback (GtkGestureDrag     *gesture,
+                                     gdouble             start_x,
+                                     gdouble             start_y,
+                                     gpointer            data)
+{
+  GimpSizeEntryField *gsef;
+  gint                index;
+
+  gsef = (GimpSizeEntryField *) data;
+  index = g_slist_index(gsef->gse->fields, gsef);
+
+  gsef->drag_init_value = gimp_size_entry_get_value(gsef->gse, index);
+}
+
+static void
+gimp_size_entry_drag_callback (GtkGestureDrag*     gesture,
+                               gdouble             offset_x,
+                               gdouble             offset_y,
+                               gpointer            data)
+{
+  GimpSizeEntryField *gsef;
+  gint                index;
+
+  gsef = (GimpSizeEntryField *) data;
+  index = g_slist_index(gsef->gse->fields, gsef);
+
+  gimp_size_entry_set_value(gsef->gse, index, gsef->drag_init_value + offset_x);
+  gtk_editable_select_region(GTK_EDITABLE(gsef->value_spinbutton), 0, -1);
 }
 
 
