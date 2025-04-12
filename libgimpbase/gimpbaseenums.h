@@ -1198,6 +1198,26 @@ typedef enum
 
 
 /**
+ * GimpTextJustification:
+ * @GIMP_TEXT_JUSTIFY_TOP:    To the top
+ * @GIMP_TEXT_JUSTIFY_MIDDLE: To the middle
+ * @GIMP_TEXT_JUSTIFY_BOTTOM: To the bottom
+ *
+ * Text justifications.
+ **/
+#define GIMP_TYPE_TEXT_VERTICAL_JUSTIFICATION (gimp_text_vertical_justification_get_type ())
+
+GType gimp_text_vertical_justification_get_type (void) G_GNUC_CONST;
+
+typedef enum
+{
+  GIMP_TEXT_JUSTIFY_TOP,     /*< desc="To the top"    >*/
+  GIMP_TEXT_JUSTIFY_MIDDLE   /*< desc="To the middle" >*/
+  GIMP_TEXT_JUSTIFY_BOTTOM,  /*< desc="To the bottom" >*/
+} GimpTextVerticalJustification;
+
+
+/**
  * GimpTransferMode:
  * @GIMP_TRANSFER_SHADOWS:    Shadows
  * @GIMP_TRANSFER_MIDTONES:   Midtones

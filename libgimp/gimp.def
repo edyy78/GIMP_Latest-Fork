@@ -1029,6 +1029,7 @@ EXPORTS
 	gimp_text_layer_get_hint_style
 	gimp_text_layer_get_indent
 	gimp_text_layer_get_justification
+	gimp_text_layer_get_vertical_justification
 	gimp_text_layer_get_kerning
 	gimp_text_layer_get_language
 	gimp_text_layer_get_letter_spacing
@@ -1046,12 +1047,14 @@ EXPORTS
 	gimp_text_layer_set_hint_style
 	gimp_text_layer_set_indent
 	gimp_text_layer_set_justification
+	gimp_text_layer_set_vertical_justification
 	gimp_text_layer_set_kerning
 	gimp_text_layer_set_language
 	gimp_text_layer_set_letter_spacing
 	gimp_text_layer_set_line_spacing
 	gimp_text_layer_set_markup
 	gimp_text_layer_set_text
+	gimp_text_tool_editor_is_open
 	gimp_thumbnail_procedure_get_type
 	gimp_thumbnail_procedure_new
 	gimp_tile_height

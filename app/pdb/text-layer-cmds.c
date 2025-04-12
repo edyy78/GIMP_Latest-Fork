@@ -736,6 +736,64 @@ text_layer_set_justification_invoker (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
+text_layer_get_vertical_justification_invoker (GimpProcedure         *procedure,
+                                               Gimp                  *gimp,
+                                               GimpContext           *context,
+                                               GimpProgress          *progress,
+                                               const GimpValueArray  *args,
+                                               GError               **error)
+{
+  gboolean success = TRUE;
+  GimpValueArray *return_vals;
+  GimpTextLayer *layer;
+  gint justify = 0;
+
+  layer = g_value_get_object (gimp_value_array_index (args, 0));
+
+  if (success)
+    {
+      g_object_get (gimp_text_layer_get_text (layer),
+                    "vertically-justify", &justify,
+                    NULL);
+    }
+
+  return_vals = gimp_procedure_get_return_values (procedure, success,
+                                                  error ? *error : NULL);
+
+  if (success)
+    g_value_set_enum (gimp_value_array_index (return_vals, 1), justify);
+
+  return return_vals;
+}
+
+static GimpValueArray *
+text_layer_set_vertical_justification_invoker (GimpProcedure         *procedure,
+                                               Gimp                  *gimp,
+                                               GimpContext           *context,
+                                               GimpProgress          *progress,
+                                               const GimpValueArray  *args,
+                                               GError               **error)
+{
+  gboolean success = TRUE;
+  GimpTextLayer *layer;
+  gint justify;
+
+  layer = g_value_get_object (gimp_value_array_index (args, 0));
+  justify = g_value_get_enum (gimp_value_array_index (args, 1));
+
+  if (success)
+    {
+      gimp_text_layer_set (layer,
+                           _("Set text layer attribute"),
+                           "vertically-justify", justify,
+                           NULL);
+    }
+
+  return gimp_procedure_get_return_values (procedure, success,
+                                           error ? *error : NULL);
+}
+
+static GimpValueArray *
 text_layer_get_color_invoker (GimpProcedure         *procedure,
                               Gimp                  *gimp,
                               GimpContext           *context,
@@ -1682,6 +1740,66 @@ register_text_layer_procs (GimpPDB *pdb)
                                                   "The justification for your text.",
                                                   GIMP_TYPE_TEXT_JUSTIFICATION,
                                                   GIMP_TEXT_JUSTIFY_LEFT,
+                                                  GIMP_PARAM_READWRITE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
+   * gimp-text-layer-get-vertical-justification
+   */
+  procedure = gimp_procedure_new (text_layer_get_vertical_justification_invoker, FALSE);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-text-layer-get-vertical-justification");
+  gimp_procedure_set_static_help (procedure,
+                                  "Get the text vertical justification information of the text layer.",
+                                  "This procedure returns the vertical alignment of the text relative to the text layer.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Anonymous",
+                                         "Anonymous",
+                                         "2025");
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_text_layer ("layer",
+                                                           "layer",
+                                                           "The text layer.",
+                                                           FALSE,
+                                                           GIMP_PARAM_READWRITE));
+  gimp_procedure_add_return_value (procedure,
+                                   g_param_spec_enum ("vertically-justify",
+                                                      "vertically-justify",
+                                                      "The vertical justification used in the text layer.",
+                                                      GIMP_TYPE_TEXT_VERTICAL_JUSTIFICATION,
+                                                      GIMP_TEXT_JUSTIFY_TOP,
+                                                      GIMP_PARAM_READWRITE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
+   * gimp-text-layer-set-vertical-justification
+   */
+  procedure = gimp_procedure_new (text_layer_set_vertical_justification_invoker, FALSE);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-text-layer-set-justification");
+  gimp_procedure_set_static_help (procedure,
+                                  "Set the vertical justification of the text in a text layer.",
+                                  "This procedure sets the vertical alignment of the text relative to the text layer.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Anonymous",
+                                         "Anonymous",
+                                         "2025");
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_text_layer ("layer",
+                                                           "layer",
+                                                           "The text layer",
+                                                           FALSE,
+                                                           GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_enum ("vertically-justify",
+                                                  "vertically-justify",
+                                                  "The justification for your text.",
+                                                  GIMP_TYPE_TEXT_VERTICAL_JUSTIFICATION,
+                                                  GIMP_TEXT_JUSTIFY_TOP,
                                                   GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);

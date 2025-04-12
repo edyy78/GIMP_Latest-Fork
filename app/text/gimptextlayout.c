@@ -763,8 +763,9 @@ gimp_text_layout_position (GimpTextLayout *layout)
       PangoAlignment    align    = pango_layout_get_alignment (layout->layout);
       GimpTextDirection base_dir = layout->text->base_dir;
       gint              width;
+      gint              height;
 
-      pango_layout_get_pixel_size (layout->layout, &width, NULL);
+      pango_layout_get_pixel_size (layout->layout, &width, &height);
 
       if ((base_dir == GIMP_TEXT_DIRECTION_LTR && align == PANGO_ALIGN_RIGHT) ||
           (base_dir == GIMP_TEXT_DIRECTION_RTL && align == PANGO_ALIGN_RIGHT) ||
@@ -780,7 +781,59 @@ gimp_text_layout_position (GimpTextLayout *layout)
         {
           layout->extents.x +=
             (PANGO_PIXELS (pango_layout_get_width (layout->layout)) - width) / 2;
-       }
+        }
+      if (layout->text->vertically_justify == GIMP_TEXT_JUSTIFY_BOTTOM)
+        {
+          switch (base_dir)
+            {
+              case GIMP_TEXT_DIRECTION_TTB_LTR:
+              case GIMP_TEXT_DIRECTION_TTB_LTR_UPRIGHT:
+                layout->extents.y +=
+                  PANGO_PIXELS (pango_layout_get_height (layout->layout))
+                  - height + layout->text->box_width;
+                break;
+
+              case GIMP_TEXT_DIRECTION_TTB_RTL:
+              case GIMP_TEXT_DIRECTION_TTB_RTL_UPRIGHT:
+                layout->extents.y -=
+                  PANGO_PIXELS (pango_layout_get_height (layout->layout))
+                  - height + layout->text->box_width;
+                break;
+
+              case GIMP_TEXT_DIRECTION_LTR:
+              case GIMP_TEXT_DIRECTION_RTL:
+                layout->extents.y +=
+                  PANGO_PIXELS (pango_layout_get_height (layout->layout))
+                  - height + layout->text->box_height;
+                break;
+            }
+        }
+      else if (layout->text->vertically_justify == GIMP_TEXT_JUSTIFY_MIDDLE)
+        {
+          switch (base_dir)
+            {
+              case GIMP_TEXT_DIRECTION_TTB_LTR:
+              case GIMP_TEXT_DIRECTION_TTB_LTR_UPRIGHT:
+                layout->extents.y +=
+                  (PANGO_PIXELS (pango_layout_get_height (layout->layout))
+                  - height + layout->text->box_width) / 2;
+                break;
+
+              case GIMP_TEXT_DIRECTION_TTB_RTL:
+              case GIMP_TEXT_DIRECTION_TTB_RTL_UPRIGHT:
+                layout->extents.y -=
+                  (PANGO_PIXELS (pango_layout_get_height (layout->layout))
+                  - height + layout->text->box_width) / 2;
+                break;
+
+              case GIMP_TEXT_DIRECTION_LTR:
+              case GIMP_TEXT_DIRECTION_RTL:
+                layout->extents.y +=
+                  (PANGO_PIXELS (pango_layout_get_height (layout->layout))
+                  - height + layout->text->box_height) / 2;
+                break;
+            }
+        }
     }
 
   if (layout->text->border > 0)

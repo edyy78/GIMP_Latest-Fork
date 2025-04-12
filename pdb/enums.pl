@@ -581,6 +581,15 @@ package Gimp::CodeGen::enums;
 		       GIMP_TEXT_JUSTIFY_CENTER => '2',
 		       GIMP_TEXT_JUSTIFY_FILL => '3' }
 	},
+    GimpTextVerticalJustification =>
+	{ contig => 1,
+	  header => 'libgimpbase/gimpbaseenums.h',
+	  symbols => [ qw(GIMP_TEXT_JUSTIFY_TOP GIMP_TEXT_JUSTIFY_MIDDLE
+			  GIMP_TEXT_JUSTIFY_BOTTOM) ],
+	  mapping => { GIMP_TEXT_JUSTIFY_TOP => '0',
+		       GIMP_TEXT_JUSTIFY_MIDDLE => '1',
+		       GIMP_TEXT_JUSTIFY_BOTTOM => '2' }
+	},
     GimpTransferMode =>
 	{ contig => 1,
 	  header => 'libgimpbase/gimpbaseenums.h',
