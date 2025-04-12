@@ -1212,8 +1212,8 @@ GType gimp_text_vertical_justification_get_type (void) G_GNUC_CONST;
 typedef enum
 {
   GIMP_TEXT_JUSTIFY_TOP,     /*< desc="To the top"    >*/
-  GIMP_TEXT_JUSTIFY_MIDDLE   /*< desc="To the middle" >*/
-  GIMP_TEXT_JUSTIFY_BOTTOM,  /*< desc="To the bottom" >*/
+  GIMP_TEXT_JUSTIFY_MIDDLE,  /*< desc="To the middle" >*/
+  GIMP_TEXT_JUSTIFY_BOTTOM   /*< desc="To the bottom" >*/
 } GimpTextVerticalJustification;
 
 

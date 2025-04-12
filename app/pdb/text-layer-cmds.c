@@ -1779,7 +1779,7 @@ register_text_layer_procs (GimpPDB *pdb)
    */
   procedure = gimp_procedure_new (text_layer_set_vertical_justification_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-text-layer-set-justification");
+                               "gimp-text-layer-set-vertical-justification");
   gimp_procedure_set_static_help (procedure,
                                   "Set the vertical justification of the text in a text layer.",
                                   "This procedure sets the vertical alignment of the text relative to the text layer.",
