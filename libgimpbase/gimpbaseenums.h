@@ -1198,12 +1198,12 @@ typedef enum
 
 
 /**
- * GimpTextJustification:
+ * GimpTextVerticalJustification:
  * @GIMP_TEXT_JUSTIFY_TOP:    To the top
  * @GIMP_TEXT_JUSTIFY_MIDDLE: To the middle
  * @GIMP_TEXT_JUSTIFY_BOTTOM: To the bottom
  *
- * Text justifications.
+ * Text vertical justifications.
  **/
 #define GIMP_TYPE_TEXT_VERTICAL_JUSTIFICATION (gimp_text_vertical_justification_get_type ())
 
