@@ -28,8 +28,8 @@ plug-ins/script-fu/scripts/gimp-online.scm
 plug-ins/script-fu/scripts/gradient-example.scm
 plug-ins/script-fu/scripts/guides-from-selection.scm
 plug-ins/script-fu/scripts/guides-new-percent.scm
-plug-ins/script-fu/scripts/guides-rules.scm
 plug-ins/script-fu/scripts/guides-new.scm
+plug-ins/script-fu/scripts/guides-rules.scm
 plug-ins/script-fu/scripts/guides-remove-all.scm
 plug-ins/script-fu/scripts/lava.scm
 plug-ins/script-fu/scripts/line-nova.scm
