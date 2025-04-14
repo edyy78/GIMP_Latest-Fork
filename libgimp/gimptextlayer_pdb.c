@@ -878,8 +878,8 @@ gimp_text_layer_set_justification (GimpTextLayer         *layer,
  *
  * Get the text vertical justification information of the text layer.
  *
- * This procedure returns the vertical alignment of the text relative to the
- * text layer.
+ * This procedure returns the vertical alignment of the text relative
+ * to the text layer.
  *
  * Returns: The vertical justification used in the text layer.
  *
@@ -916,8 +916,8 @@ gimp_text_layer_get_vertical_justification (GimpTextLayer *layer)
  *
  * Set the vertical justification of the text in a text layer.
  *
- * This procedure sets the vertical alignment of the text relative to the
- * text layer.
+ * This procedure sets the vertical alignment of the text relative to
+ * the text layer.
  *
  * Returns: TRUE on success.
  *

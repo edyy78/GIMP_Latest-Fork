@@ -1765,8 +1765,8 @@ register_text_layer_procs (GimpPDB *pdb)
                                                            FALSE,
                                                            GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   g_param_spec_enum ("vertically-justify",
-                                                      "vertically-justify",
+                                   g_param_spec_enum ("justify",
+                                                      "justify",
                                                       "The vertical justification used in the text layer.",
                                                       GIMP_TYPE_TEXT_VERTICAL_JUSTIFICATION,
                                                       GIMP_TEXT_JUSTIFY_TOP,
@@ -1795,9 +1795,9 @@ register_text_layer_procs (GimpPDB *pdb)
                                                            FALSE,
                                                            GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               g_param_spec_enum ("vertically-justify",
-                                                  "vertically-justify",
-                                                  "The justification for your text.",
+                               g_param_spec_enum ("justify",
+                                                  "justify",
+                                                  "The vertical justification for your text.",
                                                   GIMP_TYPE_TEXT_VERTICAL_JUSTIFICATION,
                                                   GIMP_TEXT_JUSTIFY_TOP,
                                                   GIMP_PARAM_READWRITE));

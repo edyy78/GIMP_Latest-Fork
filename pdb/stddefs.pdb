@@ -57,6 +57,10 @@ sub andy_pdb_misc {
     contrib_pdb_misc('Andy Thomas', '', @_);
 }
 
+sub anon_pdb_misc {
+    contrib_pdb_misc('Anonymous', '', @_);
+}
+
 sub austin_pdb_misc {
     contrib_pdb_misc('Austin Donnelly', '', @_);
 }

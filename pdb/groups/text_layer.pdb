@@ -743,7 +743,7 @@ This procedure returns the vertical alignment of the text relative to the
 text layer.
 HELP
 
-    &marcus_pdb_misc('2025', '3.0.4');
+    &anon_pdb_misc('2025', '3.0.4');
 
     @inargs = (
         { name => 'layer', type => 'text_layer',
@@ -751,7 +751,7 @@ HELP
     );
 
     @outargs = (
-        { name => 'vertically_justify', type => 'enum GimpTextVerticalJustification',
+        { name => 'justify', type => 'enum GimpTextVerticalJustification',
           desc => 'The vertical justification used in the text layer.' }
     );
 
@@ -759,7 +759,7 @@ HELP
         code => <<'CODE'
 {
   g_object_get (gimp_text_layer_get_text (layer),
-                "vertically-justify", &vertically_justify,
+                "vertically-justify", &justify,
                 NULL);
 }
 CODE
@@ -774,12 +774,12 @@ This procedure sets the vertical alignment of the text relative to the
 text layer.
 HELP
 
-    &marcus_pdb_misc('2025', '3.0.4');
+    &anon_pdb_misc('2025', '3.0.4');
 
     @inargs = (
         { name => 'layer', type => 'text_layer',
           desc => 'The text layer' },
-        { name => 'vertically_justify', type => 'enum GimpTextVerticalJustification',
+        { name => 'justify', type => 'enum GimpTextVerticalJustification',
           desc => 'The vertical justification for your text.' }
     );
 
@@ -788,7 +788,7 @@ HELP
 {
   gimp_text_layer_set (layer,
                        _("Set text layer attribute"),
-                       "vertically-justify", vertically_justify,
+                       "vertically-justify", justify,
                        NULL);
 }
 CODE
@@ -1103,6 +1103,8 @@ CODE
             text_layer_set_base_direction
             text_layer_get_justification
             text_layer_set_justification
+            text_layer_get_vertical_justification
+            text_layer_set_vertical_justification
             text_layer_get_color
             text_layer_set_color
             text_layer_get_indent
