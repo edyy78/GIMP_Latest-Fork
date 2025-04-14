@@ -1801,9 +1801,9 @@ gimp_text_vertical_justification_get_type (void)
 
   static const GimpEnumDesc descs[] =
   {
-    { GIMP_TEXT_JUSTIFY_TOP, NC_("text-vertical-justification", "Top"), NULL },
-    { GIMP_TEXT_JUSTIFY_MIDDLE, NC_("text-vertical-justification", "Middle"), NULL },
-    { GIMP_TEXT_JUSTIFY_BOTTOM, NC_("text-vertical-justification", "Bottom"), NULL },
+    { GIMP_TEXT_JUSTIFY_TOP, NC_("text-vertical-justification", "To the top"), NULL },
+    { GIMP_TEXT_JUSTIFY_MIDDLE, NC_("text-vertical-justification", "To the middle"), NULL },
+    { GIMP_TEXT_JUSTIFY_BOTTOM, NC_("text-vertical-justification", "To the bottom"), NULL },
     { 0, NULL, NULL }
   };
 
