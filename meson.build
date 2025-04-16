@@ -2062,7 +2062,7 @@ gimp_exe = find_program('tools'/'in-build-gimp.sh')
 subdir('gimp-data/images/')
 
 # Unit testing
-subdir('libgimp/tests')
+subdir('libgimptest/libgimp_tests')
 
 # Docs
 subdir('docs')

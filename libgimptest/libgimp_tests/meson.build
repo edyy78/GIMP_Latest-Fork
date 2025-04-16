@@ -20,7 +20,7 @@ tests = [
 # test_env here is a new object.
 # See: https://github.com/mesonbuild/meson/issues/13045
 test_env=gimp_run_env
-test_env.append('GIMP_TESTING_PLUGINDIRS', meson.project_build_root() / 'libgimp/tests/c-tests/')
+test_env.append('GIMP_TESTING_PLUGINDIRS', meson.project_build_root() / 'libgimptest/libgimp_tests/c-tests/')
 test_env.set('GIMP_TESTING_ABS_TOP_SRCDIR', meson.project_source_root())
 
 run_python_test = find_program('./libgimp-run-python-test.sh')
