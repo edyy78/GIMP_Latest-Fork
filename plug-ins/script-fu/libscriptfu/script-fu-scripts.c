@@ -29,6 +29,7 @@
 
 #include "tinyscheme/scheme-private.h"
 
+#include "script-fu-lib.h"
 #include "script-fu-types.h"
 #include "script-fu-script.h"
 #include "script-fu-scripts.h"
@@ -197,6 +198,8 @@ script_fu_add_script (scheme  *sc,
 
   script->proc_class = GIMP_TYPE_PROCEDURE;
 
+  script_fu_script_set_is_old_style (script);
+
   script_fu_try_map_menu (script);
   script_fu_append_script_to_tree (script);
   return sc->NIL;
@@ -243,6 +246,45 @@ script_fu_add_script_filter (scheme  *sc,
       return args_error;
 
   script->proc_class = GIMP_TYPE_IMAGE_PROCEDURE;
+
+  script_fu_try_map_menu (script);
+  script_fu_append_script_to_tree (script);
+  return sc->NIL;
+}
+
+/* For a script's call to script-fu-register-procedure.
+ * Traverse Scheme argument list creating a new SFScript
+ * whose drawable_arity is SF_NO_DRAWABLE
+ *
+ * Return NIL or a foreign_error
+ */
+pointer
+script_fu_add_script_regular (scheme  *sc,
+                             pointer  a)
+{
+  SFScript    *script;
+  pointer      args_error;  /* a foreign_error or NIL. */
+
+  /* Check metadata args args are present.
+   * Has two less arg than script-fu-register.
+   * Last metadata arg is "copyright date"
+   */
+  if (sc->vptr->list_length (sc, a) < 5)
+    return foreign_error (sc, "script-fu-register-filter: Not enough arguments", 0);
+
+  /* pass handle i.e. "&a" ("a" of type "pointer" is on the stack) */
+  script = script_fu_script_new_from_metadata_regular (sc, &a);
+
+  script_fu_script_set_drawable_arity_none (script);
+
+  /* Parse the args to this function that are formal declarations of
+   * the args to the PDB procedure being defined.
+   */
+  args_error = script_fu_script_create_formal_args (sc, &a, script);
+  if (args_error != sc->NIL)
+      return args_error;
+
+  script->proc_class = GIMP_TYPE_PROCEDURE;
 
   script_fu_try_map_menu (script);
   script_fu_append_script_to_tree (script);
@@ -296,6 +338,14 @@ script_fu_add_menu (scheme  *sc,
 
 /*  private functions  */
 
+/* Load scripts from a directory tree.
+ * Recursively, descending into subdirectories.
+ * Only loads terminal files with suffix .scm.
+ * Not all such files need be plugin scripts.
+ * Does not load or traverse hidden files and directories
+ * and directories named like an init directory.
+ * ScriptFu separately loads certain files in init directories.
+ */
 static void
 script_fu_load_directory (GFile *directory)
 {
@@ -325,9 +375,19 @@ script_fu_load_directory (GFile *directory)
               GFile *child = g_file_enumerator_get_child (enumerator, info);
 
               if (file_type == G_FILE_TYPE_DIRECTORY)
-                script_fu_load_directory (child);
+                {
+                  /* Skip any init subdirectory.
+                   * It has scripts already loaded, and scripts we don't want loaded.
+                   */
+                  if (! script_fu_is_init_directory (child))
+                    /* Recursive! */
+                    script_fu_load_directory (child);
+                }
               else
-                script_fu_load_script (child);
+                {
+                  /* This will only load a .scm file. */
+                  script_fu_load_script (child);
+                }
 
               g_object_unref (child);
             }

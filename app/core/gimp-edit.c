@@ -31,6 +31,9 @@
 #include "gimpbuffer.h"
 #include "gimpcontext.h"
 #include "gimpdrawable-edit.h"
+#include "gimpdrawable-filters.h"
+#include "gimpdrawablefilter.h"
+#include "gimperror.h"
 #include "gimpgrouplayer.h"
 #include "gimpimage.h"
 #include "gimpimage-duplicate.h"
@@ -82,7 +85,8 @@ gimp_edit_cut (GimpImage     *image,
 
   if (layers_only)
     {
-      gchar *undo_label;
+      gchar    *undo_label;
+      gboolean  success = TRUE;
 
       undo_label = g_strdup_printf (ngettext ("Cut Layer", "Cut %d Layers",
                                               g_list_length (drawables)),
@@ -132,24 +136,30 @@ gimp_edit_cut (GimpImage     *image,
 
           /* Remove layers from source image. */
           for (iter = drawables; iter; iter = iter->next)
-            gimp_image_remove_layer (image, GIMP_LAYER (iter->data),
-                                     TRUE, NULL);
+            if (! gimp_layer_is_floating_sel (iter->data))
+              gimp_image_remove_layer (image, GIMP_LAYER (iter->data),
+                                       TRUE, NULL);
 
           g_list_free (drawables);
         }
       else
         {
           /* With selection, a cut is similar to a copy followed by a clear. */
-          gimp_edit_copy (image, drawables, context, error);
-
-          for (iter = drawables; iter; iter = iter->next)
-            if (! GIMP_IS_GROUP_LAYER (iter->data))
-              gimp_drawable_edit_clear (GIMP_DRAWABLE (iter->data), context);
+          if (gimp_edit_copy (image, drawables, context, TRUE, error))
+            {
+              for (iter = drawables; iter; iter = iter->next)
+                if (! GIMP_IS_GROUP_LAYER (iter->data))
+                  gimp_drawable_edit_clear (GIMP_DRAWABLE (iter->data), context);
+            }
+          else
+            {
+              success = FALSE;
+            }
         }
 
       gimp_image_undo_group_end (image);
 
-      return GIMP_OBJECT (gimp_get_clipboard_image (image->gimp));
+      return success ? GIMP_OBJECT (gimp_get_clipboard_image (image->gimp)) : NULL;
     }
   else
     {
@@ -173,6 +183,7 @@ GimpObject *
 gimp_edit_copy (GimpImage     *image,
                 GList         *drawables,
                 GimpContext   *context,
+                gboolean       copy_for_cut,
                 GError       **error)
 {
   GList    *iter;
@@ -193,7 +204,21 @@ gimp_edit_copy (GimpImage     *image,
     }
 
   /* Only accept multiple drawables for layers. */
-  g_return_val_if_fail (g_list_length (drawables) == 1 || drawables_are_layers, NULL);
+  if (g_list_length (drawables) > 1 && ! drawables_are_layers)
+    {
+      if (error)
+        {
+          if (copy_for_cut)
+            g_set_error_literal (error, GIMP_ERROR, GIMP_FAILED,
+                                 _("Cannot cut because multiple channels "
+                                   "are selected."));
+          else
+            g_set_error_literal (error, GIMP_ERROR, GIMP_FAILED,
+                                 _("Cannot copy because multiple channels "
+                                   "are selected."));
+        }
+      return NULL;
+    }
 
   if (drawables_are_layers)
     {
@@ -203,13 +228,66 @@ gimp_edit_copy (GimpImage     *image,
        */
       GimpImage     *clip_image;
       GimpChannel   *clip_selection;
+      GList         *remove = NULL;
       GeglRectangle  selection_bounds;
       gboolean       has_selection = FALSE;
+
+      for (iter = drawables; iter; iter = iter->next)
+        {
+          gint x1;
+          gint y1;
+          gint x2;
+          gint y2;
+
+          if (! gimp_item_mask_bounds (iter->data, &x1, &y1, &x2, &y2) ||
+              (x1 != x2 && y1 != y2))
+            break;
+        }
+
+      if (iter == NULL)
+        {
+          if (error)
+            {
+              if (copy_for_cut)
+                g_set_error_literal (error, GIMP_ERROR, GIMP_FAILED,
+                                     _("Cannot cut because the selected region is empty."));
+              else
+                g_set_error_literal (error, GIMP_ERROR, GIMP_FAILED,
+                                     _("Cannot copy because the selected region is empty."));
+            }
+          return NULL;
+        }
+
+      drawables = g_list_copy (drawables);
+      for (iter = drawables; iter; iter = iter->next)
+        {
+          GList *iter2;
+
+          for (iter2 = drawables; iter2; iter2 = iter2->next)
+            {
+              if (iter2 == iter)
+                continue;
+
+              if (gimp_viewable_is_ancestor (iter2->data, iter->data))
+                {
+                  /* When copying a layer group, all its children come
+                   * with anyway.
+                   */
+                  remove = g_list_prepend (remove, iter);
+                  break;
+                }
+            }
+        }
+      for (iter = remove; iter; iter = iter->next)
+        drawables = g_list_delete_link (drawables, iter->data);
+
+      g_list_free (remove);
 
       clip_image = gimp_image_new_from_drawables (image->gimp, drawables, TRUE, TRUE);
       gimp_container_remove (image->gimp->images, GIMP_OBJECT (clip_image));
       gimp_set_clipboard_image (image->gimp, clip_image);
       g_object_unref (clip_image);
+      g_list_free (drawables);
 
       clip_selection = gimp_image_get_mask (clip_image);
       if (! gimp_channel_is_empty (clip_selection))
@@ -430,8 +508,38 @@ gimp_edit_paste_get_tagged_layers (GimpImage         *image,
                                                                 "gimp-image-copied-layer"));
       if (copied)
         {
+          GimpContainer *filters;
+
           layer = GIMP_LAYER (gimp_item_convert (GIMP_ITEM (iter->data),
                                                  image, layer_type));
+
+          filters = gimp_drawable_get_filters (GIMP_DRAWABLE (iter->data));
+          if (gimp_container_get_n_children (filters) > 0)
+            {
+              GList *filter_list;
+
+              for (filter_list = GIMP_LIST (filters)->queue->tail;
+                   filter_list;
+                   filter_list = g_list_previous (filter_list))
+                {
+                  if (GIMP_IS_DRAWABLE_FILTER (filter_list->data))
+                    {
+                      GimpDrawableFilter *old_filter = filter_list->data;
+                      GimpDrawableFilter *filter;
+
+                      filter = gimp_drawable_filter_duplicate (GIMP_DRAWABLE (layer), old_filter);
+
+                      if (filter != NULL)
+                        {
+                          gimp_drawable_filter_apply (filter, NULL);
+                          gimp_drawable_filter_commit (filter, TRUE, NULL, FALSE);
+
+                          gimp_drawable_filter_layer_mask_freeze (filter);
+                          g_object_unref (filter);
+                        }
+                    }
+                }
+            }
           returned_layers = g_list_prepend (returned_layers, layer);
 
           switch (paste_type)
@@ -862,11 +970,12 @@ gimp_edit_paste (GimpImage     *image,
                  gint           viewport_height)
 {
   GList    *layers;
-  gboolean  use_offset    = FALSE;
-  gint      layers_bbox_x = 0;
-  gint      layers_bbox_y = 0;
-  gint      offset_y      = 0;
-  gint      offset_x      = 0;
+  gboolean  use_offset     = FALSE;
+  gint      layers_bbox_x  = 0;
+  gint      layers_bbox_y  = 0;
+  gint      offset_y       = 0;
+  gint      offset_x       = 0;
+  GType     drawables_type = G_TYPE_NONE;
 
   g_return_val_if_fail (GIMP_IS_IMAGE (image), NULL);
   g_return_val_if_fail (GIMP_IS_IMAGE (paste) || GIMP_IS_BUFFER (paste), NULL);
@@ -875,6 +984,32 @@ gimp_edit_paste (GimpImage     *image,
     {
       g_return_val_if_fail (GIMP_IS_DRAWABLE (iter->data), NULL);
       g_return_val_if_fail (gimp_item_is_attached (GIMP_ITEM (iter->data)), NULL);
+      g_return_val_if_fail (gimp_item_get_image (GIMP_ITEM (iter->data)) == image, NULL);
+      g_return_val_if_fail (drawables_type == G_TYPE_NONE || G_OBJECT_TYPE (iter->data) == drawables_type, NULL);
+
+      drawables_type = G_OBJECT_TYPE (iter->data);
+
+      /* Currently we can only paste to channels (named channels, layer
+       * masks, selection, etc.) as floating.
+       */
+      if (GIMP_IS_CHANNEL (iter->data))
+        {
+          switch (paste_type)
+            {
+            case GIMP_PASTE_TYPE_NEW_LAYER:
+            case GIMP_PASTE_TYPE_NEW_LAYER_OR_FLOATING:
+            case GIMP_PASTE_TYPE_NEW_MERGED_LAYER_OR_FLOATING:
+              paste_type = GIMP_PASTE_TYPE_FLOATING;
+              break;
+            case GIMP_PASTE_TYPE_NEW_LAYER_IN_PLACE:
+            case GIMP_PASTE_TYPE_NEW_LAYER_OR_FLOATING_IN_PLACE:
+            case GIMP_PASTE_TYPE_NEW_MERGED_LAYER_OR_FLOATING_IN_PLACE:
+              paste_type = GIMP_PASTE_TYPE_FLOATING_IN_PLACE;
+              break;
+            default:
+              break;
+            }
+        }
     }
 
   if (merged && GIMP_IS_IMAGE (paste))

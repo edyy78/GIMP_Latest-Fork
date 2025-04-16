@@ -78,14 +78,12 @@ static GimpProcedure  * mail_create_procedure (GimpPlugIn           *plug_in,
 static GimpValueArray * mail_run              (GimpProcedure        *procedure,
                                                GimpRunMode           run_mode,
                                                GimpImage            *image,
-                                               gint                  n_drawables,
                                                GimpDrawable        **drawables,
                                                GimpProcedureConfig  *config,
                                                gpointer              run_data);
 
 static GimpPDBStatusType  send_image          (GObject              *config,
                                                GimpImage            *image,
-                                               gint                  n_drawables,
                                                GimpDrawable        **drawables,
                                                gint32                run_mode);
 
@@ -207,35 +205,35 @@ mail_create_procedure (GimpPlugIn  *plug_in,
                                       "Spencer Kimball and Peter Mattis",
                                       "1995-1997");
 
-      GIMP_PROC_ARG_STRING (procedure, "filename",
-                            _("File_name"),
-                            _("The name of the file to save the image in"),
-                            NULL,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_string_argument (procedure, "filename",
+                                          _("File_name"),
+                                          _("The name of the file to save the image in"),
+                                          NULL,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_STRING (procedure, "to-address",
-                            _("_To"),
-                            _("The email address to send to"),
-                            "",
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_string_argument (procedure, "to-address",
+                                          _("_To"),
+                                          _("The email address to send to"),
+                                          "",
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_STRING (procedure, "from-address",
-                            _("_From"),
-                            _("The email address for the From: field"),
-                            "",
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_string_argument (procedure, "from-address",
+                                          _("_From"),
+                                          _("The email address for the From: field"),
+                                          "",
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_STRING (procedure, "subject",
-                            _("Su_bject"),
-                            _("The subject"),
-                            "",
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_string_argument (procedure, "subject",
+                                          _("Su_bject"),
+                                          _("The subject"),
+                                          "",
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_STRING (procedure, "comment",
-                            _("Co_mment"),
-                            _("The comment"),
-                            NULL,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_string_argument (procedure, "comment",
+                                          _("Co_mment"),
+                                          _("The comment"),
+                                          NULL,
+                                          G_PARAM_READWRITE);
     }
 
   return procedure;
@@ -245,7 +243,6 @@ static GimpValueArray *
 mail_run (GimpProcedure        *procedure,
           GimpRunMode           run_mode,
           GimpImage            *image,
-          gint                  n_drawables,
           GimpDrawable        **drawables,
           GimpProcedureConfig  *config,
           gpointer              run_data)
@@ -274,10 +271,7 @@ mail_run (GimpProcedure        *procedure,
         return gimp_procedure_new_return_values (procedure, GIMP_PDB_CANCEL, NULL);
     }
 
-  status = send_image (G_OBJECT (config),
-                       image,
-                       n_drawables, drawables,
-                       run_mode);
+  status = send_image (G_OBJECT (config), image, drawables, run_mode);
 
   return gimp_procedure_new_return_values (procedure, status, NULL);
 }
@@ -285,11 +279,10 @@ mail_run (GimpProcedure        *procedure,
 static GimpPDBStatusType
 send_image (GObject       *config,
             GimpImage     *image,
-            gint           n_drawables,
             GimpDrawable **drawables,
             gint32         run_mode)
 {
-  GimpPDBStatusType  status = GIMP_PDB_SUCCESS;
+  GimpPDBStatusType  status  = GIMP_PDB_SUCCESS;
   gchar             *ext;
   GFile             *tmpfile;
   gchar             *tmpname;
@@ -311,6 +304,7 @@ send_image (GObject       *config,
   gchar             *subject  = NULL;
   gchar             *comment  = NULL;
 
+  mailcmd[0] = NULL;
   g_object_get (config,
                 "filename",     &filename,
                 "to-address",   &receipt,
@@ -328,9 +322,7 @@ send_image (GObject       *config,
   tmpfile = gimp_temp_file (ext + 1);
   tmpname = g_file_get_path (tmpfile);
 
-  if (! (gimp_file_save (run_mode, image, n_drawables,
-                         (const GimpItem **) drawables,
-                         tmpfile) &&
+  if (! (gimp_file_save (run_mode, image, tmpfile, NULL) &&
          valid_file (tmpfile)))
     {
       goto error;

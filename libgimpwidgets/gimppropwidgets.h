@@ -168,9 +168,16 @@ GtkWidget     * gimp_prop_string_combo_box_new    (GObject       *config,
                                                    gint           label_column);
 GtkWidget *     gimp_prop_choice_combo_box_new    (GObject       *config,
                                                    const gchar   *property_name);
+GtkWidget *     gimp_prop_choice_radio_frame_new  (GObject       *config,
+                                                   const gchar   *property_name);
 
 
 /*  GimpParamPath  */
+
+GtkWidget     * gimp_prop_file_chooser_new        (GObject               *config,
+                                                   const gchar           *property_name,
+                                                   const gchar           *label,
+                                                   const gchar           *title);
 
 GtkWidget     * gimp_prop_file_chooser_button_new (GObject              *config,
                                                    const gchar          *property_name,

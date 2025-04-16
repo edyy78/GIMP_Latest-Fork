@@ -21,6 +21,7 @@
 #include "config.h"
 
 #include <gegl.h>
+#include <gio/gio.h>
 #include <glib-object.h>
 
 #include "gimpbasetypes.h"
@@ -237,7 +238,6 @@ gimp_choice_is_valid (GimpChoice  *choice,
 /**
  * gimp_choice_list_nicks:
  * @choice: a %GimpChoice.
- * @nick:   the nick to check.
  *
  * This procedure returns the list of nicks allowed for @choice.
  *
@@ -364,8 +364,6 @@ gimp_choice_get_documentation (GimpChoice   *choice,
  * return %FALSE; nevertheless [method@Gimp.Choice.list_nicks] and other
  * functions to get information about a choice will still function).
  *
- * Returns: %TRUE if @nick is found, %FALSE otherwise.
- *
  * Since: 3.0
  **/
 void
@@ -396,4 +394,224 @@ gimp_choice_desc_free (GimpChoiceDesc *desc)
   g_free (desc->label);
   g_free (desc->help);
   g_free (desc);
+}
+
+
+/*
+ * GIMP_TYPE_PARAM_CHOICE
+ */
+
+#define GIMP_PARAM_SPEC_CHOICE(pspec)    (G_TYPE_CHECK_INSTANCE_CAST ((pspec), GIMP_TYPE_PARAM_CHOICE, GimpParamSpecChoice))
+
+typedef struct _GimpParamSpecChoice GimpParamSpecChoice;
+
+struct _GimpParamSpecChoice
+{
+  GParamSpecString  parent_instance;
+
+  GimpChoice       *choice;
+};
+
+static void       gimp_param_choice_class_init        (GParamSpecClass *klass);
+static void       gimp_param_choice_init              (GParamSpec      *pspec);
+static void       gimp_param_choice_finalize          (GParamSpec      *pspec);
+static gboolean   gimp_param_choice_validate          (GParamSpec      *pspec,
+                                                       GValue          *value);
+static gboolean   gimp_param_choice_value_is_valid    (GParamSpec      *pspec,
+                                                       const GValue    *value);
+static gint       gimp_param_choice_values_cmp        (GParamSpec      *pspec,
+                                                      const GValue    *value1,
+                                                      const GValue    *value2);
+
+GType
+gimp_param_choice_get_type (void)
+{
+  static GType type = 0;
+
+  if (! type)
+    {
+      const GTypeInfo info =
+      {
+        sizeof (GParamSpecClass),
+        NULL, NULL,
+        (GClassInitFunc) gimp_param_choice_class_init,
+        NULL, NULL,
+        sizeof (GimpParamSpecChoice),
+        0,
+        (GInstanceInitFunc) gimp_param_choice_init
+      };
+
+      type = g_type_register_static (G_TYPE_PARAM_STRING,
+                                     "GimpParamChoice", &info, 0);
+    }
+
+  return type;
+}
+
+static void
+gimp_param_choice_class_init (GParamSpecClass *klass)
+{
+  klass->value_type     = G_TYPE_STRING;
+  klass->finalize       = gimp_param_choice_finalize;
+  klass->value_validate = gimp_param_choice_validate;
+  klass->value_is_valid = gimp_param_choice_value_is_valid;
+  klass->values_cmp     = gimp_param_choice_values_cmp;
+}
+
+static void
+gimp_param_choice_init (GParamSpec *pspec)
+{
+  GimpParamSpecChoice *choice = GIMP_PARAM_SPEC_CHOICE (pspec);
+
+  choice->choice = NULL;
+}
+
+static void
+gimp_param_choice_finalize (GParamSpec *pspec)
+{
+  GimpParamSpecChoice *spec_choice  = GIMP_PARAM_SPEC_CHOICE (pspec);
+  GParamSpecClass     *parent_class = g_type_class_peek (g_type_parent (GIMP_TYPE_PARAM_CHOICE));
+
+  g_object_unref (spec_choice->choice);
+
+  parent_class->finalize (pspec);
+}
+
+static gboolean
+gimp_param_choice_validate (GParamSpec *pspec,
+                            GValue     *value)
+{
+  GimpParamSpecChoice *spec_choice = GIMP_PARAM_SPEC_CHOICE (pspec);
+  GParamSpecString    *spec_string = G_PARAM_SPEC_STRING (pspec);
+  GimpChoice          *choice      = spec_choice->choice;
+  const gchar         *strval      = g_value_get_string (value);
+
+  if (! gimp_choice_is_valid (choice, strval))
+    {
+      if (gimp_choice_is_valid (choice, spec_string->default_value))
+        {
+          g_value_set_string (value, spec_string->default_value);
+        }
+      else
+        {
+          /* This might happen if the default value is set insensitive. Then we
+           * should just set any valid random nick.
+           */
+          GList *nicks;
+
+          nicks = gimp_choice_list_nicks (choice);
+          for (GList *iter = nicks; iter; iter = iter->next)
+            if (gimp_choice_is_valid (choice, (gchar *) iter->data))
+              {
+                g_value_set_string (value, (gchar *) iter->data);
+                break;
+              }
+        }
+      return TRUE;
+    }
+
+  return FALSE;
+}
+
+static gboolean
+gimp_param_choice_value_is_valid (GParamSpec   *pspec,
+                                  const GValue *value)
+{
+  GimpParamSpecChoice *cspec  = GIMP_PARAM_SPEC_CHOICE (pspec);
+  const gchar         *strval = g_value_get_string (value);
+  GimpChoice          *choice = cspec->choice;
+
+  return gimp_choice_is_valid (choice, strval);
+}
+
+static gint
+gimp_param_choice_values_cmp (GParamSpec   *pspec,
+                              const GValue *value1,
+                              const GValue *value2)
+{
+  const gchar *choice1 = g_value_get_string (value1);
+  const gchar *choice2 = g_value_get_string (value2);
+
+  return g_strcmp0 (choice1, choice2);
+}
+
+/**
+ * gimp_param_spec_choice:
+ * @name:  Canonical name of the property specified.
+ * @nick:  Nick name of the property specified.
+ * @blurb: Description of the property specified.
+ * @choice: (transfer full): the %GimpChoice describing allowed choices.
+ * @flags: Flags for the property specified.
+ *
+ * Creates a new #GimpParamSpecChoice specifying a
+ * #G_TYPE_STRING property.
+ * This %GimpParamSpecChoice takes ownership of the reference on @choice.
+ *
+ * See g_param_spec_internal() for details on property names.
+ *
+ * Returns: (transfer floating): The newly created #GimpParamSpecChoice.
+ *
+ * Since: 3.0
+ **/
+GParamSpec *
+gimp_param_spec_choice (const gchar *name,
+                        const gchar *nick,
+                        const gchar *blurb,
+                        GimpChoice  *choice,
+                        const gchar *default_value,
+                        GParamFlags  flags)
+{
+  GimpParamSpecChoice *choice_spec;
+  GParamSpecString    *string_spec;
+
+  g_return_val_if_fail (GIMP_IS_CHOICE (choice), NULL);
+  g_return_val_if_fail (gimp_choice_is_valid (choice, default_value), NULL);
+
+  choice_spec = g_param_spec_internal (GIMP_TYPE_PARAM_CHOICE,
+                                       name, nick, blurb, flags);
+
+  g_return_val_if_fail (choice_spec, NULL);
+
+  string_spec = G_PARAM_SPEC_STRING (choice_spec);
+
+  choice_spec->choice        = choice;
+  string_spec->default_value = g_strdup (default_value);
+
+  return G_PARAM_SPEC (choice_spec);
+}
+
+/**
+ * gimp_param_spec_choice_get_choice:
+ * @pspec: a #GParamSpec to hold a #GimpParamSpecChoice value.
+ *
+ * Returns: (transfer none): the choice object defining the valid values.
+ *
+ * Since: 3.0
+ **/
+GimpChoice *
+gimp_param_spec_choice_get_choice (GParamSpec *pspec)
+{
+  g_return_val_if_fail (GIMP_IS_PARAM_SPEC_CHOICE (pspec), NULL);
+
+  return GIMP_PARAM_SPEC_CHOICE (pspec)->choice;
+}
+
+/**
+ * gimp_param_spec_choice_get_default:
+ * @pspec: a #GParamSpec to hold a #GimpParamSpecChoice value.
+ *
+ * Returns: the default value.
+ *
+ * Since: 3.0
+ **/
+const gchar *
+gimp_param_spec_choice_get_default (GParamSpec *pspec)
+{
+  const GValue *value;
+
+  g_return_val_if_fail (GIMP_IS_PARAM_SPEC_CHOICE (pspec), NULL);
+
+  value = g_param_spec_get_default_value (pspec);
+
+  return g_value_get_string (value);
 }

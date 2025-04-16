@@ -27,15 +27,16 @@ if platform_windows
   )
 endif
 
-executable(plugin_name,
-  plugin_sources,
-  dependencies: [
-    libgimpui_dep,
-    gexiv2,
-  ],
-  install: true,
-  install_dir: gimpplugindir / 'plug-ins' / plugin_name,
-)
+plugin_exe = executable(plugin_name,
+                        plugin_sources,
+                        dependencies: [
+                          libgimpui_dep,
+                          gexiv2,
+                        ],
+                        win_subsystem: 'windows',
+                        install: true,
+                        install_dir: gimpplugindir / 'plug-ins' / plugin_name)
+plugin_executables += [plugin_exe.full_path()]
 
 ###############################################################################
 
@@ -65,21 +66,22 @@ if platform_windows
   )
 endif
 
-executable(plugin_name,
-  plugin_sources,
-  include_directories: [ rootInclude, ],
-  dependencies: [
-    gtk3, gegl, gexiv2,
-  ],
-  link_with: [
-    libgimp,
-    libgimpbase,
-    libgimpcolor,
-    libgimpconfig,
-    libgimpmath,
-    libgimpui,
-    libgimpwidgets,
-  ],
-  install: true,
-  install_dir: gimpplugindir / 'plug-ins' / plugin_name,
-)
+plugin_exe = executable(plugin_name,
+                        plugin_sources,
+                        include_directories: [ rootInclude, ],
+                        dependencies: [
+                          gtk3, gegl, gexiv2,
+                        ],
+                        link_with: [
+                          libgimp,
+                          libgimpbase,
+                          libgimpcolor,
+                          libgimpconfig,
+                          libgimpmath,
+                          libgimpui,
+                          libgimpwidgets,
+                        ],
+                        win_subsystem: 'windows',
+                        install: true,
+                        install_dir: gimpplugindir / 'plug-ins' / plugin_name)
+plugin_executables += [plugin_exe.full_path()]

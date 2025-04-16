@@ -20,6 +20,8 @@ static const GimpGetTypeFunc get_type_funcs[] =
   gimp_convolve_type_get_type,
   gimp_desaturate_mode_get_type,
   gimp_dodge_burn_type_get_type,
+  gimp_export_capabilities_get_type,
+  gimp_file_chooser_action_get_type,
   gimp_fill_type_get_type,
   gimp_foreground_extract_mode_get_type,
   gimp_gradient_blend_color_space_get_type,
@@ -47,6 +49,7 @@ static const GimpGetTypeFunc get_type_funcs[] =
   gimp_pdb_proc_type_get_type,
   gimp_pdb_status_type_get_type,
   gimp_paint_application_mode_get_type,
+  gimp_path_stroke_type_get_type,
   gimp_precision_get_type,
   gimp_progress_command_get_type,
   gimp_repeat_mode_get_type,
@@ -61,8 +64,7 @@ static const GimpGetTypeFunc get_type_funcs[] =
   gimp_text_justification_get_type,
   gimp_transfer_mode_get_type,
   gimp_transform_direction_get_type,
-  gimp_transform_resize_get_type,
-  gimp_vectors_stroke_type_get_type
+  gimp_transform_resize_get_type
 };
 
 static const gchar * const type_names[] =
@@ -84,6 +86,8 @@ static const gchar * const type_names[] =
   "GimpConvolveType",
   "GimpDesaturateMode",
   "GimpDodgeBurnType",
+  "GimpExportCapabilities",
+  "GimpFileChooserAction",
   "GimpFillType",
   "GimpForegroundExtractMode",
   "GimpGradientBlendColorSpace",
@@ -111,6 +115,7 @@ static const gchar * const type_names[] =
   "GimpPDBProcType",
   "GimpPDBStatusType",
   "GimpPaintApplicationMode",
+  "GimpPathStrokeType",
   "GimpPrecision",
   "GimpProgressCommand",
   "GimpRepeatMode",
@@ -125,8 +130,7 @@ static const gchar * const type_names[] =
   "GimpTextJustification",
   "GimpTransferMode",
   "GimpTransformDirection",
-  "GimpTransformResize",
-  "GimpVectorsStrokeType"
+  "GimpTransformResize"
 };
 
 static gboolean enums_initialized = FALSE;

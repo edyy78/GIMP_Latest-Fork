@@ -478,24 +478,44 @@ themes_apply_theme (Gimp          *gimp,
             "\n"
             "* { -GimpToolPalette-tool-icon-size: %s; }"
             "\n"
+            "* { -GimpDock-tool-icon-size: %s; }"
+            "\n"
             "* { -GimpDockbook-tab-icon-size: %s; }"
             "\n"
+            "* { -GimpColorNotebook-tab-icon-size: %s; }"
+            "\n"
+            "* { -GimpPrefsBox-tab-icon-size: %s; }"
+            "\n"
             "* { -GimpEditor-button-icon-size: %s; }"
+            "\n"
+            "* { -GimpDisplayShell-button-icon-size: %s; }"
+            "\n"
+            "* { -GimpFgBgEditor-tool-icon-size: %s; }"
             "\n"
             "toolpalette button { padding: %dpx; }"
             "\n"
             "button, tab { padding: %dpx; }"
             "\n"
             "paned separator { padding: %dpx; }",
-            tool_icon_size, tab_icon_size, button_icon_size,
+            tool_icon_size, tool_icon_size, tab_icon_size, tab_icon_size,
+            tab_icon_size, button_icon_size, button_icon_size, tool_icon_size,
             pal_padding, tab_padding, sep_padding);
         }
 
       if (! error && config->font_relative_size != 1.0)
-        g_output_stream_printf (output, NULL, NULL, &error,
-                                "\n"
-                                "* { font-size: %frem; }",
-                                config->font_relative_size);
+        {
+          /* Intermediate buffer for locale-independent float to string
+           * conversion. See issue #11048.
+           */
+          gchar font_size_string[G_ASCII_DTOSTR_BUF_SIZE];
+
+          g_output_stream_printf (output, NULL, NULL, &error,
+                                  "\n"
+                                  "* { font-size: %srem; }",
+                                  g_ascii_dtostr (font_size_string,
+                                                  G_ASCII_DTOSTR_BUF_SIZE,
+                                                  config->font_relative_size));
+        }
 
       if (! error)
         {
@@ -669,10 +689,10 @@ themes_theme_paths_notify (GimpExtensionManager *manager,
     }
 }
 
+#ifdef G_OS_WIN32
 void
 themes_set_title_bar (Gimp *gimp)
 {
-#ifdef G_OS_WIN32
   GList *windows = gimp_get_image_windows (gimp);
   GList *iter;
 
@@ -680,10 +700,10 @@ themes_set_title_bar (Gimp *gimp)
     {
       GtkWidget *window = GTK_WIDGET (windows->data);
 
-      gimp_window_set_title_bar_theme (gimp, window, TRUE);
+      gimp_window_set_title_bar_theme (gimp, window);
     }
 
   if (windows)
     g_list_free (windows);
-#endif
 }
+#endif

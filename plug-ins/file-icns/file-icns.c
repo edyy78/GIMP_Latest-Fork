@@ -32,13 +32,13 @@
 
 #include "file-icns.h"
 #include "file-icns-load.h"
-#include "file-icns-save.h"
+#include "file-icns-export.h"
 
 #include "libgimp/stdplugins-intl.h"
 
 #define LOAD_PROC           "file-icns-load"
 #define LOAD_THUMB_PROC     "file-icns-load-thumb"
-#define SAVE_PROC           "file-icns-save"
+#define EXPORT_PROC         "file-icns-export"
 
 
 typedef struct _Icns      Icns;
@@ -76,12 +76,11 @@ static GimpValueArray * icns_load_thumb       (GimpProcedure         *procedure,
                                                gint                   size,
                                                GimpProcedureConfig   *config,
                                                gpointer               run_data);
-static GimpValueArray * icns_save             (GimpProcedure         *procedure,
+static GimpValueArray * icns_export           (GimpProcedure         *procedure,
                                                GimpRunMode            run_mode,
                                                GimpImage             *image,
-                                               gint                   n_drawables,
-                                               GimpDrawable         **drawables,
                                                GFile                 *file,
+                                               GimpExportOptions     *options,
                                                GimpMetadata          *metadata,
                                                GimpProcedureConfig   *config,
                                                gpointer               run_data);
@@ -114,7 +113,7 @@ icns_query_procedures (GimpPlugIn *plug_in)
 
   list = g_list_append (list, g_strdup (LOAD_THUMB_PROC));
   list = g_list_append (list, g_strdup (LOAD_PROC));
-  list = g_list_append (list, g_strdup (SAVE_PROC));
+  list = g_list_append (list, g_strdup (EXPORT_PROC));
 
   return list;
 }
@@ -167,11 +166,11 @@ icns_create_procedure (GimpPlugIn  *plug_in,
                                       "Brion Vibber <brion@pobox.com>",
                                       "2004");
     }
-  else if (! strcmp (name, SAVE_PROC))
+  else if (! strcmp (name, EXPORT_PROC))
     {
-      procedure = gimp_save_procedure_new (plug_in, name,
-                                           GIMP_PDB_PROC_TYPE_PLUGIN,
-                                           FALSE, icns_save, NULL, NULL);
+      procedure = gimp_export_procedure_new (plug_in, name,
+                                             GIMP_PDB_PROC_TYPE_PLUGIN,
+                                             FALSE, icns_export, NULL, NULL);
 
       gimp_procedure_set_image_types (procedure, "*");
 
@@ -187,10 +186,14 @@ icns_create_procedure (GimpPlugIn  *plug_in,
                                       "Brion Vibber <brion@pobox.com>",
                                       "2004");
 
+      gimp_file_procedure_set_format_name (GIMP_FILE_PROCEDURE (procedure),
+                                           "Apple Icon Image");
       gimp_file_procedure_set_mime_types (GIMP_FILE_PROCEDURE (procedure),
                                           "image/x-icns");
       gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
                                           "icns");
+
+      gimp_export_procedure_set_support_profile (GIMP_EXPORT_PROCEDURE (procedure), TRUE);
     }
 
   return procedure;
@@ -267,22 +270,21 @@ icns_load_thumb (GimpProcedure       *procedure,
 }
 
 static GimpValueArray *
-icns_save (GimpProcedure        *procedure,
-           GimpRunMode           run_mode,
-           GimpImage            *image,
-           gint                  n_drawables,
-           GimpDrawable        **drawables,
-           GFile                *file,
-           GimpMetadata         *metadata,
-           GimpProcedureConfig  *config,
-           gpointer              run_data)
+icns_export (GimpProcedure        *procedure,
+             GimpRunMode           run_mode,
+             GimpImage            *image,
+             GFile                *file,
+             GimpExportOptions    *options,
+             GimpMetadata         *metadata,
+             GimpProcedureConfig  *config,
+             gpointer              run_data)
 {
   GimpPDBStatusType  status;
   GError            *error = NULL;
 
   gegl_init (NULL, NULL);
 
-  status = icns_save_image (file, image, run_mode, &error);
+  status = icns_save_image (file, image, procedure, config, run_mode, &error);
 
   return gimp_procedure_new_return_values (procedure, status, error);
 }

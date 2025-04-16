@@ -37,7 +37,7 @@
 
 
 /**
- * _gimp_text_layer_new:
+ * gimp_text_layer_new:
  * @image: The image.
  * @text: The text to generate (in UTF-8 encoding).
  * @font: The font to write the text with.
@@ -46,23 +46,29 @@
  *
  * Creates a new text layer.
  *
- * This procedure creates a new text layer. The arguments are kept as
- * simple as necessary for the normal case. All text attributes,
- * however, can be modified with the appropriate
- * gimp_text_layer_set_*() procedures. The new layer still needs to be
- * added to the image, as this is not automatic. Add the new layer
- * using gimp_image_insert_layer().
+ * This procedure creates a new text layer displaying the specified
+ * @text. By default the width and height of the layer will be
+ * determined by the @text contents, the @font, @size and @unit.
  *
- * Returns: (transfer none): The new text layer.
+ * The new layer still needs to be added to the image as this is not
+ * automatic. Add the new layer with the [method@Image.insert_layer]
+ * method.
+ *
+ * The arguments are kept as simple as necessary for the basic case.
+ * All text attributes, however, can be modified with the appropriate
+ * `gimp_text_layer_set_*()` procedures.
+ *
+ * Returns: (transfer none):
+ *          The new text layer. The object belongs to libgimp and you should not free it.
  *
  * Since: 2.6
  **/
 GimpTextLayer *
-_gimp_text_layer_new (GimpImage   *image,
-                      const gchar *text,
-                      GimpFont    *font,
-                      gdouble      size,
-                      GimpUnit     unit)
+gimp_text_layer_new (GimpImage   *image,
+                     const gchar *text,
+                     GimpFont    *font,
+                     gdouble      size,
+                     GimpUnit    *unit)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
@@ -331,7 +337,7 @@ gimp_text_layer_set_font (GimpTextLayer *layer,
  * Get the font size from a text layer.
  *
  * This procedure returns the size of the font which is used in a text
- * layer. You will receive the size as a float 'font-size' in 'unit'
+ * layer. You will receive the size as a double 'font-size' in 'unit'
  * units.
  *
  * Returns: The font size.
@@ -339,8 +345,8 @@ gimp_text_layer_set_font (GimpTextLayer *layer,
  * Since: 2.6
  **/
 gdouble
-gimp_text_layer_get_font_size (GimpTextLayer *layer,
-                               GimpUnit      *unit)
+gimp_text_layer_get_font_size (GimpTextLayer  *layer,
+                               GimpUnit      **unit)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
@@ -358,7 +364,7 @@ gimp_text_layer_get_font_size (GimpTextLayer *layer,
   if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
     {
       font_size = GIMP_VALUES_GET_DOUBLE (return_vals, 1);
-      *unit = GIMP_VALUES_GET_INT (return_vals, 2);
+      *unit = GIMP_VALUES_GET_UNIT (return_vals, 2);
     }
 
   gimp_value_array_unref (return_vals);
@@ -384,7 +390,7 @@ gimp_text_layer_get_font_size (GimpTextLayer *layer,
 gboolean
 gimp_text_layer_set_font_size (GimpTextLayer *layer,
                                gdouble        font_size,
-                               GimpUnit       unit)
+                               GimpUnit      *unit)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;

@@ -57,7 +57,7 @@
 
 #include "vectors/gimpanchor.h"
 #include "vectors/gimpbezierstroke.h"
-#include "vectors/gimpvectors.h"
+#include "vectors/gimppath.h"
 
 #include "plug-in/gimppluginmanager-file.h"
 
@@ -126,7 +126,7 @@
                                         "manually and may thus look weird if "\
                                         "opened and inspected in GIMP."
 
-#define GIMP_MAINIMAGE_UNIT             GIMP_UNIT_PICA
+#define GIMP_MAINIMAGE_UNIT             gimp_unit_pica ()
 
 #define GIMP_MAINIMAGE_GRIDXSPACING     25.0
 #define GIMP_MAINIMAGE_GRIDYSPACING     27.0
@@ -195,7 +195,7 @@ write_and_read_gimp_2_6_format (gconstpointer data)
  *
  * Do a write and read test on a file that could as well be
  * constructed with GIMP 2.6, and make it unusual, like compatible
- * vectors and with a floating selection.
+ * paths and with a floating selection.
  **/
 static void
 write_and_read_gimp_2_6_format_unusual (gconstpointer data)
@@ -278,6 +278,7 @@ gimp_test_load_image (Gimp  *gimp,
                            gimp_get_user_context (gimp),
                            NULL /*progress*/,
                            file,
+                           0, 0, /* vector width, height */
                            FALSE /*as_new*/,
                            proc,
                            GIMP_RUN_NONINTERACTIVE,
@@ -380,7 +381,7 @@ gimp_create_mainimage (Gimp     *gimp,
   GimpChannel   *channel           = NULL;
   GeglColor     *channel_color     = gegl_color_new (NULL);
   GimpChannel   *selection         = NULL;
-  GimpVectors   *vectors           = NULL;
+  GimpPath      *vectors           = NULL;
   GimpCoords     vectors1_coords[] = GIMP_MAINIMAGE_VECTORS1_COORDS;
   GimpCoords     vectors2_coords[] = GIMP_MAINIMAGE_VECTORS2_COORDS;
   GimpStroke    *stroke            = NULL;
@@ -528,11 +529,11 @@ gimp_create_mainimage (Gimp     *gimp,
                                  FALSE /*push_undo*/);
 
   /* Vectors 1 */
-  vectors = gimp_vectors_new (image,
-                              GIMP_MAINIMAGE_VECTORS1_NAME);
+  vectors = gimp_path_new (image,
+                           GIMP_MAINIMAGE_VECTORS1_NAME);
   /* The XCF file can save vectors in two kind of ways, one old way
    * and a new way. Parameterize the way so we can test both variants,
-   * i.e. gimp_vectors_compat_is_compatible() must return both TRUE
+   * i.e. gimp_path_compat_is_compatible() must return both TRUE
    * and FALSE.
    */
   if (! compat_paths)
@@ -547,26 +548,26 @@ gimp_create_mainimage (Gimp     *gimp,
   stroke = gimp_bezier_stroke_new_from_coords (vectors1_coords,
                                                G_N_ELEMENTS (vectors1_coords),
                                                TRUE /*closed*/);
-  gimp_vectors_stroke_add (vectors, stroke);
-  gimp_image_add_vectors (image,
-                          vectors,
-                          NULL /*parent*/,
-                          -1 /*position*/,
-                          FALSE /*push_undo*/);
+  gimp_path_stroke_add (vectors, stroke);
+  gimp_image_add_path (image,
+                       vectors,
+                       NULL /*parent*/,
+                       -1 /*position*/,
+                       FALSE /*push_undo*/);
 
   /* Vectors 2 */
-  vectors = gimp_vectors_new (image,
-                              GIMP_MAINIMAGE_VECTORS2_NAME);
+  vectors = gimp_path_new (image,
+                           GIMP_MAINIMAGE_VECTORS2_NAME);
 
   stroke = gimp_bezier_stroke_new_from_coords (vectors2_coords,
                                                G_N_ELEMENTS (vectors2_coords),
                                                TRUE /*closed*/);
-  gimp_vectors_stroke_add (vectors, stroke);
-  gimp_image_add_vectors (image,
-                          vectors,
-                          NULL /*parent*/,
-                          -1 /*position*/,
-                          FALSE /*push_undo*/);
+  gimp_path_stroke_add (vectors, stroke);
+  gimp_image_add_path (image,
+                       vectors,
+                       NULL /*parent*/,
+                       -1 /*position*/,
+                       FALSE /*push_undo*/);
 
   /* Some of these things are pretty unusual, parameterize the
    * inclusion of this in the written file so we can do our test both
@@ -686,14 +687,14 @@ gimp_assert_vectors (GimpImage   *image,
                      gsize        coords_size,
                      gboolean     visible)
 {
-  GimpVectors *vectors        = NULL;
+  GimpPath    *vectors        = NULL;
   GimpStroke  *stroke         = NULL;
   GArray      *control_points = NULL;
   gboolean     closed         = FALSE;
   gint         i              = 0;
 
-  vectors = gimp_image_get_vectors_by_name (image, name);
-  stroke = gimp_vectors_stroke_get_next (vectors, NULL);
+  vectors = gimp_image_get_path_by_name (image, name);
+  stroke = gimp_path_stroke_get_next (vectors, NULL);
   g_assert_true (stroke != NULL);
   control_points = gimp_stroke_control_points_get (stroke,
                                                    &closed);
@@ -902,9 +903,7 @@ gimp_assert_mainimage (GimpImage *image,
   g_free (parasite_data);
 
   /* Unit */
-  g_assert_cmpint (gimp_image_get_unit (image),
-                   ==,
-                   GIMP_MAINIMAGE_UNIT);
+  g_assert_true (gimp_image_get_unit (image) == GIMP_MAINIMAGE_UNIT);
 
   /* Grid */
   grid = gimp_image_get_grid (image);

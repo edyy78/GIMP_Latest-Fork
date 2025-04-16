@@ -138,7 +138,7 @@ static GimpDisplay  * gui_get_empty_display      (Gimp                *gimp);
 static GBytes       * gui_display_get_window_id  (GimpDisplay         *display);
 static GimpDisplay  * gui_display_create         (Gimp                *gimp,
                                                   GimpImage           *image,
-                                                  GimpUnit             unit,
+                                                  GimpUnit            *unit,
                                                   gdouble              scale,
                                                   GObject             *monitor);
 static void           gui_display_delete         (GimpDisplay         *display);
@@ -396,7 +396,7 @@ gui_display_get_window_id (GimpDisplay *display)
 static GimpDisplay *
 gui_display_create (Gimp      *gimp,
                     GimpImage *image,
-                    GimpUnit   unit,
+                    GimpUnit  *unit,
                     gdouble    scale,
                     GObject   *monitor)
 {
@@ -1001,6 +1001,11 @@ gui_inhibit (Gimp *gimp)
     }
 
   app = GTK_APPLICATION (g_application_get_default ());
+  if (app == NULL)
+    /* This may happen when quitting. The GtkApplication is finalized
+     * faster than the images without display.
+     */
+    return;
 
   if (gimp_displays_dirty (gimp))
     {
@@ -1018,7 +1023,7 @@ gui_inhibit (Gimp *gimp)
       n_images = n_dirty_images;
     }
 
-  if (gtk_application_is_inhibited (app, GTK_APPLICATION_INHIBIT_LOGOUT))
+  if (cookie != 0)
     {
       gtk_application_uninhibit (app, cookie);
       cookie = 0;

@@ -51,14 +51,14 @@
 #include "menus/menus.h"
 
 #include "text/gimptext.h"
-#include "text/gimptext-vectors.h"
+#include "text/gimptext-path.h"
 #include "text/gimptextlayer.h"
 #include "text/gimptextlayout.h"
 #include "text/gimptextundo.h"
 
 #include "vectors/gimpstroke.h"
-#include "vectors/gimpvectors.h"
-#include "vectors/gimpvectors-warp.h"
+#include "vectors/gimppath.h"
+#include "vectors/gimppath-warp.h"
 
 #include "widgets/gimpdialogfactory.h"
 #include "widgets/gimpdockcontainer.h"
@@ -1163,7 +1163,7 @@ gimp_text_tool_rectangle_change_complete (GimpToolRectangle *rectangle,
       if ((x2 - x1) != gimp_item_get_width  (item) ||
           (y2 - y1) != gimp_item_get_height (item))
         {
-          GimpUnit  box_unit = text_tool->proxy->box_unit;
+          GimpUnit *box_unit = text_tool->proxy->box_unit;
           gdouble   xres, yres;
           gboolean  push_undo = TRUE;
           GimpUndo *undo;
@@ -1681,8 +1681,8 @@ gimp_text_tool_create_layer (GimpTextTool *text_tool,
 
   if (text_tool->text_box_fixed)
     {
-      GimpUnit box_unit = text_tool->proxy->box_unit;
-      gdouble  xres, yres;
+      GimpUnit *box_unit = text_tool->proxy->box_unit;
+      gdouble   xres, yres;
 
       gimp_image_get_resolution (image, &xres, &yres);
 
@@ -2313,24 +2313,24 @@ gimp_text_tool_paste_clipboard (GimpTextTool *text_tool)
 void
 gimp_text_tool_create_vectors (GimpTextTool *text_tool)
 {
-  GimpVectors *vectors;
+  GimpPath *path;
 
   g_return_if_fail (GIMP_IS_TEXT_TOOL (text_tool));
 
   if (! text_tool->text || ! text_tool->image)
     return;
 
-  vectors = gimp_text_vectors_new (text_tool->image, text_tool->text);
+  path = gimp_text_path_new (text_tool->image, text_tool->text);
 
   if (text_tool->layer)
     {
       gint x, y;
 
       gimp_item_get_offset (GIMP_ITEM (text_tool->layer), &x, &y);
-      gimp_item_translate (GIMP_ITEM (vectors), x, y, FALSE);
+      gimp_item_translate (GIMP_ITEM (path), x, y, FALSE);
     }
 
-  gimp_image_add_vectors (text_tool->image, vectors,
+  gimp_image_add_path (text_tool->image, path,
                           GIMP_IMAGE_ACTIVE_PARENT, -1, TRUE);
 
   gimp_image_flush (text_tool->image);
@@ -2341,7 +2341,7 @@ gimp_text_tool_create_vectors_warped (GimpTextTool  *text_tool,
                                       GError       **error)
 {
   GList             *vectors0;
-  GimpVectors       *vectors;
+  GimpPath          *vectors;
   gdouble            box_width;
   gdouble            box_height;
   GimpTextDirection  dir;
@@ -2366,7 +2366,7 @@ gimp_text_tool_create_vectors_warped (GimpTextTool  *text_tool,
   box_width  = gimp_item_get_width  (GIMP_ITEM (text_tool->layer));
   box_height = gimp_item_get_height (GIMP_ITEM (text_tool->layer));
 
-  vectors0 = gimp_image_get_selected_vectors (text_tool->image);
+  vectors0 = gimp_image_get_selected_paths (text_tool->image);
   if (g_list_length (vectors0) != 1)
     {
       g_set_error_literal (error, GIMP_ERROR, GIMP_FAILED,
@@ -2374,7 +2374,7 @@ gimp_text_tool_create_vectors_warped (GimpTextTool  *text_tool,
       return FALSE;
     }
 
-  vectors = gimp_text_vectors_new (text_tool->image, text_tool->text);
+  vectors = gimp_text_path_new (text_tool->image, text_tool->text);
 
   offset = 0;
   dir = gimp_text_tool_get_direction (text_tool);
@@ -2391,7 +2391,7 @@ gimp_text_tool_create_vectors_warped (GimpTextTool  *text_tool,
       {
         GimpStroke *stroke = NULL;
 
-        while ((stroke = gimp_vectors_stroke_get_next (vectors, stroke)))
+        while ((stroke = gimp_path_stroke_get_next (vectors, stroke)))
           {
             gimp_stroke_rotate (stroke, 0, 0, 270);
             gimp_stroke_translate (stroke, 0, box_width);
@@ -2401,12 +2401,12 @@ gimp_text_tool_create_vectors_warped (GimpTextTool  *text_tool,
       break;
     }
 
-  gimp_vectors_warp_vectors (vectors0->data, vectors, offset);
+  gimp_path_warp_path (vectors0->data, vectors, offset);
 
   gimp_item_set_visible (GIMP_ITEM (vectors), TRUE, FALSE);
 
-  gimp_image_add_vectors (text_tool->image, vectors,
-                          GIMP_IMAGE_ACTIVE_PARENT, -1, TRUE);
+  gimp_image_add_path (text_tool->image, vectors,
+                       GIMP_IMAGE_ACTIVE_PARENT, -1, TRUE);
 
   gimp_image_flush (text_tool->image);
 

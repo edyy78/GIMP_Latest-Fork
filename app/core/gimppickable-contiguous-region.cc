@@ -144,7 +144,7 @@ gimp_pickable_contiguous_region_by_seed (GimpPickable        *pickable,
   g_return_val_if_fail (GIMP_IS_PICKABLE (pickable), NULL);
 
   gimp_pickable_flush (pickable);
-  src_buffer = gimp_pickable_get_buffer (pickable);
+  src_buffer = gimp_pickable_get_buffer_with_effects (pickable);
 
   format = choose_format (src_buffer, select_criterion,
                           &n_components, &has_alpha);
@@ -222,7 +222,7 @@ gimp_pickable_contiguous_region_by_color (GimpPickable        *pickable,
 
   gimp_pickable_flush (pickable);
 
-  src_buffer = gimp_pickable_get_buffer (pickable);
+  src_buffer = gimp_pickable_get_buffer_with_effects (pickable);
 
   format = choose_format (src_buffer, select_criterion,
                           &n_components, &has_alpha);
@@ -599,7 +599,7 @@ gimp_pickable_contiguous_region_by_line_art (GimpPickable  *pickable,
 
       g_object_get (line_art,
                     "max-grow", &line_art_max_grow,
-                    NULL);
+                    (void *) NULL);
       while (! g_queue_is_empty (queue))
         {
           BorderPixel *c = (BorderPixel *) g_queue_pop_head (queue);

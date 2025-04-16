@@ -34,7 +34,6 @@ import pyconsole
 
 import gettext
 textdomain = "gimp30-python"
-gettext.bindtextdomain(textdomain, Gimp.locale_directory())
 gettext.textdomain(textdomain)
 _ = gettext.gettext
 
@@ -61,12 +60,13 @@ def run(procedure, config, data):
                  'Pango': gi.repository.Pango }
 
     class GimpConsole(pyconsole.Console):
-        def __init__(self, quit_func=None):
+        def __init__(self, quit_func=None, initial_history=None):
             banner = ('GIMP %s Python Console\nPython %s\n' %
                       (Gimp.version(), sys.version))
             pyconsole.Console.__init__(self,
                                        locals=namespace, banner=banner,
-                                       quit_func=quit_func)
+                                       quit_func=quit_func,
+                                       initial_history=initial_history)
         def _commit(self):
             pyconsole.Console._commit(self)
             Gimp.displays_flush()
@@ -90,7 +90,8 @@ def run(procedure, config, data):
                                                                   RESPONSE_CLEAR,
                                                                   Gtk.ResponseType.OK ])
 
-            self.cons = GimpConsole(quit_func=lambda: Gtk.main_quit())
+            history = config.get_property('history')
+            self.cons = GimpConsole(quit_func=lambda: Gtk.main_quit(), initial_history=history)
 
             self.style_set (None, None)
 
@@ -136,6 +137,8 @@ def run(procedure, config, data):
             elif response_id == Gtk.ResponseType.OK:
                 self.save_dialog()
             else:
+                # Store up to 100 commands.
+                config.set_property('history', self.cons.history.items[-100:])
                 Gtk.main_quit()
 
             self.cons.grab_focus()
@@ -172,6 +175,9 @@ def run(procedure, config, data):
               if arg.name == 'run-mode':
                 # Special handling for run mode.
                 cmd += "config.set_property('" + arg.name + "', Gimp.RunMode.INTERACTIVE); "
+              elif type(arg) == Gimp.ParamCoreObjectArray:
+                # Special handling for GimpCoreObjectArray parameters
+                cmd += "config.set_core_object_array('" + arg.name + "', " + arg.name.replace('-', '_') + "); "
               else:
                 cmd += "config.set_property('" + arg.name + "', " + arg.name.replace('-', '_') + "); "
 
@@ -294,20 +300,9 @@ def run(procedure, config, data):
     return procedure.new_return_values(Gimp.PDBStatusType.SUCCESS, GLib.Error())
 
 class PythonConsole (Gimp.PlugIn):
-    ## Properties: parameters ##
-    @GObject.Property(type=Gimp.RunMode,
-                      default=Gimp.RunMode.NONINTERACTIVE,
-                      nick=_("Run mode"), blurb=_("The run mode"))
-    def run_mode(self):
-        """Read-write integer property."""
-        return self.runmode
-
-    @run_mode.setter
-    def run_mode(self, runmode):
-        self.runmode = runmode
-
     ## GimpPlugIn virtual methods ##
     def do_set_i18n(self, name):
+        gettext.bindtextdomain(textdomain, Gimp.locale_directory())
         return True, 'gimp30-python', None
 
     def do_query_procedures(self):
@@ -325,7 +320,13 @@ class PythonConsole (Gimp.PlugIn):
             procedure.set_attribution("James Henstridge",
                                       "James Henstridge",
                                       "1997-1999")
-            procedure.add_argument_from_property(self, "run-mode")
+            procedure.add_enum_argument ("run-mode", _("Run mode"),
+                                         _("The run mode"), Gimp.RunMode,
+                                         Gimp.RunMode.INTERACTIVE,
+                                         GObject.ParamFlags.READWRITE)
+            procedure.add_string_array_aux_argument ("history",
+                                                     "Command history", "Command history",
+                                                     GObject.ParamFlags.READWRITE)
             procedure.add_menu_path ("<Image>/Filters/Development/Python-Fu")
 
             return procedure

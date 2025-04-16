@@ -127,20 +127,23 @@ tips_dialog_create (Gimp *gimp)
 
   tips_dialog = gimp_dialog_new (_("GIMP Tip of the Day"),
                                  "gimp-tip-of-the-day",
-                                 NULL, 0, NULL, NULL,
+                                 NULL, 0, gimp_standard_help_func,
+                                 GIMP_HELP_TIPS_DIALOG,
                                  NULL);
 
   button = gtk_dialog_add_button (GTK_DIALOG (tips_dialog),
                                   _("_Previous Tip"), RESPONSE_PREVIOUS);
-  gtk_button_set_image (GTK_BUTTON (button),
-                        gtk_image_new_from_icon_name (GIMP_ICON_GO_PREVIOUS,
-                                                      GTK_ICON_SIZE_BUTTON));
+  image = gtk_image_new_from_icon_name (GIMP_ICON_GO_PREVIOUS,
+                                        GTK_ICON_SIZE_BUTTON);
+  gtk_button_set_image (GTK_BUTTON (button), image);
+  gtk_widget_set_visible (image, TRUE);
 
   button = gtk_dialog_add_button (GTK_DIALOG (tips_dialog),
                                   _("_Next Tip"), RESPONSE_NEXT);
-  gtk_button_set_image (GTK_BUTTON (button),
-                        gtk_image_new_from_icon_name (GIMP_ICON_GO_NEXT,
-                                                      GTK_ICON_SIZE_BUTTON));
+  image = gtk_image_new_from_icon_name (GIMP_ICON_GO_NEXT,
+                                        GTK_ICON_SIZE_BUTTON);
+  gtk_button_set_image (GTK_BUTTON (button), image);
+  gtk_widget_set_visible (image, TRUE);
 
   gtk_dialog_set_response_sensitive (GTK_DIALOG (tips_dialog),
                                      RESPONSE_NEXT, tips_count > 1);
@@ -176,6 +179,7 @@ tips_dialog_create (Gimp *gimp)
   gtk_widget_show (image);
 
   tip_label = gtk_label_new (NULL);
+  gtk_label_set_max_width_chars (GTK_LABEL (tip_label), 70);
   gtk_label_set_selectable (GTK_LABEL (tip_label), TRUE);
   gtk_label_set_justify (GTK_LABEL (tip_label), GTK_JUSTIFY_LEFT);
   gtk_label_set_line_wrap (GTK_LABEL (tip_label), TRUE);

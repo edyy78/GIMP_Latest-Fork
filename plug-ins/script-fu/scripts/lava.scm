@@ -23,7 +23,7 @@
 
 
 (define (script-fu-lava image
-                        drawable
+                        drawables
                         seed
                         tile_size
                         mask_size
@@ -32,7 +32,8 @@
                         separate-layer
                         current-grad)
   (let* (
-        (type (car (gimp-drawable-type-with-alpha drawable)))
+        (first-layer (vector-ref drawables 0))
+        (type (car (gimp-drawable-type-with-alpha first-layer)))
         (image-width (car (gimp-image-get-width image)))
         (image-height (car (gimp-image-get-height image)))
         (active-selection 0)
@@ -43,9 +44,8 @@
         (select-height 0)
         (lava-layer 0)
         (active-layer 0)
-        (selected-layers (gimp-image-get-selected-layers image))
-        (num-selected-layers (car selected-layers))
-        (selected-layers-array (cadr selected-layers))
+        (selected-layers-array (car (gimp-image-get-selected-layers image)))
+        (num-selected-layers (vector-length selected-layers-array))
         )
 
     (if (= num-selected-layers 1)
@@ -54,16 +54,16 @@
             (gimp-context-set-defaults)
             (gimp-image-undo-group-start image)
 
-            (if (= (car (gimp-drawable-has-alpha drawable)) FALSE)
-                (gimp-layer-add-alpha drawable)
+            (if (= (car (gimp-drawable-has-alpha first-layer)) FALSE)
+                (gimp-layer-add-alpha first-layer)
             )
 
             (if (= (car (gimp-selection-is-empty image)) TRUE)
-                (gimp-image-select-item image CHANNEL-OP-REPLACE drawable)
+                (gimp-image-select-item image CHANNEL-OP-REPLACE first-layer)
             )
 
             (set! active-selection (car (gimp-selection-save image)))
-            (gimp-image-set-selected-layers image 1 (make-vector 1 drawable))
+            (gimp-image-set-selected-layers image (make-vector 1 first-layer))
 
             (set! selection-bounds (gimp-selection-bounds image))
             (set! select-offset-x (cadr selection-bounds))
@@ -74,10 +74,10 @@
             (if (= separate-layer TRUE)
                 (begin
                   (set! lava-layer (car (gimp-layer-new image
+                                                        "Lava Layer"
                                                         select-width
                                                         select-height
                                                         type
-                                                        "Lava Layer"
                                                         100
                                                         LAYER-MODE-NORMAL-LEGACY)))
 
@@ -87,31 +87,35 @@
                   (gimp-drawable-edit-clear lava-layer)
 
                   (gimp-image-select-item image CHANNEL-OP-REPLACE active-selection)
-                  (gimp-image-set-selected-layers image 1 (make-vector 1 lava-layer))
+                  (gimp-image-set-selected-layers image (make-vector 1 lava-layer))
                 )
             )
 
-            (set! selected-layers (gimp-image-get-selected-layers image))
-            (set! num-selected-layers (car selected-layers))
-            (set! selected-layers-array (cadr selected-layers))
-            (set! active-layer (aref selected-layers-array (- num-selected-layers 1)))
+            (set! selected-layers-array (car (gimp-image-get-selected-layers image)))
+            (set! num-selected-layers (vector-length selected-layers-array))
+            (set! active-layer (vector-ref selected-layers-array (- num-selected-layers 1)))
 
             (if (= current-grad FALSE)
                 (gimp-context-set-gradient gradient)
             )
 
-            (plug-in-solid-noise RUN-NONINTERACTIVE image active-layer FALSE TRUE seed 2 2 2)
-            (plug-in-cubism RUN-NONINTERACTIVE image active-layer tile_size 2.5 0)
-            (plug-in-oilify RUN-NONINTERACTIVE image active-layer mask_size 0)
-            (plug-in-edge RUN-NONINTERACTIVE image active-layer 2 0 0)
-            (plug-in-gauss-rle RUN-NONINTERACTIVE image active-layer 2 TRUE TRUE)
-            (plug-in-gradmap RUN-NONINTERACTIVE image num-selected-layers selected-layers-array)
+            (let* ((width  (cadddr (gimp-drawable-mask-intersect active-layer)))
+                   (height (caddr (cddr (gimp-drawable-mask-intersect active-layer)))))
+              (gimp-drawable-merge-new-filter active-layer "gegl:noise-solid" 0 LAYER-MODE-REPLACE 1.0 "tileable" FALSE "turbulent" TRUE "seed" seed
+                                                                                                       "detail" 2 "x-size" 2.0 "y-size" 2.0
+                                                                                                       "width" width "height" height)
+            )
+            (gimp-drawable-merge-new-filter active-layer "gegl:cubism" 0 LAYER-MODE-REPLACE 1.0 "tile-size" tile_size "tile-saturation" 2.5 "bg-color" '(0 0 0))
+            (gimp-drawable-merge-new-filter active-layer "gegl:oilify" 0 LAYER-MODE-REPLACE 1.0 "mask-radius" (max 1 (/ mask_size 2)) "use-inten" FALSE)
+            (gimp-drawable-merge-new-filter active-layer "gegl:edge" 0 LAYER-MODE-REPLACE 1.0 "amount" 2.0 "border-behavior" "none" "algorithm" "sobel")
+            (gimp-drawable-merge-new-filter active-layer "gegl:gaussian-blur" 0 LAYER-MODE-REPLACE 1.0 "std-dev-x" 0.64 "std-dev-y" 0.64 "filter" "auto")
+            (plug-in-gradmap #:run-mode RUN-NONINTERACTIVE #:image image #:drawables selected-layers-array)
 
             (if (= keep-selection FALSE)
                 (gimp-selection-none image)
             )
 
-            (gimp-image-set-selected-layers image 1 (make-vector 1 drawable))
+            (gimp-image-set-selected-layers image (make-vector 1 first-layer))
             (gimp-image-remove-channel image active-selection)
 
             (gimp-image-undo-group-end image)
@@ -125,19 +129,18 @@
   )
 )
 
-(script-fu-register "script-fu-lava"
+(script-fu-register-filter "script-fu-lava"
   _"_Lava..."
   _"Fill the current selection with lava"
   "Adrian Likins <adrian@gimp.org>"
   "Adrian Likins"
   "10/12/97"
   "RGB* GRAY*"
-  SF-IMAGE       "Image"          0
-  SF-DRAWABLE    "Drawable"       0
+  SF-ONE-OR-MORE-DRAWABLE
   SF-ADJUSTMENT _"Seed"           '(10 1 30000 1 10 0 1)
   SF-ADJUSTMENT _"Size"           '(10 0 100 1 10 0 1)
   SF-ADJUSTMENT _"Roughness"      '(7 3 50 1 10 0 0)
-  SF-GRADIENT   _"Gradient"       "German flag smooth"
+  SF-GRADIENT   _"Gradient"       "Incandescent"
   SF-TOGGLE     _"Keep selection" TRUE
   SF-TOGGLE     _"Separate layer" TRUE
   SF-TOGGLE     _"Use current gradient" FALSE

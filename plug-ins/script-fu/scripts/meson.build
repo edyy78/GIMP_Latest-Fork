@@ -1,4 +1,6 @@
 subdir('images')
+subdir('init')
+subdir('test')
 
 # scripts interpreted by extension-script-fu, installed to /scripts
 scripts = [
@@ -30,14 +32,11 @@ scripts = [
   'paste-as-brush.scm',
   'paste-as-pattern.scm',
   'perspective-shadow.scm',
-  'plug-in-compat.init',
   'reverse-layers.scm',
   'ripply-anim.scm',
   'round-corners.scm',
-  'script-fu-compat.init',
   'script-fu-set-cmap.scm',
   'script-fu-util.scm',
-  'script-fu.init',
   'selection-round.scm',
   'slide.scm',
   'spinning-globe.scm',
@@ -46,16 +45,7 @@ scripts = [
   'waves-anim.scm',
   'weave.scm',
   'xach-effect.scm',
-  'clothify-v3.scm'
 ]
-
-if not stable
-  scripts += [
-    'contactsheet.scm',
-    'test-sphere.scm',
-    'test-v3.scm',
-  ]
-endif
 
 install_data(
   scripts,
@@ -68,8 +58,12 @@ install_data(
 # Like other interpreted plugins.
 # Lacking a shebang, a .interp file is needed to associate .scm suffix
 
+# !!! test-sphere-v3 is example plugin.
+# Install with a stable release along with other language examples.
+
+# For now, there are no other stable plugins that are independently interpreted.
+
 scripts_independent = [
-  { 'name': 'ts-helloworld' },
   { 'name': 'test-sphere-v3' },
 ]
 

@@ -26,7 +26,6 @@
 #include "libgimpbase/gimpwire.h" /* FIXME kill this include */
 
 #include "gimpplugin-private.h"
-#include "gimpprocedure-private.h"
 
 
 enum
@@ -134,6 +133,9 @@ gimp_item_get_property (GObject    *object,
  * gimp_item_get_id:
  * @item: The item.
  *
+ * Note: in most use cases, you should not need an item's ID which is
+ * mostly internal data and not reusable across sessions.
+ *
  * Returns: the item ID.
  *
  * Since: 3.0
@@ -161,6 +163,10 @@ gimp_item_get_id (GimpItem *item)
  * abstract class, the real object type will actually be the proper
  * subclass.
  *
+ * Note: in most use cases, you should not need to retrieve a #GimpItem
+ * by its ID, which is mostly internal data and not reusable across
+ * sessions. Use the appropriate functions for your use case instead.
+ *
  * Returns: (nullable) (transfer none): a #GimpItem for @item_id or
  *          %NULL if @item_id does not represent a valid item.
  *          The object belongs to libgimp and you must not modify
@@ -173,10 +179,9 @@ gimp_item_get_by_id (gint32 item_id)
 {
   if (item_id > 0)
     {
-      GimpPlugIn    *plug_in   = gimp_get_plug_in ();
-      GimpProcedure *procedure = _gimp_plug_in_get_procedure (plug_in);
+      GimpPlugIn *plug_in = gimp_get_plug_in ();
 
-      return _gimp_procedure_get_item (procedure, item_id);
+      return _gimp_plug_in_get_item (plug_in, item_id);
     }
 
   return NULL;
@@ -257,6 +262,25 @@ gimp_item_is_text_layer (GimpItem *item)
 }
 
 /**
+ * gimp_item_is_group_layer:
+ * @item: The item.
+ *
+ * Returns whether the item is a group layer.
+ *
+ * This procedure returns TRUE if the specified item is a group
+ * layer.
+ *
+ * Returns: TRUE if the item is a group layer, FALSE otherwise.
+ *
+ * Since: 3.0
+ **/
+gboolean
+gimp_item_is_group_layer (GimpItem *item)
+{
+  return gimp_item_id_is_group_layer (gimp_item_get_id (item));
+}
+
+/**
  * gimp_item_is_channel:
  * @item: The item.
  *
@@ -312,25 +336,25 @@ gimp_item_is_selection (GimpItem *item)
 }
 
 /**
- * gimp_item_is_vectors:
+ * gimp_item_is_path:
  * @item: The item.
  *
- * Returns whether the item is a vectors.
+ * Returns whether the item is a path.
  *
- * This procedure returns TRUE if the specified item is a vectors.
+ * This procedure returns TRUE if the specified item is a path.
  *
- * Returns: TRUE if the item is a vectors, FALSE otherwise.
+ * Returns: TRUE if the item is a path, FALSE otherwise.
  *
  * Since: 2.8
  **/
 gboolean
-gimp_item_is_vectors (GimpItem *item)
+gimp_item_is_path (GimpItem *item)
 {
-  return gimp_item_id_is_vectors (gimp_item_get_id (item));
+  return gimp_item_id_is_path (gimp_item_get_id (item));
 }
 
 /**
- * gimp_item_list_children:
+ * gimp_item_list_children: (skip)
  * @item: The item.
  *
  * Returns the item's list of children.
@@ -349,14 +373,14 @@ GList *
 gimp_item_list_children (GimpItem *item)
 {
   GimpItem **children;
-  gint       num_children;
   GList     *list = NULL;
   gint       i;
 
-  children = gimp_item_get_children (item, &num_children);
+  children = gimp_item_get_children (item);
 
-  for (i = 0; i < num_children; i++)
-    list = g_list_prepend (list, children[i]);
+  if (children)
+    for (i = 0; children[i] != NULL; i++)
+      list = g_list_prepend (list, children[i]);
 
   g_free (children);
 

@@ -28,7 +28,7 @@
 
 #include "ico.h"
 #include "ico-dialog.h"
-#include "ico-save.h"
+#include "ico-export.h"
 
 #include "libgimp/stdplugins-intl.h"
 
@@ -45,9 +45,12 @@ static void   ico_dialog_ani_update_iart (GtkEntry    *entry,
 
 
 GtkWidget *
-ico_dialog_new (IcoSaveInfo   *info,
-                AniFileHeader *ani_header,
-                AniSaveInfo   *ani_info)
+ico_dialog_new (GimpImage           *image,
+                GimpProcedure       *procedure,
+                GimpProcedureConfig *config,
+                IcoSaveInfo         *info,
+                AniFileHeader       *ani_header,
+                AniSaveInfo         *ani_info)
 {
   GtkWidget     *dialog;
   GtkWidget     *main_vbox;
@@ -57,11 +60,8 @@ ico_dialog_new (IcoSaveInfo   *info,
   GtkWidget     *viewport;
   GtkWidget     *warning;
 
-  dialog = gimp_export_dialog_new (ani_header ?
-                                   _("Windows Animated Cursor") : info->is_cursor ?
-                                   _("Windows Cursor") : _("Windows Icon"),
-                                   PLUG_IN_BINARY,
-                                   "plug-in-winicon");
+  dialog = gimp_export_procedure_dialog_new (GIMP_EXPORT_PROCEDURE (procedure),
+                                             config, image);
 
   /* We store an array that holds each icon's requested bit depth
      with the dialog. It's queried when the dialog is closed so the
@@ -80,7 +80,7 @@ ico_dialog_new (IcoSaveInfo   *info,
 
   main_vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 6);
   gtk_container_set_border_width (GTK_CONTAINER (main_vbox), 6);
-  gtk_box_pack_start (GTK_BOX (gimp_export_dialog_get_content_area (dialog)),
+  gtk_box_pack_start (GTK_BOX (gtk_dialog_get_content_area (GTK_DIALOG (dialog))),
                       main_vbox, TRUE, TRUE, 0);
   gtk_widget_show (main_vbox);
 
@@ -366,14 +366,13 @@ ico_dialog_update_icon_preview (GtkWidget    *dialog,
 
   if (bpp <= 8)
     {
-      GeglBuffer *buffer;
-      GeglBuffer *tmp;
-      GimpImage  *image;
-      GimpImage  *tmp_image;
-      GimpLayer  *tmp_layer;
-      guchar     *buf;
-      guchar     *cmap;
-      gint        num_colors;
+      GeglBuffer  *buffer;
+      GeglBuffer  *tmp;
+      GimpImage   *image;
+      GimpImage   *tmp_image;
+      GimpLayer   *tmp_layer;
+      guchar      *buf;
+      GimpPalette *palette;
 
       image = gimp_item_get_image (GIMP_ITEM (layer));
 
@@ -381,11 +380,7 @@ ico_dialog_update_icon_preview (GtkWidget    *dialog,
       gimp_image_undo_disable (tmp_image);
 
       if (gimp_drawable_is_indexed (layer))
-        {
-          cmap = gimp_image_get_colormap (image, NULL, &num_colors);
-          gimp_image_set_colormap (tmp_image, cmap, num_colors);
-          g_free (cmap);
-        }
+        gimp_image_set_palette (tmp_image, gimp_image_get_palette (image));
 
       tmp_layer = gimp_layer_new (tmp_image, "temporary", w, h,
                                   gimp_drawable_type (layer),
@@ -415,19 +410,17 @@ ico_dialog_update_icon_preview (GtkWidget    *dialog,
                                   GIMP_CONVERT_PALETTE_GENERATE,
                                   1 << bpp, TRUE, FALSE, "dummy");
 
-      cmap = gimp_image_get_colormap (tmp_image, NULL, &num_colors);
+      palette = gimp_image_get_palette (tmp_image);
 
-      if (num_colors == (1 << bpp) &&
-          ! ico_cmap_contains_black (cmap, num_colors))
+      if (gimp_palette_get_color_count (palette) == (1 << bpp) &&
+          ! ico_cmap_contains_black (palette))
         {
           /* Windows icons with color maps need the color black.
            * We need to eliminate one more color to make room for black.
            */
           if (gimp_drawable_is_indexed (layer))
             {
-              g_free (cmap);
-              cmap = gimp_image_get_colormap (image, NULL, &num_colors);
-              gimp_image_set_colormap (tmp_image, cmap, num_colors);
+              gimp_image_set_palette (tmp_image, gimp_image_get_palette (image));
             }
           else if (gimp_drawable_is_gray (layer))
             {
@@ -454,7 +447,6 @@ ico_dialog_update_icon_preview (GtkWidget    *dialog,
                                       (1 << bpp) - 1, TRUE, FALSE, "dummy");
         }
 
-      g_free (cmap);
       g_free (buf);
 
       pixbuf = gimp_drawable_get_thumbnail (GIMP_DRAWABLE (tmp_layer),
@@ -470,8 +462,6 @@ ico_dialog_update_icon_preview (GtkWidget    *dialog,
       GimpImage      *image;
       GimpImage      *tmp_image;
       GimpLayer      *tmp_layer;
-      GimpProcedure  *procedure;
-      GimpValueArray *return_vals;
 
       image = gimp_item_get_image (GIMP_ITEM (layer));
 
@@ -479,14 +469,7 @@ ico_dialog_update_icon_preview (GtkWidget    *dialog,
       gimp_image_undo_disable (tmp_image);
 
       if (gimp_drawable_is_indexed (layer))
-        {
-          guchar *cmap;
-          gint    num_colors;
-
-          cmap = gimp_image_get_colormap (image, NULL, &num_colors);
-          gimp_image_set_colormap (tmp_image, cmap, num_colors);
-          g_free (cmap);
-        }
+        gimp_image_set_palette (tmp_image, gimp_image_get_palette (image));
 
       tmp_layer = gimp_layer_new (tmp_image, "temporary", w, h,
                                   gimp_drawable_type (layer),
@@ -505,16 +488,11 @@ ico_dialog_update_icon_preview (GtkWidget    *dialog,
       if (gimp_drawable_is_indexed (layer))
         gimp_image_convert_rgb (tmp_image);
 
-      procedure   = gimp_pdb_lookup_procedure (gimp_get_pdb (),
-                                               "plug-in-threshold-alpha");
-      return_vals = gimp_procedure_run (procedure,
-                                        "run-mode",  GIMP_RUN_NONINTERACTIVE,
-                                        "image",     tmp_image,
-                                        "drawable",  tmp_layer,
-                                        "threshold", ICO_ALPHA_THRESHOLD,
-                                        NULL);
-
-      gimp_value_array_unref (return_vals);
+      gimp_drawable_merge_new_filter (GIMP_DRAWABLE (tmp_layer),
+                                      "gimp:threshold-alpha", NULL,
+                                      GIMP_LAYER_MODE_REPLACE, 1.0,
+                                      "value", ICO_ALPHA_THRESHOLD / 255.0,
+                                      NULL);
 
       pixbuf = gimp_drawable_get_thumbnail (GIMP_DRAWABLE (tmp_layer),
                                             MIN (w, 128), MIN (h, 128),

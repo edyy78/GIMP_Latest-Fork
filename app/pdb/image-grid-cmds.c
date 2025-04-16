@@ -21,11 +21,14 @@
 
 #include "stamp-pdbgen.h"
 
+#include <cairo.h>
+
 #include <gegl.h>
 
 #include <gdk-pixbuf/gdk-pixbuf.h>
 
 #include "libgimpbase/gimpbaseenums.h"
+#include "libgimpcolor/gimpcolor.h"
 
 #include "libgimpbase/gimpbase.h"
 
@@ -388,7 +391,7 @@ register_image_grid_procs (GimpPDB *pdb)
   /*
    * gimp-image-grid-get-spacing
    */
-  procedure = gimp_procedure_new (image_grid_get_spacing_invoker);
+  procedure = gimp_procedure_new (image_grid_get_spacing_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-grid-get-spacing");
   gimp_procedure_set_static_help (procedure,
@@ -423,7 +426,7 @@ register_image_grid_procs (GimpPDB *pdb)
   /*
    * gimp-image-grid-set-spacing
    */
-  procedure = gimp_procedure_new (image_grid_set_spacing_invoker);
+  procedure = gimp_procedure_new (image_grid_set_spacing_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-grid-set-spacing");
   gimp_procedure_set_static_help (procedure,
@@ -458,7 +461,7 @@ register_image_grid_procs (GimpPDB *pdb)
   /*
    * gimp-image-grid-get-offset
    */
-  procedure = gimp_procedure_new (image_grid_get_offset_invoker);
+  procedure = gimp_procedure_new (image_grid_get_offset_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-grid-get-offset");
   gimp_procedure_set_static_help (procedure,
@@ -493,7 +496,7 @@ register_image_grid_procs (GimpPDB *pdb)
   /*
    * gimp-image-grid-set-offset
    */
-  procedure = gimp_procedure_new (image_grid_set_offset_invoker);
+  procedure = gimp_procedure_new (image_grid_set_offset_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-grid-set-offset");
   gimp_procedure_set_static_help (procedure,
@@ -528,7 +531,7 @@ register_image_grid_procs (GimpPDB *pdb)
   /*
    * gimp-image-grid-get-foreground-color
    */
-  procedure = gimp_procedure_new (image_grid_get_foreground_color_invoker);
+  procedure = gimp_procedure_new (image_grid_get_foreground_color_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-grid-get-foreground-color");
   gimp_procedure_set_static_help (procedure,
@@ -546,9 +549,10 @@ register_image_grid_procs (GimpPDB *pdb)
                                                       FALSE,
                                                       GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gegl_param_spec_color ("fgcolor",
+                                   gimp_param_spec_color ("fgcolor",
                                                           "fgcolor",
                                                           "The image's grid foreground color",
+                                                          TRUE,
                                                           NULL,
                                                           GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
@@ -557,7 +561,7 @@ register_image_grid_procs (GimpPDB *pdb)
   /*
    * gimp-image-grid-set-foreground-color
    */
-  procedure = gimp_procedure_new (image_grid_set_foreground_color_invoker);
+  procedure = gimp_procedure_new (image_grid_set_foreground_color_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-grid-set-foreground-color");
   gimp_procedure_set_static_help (procedure,
@@ -575,9 +579,10 @@ register_image_grid_procs (GimpPDB *pdb)
                                                       FALSE,
                                                       GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gegl_param_spec_color ("fgcolor",
+                               gimp_param_spec_color ("fgcolor",
                                                       "fgcolor",
                                                       "The new foreground color",
+                                                      TRUE,
                                                       NULL,
                                                       GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
@@ -586,7 +591,7 @@ register_image_grid_procs (GimpPDB *pdb)
   /*
    * gimp-image-grid-get-background-color
    */
-  procedure = gimp_procedure_new (image_grid_get_background_color_invoker);
+  procedure = gimp_procedure_new (image_grid_get_background_color_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-grid-get-background-color");
   gimp_procedure_set_static_help (procedure,
@@ -604,9 +609,10 @@ register_image_grid_procs (GimpPDB *pdb)
                                                       FALSE,
                                                       GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gegl_param_spec_color ("bgcolor",
+                                   gimp_param_spec_color ("bgcolor",
                                                           "bgcolor",
                                                           "The image's grid background color",
+                                                          TRUE,
                                                           NULL,
                                                           GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
@@ -615,7 +621,7 @@ register_image_grid_procs (GimpPDB *pdb)
   /*
    * gimp-image-grid-set-background-color
    */
-  procedure = gimp_procedure_new (image_grid_set_background_color_invoker);
+  procedure = gimp_procedure_new (image_grid_set_background_color_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-grid-set-background-color");
   gimp_procedure_set_static_help (procedure,
@@ -633,9 +639,10 @@ register_image_grid_procs (GimpPDB *pdb)
                                                       FALSE,
                                                       GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gegl_param_spec_color ("bgcolor",
+                               gimp_param_spec_color ("bgcolor",
                                                       "bgcolor",
                                                       "The new background color",
+                                                      TRUE,
                                                       NULL,
                                                       GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
@@ -644,7 +651,7 @@ register_image_grid_procs (GimpPDB *pdb)
   /*
    * gimp-image-grid-get-style
    */
-  procedure = gimp_procedure_new (image_grid_get_style_invoker);
+  procedure = gimp_procedure_new (image_grid_get_style_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-grid-get-style");
   gimp_procedure_set_static_help (procedure,
@@ -674,7 +681,7 @@ register_image_grid_procs (GimpPDB *pdb)
   /*
    * gimp-image-grid-set-style
    */
-  procedure = gimp_procedure_new (image_grid_set_style_invoker);
+  procedure = gimp_procedure_new (image_grid_set_style_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-grid-set-style");
   gimp_procedure_set_static_help (procedure,

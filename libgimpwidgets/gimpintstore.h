@@ -53,29 +53,15 @@ typedef enum
 } GimpIntStoreColumns;
 
 
-#define GIMP_TYPE_INT_STORE            (gimp_int_store_get_type ())
-#define GIMP_INT_STORE(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_INT_STORE, GimpIntStore))
-#define GIMP_INT_STORE_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_INT_STORE, GimpIntStoreClass))
-#define GIMP_IS_INT_STORE(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_INT_STORE))
-#define GIMP_IS_INT_STORE_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_INT_STORE))
-#define GIMP_INT_STORE_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_INT_STORE, GimpIntStoreClass))
-
-
-typedef struct _GimpIntStorePrivate GimpIntStorePrivate;
-typedef struct _GimpIntStoreClass   GimpIntStoreClass;
-
-struct _GimpIntStore
-{
-  GtkListStore         parent_instance;
-
-  GimpIntStorePrivate *priv;
-};
+#define GIMP_TYPE_INT_STORE (gimp_int_store_get_type ())
+G_DECLARE_DERIVABLE_TYPE (GimpIntStore, gimp_int_store, GIMP, INT_STORE, GtkListStore)
 
 struct _GimpIntStoreClass
 {
   GtkListStoreClass  parent_class;
 
   /* Padding for future expansion */
+  void (* _gimp_reserved0) (void);
   void (* _gimp_reserved1) (void);
   void (* _gimp_reserved2) (void);
   void (* _gimp_reserved3) (void);
@@ -84,10 +70,9 @@ struct _GimpIntStoreClass
   void (* _gimp_reserved6) (void);
   void (* _gimp_reserved7) (void);
   void (* _gimp_reserved8) (void);
+  void (* _gimp_reserved9) (void);
 };
 
-
-GType          gimp_int_store_get_type        (void) G_GNUC_CONST;
 
 GtkListStore * gimp_int_store_new             (const gchar   *first_label,
                                                gint           first_value,

@@ -1,7 +1,3 @@
-if not have_python
-  subdir_done()
-endif
-
 plugins = [
   { 'name': 'colorxhtml' },
   { 'name': 'file-openraster' },
@@ -22,6 +18,7 @@ if not stable or not release
 endif
 
 subdir('python-console')
+subdir('tests')
 
 foreach plugin : plugins
   name = plugin.get('name')
@@ -33,21 +30,27 @@ foreach plugin : plugins
   foreach src : srcs
     # Ugly trick to copy Python plug-ins into subfolders so that we can run GIMP
     # from the build directory without installing it.
+    # To be run even if we don't install Python plug-ins so that we can
+    # still run them for in-build scripts.
     run_command(python, meson.project_source_root() / '.gitlab/cp-plug-in-subfolder.py',
                 meson.current_source_dir() / src, meson.current_build_dir() / name, check: true)
   endforeach
 endforeach
 
-# Fallback fix to the problem of non-configured interpreters
+# Fallback fix to the problem of non-configured interpreters (needed by MSIX)
 if platform_windows and not meson.is_cross_build() and python.found()
   python_config = configuration_data()
-  python_config.set('PYTHON_PATH', '')
+  if gimp_unstable or not release
+    #python.exe is prefered in unstable versions because of error output
+    python_config.set('PYTHON_EXE', 'python.exe')
+  else
+    #pythonw.exe is prefered in stable releases because it works silently
+    python_config.set('PYTHON_EXE', 'pythonw.exe')
+  endif
 
-  configure_file(
-    input : 'pygimp.interp.in',
-    output: 'pygimp.interp',
-    configuration: python_config,
-    install: true,
-    install_dir: gimpplugindir / 'interpreters',
-  )
+  configure_file(input : 'pygimp.interp.in',
+                 output: 'pygimp.interp',
+                 configuration: python_config,
+                 install: true,
+                 install_dir: gimpplugindir / 'interpreters')
 endif

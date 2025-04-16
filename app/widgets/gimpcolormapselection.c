@@ -73,54 +73,55 @@ enum
          gimp_image_get_colormap_palette (image) != NULL)
 
 
-static void   gimp_colormap_selection_set_property    (GObject               *object,
-                                                       guint                  property_id,
-                                                       const GValue          *value,
-                                                       GParamSpec            *pspec);
-static void   gimp_colormap_selection_get_property    (GObject               *object,
-                                                       guint                  property_id,
-                                                       GValue                *value,
-                                                       GParamSpec            *pspec);
-static void   gimp_colormap_selection_dispose         (GObject               *object);
-static void   gimp_colormap_selection_finalize        (GObject               *object);
+static void   gimp_colormap_selection_set_property     (GObject               *object,
+                                                        guint                  property_id,
+                                                        const GValue          *value,
+                                                        GParamSpec            *pspec);
+static void   gimp_colormap_selection_get_property     (GObject               *object,
+                                                        guint                  property_id,
+                                                        GValue                *value,
+                                                        GParamSpec            *pspec);
+static void   gimp_colormap_selection_dispose          (GObject               *object);
+static void   gimp_colormap_selection_finalize         (GObject               *object);
 
-static void   gimp_colormap_selection_unmap           (GtkWidget             *widget);
+static void   gimp_colormap_selection_unmap            (GtkWidget             *widget);
 
 static PangoLayout *
-              gimp_colormap_selection_create_layout   (GtkWidget             *widget);
+              gimp_colormap_selection_create_layout    (GtkWidget             *widget);
 
-static void   gimp_colormap_selection_update_entries  (GimpColormapSelection *selection);
+static void   gimp_colormap_selection_update_entries   (GimpColormapSelection *selection);
 
 static gboolean
-              gimp_colormap_selection_preview_draw    (GtkWidget             *widget,
-                                                       cairo_t               *cr,
-                                                       GimpColormapSelection *selection);
+              gimp_colormap_selection_preview_draw     (GtkWidget             *widget,
+                                                        cairo_t               *cr,
+                                                        GimpColormapSelection *selection);
 
-static void   gimp_colormap_selection_entry_clicked   (GimpPaletteView       *view,
-                                                       GimpPaletteEntry      *entry,
-                                                       GdkModifierType       state,
-                                                       GimpColormapSelection *selection);
-static void   gimp_colormap_selection_entry_selected  (GimpPaletteView       *view,
-                                                       GimpPaletteEntry      *entry,
-                                                       GimpColormapSelection *selection);
-static void   gimp_colormap_selection_entry_activated (GimpPaletteView       *view,
-                                                       GimpPaletteEntry      *entry,
-                                                       GimpColormapSelection *selection);
-static void   gimp_colormap_selection_color_dropped   (GimpPaletteView       *view,
-                                                       GimpPaletteEntry      *entry,
-                                                       const GimpRGB         *color,
-                                                       GimpColormapSelection *selection);
+static void   gimp_colormap_selection_entry_clicked    (GimpPaletteView       *view,
+                                                        GimpPaletteEntry      *entry,
+                                                        GdkModifierType       state,
+                                                        GimpColormapSelection *selection);
+static void   gimp_colormap_selection_entry_selected   (GimpPaletteView       *view,
+                                                        GimpPaletteEntry      *entry,
+                                                        GimpColormapSelection *selection);
+static void   gimp_colormap_selection_entry_activated  (GimpPaletteView       *view,
+                                                        GimpPaletteEntry      *entry,
+                                                        GimpColormapSelection *selection);
+static void   gimp_colormap_selection_color_dropped    (GimpPaletteView       *view,
+                                                        GimpPaletteEntry      *entry,
+                                                        GeglColor             *color,
+                                                        GimpColormapSelection *selection);
 
-static void   gimp_colormap_adjustment_changed        (GtkAdjustment         *adjustment,
-                                                       GimpColormapSelection *selection);
-static void   gimp_colormap_hex_entry_changed         (GimpColorHexEntry     *entry,
-                                                       GimpColormapSelection *selection);
+static void   gimp_colormap_adjustment_changed         (GtkAdjustment         *adjustment,
+                                                        GimpColormapSelection *selection);
+static void   gimp_colormap_hex_entry_changed          (GimpColorHexEntry     *entry,
+                                                        GimpColormapSelection *selection);
 
-static void   gimp_colormap_selection_set_context     (GimpColormapSelection *selection,
-                                                       GimpContext           *context);
-static void   gimp_colormap_selection_image_changed   (GimpColormapSelection *selection,
-                                                       GimpImage             *image);
-static void   gimp_colormap_selection_set_palette     (GimpColormapSelection *selection);
+static void   gimp_colormap_selection_set_context      (GimpColormapSelection *selection,
+                                                        GimpContext           *context);
+static void   gimp_colormap_selection_image_changed    (GimpColormapSelection *selection,
+                                                        GimpImage             *image);
+static void   gimp_colormap_selection_set_palette      (GimpColormapSelection *selection);
+static void   gimp_colormap_selection_colormap_changed (GimpColormapSelection *selection);
 
 G_DEFINE_TYPE (GimpColormapSelection, gimp_colormap_selection, GTK_TYPE_BOX)
 
@@ -302,6 +303,8 @@ gimp_colormap_selection_dispose (GObject *object)
   GimpColormapSelection *selection = GIMP_COLORMAP_SELECTION (object);
 
   g_clear_pointer (&selection->color_dialog, gtk_widget_destroy);
+  g_clear_weak_pointer (&selection->active_image);
+  g_clear_weak_pointer (&selection->active_palette);
 
   G_OBJECT_CLASS (parent_class)->dispose (object);
 }
@@ -327,6 +330,9 @@ gimp_colormap_selection_finalize (GObject *object)
                                             selection);
       g_signal_handlers_disconnect_by_func (selection->active_image,
                                             G_CALLBACK (gimp_colormap_selection_set_palette),
+                                            selection);
+      g_signal_handlers_disconnect_by_func (selection->active_image,
+                                            G_CALLBACK (gimp_colormap_selection_colormap_changed),
                                             selection);
     }
   if (selection->active_palette)
@@ -661,7 +667,7 @@ gimp_colormap_selection_entry_activated (GimpPaletteView       *view,
 static void
 gimp_colormap_selection_color_dropped (GimpPaletteView       *view,
                                        GimpPaletteEntry      *entry,
-                                       const GimpRGB         *color,
+                                       GeglColor             *color,
                                        GimpColormapSelection *selection)
 {
 }
@@ -751,7 +757,7 @@ gimp_colormap_selection_image_changed (GimpColormapSelection *selection,
   if (selection->active_image)
     {
       g_signal_handlers_disconnect_by_func (selection->active_image,
-                                            G_CALLBACK (gtk_widget_queue_draw),
+                                            G_CALLBACK (gimp_colormap_selection_colormap_changed),
                                             selection);
       g_signal_handlers_disconnect_by_func (selection->active_image,
                                             G_CALLBACK (gimp_colormap_selection_set_palette),
@@ -790,12 +796,12 @@ gimp_colormap_selection_image_changed (GimpColormapSelection *selection,
 
   if (image)
     {
-      g_signal_connect_swapped (image, "colormap-changed",
-                                G_CALLBACK (gtk_widget_queue_draw),
-                                selection);
-      g_signal_connect_swapped (image, "mode-changed",
-                                G_CALLBACK (gimp_colormap_selection_set_palette),
-                                selection);
+      g_signal_connect_object (image, "colormap-changed",
+                               G_CALLBACK (gimp_colormap_selection_colormap_changed),
+                               selection, G_CONNECT_SWAPPED);
+      g_signal_connect_object (image, "mode-changed",
+                               G_CALLBACK (gimp_colormap_selection_set_palette),
+                               selection, G_CONNECT_SWAPPED);
     }
 
   gimp_colormap_selection_set_palette (selection);
@@ -838,4 +844,25 @@ gimp_colormap_selection_set_palette (GimpColormapSelection *selection)
           gtk_adjustment_set_upper (selection->index_adjustment, n_colors - 1);
         }
     }
+}
+
+static void
+gimp_colormap_selection_colormap_changed (GimpColormapSelection *selection)
+{
+  GimpPalette *palette = NULL;
+
+  if (selection->active_image)
+    palette = gimp_image_get_colormap_palette (selection->active_image);
+
+  if (palette)
+    {
+      gint n_colors;
+
+      n_colors = gimp_palette_get_n_colors (palette);
+      gtk_adjustment_set_upper (selection->index_adjustment, n_colors - 1);
+
+      gimp_colormap_selection_update_entries (selection);
+    }
+
+  gtk_widget_queue_draw (GTK_WIDGET (selection));
 }

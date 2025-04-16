@@ -199,7 +199,6 @@ static GimpProcedure  * jigsaw_create_procedure (GimpPlugIn           *plug_in,
 static GimpValueArray * jigsaw_run              (GimpProcedure        *procedure,
                                                  GimpRunMode           run_mode,
                                                  GimpImage            *image,
-                                                 gint                  n_drawables,
                                                  GimpDrawable        **drawables,
                                                  GimpProcedureConfig  *config,
                                                  gpointer              run_data);
@@ -409,37 +408,39 @@ jigsaw_create_procedure (GimpPlugIn  *plug_in,
                                       "Nigel Wetten",
                                       "May 2000");
 
-      GIMP_PROC_ARG_INT (procedure, "x",
-                         _("_Horizontal"),
-                         _("Number of pieces going across"),
-                         MIN_XTILES, MAX_XTILES, 5,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "x",
+                                       _("_Horizontal"),
+                                       _("Number of pieces going across"),
+                                       MIN_XTILES, MAX_XTILES, 5,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "y",
-                         _("_Vertical"),
-                         _("Number of pieces going down"),
-                         MIN_YTILES, MAX_YTILES, 5,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "y",
+                                       _("_Vertical"),
+                                       _("Number of pieces going down"),
+                                       MIN_YTILES, MAX_YTILES, 5,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "style",
-                         _("Jigsaw Style"),
-                         _("The style/shape of the jigsaw puzzle "
-                           "{ Square (0), Curved (1) }"),
-                         0, 1, BEZIER_1,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_choice_argument (procedure, "style",
+                                          _("_Jigsaw Style"),
+                                          _("The style/shape of the jigsaw puzzle"),
+                                          gimp_choice_new_with_values ("square", BEZIER_1, _("Square"), NULL,
+                                                                       "curved", BEZIER_2, _("Curved"), NULL,
+                                                                       NULL),
+                                          "square",
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "blend-lines",
-                         _("_Blend width"),
-                         _("Degree of slope of each piece's edge"),
-                         MIN_BLEND_LINES, MAX_BLEND_LINES, 3,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "blend-lines",
+                                       _("_Blend width"),
+                                       _("Degree of slope of each piece's edge"),
+                                       MIN_BLEND_LINES, MAX_BLEND_LINES, 3,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "blend-amount",
-                            _("Hi_ghlight"),
-                            _("The amount of highlighting on the edges "
-                              "of each piece"),
-                            MIN_BLEND_AMOUNT, MAX_BLEND_AMOUNT, 0.5,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "blend-amount",
+                                          _("Hi_ghlight"),
+                                          _("The amount of highlighting on the edges "
+                                            "of each piece"),
+                                          MIN_BLEND_AMOUNT, MAX_BLEND_AMOUNT, 0.5,
+                                          G_PARAM_READWRITE);
     }
 
   return procedure;
@@ -449,7 +450,6 @@ static GimpValueArray *
 jigsaw_run (GimpProcedure        *procedure,
             GimpRunMode           run_mode,
             GimpImage            *image,
-            gint                  n_drawables,
             GimpDrawable        **drawables,
             GimpProcedureConfig  *config,
             gpointer              run_data)
@@ -458,7 +458,7 @@ jigsaw_run (GimpProcedure        *procedure,
 
   gegl_init (NULL, NULL);
 
-  if (n_drawables != 1)
+  if (gimp_core_object_array_get_length ((GObject **) drawables) != 1)
     {
       GError *error = NULL;
 
@@ -517,9 +517,11 @@ jigsaw (GObject      *config,
       GBytes *buffer_bytes;
 
       gimp_preview_get_size (preview, &width, &height);
+
       buffer_bytes = gimp_drawable_get_thumbnail_data (drawable,
                                                        width, height,
                                                        &width, &height, &bytes);
+
       buffer = g_bytes_unref_to_data (buffer_bytes, &buffer_size);
     }
   else
@@ -559,6 +561,9 @@ jigsaw (GObject      *config,
   if (preview)
     {
       gimp_preview_draw_buffer (preview, buffer, width * bytes);
+
+      gimp_preview_set_bounds (preview, 0, 0, width, height);
+      gimp_preview_set_size (preview, width, height);
     }
   else
     {
@@ -580,10 +585,13 @@ static void
 jigsaw_preview (GtkWidget *widget,
                 GObject   *config)
 {
-  GimpPreview  *preview  = GIMP_PREVIEW (widget);
-  GimpDrawable *drawable = g_object_get_data (config, "drawable");
+  GimpDrawablePreview  *preview;
+  GimpDrawable         *drawable;
 
-  jigsaw (config, drawable, preview);
+  preview = GIMP_DRAWABLE_PREVIEW (widget);
+  drawable = gimp_drawable_preview_get_drawable (preview);
+
+  jigsaw (config, drawable, GIMP_PREVIEW (widget));
 }
 
 static void
@@ -646,8 +654,9 @@ draw_jigsaw (GObject  *config,
                 "y",            &ytiles,
                 "blend-lines",  &blend_lines,
                 "blend-amount", &blend_amount,
-                "style",        &style,
                 NULL);
+  style = gimp_procedure_config_get_choice_id (GIMP_PROCEDURE_CONFIG (config),
+                                               "style");
 
   xlines = xtiles - 1;
   ylines = ytiles - 1;
@@ -2460,7 +2469,6 @@ jigsaw_dialog (GimpProcedure *procedure,
   GtkWidget     *preview;
   GtkWidget     *frame;
   GtkWidget     *scale;
-  GtkListStore  *store;
   gboolean       run;
 
   gimp_ui_init (PLUG_IN_BINARY);
@@ -2468,13 +2476,6 @@ jigsaw_dialog (GimpProcedure *procedure,
   dialog = gimp_procedure_dialog_new (procedure,
                                       GIMP_PROCEDURE_CONFIG (config),
                                       _("Jigsaw"));
-
-  gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
-                                            GTK_RESPONSE_OK,
-                                            GTK_RESPONSE_CANCEL,
-                                           -1);
-
-  gimp_window_set_transient (GTK_WINDOW (dialog));
 
   /* xtiles */
   scale = gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
@@ -2514,11 +2515,8 @@ jigsaw_dialog (GimpProcedure *procedure,
                                     "bevel-vbox");
 
   /* frame for primitive radio buttons */
-  store = gimp_int_store_new (_("Square"), BEZIER_1,
-                              _("Curved"), BEZIER_2,
-                              NULL);
-  frame = gimp_procedure_dialog_get_int_radio (GIMP_PROCEDURE_DIALOG (dialog),
-                                               "style", GIMP_INT_STORE (store));
+  frame = gimp_procedure_dialog_get_widget (GIMP_PROCEDURE_DIALOG (dialog),
+                                            "style", GIMP_TYPE_INT_RADIO_FRAME);
   gtk_widget_set_margin_bottom (frame, 12);
 
   gimp_procedure_dialog_fill_box (GIMP_PROCEDURE_DIALOG (dialog),
@@ -2528,8 +2526,6 @@ jigsaw_dialog (GimpProcedure *procedure,
   preview = gimp_procedure_dialog_get_drawable_preview (GIMP_PROCEDURE_DIALOG (dialog),
                                                         "preview", drawable);
   gtk_widget_set_margin_bottom (preview, 12);
-
-  g_object_set_data (config, "drawable", drawable);
 
   g_signal_connect (preview, "invalidated",
                     G_CALLBACK (jigsaw_preview),

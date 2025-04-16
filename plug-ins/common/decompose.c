@@ -98,7 +98,6 @@ static GimpProcedure  * decompose_create_procedure (GimpPlugIn           *plug_i
 static GimpValueArray * decompose_run              (GimpProcedure        *procedure,
                                                     GimpRunMode           run_mode,
                                                     GimpImage            *image,
-                                                    gint                  n_drawables,
                                                     GimpDrawable        **drawables,
                                                     GimpProcedureConfig  *config,
                                                     gpointer              run_data);
@@ -294,63 +293,63 @@ decompose_create_procedure (GimpPlugIn  *plug_in,
                                       "Peter Kirchgessner, Clarence Risher",
                                       "1997");
 
-      GIMP_PROC_ARG_CHOICE (procedure, "decompose-type",
-                            _("Color _model"),
-                            _("The model to decompose to"),
-                            gimp_choice_new_with_values ("rgb",        0, _("RGB"),                NULL,
-                                                         "rgba",       1, _("RGBA"),               NULL,
-                                                         "alpha",      2, _("Alpha"),              NULL,
-                                                         "hsv",        3, _("HSV"),                NULL,
-                                                         "hsl",        4, _("HSL"),                NULL,
-                                                         "cmyk",       5, _("CMYK"),               NULL,
-                                                         "lab",        6, _("LAB"),                NULL,
-                                                         "lch",        7, _("LCH"),                NULL,
-                                                         "ycbcr470",   8, _("YCbCr ITU R470"),     NULL,
-                                                         "ycbcr709",   9, _("YCbCr ITU R709"),     NULL,
-                                                         "ycbcr470f", 10, _("YCbCr ITU R470 256"), NULL,
-                                                         "ycbcr709f", 11, _("YCbCr ITU R709 256"), NULL,
-                                                         NULL),
-                            "rgb",
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_choice_argument (procedure, "decompose-type",
+                                          _("Color _model"),
+                                          _("The model to decompose to"),
+                                          gimp_choice_new_with_values ("rgb",        0, _("RGB"),                NULL,
+                                                                       "rgba",       1, _("RGBA"),               NULL,
+                                                                       "alpha",      2, _("Alpha"),              NULL,
+                                                                       "hsv",        3, _("HSV"),                NULL,
+                                                                       "hsl",        4, _("HSL"),                NULL,
+                                                                       "cmyk",       5, _("CMYK"),               NULL,
+                                                                       "lab",        6, _("LAB"),                NULL,
+                                                                       "lch",        7, _("LCH"),                NULL,
+                                                                       "ycbcr470",   8, _("YCbCr ITU R470"),     NULL,
+                                                                       "ycbcr709",   9, _("YCbCr ITU R709"),     NULL,
+                                                                       "ycbcr470f", 10, _("YCbCr ITU R470 256"), NULL,
+                                                                       "ycbcr709f", 11, _("YCbCr ITU R709 256"), NULL,
+                                                                       NULL),
+                                          "rgb",
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "layers-mode",
-                             _("_Decompose to layers"),
-                             _("Create channels as layers in a single image"),
-                             TRUE,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "layers-mode",
+                                           _("_Decompose to layers"),
+                                           _("Create channels as layers in a single image"),
+                                           TRUE,
+                                           G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "use-registration",
-                             _("_Foreground as registration color"),
-                             _("When enabled, pixels in the foreground color "
-                               "will appear black in all output images. This "
-                               "can be used for things like crop marks that "
-                               "have to show up on all channels."),
-                             FALSE,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "use-registration",
+                                           _("_Foreground as registration color"),
+                                           _("When enabled, pixels in the foreground color "
+                                             "will appear black in all output images. This "
+                                             "can be used for things like crop marks that "
+                                             "have to show up on all channels."),
+                                           FALSE,
+                                           G_PARAM_READWRITE);
 
-      GIMP_PROC_VAL_IMAGE (procedure, "new-image-1",
-                           "New image 1",
-                           "Output gray image 1",
-                           FALSE,
-                           G_PARAM_READWRITE);
+      gimp_procedure_add_image_return_value (procedure, "new-image-1",
+                                             "New image 1",
+                                             "Output gray image 1",
+                                             FALSE,
+                                             G_PARAM_READWRITE);
 
-      GIMP_PROC_VAL_IMAGE (procedure, "new-image-2",
-                           "New image 2",
-                           "Output gray image 2 (N/A for single channel extract)",
-                           TRUE,
-                           G_PARAM_READWRITE);
+      gimp_procedure_add_image_return_value (procedure, "new-image-2",
+                                             "New image 2",
+                                             "Output gray image 2 (N/A for single channel extract)",
+                                             TRUE,
+                                             G_PARAM_READWRITE);
 
-      GIMP_PROC_VAL_IMAGE (procedure, "new-image-3",
-                           "New image 3",
-                           "Output gray image 3 (N/A for single channel extract)",
-                           TRUE,
-                           G_PARAM_READWRITE);
+      gimp_procedure_add_image_return_value (procedure, "new-image-3",
+                                             "New image 3",
+                                             "Output gray image 3 (N/A for single channel extract)",
+                                             TRUE,
+                                             G_PARAM_READWRITE);
 
-      GIMP_PROC_VAL_IMAGE (procedure, "new-image-4",
-                           "New image 4",
-                           "Output gray image 4 (N/A for single channel extract)",
-                           TRUE,
-                           G_PARAM_READWRITE);
+      gimp_procedure_add_image_return_value (procedure, "new-image-4",
+                                             "New image 4",
+                                             "Output gray image 4 (N/A for single channel extract)",
+                                             TRUE,
+                                             G_PARAM_READWRITE);
 
       g_string_free (type_desc, TRUE);
     }
@@ -362,7 +361,6 @@ static GimpValueArray *
 decompose_run (GimpProcedure        *procedure,
                GimpRunMode           run_mode,
                GimpImage            *image,
-               gint                  n_drawables,
                GimpDrawable        **drawables,
                GimpProcedureConfig  *config,
                gpointer              run_data)
@@ -379,7 +377,7 @@ decompose_run (GimpProcedure        *procedure,
 
   gegl_init (NULL, NULL);
 
-  if (n_drawables != 1)
+  if (gimp_core_object_array_get_length ((GObject **) drawables) != 1)
     {
       GError *error = NULL;
 
@@ -882,7 +880,8 @@ generate_filename (GimpImage *image,
                    guint      channel)
 {
   /* Build a filename like <imagename>-<channel>.<extension> */
-  gchar    *fname;
+  GFile    *file;
+  gchar    *fname = NULL;
   gchar    *filename;
   gchar    *extension;
   gboolean  config_as_layers;
@@ -891,7 +890,9 @@ generate_filename (GimpImage *image,
                 "layers-mode", &config_as_layers,
                 NULL);
 
-  fname = g_file_get_path (gimp_image_get_file (image));
+  file  = gimp_image_get_file (image);
+  if (file)
+    fname = g_file_get_path (file);
 
   if (fname)
     {
@@ -907,29 +908,23 @@ generate_filename (GimpImage *image,
       if (extension >= fname)
         {
           *(extension++) = '\0';
+        }
 
-          if (config_as_layers)
-            filename = g_strdup_printf ("%s-%s.%s", fname,
-                                        gettext (extract[colorspace].type),
-                                        extension);
-          else
-            filename = g_strdup_printf ("%s-%s.%s", fname,
-                                        gettext (extract[colorspace].component[channel].channel_name),
-                                        extension);
-        }
+      if (config_as_layers)
+        filename = g_strdup_printf ("%s-%s.xcf", fname,
+                                    gettext (extract[colorspace].type));
       else
-        {
-          if (config_as_layers)
-            filename = g_strdup_printf ("%s-%s", fname,
-                                        gettext (extract[colorspace].type));
-          else
-            filename = g_strdup_printf ("%s-%s", fname,
-                                        gettext (extract[colorspace].component[channel].channel_name));
-        }
+        filename = g_strdup_printf ("%s-%s.xcf", fname,
+                                    gettext (extract[colorspace].component[channel].channel_name));
     }
   else
     {
-      filename = g_strdup (gettext (extract[colorspace].component[channel].channel_name));
+      if (config_as_layers)
+        filename = g_strdup_printf ("%s.xcf",
+                                    gettext (extract[colorspace].type));
+      else
+        filename = g_strdup_printf ("%s.xcf",
+                                    gettext (extract[colorspace].component[channel].channel_name));
     }
 
   g_free (fname);

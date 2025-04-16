@@ -88,7 +88,6 @@ static GimpProcedure  * flame_create_procedure (GimpPlugIn           *plug_in,
 static GimpValueArray * flame_run              (GimpProcedure        *procedure,
                                                 GimpRunMode           run_mode,
                                                 GimpImage            *image,
-                                                gint                  n_drawables,
                                                 GimpDrawable        **drawables,
                                                 GimpProcedureConfig  *proc_config,
                                                 gpointer              run_data);
@@ -191,55 +190,55 @@ flame_create_procedure (GimpPlugIn  *plug_in,
                                       "Scott Draves",
                                       "1997");
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "brightness",
-                            _("_Brightness"), NULL,
-                            0.0, 5.0, 1.0,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "brightness",
+                                          _("_Brightness"), NULL,
+                                          0.0, 5.0, 1.0,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "contrast",
-                            _("Co_ntrast"), NULL,
-                            0.0, 5.0, 1.0,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "contrast",
+                                          _("Co_ntrast"), NULL,
+                                          0.0, 5.0, 1.0,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "gamma",
-                            _("_Gamma"), NULL,
-                            1.0, 5.0, 1.0,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "gamma",
+                                          _("_Gamma"), NULL,
+                                          1.0, 5.0, 1.0,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "sample-density",
-                            _("_Brightness"), NULL,
-                            0.1, 20.0, 5.0,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "sample-density",
+                                          _("Sample _density"), NULL,
+                                          0.1, 20.0, 5.0,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "spatial-oversample",
-                            _("Spa_tial oversample"), NULL,
-                            1, 4, 2.0,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "spatial-oversample",
+                                          _("Spa_tial oversample"), NULL,
+                                          1, 4, 2.0,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "spatial-filter-radius",
-                            _("_Brightness"), NULL,
-                            0.0, 4.0, 0.75,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "spatial-filter-radius",
+                                          _("Spatial _filter radius"), NULL,
+                                          0.0, 4.0, 0.75,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "zoom",
-                            _("_Zoom"), NULL,
-                            -4.0, 4.0, 0.0,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "zoom",
+                                          _("_Zoom"), NULL,
+                                          -4.0, 4.0, 0.0,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "x",
-                            _("_X"), NULL,
-                            -2.0, 2.0, 0.0,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "x",
+                                          _("_X"), NULL,
+                                          -2.0, 2.0, 0.0,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "y",
-                            _("_Y"), NULL,
-                            -2.0, 2.0, 0.0,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "y",
+                                          _("_Y"), NULL,
+                                          -2.0, 2.0, 0.0,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_AUX_ARG_BYTES (procedure, "settings-data",
-                               "Settings data",
-                               "TODO: eventually we must implement proper args for every settings",
-                               GIMP_PARAM_READWRITE);
+      gimp_procedure_add_bytes_aux_argument (procedure, "settings-data",
+                                             "Settings data",
+                                             "TODO: eventually we must implement proper args for every settings",
+                                             GIMP_PARAM_READWRITE);
     }
 
   return procedure;
@@ -281,7 +280,6 @@ static GimpValueArray *
 flame_run (GimpProcedure        *procedure,
            GimpRunMode           run_mode,
            GimpImage            *image,
-           gint                  n_drawables,
            GimpDrawable        **drawables,
            GimpProcedureConfig  *proc_config,
            gpointer              run_data)
@@ -291,7 +289,7 @@ flame_run (GimpProcedure        *procedure,
 
   gegl_init (NULL, NULL);
 
-  if (n_drawables != 1)
+  if (gimp_core_object_array_get_length ((GObject **) drawables) != 1)
     {
       GError *error = NULL;
 
@@ -337,12 +335,6 @@ flame_run (GimpProcedure        *procedure,
                                                    GIMP_PDB_CANCEL,
                                                    NULL);
         }
-
-      /*  reusing a drawable from the last run is a bad idea
-       *  since the drawable might have vanished  (bug #37761)
-       */
-      if (config.cmap_drawable_id > 0)
-        config.cmap_drawable_id = GRADIENT_DRAWABLE;
     }
 
   if (gimp_drawable_is_rgb (drawable))
@@ -360,6 +352,12 @@ flame_run (GimpProcedure        *procedure,
                                                GIMP_PDB_EXECUTION_ERROR,
                                                NULL);
     }
+
+   /*  reusing a drawable from the last run is a bad idea
+    *  since the drawable might have vanished  (bug #37761)
+    */
+   if (config.cmap_drawable_id > 0)
+     config.cmap_drawable_id = GRADIENT_DRAWABLE;
 
   flame_update_settings_aux (proc_config);
 
@@ -384,20 +382,17 @@ drawable_to_cmap (control_point *cp)
     }
   else if (GRADIENT_DRAWABLE == config.cmap_drawable_id)
     {
-      GimpGradient *gradient = gimp_context_get_gradient ();
-
-      gint     num;
-      gdouble *g;
+      GimpGradient  *gradient   = gimp_context_get_gradient ();
+      GeglColor    **colors;
+      const Babl    *format_dst = babl_format ("R'G'B' double");
 
       /* FIXME: "reverse" hardcoded to FALSE. */
-      gimp_gradient_get_uniform_samples (gradient, 256, FALSE,
-                                         &num, &g);
-
+      colors = gimp_gradient_get_uniform_samples (gradient, 256, FALSE);
 
       for (i = 0; i < 256; i++)
-        for (j = 0; j < 3; j++)
-          cp->cmap[i][j] = g[i*4 + j];
-      g_free (g);
+        gegl_color_get_pixel (colors[i], format_dst, &(cp->cmap[i][0]));
+
+      gimp_color_array_free (colors);
     }
   else
     {
@@ -576,8 +571,8 @@ file_response_callback (GtkFileChooser      *chooser,
                         "zoom",                  config.cp.zoom,
                         NULL);
           g_signal_handlers_unblock_by_func (proc_config,
-                                           G_CALLBACK (set_flame_preview),
-                                           NULL);
+                                             G_CALLBACK (set_flame_preview),
+                                             NULL);
           set_flame_preview (proc_config);
           set_edit_preview (proc_config);
         }
@@ -1139,6 +1134,14 @@ cmap_callback (GtkWidget           *widget,
   gimp_int_combo_box_get_active (GIMP_INT_COMBO_BOX (widget),
                                  &config.cmap_drawable_id);
 
+  g_signal_handlers_block_by_func (proc_config,
+                                   G_CALLBACK (set_flame_preview),
+                                   NULL);
+  flame_update_settings_aux (proc_config);
+  g_signal_handlers_unblock_by_func (proc_config,
+                                     G_CALLBACK (set_flame_preview),
+                                     NULL);
+
   set_cmap_preview ();
   set_flame_preview (proc_config);
   /* set_edit_preview(); */
@@ -1163,6 +1166,7 @@ flame_dialog (Flame                *flame,
   GtkWidget *frame;
   GtkWidget *button;
   GtkWidget *box;
+  gulong     notify_handler;
   gboolean   run;
 
   gimp_ui_init (PLUG_IN_BINARY);
@@ -1351,12 +1355,13 @@ flame_dialog (Flame                *flame,
   gtk_widget_show (notebook);
   gtk_box_pack_start (GTK_BOX (main_vbox), notebook, FALSE, FALSE, 0);
 
-  g_signal_connect (proc_config, "notify",
-                    G_CALLBACK (set_flame_preview),
-                    NULL);
+  notify_handler = g_signal_connect (proc_config, "notify",
+                                     G_CALLBACK (set_flame_preview),
+                                     NULL);
   set_flame_preview (proc_config);
   run = gimp_procedure_dialog_run (GIMP_PROCEDURE_DIALOG (dialog));
 
+  g_signal_handler_disconnect (proc_config, notify_handler);
   gtk_widget_destroy (dialog);
 
   return run;

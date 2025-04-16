@@ -102,6 +102,11 @@ gimp_channel_tree_view_class_init (GimpChannelTreeViewClass *klass)
   view_class->drop_viewables = gimp_channel_tree_view_drop_viewables;
   view_class->drop_component = gimp_channel_tree_view_drop_component;
 
+  iv_class->move_cursor_up_action    = "channels-select-previous";
+  iv_class->move_cursor_down_action  = "channels-select-next";
+  iv_class->move_cursor_start_action = "channels-select-top";
+  iv_class->move_cursor_end_action   = "channels-select-bottom";
+
   iv_class->set_image        = gimp_channel_tree_view_set_image;
 
   iv_class->item_type        = GIMP_TYPE_CHANNEL;
@@ -114,18 +119,19 @@ gimp_channel_tree_view_class_init (GimpChannelTreeViewClass *klass)
   iv_class->remove_item      = (GimpRemoveItemFunc) gimp_image_remove_channel;
   iv_class->new_item         = gimp_channel_tree_view_item_new;
 
-  iv_class->action_group          = "channels";
-  iv_class->activate_action       = "channels-edit-attributes";
-  iv_class->new_action            = "channels-new";
-  iv_class->new_default_action    = "channels-new-last-values";
-  iv_class->raise_action          = "channels-raise";
-  iv_class->raise_top_action      = "channels-raise-to-top";
-  iv_class->lower_action          = "channels-lower";
-  iv_class->lower_bottom_action   = "channels-lower-to-bottom";
-  iv_class->duplicate_action      = "channels-duplicate";
-  iv_class->delete_action         = "channels-delete";
-  iv_class->lock_content_help_id  = GIMP_HELP_CHANNEL_LOCK_PIXELS;
-  iv_class->lock_position_help_id = GIMP_HELP_CHANNEL_LOCK_POSITION;
+  iv_class->action_group            = "channels";
+  iv_class->activate_action         = "channels-edit-attributes";
+  iv_class->new_action              = "channels-new";
+  iv_class->new_default_action      = "channels-new-last-values";
+  iv_class->raise_action            = "channels-raise";
+  iv_class->raise_top_action        = "channels-raise-to-top";
+  iv_class->lower_action            = "channels-lower";
+  iv_class->lower_bottom_action     = "channels-lower-to-bottom";
+  iv_class->duplicate_action        = "channels-duplicate";
+  iv_class->delete_action           = "channels-delete";
+  iv_class->lock_content_help_id    = GIMP_HELP_CHANNEL_LOCK_PIXELS;
+  iv_class->lock_position_help_id   = GIMP_HELP_CHANNEL_LOCK_POSITION;
+  iv_class->lock_visibility_help_id = GIMP_HELP_CHANNEL_LOCK_VISIBILITY;
 }
 
 static void

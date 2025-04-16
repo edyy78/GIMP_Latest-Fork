@@ -15,7 +15,13 @@
 (testing:load-test "atom2string.scm")
 (testing:load-test "integer2char.scm")
 
-(testing:load-test "string-port.scm")
+(testing:load-test "string-escape.scm")
+
+(testing:load-test "file-port.scm")
+(testing:load-test "string-port-output.scm")
+(testing:load-test "string-port-input.scm")
+; WIP
+; (testing:load-test "string-port-unichar.scm")
 
 (testing:load-test "sharp-expr.scm")
 (testing:load-test "sharp-expr-char.scm")
@@ -27,6 +33,8 @@
 (testing:load-test "vector.scm")
 
 (testing:load-test "no-memory.scm")
+
+(testing:load-test "numeric.scm")
 
 ; report the result
 (testing:report)

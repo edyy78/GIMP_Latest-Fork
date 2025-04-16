@@ -21,11 +21,14 @@
 
 #include "stamp-pdbgen.h"
 
+#include <cairo.h>
+
 #include <gegl.h>
 
 #include <gdk-pixbuf/gdk-pixbuf.h>
 
 #include "libgimpbase/gimpbase.h"
+#include "libgimpcolor/gimpcolor.h"
 
 #include "libgimpbase/gimpbase.h"
 
@@ -287,13 +290,12 @@ image_select_polygon_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpImage *image;
   gint operation;
-  gint num_segs;
+  gsize num_segs;
   const gdouble *segs;
 
   image = g_value_get_object (gimp_value_array_index (args, 0));
   operation = g_value_get_enum (gimp_value_array_index (args, 1));
-  num_segs = g_value_get_int (gimp_value_array_index (args, 2));
-  segs = gimp_value_get_float_array (gimp_value_array_index (args, 3));
+  segs = gimp_value_get_double_array (gimp_value_array_index (args, 2), &num_segs);
 
   if (success)
     {
@@ -360,7 +362,7 @@ register_image_select_procs (GimpPDB *pdb)
   /*
    * gimp-image-select-color
    */
-  procedure = gimp_procedure_new (image_select_color_invoker);
+  procedure = gimp_procedure_new (image_select_color_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-select-color");
   gimp_procedure_set_static_help (procedure,
@@ -395,9 +397,10 @@ register_image_select_procs (GimpPDB *pdb)
                                                          FALSE,
                                                          GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gegl_param_spec_color ("color",
+                               gimp_param_spec_color ("color",
                                                       "color",
                                                       "The color to select",
+                                                      FALSE,
                                                       NULL,
                                                       GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
@@ -406,7 +409,7 @@ register_image_select_procs (GimpPDB *pdb)
   /*
    * gimp-image-select-contiguous-color
    */
-  procedure = gimp_procedure_new (image_select_contiguous_color_invoker);
+  procedure = gimp_procedure_new (image_select_contiguous_color_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-select-contiguous-color");
   gimp_procedure_set_static_help (procedure,
@@ -458,7 +461,7 @@ register_image_select_procs (GimpPDB *pdb)
   /*
    * gimp-image-select-rectangle
    */
-  procedure = gimp_procedure_new (image_select_rectangle_invoker);
+  procedure = gimp_procedure_new (image_select_rectangle_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-select-rectangle");
   gimp_procedure_set_static_help (procedure,
@@ -514,7 +517,7 @@ register_image_select_procs (GimpPDB *pdb)
   /*
    * gimp-image-select-round-rectangle
    */
-  procedure = gimp_procedure_new (image_select_round_rectangle_invoker);
+  procedure = gimp_procedure_new (image_select_round_rectangle_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-select-round-rectangle");
   gimp_procedure_set_static_help (procedure,
@@ -582,7 +585,7 @@ register_image_select_procs (GimpPDB *pdb)
   /*
    * gimp-image-select-ellipse
    */
-  procedure = gimp_procedure_new (image_select_ellipse_invoker);
+  procedure = gimp_procedure_new (image_select_ellipse_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-select-ellipse");
   gimp_procedure_set_static_help (procedure,
@@ -638,7 +641,7 @@ register_image_select_procs (GimpPDB *pdb)
   /*
    * gimp-image-select-polygon
    */
-  procedure = gimp_procedure_new (image_select_polygon_invoker);
+  procedure = gimp_procedure_new (image_select_polygon_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-select-polygon");
   gimp_procedure_set_static_help (procedure,
@@ -665,23 +668,17 @@ register_image_select_procs (GimpPDB *pdb)
                                                   GIMP_CHANNEL_OP_ADD,
                                                   GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               g_param_spec_int ("num-segs",
-                                                 "num segs",
-                                                 "Number of points (count 1 coordinate as two points)",
-                                                 2, G_MAXINT32, 2,
-                                                 GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_float_array ("segs",
-                                                            "segs",
-                                                            "Array of points: { p1.x, p1.y, p2.x, p2.y, ..., pn.x, pn.y}",
-                                                            GIMP_PARAM_READWRITE));
+                               gimp_param_spec_double_array ("segs",
+                                                             "segs",
+                                                             "Array of points: { p1.x, p1.y, p2.x, p2.y, ..., pn.x, pn.y}",
+                                                             GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-select-item
    */
-  procedure = gimp_procedure_new (image_select_item_invoker);
+  procedure = gimp_procedure_new (image_select_item_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-select-item");
   gimp_procedure_set_static_help (procedure,

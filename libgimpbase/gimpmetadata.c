@@ -25,8 +25,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <gegl.h>
 #include <gio/gio.h>
-#include <gexiv2/gexiv2.h>
 
 #include "libgimpmath/gimpmath.h"
 
@@ -34,51 +34,23 @@
 
 #include "gimplimits.h"
 #include "gimpmetadata.h"
+#include "gimpparamspecs.h"
 #include "gimpunit.h"
 
 #include "libgimp/libgimp-intl.h"
-
-typedef struct _GimpMetadataPrivate GimpMetadataPrivate;
-typedef struct _GimpMetadataClass   GimpMetadataClass;
-
-struct _GimpMetadata
-{
-  GExiv2Metadata parent_instance;
-};
-
-struct _GimpMetadataPrivate
-{
-  /* dummy entry to avoid a critical warning due to size 0 */
-  gpointer _gimp_reserved1;
-};
-
-struct _GimpMetadataClass
-{
-  GExiv2MetadataClass parent_class;
-
-  /* Padding for future expansion */
-  void (*_gimp_reserved1) (void);
-  void (*_gimp_reserved2) (void);
-  void (*_gimp_reserved3) (void);
-  void (*_gimp_reserved4) (void);
-  void (*_gimp_reserved5) (void);
-  void (*_gimp_reserved6) (void);
-  void (*_gimp_reserved7) (void);
-  void (*_gimp_reserved8) (void);
-};
 
 /**
  * SECTION: gimpmetadata
  * @title: GimpMetadata
  * @short_description: Basic functions for handling #GimpMetadata objects.
- * @see_also: gimp_image_metadata_load_prepare(),
- *            gimp_image_metadata_load_finish(),
- *            gimp_image_metadata_save_prepare(),
- *            gimp_image_metadata_save_finish().
  *
  * Basic functions for handling #GimpMetadata objects.
  **/
 
+struct _GimpMetadata
+{
+  GExiv2Metadata parent_instance;
+};
 
 #define GIMP_METADATA_ERROR gimp_metadata_error_quark ()
 
@@ -165,6 +137,9 @@ static const gchar *unsupported_tags[] =
    * unedited original state. */
   "Exif.Image.ImageResources",
   "Exif.Image.0x935c",
+  /* Issue #12518 Metadata fails to be exported when certain Sony Exif tags
+   * are present. */
+  "Exif.SonyMisc3c",
 };
 
 static const guint8 minimal_exif[] =
@@ -206,7 +181,7 @@ static const guint8 wilber_jpg[] =
 
 static const guint wilber_jpg_len = G_N_ELEMENTS (wilber_jpg);
 
-G_DEFINE_TYPE_WITH_PRIVATE (GimpMetadata, gimp_metadata, GEXIV2_TYPE_METADATA)
+G_DEFINE_TYPE (GimpMetadata, gimp_metadata, GEXIV2_TYPE_METADATA)
 
 
 static void
@@ -1583,10 +1558,10 @@ gimp_metadata_set_bits_per_sample (GimpMetadata *metadata,
  * Since: 2.10
  */
 gboolean
-gimp_metadata_get_resolution (GimpMetadata *metadata,
-                              gdouble      *xres,
-                              gdouble      *yres,
-                              GimpUnit     *unit)
+gimp_metadata_get_resolution (GimpMetadata  *metadata,
+                              gdouble       *xres,
+                              gdouble       *yres,
+                              GimpUnit     **unit)
 {
   gint xnom, xdenom;
   gint ynom, ydenom;
@@ -1637,9 +1612,9 @@ gimp_metadata_get_resolution (GimpMetadata *metadata,
              if (unit)
                {
                  if (exif_unit == 3)
-                   *unit = GIMP_UNIT_MM;
+                   *unit = gimp_unit_mm ();
                  else
-                   *unit = GIMP_UNIT_INCH;
+                   *unit = gimp_unit_inch ();
                }
 
              return TRUE;
@@ -1666,7 +1641,7 @@ void
 gimp_metadata_set_resolution (GimpMetadata *metadata,
                               gdouble       xres,
                               gdouble       yres,
-                              GimpUnit      unit)
+                              GimpUnit     *unit)
 {
   gchar buffer[32];
   gint  exif_unit;
@@ -1704,6 +1679,98 @@ gimp_metadata_set_resolution (GimpMetadata *metadata,
   g_snprintf (buffer, sizeof (buffer), "%d", exif_unit);
   gexiv2_metadata_try_set_tag_string (GEXIV2_METADATA (metadata),
                                       "Exif.Image.ResolutionUnit", buffer, NULL);
+}
+
+/**
+ * gimp_metadata_set_creation_date:
+ * @metadata: A #GimpMetadata instance.
+ * @datetime: A #GDateTime value
+ *
+ * Sets `Iptc.Application2.DateCreated`, `Iptc.Application2.TimeCreated`,
+ * `Exif.Image.DateTime`, `Exif.Image.DateTimeOriginal`,
+ * `Exif.Photo.DateTimeOriginal`, `Exif.Photo.DateTimeDigitized`,
+ * `Exif.Photo.OffsetTime`, `Exif.Photo.OffsetTimeOriginal`,
+ * `Exif.Photo.OffsetTimeDigitized`, `Xmp.xmp.CreateDate`, `Xmp.xmp.ModifyDate`,
+ * `Xmp.xmp.MetadataDate`, `Xmp.photoshop.DateCreated` of @metadata.
+ *
+ * Since: 3.0
+ */
+void
+gimp_metadata_set_creation_date (GimpMetadata *metadata,
+                                 GDateTime    *datetime)
+{
+  gchar          *datetime_buf = NULL;
+  GExiv2Metadata *g2metadata   = GEXIV2_METADATA (metadata);
+
+  g_return_if_fail (GIMP_IS_METADATA (metadata));
+
+  /* IPTC: set creation date and time; there is no tag for modified date/time. */
+
+  datetime_buf = g_date_time_format (datetime, "%Y-%m-%d");
+  gexiv2_metadata_try_set_tag_string (g2metadata,
+                                      "Iptc.Application2.DateCreated",
+                                      datetime_buf, NULL);
+  g_free (datetime_buf);
+
+  /* time and timezone */
+  datetime_buf = g_date_time_format (datetime, "%T\%:z");
+  gexiv2_metadata_try_set_tag_string (g2metadata,
+                                      "Iptc.Application2.TimeCreated",
+                                      datetime_buf, NULL);
+  g_free (datetime_buf);
+
+  /* Exif: Exif.Image.DateTime = Modified datetime
+   * Exif.Image.DateTimeOriginal and Exif.Photo.DateTimeOriginal = When the
+   *   original image data was generated.
+   * Exif.Photo.DateTimeDigitized = when the image was stored as digital data.
+   */
+  datetime_buf = g_date_time_format (datetime, "%Y:%m:%d %T");
+
+  gexiv2_metadata_try_set_tag_string (g2metadata,
+                                      "Exif.Image.DateTime",
+                                      datetime_buf, NULL);
+  gexiv2_metadata_try_set_tag_string (g2metadata,
+                                      "Exif.Image.DateTimeOriginal",
+                                      datetime_buf, NULL);
+  gexiv2_metadata_try_set_tag_string (g2metadata,
+                                      "Exif.Photo.DateTimeOriginal",
+                                      datetime_buf, NULL);
+  gexiv2_metadata_try_set_tag_string (g2metadata,
+                                      "Exif.Photo.DateTimeDigitized",
+                                      datetime_buf, NULL);
+  g_free (datetime_buf);
+
+  /* Timezone is separate */
+  datetime_buf = g_date_time_format (datetime, "\%:z");
+  gexiv2_metadata_try_set_tag_string (g2metadata,
+                                      "Exif.Photo.OffsetTime",
+                                      datetime_buf, NULL);
+  gexiv2_metadata_try_set_tag_string (g2metadata,
+                                      "Exif.Photo.OffsetTimeOriginal",
+                                      datetime_buf, NULL);
+  gexiv2_metadata_try_set_tag_string (g2metadata,
+                                      "Exif.Photo.OffsetTimeDigitized",
+                                      datetime_buf, NULL);
+  g_free (datetime_buf);
+
+  /* XMP: Xmp.photoshop.DateCreated = date when the original image was
+   *   taken, this can be before Xmp.xmp.CreateDate. */
+  datetime_buf = g_date_time_format (datetime, "%Y:%m:%dT%T\%:z");
+
+  gexiv2_metadata_try_set_tag_string (g2metadata,
+                                      "Xmp.xmp.CreateDate",
+                                      datetime_buf, NULL);
+  gexiv2_metadata_try_set_tag_string (g2metadata,
+                                      "Xmp.xmp.ModifyDate",
+                                      datetime_buf, NULL);
+  gexiv2_metadata_try_set_tag_string (g2metadata,
+                                      "Xmp.xmp.MetadataDate",
+                                      datetime_buf, NULL);
+  gexiv2_metadata_try_set_tag_string (g2metadata,
+                                      "Xmp.photoshop.DateCreated",
+                                      datetime_buf, NULL);
+
+  g_free (datetime_buf);
 }
 
 /**

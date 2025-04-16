@@ -118,7 +118,6 @@ static GimpProcedure  * pagecurl_create_procedure (GimpPlugIn           *plug_in
 static GimpValueArray * pagecurl_run              (GimpProcedure        *procedure,
                                                    GimpRunMode           run_mode,
                                                    GimpImage            *image,
-                                                   gint                  n_drawables,
                                                    GimpDrawable        **drawables,
                                                    GimpProcedureConfig  *config,
                                                    gpointer              run_data);
@@ -134,7 +133,7 @@ static void             clear_curled_region       (GimpDrawable         *drawabl
                                                    GimpProcedureConfig  *config);
 static GimpLayer      * page_curl                 (GimpDrawable         *drawable,
                                                    GimpProcedureConfig  *config);
-static GimpRGB        * get_gradient_samples      (GimpDrawable         *drawable,
+static gdouble        * get_gradient_samples      (GimpDrawable         *drawable,
                                                    gboolean              reverse);
 
 
@@ -172,8 +171,8 @@ static gdouble diagm_slope;
 
 /* User-configured parameters */
 
-static GimpRGB fg_color;
-static GimpRGB bg_color;
+static gdouble fg_color[4];
+static gdouble bg_color[4];
 
 
 static void
@@ -225,51 +224,51 @@ pagecurl_create_procedure (GimpPlugIn  *plug_in,
                                       "Federico Mena Quintero and Simon Budig",
                                       PLUG_IN_VERSION);
 
-      GIMP_PROC_ARG_CHOICE (procedure, "colors",
-                            _("Colors"), NULL,
-                            gimp_choice_new_with_values ("fg-bg",                     CURL_COLORS_FG_BG,            _("Foreground / background colors"), NULL,
-                                                         "current-gradient",          CURL_COLORS_GRADIENT,         _("Current gradient"),               NULL,
-                                                         "current-gradient-reversed", CURL_COLORS_GRADIENT_REVERSE, _("Current gradient (reversed)"),    NULL,
-                                                         NULL),
-                            "fg-bg",
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_choice_argument (procedure, "colors",
+                                          _("Colors"), NULL,
+                                          gimp_choice_new_with_values ("fg-bg",                     CURL_COLORS_FG_BG,            _("Foreground / background colors"), NULL,
+                                                                       "current-gradient",          CURL_COLORS_GRADIENT,         _("Current gradient"),               NULL,
+                                                                       "current-gradient-reversed", CURL_COLORS_GRADIENT_REVERSE, _("Current gradient (reversed)"),    NULL,
+                                                                       NULL),
+                                          "fg-bg",
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_CHOICE (procedure, "edge",
-                            _("Locatio_n"),
-                            _("Corner which is curled"),
-                            gimp_choice_new_with_values ("upper-left",  CURL_EDGE_UPPER_LEFT,  _("Upper left"),  NULL,
-                                                         "upper-right", CURL_EDGE_UPPER_RIGHT, _("Upper right"), NULL,
-                                                         "lower-left",  CURL_EDGE_LOWER_LEFT,  _("Lower left"),  NULL,
-                                                         "lower-right", CURL_EDGE_LOWER_RIGHT, _("Lower right"), NULL,
-                                                         NULL),
-                            "lower-right",
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_choice_argument (procedure, "edge",
+                                          _("Locatio_n"),
+                                          _("Corner which is curled"),
+                                          gimp_choice_new_with_values ("upper-left",  CURL_EDGE_UPPER_LEFT,  _("Upper left"),  NULL,
+                                                                       "upper-right", CURL_EDGE_UPPER_RIGHT, _("Upper right"), NULL,
+                                                                       "lower-left",  CURL_EDGE_LOWER_LEFT,  _("Lower left"),  NULL,
+                                                                       "lower-right", CURL_EDGE_LOWER_RIGHT, _("Lower right"), NULL,
+                                                                       NULL),
+                                          "lower-right",
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_CHOICE (procedure, "orientation",
-                            _("Or_ientation"), NULL,
-                            gimp_choice_new_with_values ("vertical",   CURL_ORIENTATION_VERTICAL,   _("Vertical"),   NULL,
-                                                         "horizontal", CURL_ORIENTATION_HORIZONTAL, _("Horizontal"), NULL,
-                                                         NULL),
-                            "vertical",
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_choice_argument (procedure, "orientation",
+                                          _("Or_ientation"), NULL,
+                                          gimp_choice_new_with_values ("vertical",   CURL_ORIENTATION_VERTICAL,   _("Vertical"),   NULL,
+                                                                       "horizontal", CURL_ORIENTATION_HORIZONTAL, _("Horizontal"), NULL,
+                                                                       NULL),
+                                          "vertical",
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "shade",
-                             _("Sh_ade"),
-                             _("Shade the region under the curl"),
-                             TRUE,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "shade",
+                                           _("Sh_ade"),
+                                           _("Shade the region under the curl"),
+                                           TRUE,
+                                           G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "opacity",
-                            _("Opaci_ty"),
-                            _("Opacity"),
-                            0.0, 1.0, 0.0,
-                            GIMP_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "opacity",
+                                          _("Opaci_ty"),
+                                          _("Opacity"),
+                                          0.0, 1.0, 0.0,
+                                          GIMP_PARAM_READWRITE);
 
-      GIMP_PROC_VAL_LAYER (procedure, "curl-layer",
-                           "Curl layer",
-                           "The new layer with the curl.",
-                           FALSE,
-                           G_PARAM_READWRITE);
+      gimp_procedure_add_layer_return_value (procedure, "curl-layer",
+                                         "Curl layer",
+                                         "The new layer with the curl.",
+                                         FALSE,
+                                         G_PARAM_READWRITE);
     }
 
   return procedure;
@@ -279,7 +278,6 @@ static GimpValueArray *
 pagecurl_run (GimpProcedure        *procedure,
               GimpRunMode           run_mode,
               GimpImage            *_image,
-              gint                  n_drawables,
               GimpDrawable        **drawables,
               GimpProcedureConfig  *config,
               gpointer              run_data)
@@ -291,7 +289,7 @@ pagecurl_run (GimpProcedure        *procedure,
 
   image = _image;
 
-  if (n_drawables != 1)
+  if (gimp_core_object_array_get_length ((GObject **) drawables) != 1)
     {
       GError *error = NULL;
 
@@ -549,10 +547,10 @@ init_calculation (GimpDrawable        *drawable,
   /* Colors */
 
   color = gimp_context_get_foreground ();
-  gegl_color_get_rgba_with_space (color, &fg_color.r, &fg_color.g, &fg_color.b, &fg_color.a, NULL);
+  gegl_color_get_pixel (color, babl_format ("R'G'B'A double"), fg_color);
   g_object_unref (color);
   color = gimp_context_get_background ();
-  gegl_color_get_rgba_with_space (color, &bg_color.r, &bg_color.g, &bg_color.b, &bg_color.a, NULL);
+  gegl_color_get_pixel (color, babl_format ("R'G'B'A double"), bg_color);
   g_object_unref (color);
 }
 
@@ -570,7 +568,7 @@ do_curl_effect (GimpDrawable        *drawable,
   gdouble             dl_mag, dr_mag, angle, factor;
   GeglBuffer         *curl_buffer;
   GimpLayer          *curl_layer;
-  GimpRGB            *grad_samples = NULL;
+  gdouble            *grad_samples = NULL;
   gint                width, height, n_ch;
   GeglRectangle      *roi;
   GeglBufferIterator *iter;
@@ -656,7 +654,7 @@ do_curl_effect (GimpDrawable        *drawable,
 
       for (y1 = roi->y; y1 < roi->y + roi->height; y1++)
         {
-          GimpRGB color;
+          gdouble color[4] = { 0, 0, 0, 0 };
 
           for (x1 = roi->x; x1 < roi->x + roi->width; x1++)
             {
@@ -676,7 +674,8 @@ do_curl_effect (GimpDrawable        *drawable,
 
               if (left_of_diagl (x, y))
                 { /* uncurled region: transparent black */
-                  gimp_rgba_set (&color, 0, 0, 0, 0);
+                  for (gint i = 0; i < 4; i++)
+                    color[i] = 0;
                 }
               else if (right_of_diagr (x, y) ||
                        (right_of_diagm (x, y) &&
@@ -684,7 +683,8 @@ do_curl_effect (GimpDrawable        *drawable,
                         !inside_circle (x, y)))
                 {
                   /* curled region: transparent black */
-                  gimp_rgba_set (&color, 0, 0, 0, 0);
+                  for (gint i = 0; i < 4; i++)
+                    color[i] = 0;
                 }
               else
                 {
@@ -697,22 +697,24 @@ do_curl_effect (GimpDrawable        *drawable,
                     {
                       /* Below the curl. */
                       factor = angle / alpha;
-                      gimp_rgba_set (&color, 0, 0, 0, shade ? factor : 0);
+
+                      for (gint i = 0; i < 3; i++)
+                        color[i] = 0;
+                      color[3] = shade ? factor : 0;
                     }
                   else
                     {
-                      GimpRGB *gradrgb;
+                      guint rgb_index;
 
                       /* On the curl */
                       switch (colors)
                         {
                         case CURL_COLORS_FG_BG:
                           intensity = pow (sin (G_PI * angle / alpha), 1.5);
-                          gimp_rgba_set (&color,
-                                         intensity * bg_color.r + (1.0 - intensity) * fg_color.r,
-                                         intensity * bg_color.g + (1.0 - intensity) * fg_color.g,
-                                         intensity * bg_color.b + (1.0 - intensity) * fg_color.b,
-                                         (1.0 - intensity * (1.0 - opacity)));
+
+                          for (gint i = 0; i < 3; i++)
+                            color[i] = intensity * bg_color[i] + (1.0 - intensity) * fg_color[i];
+                          color[3] = 1.0 - intensity * (1.0 - opacity);
                           break;
 
                         case CURL_COLORS_GRADIENT:
@@ -720,21 +722,20 @@ do_curl_effect (GimpDrawable        *drawable,
                           /* Calculate position in Gradient */
                           intensity = (angle/alpha) + sin (G_PI*2 * angle/alpha) * 0.075;
 
-                          gradrgb = grad_samples + ((guint) (intensity * NGRADSAMPLES));
+                          rgb_index = ((guint) (intensity * NGRADSAMPLES));
 
                           /* Check boundaries */
                           intensity = CLAMP (intensity, 0.0, 1.0);
-                          color = *gradrgb;
-                          color.a = gradrgb->a * (1.0 - intensity * (1.0 - opacity));
+                          for (gint i = 0; i < 4; i++)
+                            color[i] = grad_samples[(rgb_index * 4) + i];
+                          color[3] = grad_samples[(rgb_index * 4) + 3] * (1.0 - intensity * (1.0 - opacity));
                           break;
                         }
                     }
                 }
 
-              dest[0] = color.r;
-              dest[1] = color.g;
-              dest[2] = color.b;
-              dest[3] = color.a;
+              for (gint i = 0; i < 4; i++)
+                dest[i] = color[i];
 
               dest += n_ch;
             }
@@ -882,31 +883,24 @@ page_curl (GimpDrawable        *drawable,
   Each sample has (gimp_drawable_get_bpp (drawable)) bytes.
   "ripped" from gradmap.c.
  */
-static GimpRGB *
+static gdouble *
 get_gradient_samples (GimpDrawable *drawable,
                       gboolean      reverse)
 {
-  GimpGradient *gradient;
-
-  gint     n_d_samples;
-  gdouble *d_samples = NULL;
-  GimpRGB *rgba;
-  gint     i;
+  GimpGradient  *gradient;
+  GeglColor    **colors;
+  const Babl    *format = babl_format ("R'G'B'A double");
+  gdouble       *d_samples;
 
   gradient = gimp_context_get_gradient ();
 
-  gimp_gradient_get_uniform_samples (gradient, NGRADSAMPLES, reverse,
-                                     &n_d_samples, &d_samples);
+  colors = gimp_gradient_get_uniform_samples (gradient, NGRADSAMPLES, reverse);
 
-  rgba = g_new0 (GimpRGB, NGRADSAMPLES);
-  for (i = 0; i < NGRADSAMPLES; i++)
-    {
-      gimp_rgba_set (rgba + i,
-                     d_samples[i*4 + 0],
-                     d_samples[i*4 + 1],
-                     d_samples[i*4 + 2],
-                     d_samples[i*4 + 3]);
-    }
+  d_samples = g_new0 (gdouble, NGRADSAMPLES * 4);
+  for (gint i = 0; i < NGRADSAMPLES; i++)
+    gegl_color_get_pixel (colors[i], format, &d_samples[i * 4]);
 
-  return rgba;
+  gimp_color_array_free (colors);
+
+  return d_samples;
 }

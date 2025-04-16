@@ -135,7 +135,7 @@ static void         gimp_menu_model_action_notify_visible    (GimpAction        
                                                               GimpMenuModel       *model);
 static void         gimp_menu_model_action_notify_label      (GimpAction          *action,
                                                               GParamSpec          *pspec,
-                                                              GMenuItem           *item);
+                                                              GimpMenuModel       *model);
 
 static gboolean     gimp_menu_model_ui_added                 (GimpUIManager       *manager,
                                                               const gchar         *path,
@@ -201,9 +201,9 @@ gimp_menu_model_class_init (GimpMenuModelClass *klass)
                                                         GIMP_PARAM_READWRITE |
                                                         G_PARAM_EXPLICIT_NOTIFY));
   g_object_class_install_property (object_class, PROP_COLOR,
-                                   gegl_param_spec_color ("color",
+                                   gimp_param_spec_color ("color",
                                                           NULL, NULL,
-                                                          /*TRUE,*/ NULL,
+                                                          TRUE, NULL,
                                                           GIMP_PARAM_READWRITE |
                                                           G_PARAM_EXPLICIT_NOTIFY));
 }
@@ -552,14 +552,20 @@ gimp_menu_model_get_submodel (GimpMenuModel *model,
       n_items = g_menu_model_get_n_items (G_MENU_MODEL (submodel));
       for (i = 0; i < n_items; i++)
         {
-          GMenuModel *subsubmodel;
-          gchar      *label = NULL;
-          gchar      *canon_label = NULL;
+          GMenuModel  *subsubmodel;
+          gchar       *label       = NULL;
+          gchar       *canon_label = NULL;
+          const gchar *en_label;
 
           subsubmodel = g_menu_model_get_item_link (G_MENU_MODEL (submodel), i, G_MENU_LINK_SUBMENU);
           g_menu_model_get_item_attribute (G_MENU_MODEL (submodel), i, G_MENU_ATTRIBUTE_LABEL, "s", &label);
+
           if (label)
-            canon_label = gimp_utils_make_canonical_menu_label (label);
+            {
+              en_label = g_object_get_data (G_OBJECT (subsubmodel),
+                                            "gimp-menu-model-en-label");
+              canon_label = gimp_utils_make_canonical_menu_label (en_label);
+            }
 
           if (subsubmodel && g_strcmp0 (canon_label, submenu) == 0)
             {
@@ -739,6 +745,7 @@ gimp_menu_model_initialize (GimpMenuModel *model,
           gchar         *canon_label;
           gchar         *path;
           const gchar   *en_label;
+          gchar         *en_label_copy;
 
           g_return_if_fail (label != NULL);
           en_label = g_object_get_data (G_OBJECT (submenu),
@@ -752,6 +759,10 @@ gimp_menu_model_initialize (GimpMenuModel *model,
 
           submodel = gimp_menu_model_new_submenu (model->priv->manager, submenu, path);
           item     = g_menu_item_new_submenu (label, G_MENU_MODEL (submodel));
+
+          en_label_copy = g_strdup (en_label);
+          g_object_set_data_full (G_OBJECT (submodel), "gimp-menu-model-en-label",
+                                  en_label_copy, (GDestroyNotify) g_free);
           submodel->priv->submenu_item = item;
 
           g_object_unref (submodel);
@@ -789,11 +800,11 @@ gimp_menu_model_initialize (GimpMenuModel *model,
           g_signal_connect_object (action,
                                    "notify::short-label",
                                    G_CALLBACK (gimp_menu_model_action_notify_label),
-                                   item, 0);
+                                   model, 0);
           g_signal_connect_object (action,
                                    "notify::label",
                                    G_CALLBACK (gimp_menu_model_action_notify_label),
-                                   item, 0);
+                                   model, 0);
 
           /* We want GimpRadioAction to be GTK_MENU_TRACKER_ITEM_ROLE_RADIO,
            * in order to be displayed as radio menu items (as used to be
@@ -969,6 +980,11 @@ gimp_menu_model_get_item (GimpMenuModel *model,
           action = gimp_ui_manager_find_action (model->priv->manager, NULL,
                                                 action_name);
 
+          if (! action)
+            {
+              g_critical ("Invalid action '%s'", action_name);
+              continue;
+            }
           if (gimp_action_is_visible (action))
             cur++;
         }
@@ -1067,20 +1083,32 @@ gimp_menu_model_action_notify_visible (GimpAction    *action,
 }
 
 static void
-gimp_menu_model_action_notify_label (GimpAction *action,
-                                     GParamSpec *pspec,
-                                     GMenuItem  *item)
+gimp_menu_model_action_notify_label (GimpAction    *action,
+                                     GParamSpec    *pspec,
+                                     GimpMenuModel *model)
 {
-  gchar *label_variant = NULL;
+  gchar     *label_variant = NULL;
+  GMenuItem *item;
+  gint       pos;
+  gboolean   visible;
 
   g_return_if_fail (GIMP_IS_ACTION (action));
-  g_return_if_fail (G_IS_MENU_ITEM (item));
+  g_return_if_fail (GIMP_IS_MENU_MODEL (model));
+
+  pos  = gimp_menu_model_get_position (model, gimp_action_get_name (action), &visible);
+  item = g_list_nth_data (model->priv->items, pos);
+
+  g_return_if_fail (item != NULL);
 
   g_menu_item_get_attribute (item, "label-variant", "s", &label_variant);
   if (g_strcmp0 (label_variant, "long") == 0)
     g_menu_item_set_label (item, gimp_action_get_label (action));
   else
     g_menu_item_set_label (item, gimp_action_get_short_label (action));
+
+  if (visible)
+    g_menu_model_items_changed (G_MENU_MODEL (model), pos, 1, 1);
+
   g_free (label_variant);
 }
 
@@ -1168,11 +1196,11 @@ gimp_menu_model_ui_added (GimpUIManager *manager,
           g_signal_connect_object (action,
                                    "notify::short-label",
                                    G_CALLBACK (gimp_menu_model_action_notify_label),
-                                   item, 0);
+                                   mod_model, 0);
           g_signal_connect_object (action,
                                    "notify::label",
                                    G_CALLBACK (gimp_menu_model_action_notify_label),
-                                   item, 0);
+                                   mod_model, 0);
           g_menu_model_items_changed (G_MENU_MODEL (mod_model), position, 0, 1);
         }
       else
@@ -1228,6 +1256,8 @@ gimp_menu_model_ui_removed (GimpUIManager *manager,
   gchar    *section_name = NULL;
   gboolean  removed      = FALSE;
 
+  g_return_val_if_fail (GIMP_IS_MENU_MODEL (model), FALSE);
+
   if (gimp_utils_are_menu_path_identical (path, model->priv->path, NULL, NULL, &section_name))
     {
       GApplication *app         = model->priv->manager->gimp->app;
@@ -1242,7 +1272,7 @@ gimp_menu_model_ui_removed (GimpUIManager *manager,
 
       for (iter = model->priv->items; iter; iter = iter->next)
         {
-          const gchar *action;
+          const gchar *cur_action_name;
 
           subsection = g_menu_item_get_link (iter->data, G_MENU_LINK_SECTION);
 
@@ -1256,12 +1286,23 @@ gimp_menu_model_ui_removed (GimpUIManager *manager,
             }
           else if (g_menu_item_get_attribute (iter->data,
                                               G_MENU_ATTRIBUTE_ACTION,
-                                              "&s", &action) &&
-                   /* "action" attribute will start with "app." prefix. */
-                   g_strcmp0 (action + 4, action_name) == 0)
+                                              "&s", &cur_action_name))
             {
-              item = iter->data;
-              break;
+              gchar *dot = strstr (cur_action_name, ".");
+
+              g_return_val_if_fail (dot, FALSE);
+
+              /* "action" attribute will start with "app." prefix for main
+               * actions or with another prefix in some other cases (e.g.
+               * "tool-options.tool-options-restore-preset-000"). We need to
+               * clean this up, but for the time being, let's just look at
+               * what's after the dot.
+               */
+              if (g_strcmp0 (dot + 1, action_name) == 0)
+                {
+                  item = iter->data;
+                  break;
+                }
             }
         }
 
@@ -1278,13 +1319,14 @@ gimp_menu_model_ui_removed (GimpUIManager *manager,
                                                     model);
               g_signal_handlers_disconnect_by_func (action,
                                                     G_CALLBACK (gimp_menu_model_action_notify_label),
-                                                    item);
+                                                    model);
             }
           g_object_unref (item);
 
           model->priv->items = g_list_delete_link (model->priv->items, iter);
 
-          g_menu_model_items_changed (G_MENU_MODEL (model), position, 1, 0);
+          if (! action || gimp_action_is_visible (GIMP_ACTION (action)))
+            g_menu_model_items_changed (G_MENU_MODEL (model), position, 1, 0);
         }
       else
         {

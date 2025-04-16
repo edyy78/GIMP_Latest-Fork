@@ -39,10 +39,10 @@
 
   (set! theLayer (car (gimp-image-flatten theImage)))
   (if (= inDefocus TRUE)
-      (plug-in-gauss-rle RUN-NONINTERACTIVE theImage theLayer 1.5 TRUE TRUE)
+      (gimp-drawable-merge-new-filter theLayer "gegl:gaussian-blur" 0 LAYER-MODE-REPLACE 1.0 "std-dev-x" 0.48 "std-dev-y" 0.48 "filter" "auto")
   )
   (if (> inBorderSize 0)
-      (script-fu-fuzzy-border theImage theLayer '(255 255 255)
+      (script-fu-fuzzy-border theImage (vector theLayer) '(255 255 255)
                               inBorderSize TRUE 8 FALSE 100 FALSE TRUE )
   )
   (set! theLayer (car (gimp-image-flatten theImage)))
@@ -57,8 +57,8 @@
   (set! theHeight (car (gimp-image-get-height theImage)))
   (if (= inMottle TRUE)
       (let (
-	    (mLayer (car (gimp-layer-new theImage theWidth theHeight
-					 RGBA-IMAGE "Mottle"
+	    (mLayer (car (gimp-layer-new theImage "Mottle"
+                                         theWidth theHeight RGBA-IMAGE
 					 100 LAYER-MODE-DARKEN-ONLY)))
 	    )
 
@@ -66,8 +66,10 @@
              (gimp-selection-all theImage)
              (gimp-drawable-edit-clear mLayer)
              (gimp-selection-none theImage)
-             (plug-in-noisify RUN-NONINTERACTIVE theImage mLayer TRUE 0 0 0 0.5)
-             (plug-in-gauss-rle RUN-NONINTERACTIVE theImage mLayer 5 TRUE TRUE)
+             (gimp-drawable-merge-new-filter mLayer "gegl:noise-rgb" 0 LAYER-MODE-REPLACE 1.0
+                                             "independent" TRUE "red" 0.0 "green" 0.0 "blue" 0.0 "alpha" 0.5
+                                             "correlated" FALSE "seed" (msrg-rand) "linear" TRUE)
+             (gimp-drawable-merge-new-filter mLayer "gegl:gaussian-blur" 0 LAYER-MODE-REPLACE 1.0 "std-dev-x" 1.6 "std-dev-y" 1.6 "filter" "auto")
              (set! theLayer (car (gimp-image-flatten theImage)))
       )
   )
@@ -81,19 +83,18 @@
       (gimp-image-undo-group-end theImage)
   )
 
-  (gimp-displays-flush theImage)
+  (gimp-displays-flush)
   )
 )
 
-(script-fu-register "script-fu-old-photo"
+(script-fu-register-filter "script-fu-old-photo"
   _"_Old Photo..."
   _"Make an image look like an old photo"
   "Chris Gutteridge"
   "1998, Chris Gutteridge / ECS dept, University of Southampton, England."
   "16th April 1998"
   "RGB* GRAY*"
-  SF-IMAGE      "The image"     0
-  SF-DRAWABLE   "The layer"     0
+  SF-ONE-OR-MORE-DRAWABLE
   SF-TOGGLE     _"Defocus"      TRUE
   SF-ADJUSTMENT _"Border size"  '(20 0 300 1 10 0 1)
      ; since this plug-in uses the fuzzy-border plug-in, I used the

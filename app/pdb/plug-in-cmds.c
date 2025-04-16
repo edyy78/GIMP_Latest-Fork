@@ -62,7 +62,7 @@ plug_ins_query_invoker (GimpProcedure         *procedure,
   gchar **procedures = NULL;
   gchar **accelerators = NULL;
   gchar **locations = NULL;
-  gint num_install_times = 0;
+  gsize num_install_times = 0;
   gint32 *install_times = NULL;
 
   search_string = g_value_get_string (gimp_value_array_index (args, 0));
@@ -79,8 +79,7 @@ plug_ins_query_invoker (GimpProcedure         *procedure,
   g_value_take_boxed (gimp_value_array_index (return_vals, 1), procedures);
   g_value_take_boxed (gimp_value_array_index (return_vals, 2), accelerators);
   g_value_take_boxed (gimp_value_array_index (return_vals, 3), locations);
-  g_value_set_int (gimp_value_array_index (return_vals, 4), num_install_times);
-  gimp_value_take_int32_array (gimp_value_array_index (return_vals, 5), install_times, num_install_times);
+  gimp_value_take_int32_array (gimp_value_array_index (return_vals, 4), install_times, num_install_times);
 
   return return_vals;
 }
@@ -220,7 +219,7 @@ register_plug_in_procs (GimpPDB *pdb)
   /*
    * gimp-plug-ins-query
    */
-  procedure = gimp_procedure_new (plug_ins_query_invoker);
+  procedure = gimp_procedure_new (plug_ins_query_invoker, TRUE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-plug-ins-query");
   gimp_procedure_set_static_help (procedure,
@@ -257,12 +256,6 @@ register_plug_in_procs (GimpPDB *pdb)
                                                        G_TYPE_STRV,
                                                        GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   g_param_spec_int ("num-install-times",
-                                                     "num install times",
-                                                     "The number of matching procedures",
-                                                     0, G_MAXINT32, 0,
-                                                     GIMP_PARAM_READWRITE));
-  gimp_procedure_add_return_value (procedure,
                                    gimp_param_spec_int32_array ("install-times",
                                                                 "install times",
                                                                 "Time that the plug-in was installed",
@@ -273,7 +266,7 @@ register_plug_in_procs (GimpPDB *pdb)
   /*
    * gimp-plug-in-help-register
    */
-  procedure = gimp_procedure_new (plug_in_help_register_invoker);
+  procedure = gimp_procedure_new (plug_in_help_register_invoker, TRUE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-plug-in-help-register");
   gimp_procedure_set_static_help (procedure,
@@ -303,7 +296,7 @@ register_plug_in_procs (GimpPDB *pdb)
   /*
    * gimp-plug-in-menu-branch-register
    */
-  procedure = gimp_procedure_new (plug_in_menu_branch_register_invoker);
+  procedure = gimp_procedure_new (plug_in_menu_branch_register_invoker, TRUE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-plug-in-menu-branch-register");
   gimp_procedure_set_static_help (procedure,
@@ -334,7 +327,7 @@ register_plug_in_procs (GimpPDB *pdb)
   /*
    * gimp-plug-in-set-pdb-error-handler
    */
-  procedure = gimp_procedure_new (plug_in_set_pdb_error_handler_invoker);
+  procedure = gimp_procedure_new (plug_in_set_pdb_error_handler_invoker, TRUE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-plug-in-set-pdb-error-handler");
   gimp_procedure_set_static_help (procedure,
@@ -358,7 +351,7 @@ register_plug_in_procs (GimpPDB *pdb)
   /*
    * gimp-plug-in-get-pdb-error-handler
    */
-  procedure = gimp_procedure_new (plug_in_get_pdb_error_handler_invoker);
+  procedure = gimp_procedure_new (plug_in_get_pdb_error_handler_invoker, TRUE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-plug-in-get-pdb-error-handler");
   gimp_procedure_set_static_help (procedure,

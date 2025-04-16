@@ -177,10 +177,12 @@ HELP
             proc = gimp_pdb_lookup_procedure (gimp->pdb, procedure_name);
         }
 
-      exists = (proc != NULL);
+      exists = (proc != NULL && ! proc->is_private);
     }
   else
-    success = FALSE;
+    {
+      success = FALSE;
+    }
 }
 CODE
     );
@@ -356,7 +358,7 @@ HELP
     @inargs = (
 	{ name => 'procedure_name', type => 'string', non_empty => 1,
 	  desc => 'The procedure for which to install the menu path' },
-	{ name => 'image_types', type => 'string', null_ok => 1,
+	{ name => 'image_types', type => 'string', none_ok => 1,
 	  desc => "The procedure's supported image types" }
     );
 
@@ -696,11 +698,11 @@ HELP
     @inargs = (
 	{ name => 'procedure_name', type => 'string', non_empty => 1,
 	  desc => 'The procedure for which to install the menu path' },
-	{ name => 'blurb', type => 'string', null_ok => 1,
+	{ name => 'blurb', type => 'string', none_ok => 1,
 	  desc => 'A short blurb' },
-	{ name => 'help', type => 'string', null_ok => 1,
+	{ name => 'help', type => 'string', none_ok => 1,
 	  desc => 'Detailed procedure help' },
-	{ name => 'help_id', type => 'string', null_ok => 1,
+	{ name => 'help_id', type => 'string', none_ok => 1,
 	  desc => 'The procedure help_id' }
     );
 
@@ -788,11 +790,11 @@ HELP
     @inargs = (
 	{ name => 'procedure_name', type => 'string', non_empty => 1,
 	  desc => 'The procedure for which to install the menu path' },
-	{ name => 'authors', type => 'string', null_ok => 1,
+	{ name => 'authors', type => 'string', none_ok => 1,
 	  desc => 'Authors of the procedure' },
-	{ name => 'copyright', type => 'string', null_ok => 1,
+	{ name => 'copyright', type => 'string', none_ok => 1,
 	  desc => 'The copyright' },
-	{ name => 'date', type => 'string', null_ok => 1,
+	{ name => 'date', type => 'string', none_ok => 1,
 	  desc => 'Copyright date' }
     );
 
@@ -914,12 +916,12 @@ CODE
     );
 }
 
-sub pdb_set_file_proc_save_handler {
-    $blurb = 'Registers a file save handler procedure.';
+sub pdb_set_file_proc_export_handler {
+    $blurb = 'Registers a file export handler procedure.';
 
     $help = <<'HELP';
-Registers a procedural database procedure to be called to save files in a
-particular file format.
+Registers a procedural database procedure to be called to export files
+in a particular file format.
 HELP
 
     &std_pdb_misc;
@@ -931,10 +933,10 @@ HELP
           desc => 'The name of the procedure to be used for saving' },
         { name => 'extensions', type => 'string', no_validate => 1,
           desc => 'comma separated list of extensions this handler
-                   can save (i.e. "jpg,jpeg")' },
+                   can export as (i.e. "jpg,jpeg")' },
         { name => 'prefixes', type => 'string', no_validate => 1,
           desc => 'comma separated list of prefixes this handler
-                   can save (i.e. "http:,ftp:")' }
+                   can export to (i.e. "http:,ftp:")' }
     );
 
     %invoke = (
@@ -1003,10 +1005,10 @@ sub pdb_set_file_proc_mime_types {
 
     $help = <<'HELP';
 Registers MIME types for a file handler procedure. This allows GIMP to
-determine the MIME type of the file opened or saved using this
+determine the MIME type of the file opened or exported using this
 procedure. It is recommended that only one MIME type is registered per
 file procedure; when registering more than one MIME type, GIMP will
-associate the first one with files opened or saved with this procedure.
+associate the first one with files opened or exported with this procedure.
 HELP
 
     &neo_pdb_misc('2004', '2.2');
@@ -1082,7 +1084,7 @@ sub pdb_set_file_proc_handles_raw {
     $help = <<'HELP';
 Registers a file handler procedure as capable of handling raw digital
 camera files. Use this procedure only to register raw load handlers,
-calling it on a save handler will generate an error.
+calling it on an export handler will generate an error.
 HELP
 
     &mitch_pdb_misc('2017', '2.10');
@@ -1105,6 +1107,43 @@ HELP
       success = gimp_plug_in_set_file_proc_handles_raw (plug_in,
                                                         procedure_name,
                                                         error);
+    }
+  else
+    success = FALSE;
+}
+CODE
+    );
+}
+
+sub pdb_set_file_proc_handles_vector {
+    $blurb = 'Registers a load handler procedure as handling vector formats.';
+
+    $help = <<'HELP';
+Registers a file handler procedure as handling vector image formats.
+Use this procedure only to register a GimpVectorLoadProcedure,
+calling it on any other handler will generate an error.
+HELP
+
+    &jehan_pdb_misc('2024', '3.0');
+
+    $lib_private = 1;
+
+    @inargs = (
+        { name => 'procedure_name', type => 'string', non_empty => 1,
+          desc => "The name of the vector load procedure." }
+    );
+
+    %invoke = (
+        code => <<'CODE'
+{
+  GimpPlugIn *plug_in = gimp->plug_in_manager->current_plug_in;
+
+  if (plug_in &&
+      gimp_pdb_is_canonical_procedure (procedure_name, error))
+    {
+      success = gimp_plug_in_set_file_proc_handles_vector (plug_in,
+                                                           procedure_name,
+                                                           error);
     }
   else
     success = FALSE;
@@ -1346,11 +1385,12 @@ CODE
             pdb_set_proc_attribution
             pdb_get_proc_attribution
             pdb_set_file_proc_load_handler
-            pdb_set_file_proc_save_handler
+            pdb_set_file_proc_export_handler
             pdb_set_file_proc_priority
             pdb_set_file_proc_mime_types
             pdb_set_file_proc_handles_remote
             pdb_set_file_proc_handles_raw
+            pdb_set_file_proc_handles_vector
             pdb_set_file_proc_thumbnail_loader
             pdb_set_batch_interpreter
             pdb_get_data

@@ -20,31 +20,34 @@ sub layer_new {
     $blurb = 'Create a new layer.';
 
     $help = <<'HELP';
-This procedure creates a new layer with the specified width, height,
-and type. If @name is %NULL, a default layer name will be used.
-Opacity, and mode are also supplied parameters. The
-new layer still needs to be added to the image, as this is not
-automatic. Add the new layer with the gimp_image_insert_layer()
-command. Other attributes such as layer mask modes, and offsets should
-be set with explicit procedure calls.
+This procedure creates a new layer with the specified @width, @height
+and @type. If @name is %NULL, a default layer name will be used.
+@opacity and @mode are also supplied parameters.
+
+
+The new layer still needs to be added to the image as this is not
+automatic. Add the new layer with the [method@Image.insert_layer]
+method.
+
+
+Other attributes such as layer mask modes and offsets should be set
+with explicit procedure calls.
 HELP
 
     &std_pdb_misc;
 
-    $lib_private = 1;
-
     @inargs = (
 	{ name => 'image', type => 'image',
 	  desc => 'The image to which to add the layer' },
+	{ name => 'name', type => 'string',
+	  desc => 'The layer name', none_ok => 0 },
 	{ name => 'width', type => '1 <= int32 <= GIMP_MAX_IMAGE_SIZE',
 	  desc => 'The layer width' },
 	{ name => 'height', type => '1 <= int32 <= GIMP_MAX_IMAGE_SIZE',
 	  desc => 'The layer height' },
 	{ name => 'type', type => 'enum GimpImageType',
 	  desc => 'The layer type' },
-	{ name => 'name', type => 'string',
-	  desc => 'The layer name', null_ok => 0 },
-	{ name => 'opacity', type => '0 <= float <= 100',
+	{ name => 'opacity', type => '0 <= double <= 100',
 	  desc => 'The layer opacity' },
 	{ name => 'mode', type => 'enum GimpLayerMode',
           default => 'GIMP_LAYER_MODE_NORMAL',
@@ -53,7 +56,7 @@ HELP
 
     @outargs = (
 	{ name => 'layer', type => 'layer',
-	  desc => 'The newly created layer' }
+	  desc => 'The newly created layer. The object belongs to libgimp and you should not free it.' }
     );
 
     %invoke = (
@@ -144,7 +147,7 @@ HELP
 	{ name => 'dest_image', type => 'image',
 	  desc => 'The destination image to which to add the layer' },
 	{ name => 'name', type => 'string',
-	  desc => 'The layer name', null_ok => 1 }
+	  desc => 'The layer name', none_ok => 1 }
      );
 
     @outargs = (
@@ -214,45 +217,49 @@ HELP
   new_item = gimp_item_convert (GIMP_ITEM (drawable), dest_image, new_type);
 
   if (new_item)
-    layer_copy = GIMP_LAYER (new_item);
+    {
+      GimpContainer *filters;
+
+      layer_copy = GIMP_LAYER (new_item);
+
+      filters = gimp_drawable_get_filters (GIMP_DRAWABLE (drawable));
+      if (gimp_container_get_n_children (filters) > 0)
+        {
+          GList        *filter_list;
+          GimpDrawable *drawable_copy;
+
+          drawable_copy = GIMP_DRAWABLE (layer_copy);
+
+          for (filter_list = GIMP_LIST (filters)->queue->tail;
+               filter_list;
+               filter_list = g_list_previous (filter_list))
+            {
+              if (GIMP_IS_DRAWABLE_FILTER (filter_list->data))
+                {
+                  GimpDrawableFilter *old_filter = filter_list->data;
+                  GimpDrawableFilter *filter;
+
+                  filter =
+                    gimp_drawable_filter_duplicate (drawable_copy,
+                                                    old_filter);
+
+                  if (filter != NULL)
+                    {
+                      gimp_drawable_filter_apply (filter, NULL);
+                      gimp_drawable_filter_commit (filter, TRUE, NULL,
+                                                   FALSE);
+
+                      gimp_drawable_filter_layer_mask_freeze (filter);
+                      g_object_unref (filter);
+                    }
+                }
+            }
+        }
+    }
   else
-    success = FALSE;
-}
-CODE
-    );
-}
-
-sub layer_group_new {
-    $blurb = 'Create a new layer group.';
-
-    $help = <<'HELP';
-This procedure creates a new layer group. Attributes such as layer mode
-and opacity should be set with explicit procedure calls. Add the new
-layer group (which is a kind of layer) with the
-gimp_image_insert_layer() command.
-
-Other procedures useful with layer groups: gimp_image_reorder_item(),
-gimp_item_get_parent(), gimp_item_get_children(), gimp_item_is_group().
-HELP
-
-    &barak_pdb_misc('2010', '2.8');
-
-    @inargs = (
-	{ name => 'image', type => 'image',
-	  desc => 'The image to which to add the layer group' }
-    );
-
-    @outargs = (
-	{ name => 'layer_group', type => 'layer',
-	  desc => 'The newly created layer group' }
-    );
-    %invoke = (
-	code => <<'CODE'
-{
-  layer_group = gimp_group_layer_new (image);
-
-  if (! layer_group)
-    success = FALSE;
+    {
+      success = FALSE;
+    }
 }
 CODE
     );
@@ -264,25 +271,19 @@ sub layer_copy {
     $help = <<'HELP';
 This procedure copies the specified layer and returns the copy. The newly
 copied layer is for use within the original layer's image. It should not be
-subsequently added to any other image. The copied layer can optionally have an
-added alpha channel. This is useful if the background layer in an image is
-being copied and added to the same image.
+subsequently added to any other image.
 HELP
 
     &std_pdb_misc;
 
-    $lib_private = 1;
-
     @inargs = (
 	{ name => 'layer', type => 'layer',
-	  desc => 'The layer to copy' },
-	{ name => 'add_alpha', type => 'boolean',
-	  desc => 'Add an alpha channel to the copied layer' }
+	  desc => 'The layer to copy' }
     );
 
     @outargs = (
 	{ name => 'layer_copy', type => 'layer',
-	  desc => 'The newly copied layer' }
+	  desc => 'The newly copied layer. The object belongs to libgimp and you should not free it.' }
     );
 
     %invoke = (
@@ -292,8 +293,41 @@ HELP
                                                 G_TYPE_FROM_INSTANCE (layer)));
   if (layer_copy)
     {
-      if (add_alpha)
-        gimp_layer_add_alpha (layer_copy);
+      GimpContainer *filters;
+
+      filters = gimp_drawable_get_filters (GIMP_DRAWABLE (layer));
+      if (gimp_container_get_n_children (filters) > 0)
+        {
+          GList        *filter_list;
+          GimpDrawable *drawable_copy;
+
+          drawable_copy = GIMP_DRAWABLE (layer_copy);
+
+          for (filter_list = GIMP_LIST (filters)->queue->tail;
+               filter_list;
+               filter_list = g_list_previous (filter_list))
+            {
+              if (GIMP_IS_DRAWABLE_FILTER (filter_list->data))
+                {
+                  GimpDrawableFilter *old_filter = filter_list->data;
+                  GimpDrawableFilter *filter;
+
+                  filter =
+                    gimp_drawable_filter_duplicate (drawable_copy,
+                                                    old_filter);
+
+                  if (filter != NULL)
+                    {
+                      gimp_drawable_filter_apply (filter, NULL);
+                      gimp_drawable_filter_commit (filter, TRUE, NULL,
+                                                   FALSE);
+
+                      gimp_drawable_filter_layer_mask_freeze (filter);
+                      g_object_unref (filter);
+                    }
+                }
+            }
+        }
     }
   else
     {
@@ -1039,7 +1073,7 @@ sub layer_get_opacity {
     );
 
     @outargs = (
-	{ name => 'opacity', type => '0 <= float <= 100',
+	{ name => 'opacity', type => '0 <= double <= 100',
 	  desc => 'The layer opacity' }
     );
 
@@ -1061,7 +1095,7 @@ sub layer_set_opacity {
     @inargs = (
 	{ name => 'layer', type => 'layer',
 	  desc => 'The layer' },
-	{ name => 'opacity', type => '0 <= float <= 100',
+	{ name => 'opacity', type => '0 <= double <= 100',
 	  desc => 'The new layer opacity' }
     );
 
@@ -1283,10 +1317,14 @@ CODE
               "libgimpbase/gimpbase.h"
               "libgimpcolor/gimpcolor.h"
               "core/gimp.h"
+              "core/gimpcontainer.h"
+              "core/gimpdrawable.h"
+              "core/gimpdrawable-filters.h"
+              "core/gimpdrawablefilter.h"
               "core/gimpimage-color-profile.h"
               "core/gimpimage-undo.h"
-              "core/gimpgrouplayer.h"
               "core/gimplayer-new.h"
+              "core/gimplist.h"
               "core/gimppickable.h"
               "core/gimpprogress.h"
               "operations/layer-modes/gimp-layer-modes.h"
@@ -1297,7 +1335,6 @@ CODE
 @procs = qw(layer_new
             layer_new_from_visible
             layer_new_from_drawable
-            layer_group_new
             layer_copy
             layer_add_alpha
             layer_flatten

@@ -46,6 +46,8 @@
  *
  * Returns: (transfer full): font lookup name.
  *          The returned value must be freed with g_free().
+ *
+ * Since: 3.0
  **/
 gchar *
 _gimp_font_get_lookup_name (GimpFont *font)
@@ -81,10 +83,11 @@ _gimp_font_get_lookup_name (GimpFont *font)
  * this function should be considered random. This can be used when you
  * know you won't have multiple fonts of this name or that you don't
  * want to choose (non-interactive scripts, etc.).
- * If you need more control, you should use gimp_fonts_get_by_name()
+ * If you need more control, you should use [func@fonts_get_list]
  * instead.
+ * Returns %NULL when no font exists of that name.
  *
- * Returns: (transfer none): The font.
+ * Returns: (nullable) (transfer none): The font.
  *
  * Since: 3.0
  **/
@@ -110,49 +113,4 @@ gimp_font_get_by_name (const gchar *name)
   gimp_value_array_unref (return_vals);
 
   return font;
-}
-
-/**
- * gimp_fonts_get_by_name:
- * @name: The name of the font.
- * @num_fonts: (out): The number of fonts with the given name.
- *
- * Returns the fonts with the given name.
- *
- * Returns the fonts with the given name. There may be more than one.
- *
- * Returns: (array length=num_fonts) (element-type GimpFont) (transfer container):
- *          The fonts with the given name.
- *          The returned value must be freed with g_free().
- *
- * Since: 3.0
- **/
-GimpFont **
-gimp_fonts_get_by_name (const gchar *name,
-                        gint        *num_fonts)
-{
-  GimpValueArray *args;
-  GimpValueArray *return_vals;
-  GimpFont **fonts = NULL;
-
-  args = gimp_value_array_new_from_types (NULL,
-                                          G_TYPE_STRING, name,
-                                          G_TYPE_NONE);
-
-  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
-                                               "gimp-fonts-get-by-name",
-                                               args);
-  gimp_value_array_unref (args);
-
-  *num_fonts = 0;
-
-  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
-    {
-      *num_fonts = GIMP_VALUES_GET_INT (return_vals, 1);
-      { GimpObjectArray *a = g_value_get_boxed (gimp_value_array_index (return_vals, 2)); if (a) fonts = g_memdup2 (a->data, a->length * sizeof (gpointer)); };
-    }
-
-  gimp_value_array_unref (return_vals);
-
-  return fonts;
 }

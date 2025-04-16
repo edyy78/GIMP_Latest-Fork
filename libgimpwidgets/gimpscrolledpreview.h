@@ -33,27 +33,15 @@ G_BEGIN_DECLS
 /* For information look into the C source or the html documentation */
 
 
-#define GIMP_TYPE_SCROLLED_PREVIEW            (gimp_scrolled_preview_get_type ())
-#define GIMP_SCROLLED_PREVIEW(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_SCROLLED_PREVIEW, GimpScrolledPreview))
-#define GIMP_SCROLLED_PREVIEW_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_SCROLLED_PREVIEW, GimpScrolledPreviewClass))
-#define GIMP_IS_SCROLLED_PREVIEW(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_SCROLLED_PREVIEW))
-#define GIMP_IS_SCROLLED_PREVIEW_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_SCROLLED_PREVIEW))
-#define GIMP_SCROLLED_PREVIEW_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_SCROLLED_PREVIEW, GimpScrolledPreviewClass))
-
-
-typedef struct _GimpScrolledPreviewPrivate GimpScrolledPreviewPrivate;
-typedef struct _GimpScrolledPreviewClass   GimpScrolledPreviewClass;
-
-struct _GimpScrolledPreview
-{
-  GimpPreview                 parent_instance;
-};
+#define GIMP_TYPE_SCROLLED_PREVIEW (gimp_scrolled_preview_get_type ())
+G_DECLARE_DERIVABLE_TYPE (GimpScrolledPreview, gimp_scrolled_preview, GIMP, SCROLLED_PREVIEW, GimpPreview)
 
 struct _GimpScrolledPreviewClass
 {
   GimpPreviewClass  parent_class;
 
   /* Padding for future expansion */
+  void (* _gimp_reserved0) (void);
   void (* _gimp_reserved1) (void);
   void (* _gimp_reserved2) (void);
   void (* _gimp_reserved3) (void);
@@ -62,10 +50,9 @@ struct _GimpScrolledPreviewClass
   void (* _gimp_reserved6) (void);
   void (* _gimp_reserved7) (void);
   void (* _gimp_reserved8) (void);
+  void (* _gimp_reserved9) (void);
 };
 
-
-GType  gimp_scrolled_preview_get_type        (void) G_GNUC_CONST;
 
 void   gimp_scrolled_preview_set_position    (GimpScrolledPreview  *preview,
                                               gint                  x,

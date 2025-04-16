@@ -32,7 +32,7 @@
 #include "gegl/gimp-gegl-nodes.h"
 #include "gegl/gimp-gegl-utils.h"
 
-#include "vectors/gimpvectors.h"
+#include "vectors/gimppath.h"
 
 #include "gimp.h"
 #include "gimpcontext.h"
@@ -55,13 +55,15 @@
 #include "gimp-intl.h"
 
 
-static GimpLayer * gimp_image_merge_layers (GimpImage     *image,
-                                            GimpContainer *container,
-                                            GSList        *merge_list,
-                                            GimpContext   *context,
-                                            GimpMergeType  merge_type,
-                                            const gchar   *undo_desc,
-                                            GimpProgress  *progress);
+static GSList    * gimp_image_trim_merge_list (GimpImage     *image,
+                                               GSList        *merge_list);
+static GimpLayer * gimp_image_merge_layers    (GimpImage     *image,
+                                               GimpContainer *container,
+                                               GSList        *merge_list,
+                                               GimpContext   *context,
+                                               GimpMergeType  merge_type,
+                                               const gchar   *undo_desc,
+                                               GimpProgress  *progress);
 
 
 /*  public functions  */
@@ -166,7 +168,8 @@ gimp_image_merge_visible_layers (GimpImage     *image,
 
       if (merge_list)
         {
-          GimpLayer   *layer;
+          GimpLayer *layer;
+
           /* if there's a floating selection, anchor it */
           if (gimp_image_get_floating_selection (image))
             floating_sel_anchor (gimp_image_get_floating_selection (image));
@@ -410,9 +413,12 @@ GimpLayer *
 gimp_image_merge_group_layer (GimpImage      *image,
                               GimpGroupLayer *group)
 {
-  GimpLayer *parent;
-  GimpLayer *layer;
-  gint       index;
+  GimpLayer     *parent;
+  GimpLayer     *layer;
+  GeglBuffer    *pass_through_buffer = NULL;
+  gboolean       is_pass_through     = FALSE;
+  gint           index;
+  GeglRectangle  rect;
 
   g_return_val_if_fail (GIMP_IS_IMAGE (image), NULL);
   g_return_val_if_fail (GIMP_IS_GROUP_LAYER (group), NULL);
@@ -425,27 +431,18 @@ gimp_image_merge_group_layer (GimpImage      *image,
   parent = gimp_layer_get_parent (GIMP_LAYER (group));
   index  = gimp_item_get_index (GIMP_ITEM (group));
 
-  /* if this is a pass-through group, change its mode to NORMAL *before*
-   * duplicating it, since PASS_THROUGH mode is invalid for regular layers.
-   * see bug #793714.
-   */
-  if (gimp_layer_get_mode (GIMP_LAYER (group)) == GIMP_LAYER_MODE_PASS_THROUGH)
+  is_pass_through = (gimp_layer_get_mode (GIMP_LAYER (group)) == GIMP_LAYER_MODE_PASS_THROUGH &&
+                     gimp_item_get_visible (GIMP_ITEM (group)));
+  if (is_pass_through &&
+      (gimp_layer_get_opacity (GIMP_LAYER (group)) < 1.0 ||
+       ! gimp_drawable_has_visible_filters (GIMP_DRAWABLE (group))))
     {
-      GimpLayerColorSpace    blend_space;
-      GimpLayerColorSpace    composite_space;
-      GimpLayerCompositeMode composite_mode;
+      GimpDrawable  *drawable  = GIMP_DRAWABLE (group);
+      GeglNode      *mode_node = gimp_drawable_get_mode_node (drawable);
 
-      /* keep the group's current blend space, composite space, and composite
-       * mode.
-       */
-      blend_space     = gimp_layer_get_blend_space     (GIMP_LAYER (group));
-      composite_space = gimp_layer_get_composite_space (GIMP_LAYER (group));
-      composite_mode  = gimp_layer_get_composite_mode  (GIMP_LAYER (group));
-
-      gimp_layer_set_mode            (GIMP_LAYER (group), GIMP_LAYER_MODE_NORMAL, TRUE);
-      gimp_layer_set_blend_space     (GIMP_LAYER (group), blend_space,            TRUE);
-      gimp_layer_set_composite_space (GIMP_LAYER (group), composite_space,        TRUE);
-      gimp_layer_set_composite_mode  (GIMP_LAYER (group), composite_mode,         TRUE);
+      rect = gegl_node_get_bounding_box (mode_node);
+      pass_through_buffer = gegl_buffer_new (&rect, gimp_drawable_get_format (drawable));
+      gegl_node_blit_buffer (mode_node, pass_through_buffer, &rect, 0, GEGL_ABYSS_NONE);
     }
 
   /* Merge down filter effects */
@@ -460,78 +457,140 @@ gimp_image_merge_group_layer (GimpImage      *image,
   gimp_image_remove_layer (image, GIMP_LAYER (group), TRUE, NULL);
   gimp_image_add_layer (image, layer, parent, index, TRUE);
 
+  /* Pass-through groups are a very special case. The duplicate works
+   * only if both these points are true:
+   * - The group is at full opacity: with lower opacity, what we want is
+   *   in fact the output of the "gimp:pass-through" mode (similar to
+   *   "gimp:replace") because we can't reproduce the same render
+   *   otherwise. This works well, since anyway the merged layer is
+   *   ensured to be the bottomest one on its own level.
+   * - The group has filters: gimp_drawable_merge_filters() will
+   *   actually set the end-rendering to the drawable (kinda rasterizing
+   *   the group layer).
+   */
+   if (pass_through_buffer)
+    {
+      if (rect.x != 0 || rect.y != 0)
+        {
+          GeglBuffer *buffer;
+
+          buffer = gegl_buffer_new (GEGL_RECTANGLE (0, 0, rect.width, rect.height),
+                                    gimp_drawable_get_format (GIMP_DRAWABLE (layer)));
+          gegl_buffer_copy (pass_through_buffer, &rect, GEGL_ABYSS_NONE,
+                            buffer, GEGL_RECTANGLE (0, 0, rect.width, rect.height));
+          g_object_unref (pass_through_buffer);
+          pass_through_buffer = buffer;
+        }
+      gimp_drawable_set_buffer_full (GIMP_DRAWABLE (layer), FALSE, NULL,
+                                     pass_through_buffer, &rect, TRUE);
+      g_object_unref (pass_through_buffer);
+    }
+
+  /* For pass-through group layers, we must remove all "big sister"
+   * layers, i.e. all layers on the same level below the newly merged
+   * layer, because their render is already integrated in the merged
+   * layer. Therefore keeping them would change the whole image's
+   * rendering.
+   */
+  if (is_pass_through)
+    {
+      GimpContainer *stack;
+      GList         *iter;
+      GList         *new_selected = g_list_prepend (NULL, layer);
+      GList         *to_remove    = NULL;
+      gboolean       remove       = FALSE;
+
+      if (parent)
+        stack = gimp_viewable_get_children (GIMP_VIEWABLE (parent));
+      else
+        stack = gimp_image_get_layers (image);
+
+      for (iter = gimp_item_stack_get_item_iter (GIMP_ITEM_STACK (stack)); iter; iter = iter->next)
+        {
+          if (iter->data == layer)
+            remove = TRUE;
+          else if (remove && gimp_item_get_visible (iter->data))
+            to_remove = g_list_prepend (to_remove, iter->data);
+        }
+
+      for (iter = to_remove; iter; iter = iter->next)
+        gimp_image_remove_layer (image, GIMP_LAYER (iter->data), TRUE, new_selected);
+
+      g_list_free (new_selected);
+    }
+
   gimp_image_undo_group_end (image);
 
   return layer;
 }
 
 
-/* merging vectors */
+/* merging paths */
 
-GimpVectors *
-gimp_image_merge_visible_vectors (GimpImage  *image,
-                                  GError    **error)
+GimpPath *
+gimp_image_merge_visible_paths (GimpImage  *image,
+                                GError    **error)
 {
   GList       *list;
   GList       *merge_list = NULL;
-  GimpVectors *vectors;
+  GimpPath    *path;
 
   g_return_val_if_fail (GIMP_IS_IMAGE (image), NULL);
   g_return_val_if_fail (error == NULL || *error == NULL, NULL);
 
-  for (list = gimp_image_get_vectors_iter (image);
+  for (list = gimp_image_get_path_iter (image);
        list;
        list = g_list_next (list))
     {
-      vectors = list->data;
+      path = list->data;
 
-      if (gimp_item_get_visible (GIMP_ITEM (vectors)))
-        merge_list = g_list_prepend (merge_list, vectors);
+      if (gimp_item_get_visible (GIMP_ITEM (path)))
+        merge_list = g_list_prepend (merge_list, path);
     }
 
   merge_list = g_list_reverse (merge_list);
 
   if (merge_list && merge_list->next)
     {
-      GimpVectors *target_vectors;
-      gchar       *name;
-      gint         pos;
+      GimpPath *target_path;
+      gchar    *name;
+      gint      pos;
 
       gimp_set_busy (image->gimp);
 
-      gimp_image_undo_group_start (image, GIMP_UNDO_GROUP_IMAGE_VECTORS_MERGE,
+      gimp_image_undo_group_start (image, GIMP_UNDO_GROUP_IMAGE_PATHS_MERGE,
                                    C_("undo-type", "Merge Visible Paths"));
 
-      vectors = GIMP_VECTORS (merge_list->data);
+      path = GIMP_PATH (merge_list->data);
 
-      name = g_strdup (gimp_object_get_name (vectors));
-      pos = gimp_item_get_index (GIMP_ITEM (vectors));
+      name = g_strdup (gimp_object_get_name (path));
+      pos = gimp_item_get_index (GIMP_ITEM (path));
 
-      target_vectors = GIMP_VECTORS (gimp_item_duplicate (GIMP_ITEM (vectors),
-                                                          GIMP_TYPE_VECTORS));
-      gimp_image_remove_vectors (image, vectors, TRUE, NULL);
+      target_path = GIMP_PATH (gimp_item_duplicate (GIMP_ITEM (path),
+                                                    GIMP_TYPE_PATH));
+      gimp_image_remove_path (image, path, TRUE, NULL);
 
       for (list = g_list_next (merge_list);
            list;
            list = g_list_next (list))
         {
-          vectors = list->data;
+          path = list->data;
 
-          gimp_vectors_add_strokes (vectors, target_vectors);
-          gimp_image_remove_vectors (image, vectors, TRUE, NULL);
+          gimp_path_add_strokes (path, target_path);
+          gimp_image_remove_path (image, path, TRUE, NULL);
         }
 
-      gimp_object_take_name (GIMP_OBJECT (target_vectors), name);
+      gimp_object_take_name (GIMP_OBJECT (target_path), name);
 
       g_list_free (merge_list);
 
       /* FIXME tree */
-      gimp_image_add_vectors (image, target_vectors, NULL, pos, TRUE);
+      gimp_image_add_path (image, target_path, NULL, pos, TRUE);
       gimp_unset_busy (image->gimp);
 
       gimp_image_undo_group_end (image);
 
-      return target_vectors;
+      return target_path;
     }
   else
     {
@@ -544,6 +603,62 @@ gimp_image_merge_visible_vectors (GimpImage  *image,
 
 
 /*  private functions  */
+
+static GSList *
+gimp_image_trim_merge_list (GimpImage *image,
+                            GSList    *merge_list)
+{
+  GSList *trimmed_list = NULL;
+  GSList *pass_through = NULL;
+
+  for (GSList *iter = merge_list; iter; iter = iter->next)
+    {
+      GimpLayer *layer  = iter->data;
+      gboolean   ignore = FALSE;
+
+      for (GSList *iter2 = pass_through; iter2; iter2 = iter2->next)
+        {
+          GimpLayer *pass_through_parent = gimp_layer_get_parent (iter2->data);
+          GimpLayer *cousin              = layer;
+
+          do
+            {
+              GimpLayer *cousin_parent = gimp_layer_get_parent (cousin);
+
+              if (pass_through_parent == cousin_parent &&
+                  gimp_item_get_index (GIMP_ITEM (iter2->data)) < gimp_item_get_index (GIMP_ITEM (cousin)))
+                {
+                  /* The "cousin" layer is in the same group layer as a
+                   * pass-through group and below it. We don't merge it
+                   * because it will be rendered already through the
+                   * merged pass-through by definition.
+                   */
+                  ignore = TRUE;
+                  break;
+                }
+
+              cousin = cousin_parent;
+            }
+          while (cousin != NULL);
+
+          if (ignore)
+            break;
+        }
+
+      if (! ignore)
+        {
+          trimmed_list = g_slist_append (trimmed_list, layer);
+
+          if (gimp_viewable_get_children (GIMP_VIEWABLE (layer)) &&
+              gimp_layer_get_mode (layer) == GIMP_LAYER_MODE_PASS_THROUGH)
+            pass_through = g_slist_append (pass_through, layer);
+        }
+    }
+
+  g_slist_free (pass_through);
+
+  return trimmed_list;
+}
 
 static GimpLayer *
 gimp_image_merge_layers (GimpImage     *image,
@@ -563,19 +678,23 @@ gimp_image_merge_layers (GimpImage     *image,
   GimpLayer        *bottom_layer;
   GimpLayer        *merge_layer;
   gint              position;
+  gint              n_bottom_removed = 0;
   GeglNode         *node;
   GeglNode         *source_node;
   GeglNode         *flatten_node;
   GeglNode         *offset_node;
   GeglNode         *last_node;
-  GeglNode         *last_node_source;
+  GeglNode         *last_node_source = NULL;
   GimpParasiteList *parasites;
+  GSList           *trimmed_list;
 
   g_return_val_if_fail (GIMP_IS_IMAGE (image), NULL);
   g_return_val_if_fail (GIMP_IS_CONTEXT (context), NULL);
   g_return_val_if_fail (progress == NULL || GIMP_IS_PROGRESS (progress), NULL);
 
-  top_layer = merge_list->data;
+  trimmed_list = gimp_image_trim_merge_list (image, merge_list);
+
+  top_layer = trimmed_list->data;
   parent    = gimp_layer_get_parent (top_layer);
 
   /*  Make sure the image's graph is constructed, so that top-level layers have
@@ -600,7 +719,7 @@ gimp_image_merge_layers (GimpImage     *image,
   /*  Get the layer extents  */
   x1 = y1 = 0;
   x2 = y2 = 0;
-  for (layers = merge_list; layers; layers = g_slist_next (layers))
+  for (layers = trimmed_list; layers; layers = g_slist_next (layers))
     {
       gint off_x, off_y;
 
@@ -616,7 +735,7 @@ gimp_image_merge_layers (GimpImage     *image,
         {
         case GIMP_EXPAND_AS_NECESSARY:
         case GIMP_CLIP_TO_IMAGE:
-          if (layers == merge_list)
+          if (layers == trimmed_list)
             {
               x1 = off_x;
               y1 = off_y;
@@ -667,7 +786,10 @@ gimp_image_merge_layers (GimpImage     *image,
     }
 
   if ((x2 - x1) == 0 || (y2 - y1) == 0)
-    return NULL;
+    {
+      g_slist_free (trimmed_list);
+      return NULL;
+    }
 
   bottom_layer = layer;
 
@@ -687,6 +809,7 @@ gimp_image_merge_layers (GimpImage     *image,
         {
           g_warning ("%s: could not allocate merge layer", G_STRFUNC);
 
+          g_slist_free (trimmed_list);
           return NULL;
         }
 
@@ -713,6 +836,7 @@ gimp_image_merge_layers (GimpImage     *image,
         {
           g_warning ("%s: could not allocate merge layer", G_STRFUNC);
 
+          g_slist_free (trimmed_list);
           return NULL;
         }
     }
@@ -751,11 +875,16 @@ gimp_image_merge_layers (GimpImage     *image,
       gegl_node_link_many (source_node, offset_node, NULL);
     }
 
-  /*  Disconnect the bottom-layer node's input  */
-  last_node        = gimp_filter_get_node (GIMP_FILTER (bottom_layer));
-  last_node_source = gegl_node_get_producer (last_node, "input", NULL);
+  /*  Disconnect the bottom-layer node's input, unless it's a
+   *  pass-through group.
+   */
+  if (gimp_layer_get_mode (bottom_layer) != GIMP_LAYER_MODE_PASS_THROUGH)
+    {
+      last_node        = gimp_filter_get_node (GIMP_FILTER (bottom_layer));
+      last_node_source = gegl_node_get_producer (last_node, "input", NULL);
 
-  gegl_node_disconnect (last_node, "input");
+      gegl_node_disconnect (last_node, "input");
+    }
 
   /*  Render the graph into the merge layer  */
   gimp_gegl_apply_operation (NULL, progress, undo_desc, offset_node,
@@ -782,9 +911,44 @@ gimp_image_merge_layers (GimpImage     *image,
   gimp_item_set_parasites (GIMP_ITEM (merge_layer), parasites);
   g_object_unref (parasites);
 
-  /*  Remove the merged layers from the image  */
-  for (layers = merge_list; layers; layers = g_slist_next (layers))
-    gimp_image_remove_layer (image, layers->data, TRUE, NULL);
+  for (layers = trimmed_list; layers; layers = g_slist_next (layers))
+    {
+      /* Remove the sisters below merged pass-through group layers. */
+      if (gimp_viewable_get_children (GIMP_VIEWABLE (layers->data)) &&
+          gimp_layer_get_mode (layers->data) == GIMP_LAYER_MODE_PASS_THROUGH)
+        {
+          GimpLayer     *parent;
+          GimpContainer *stack;
+          GList         *iter;
+          gboolean       remove    = FALSE;
+          GList         *to_remove = NULL;
+
+          parent = gimp_layer_get_parent (layers->data);
+          if (parent)
+            stack = gimp_viewable_get_children (GIMP_VIEWABLE (parent));
+          else
+            stack = gimp_image_get_layers (image);
+
+          for (iter = gimp_item_stack_get_item_iter (GIMP_ITEM_STACK (stack)); iter; iter = iter->next)
+            {
+              if (iter->data == layers->data)
+                remove = TRUE;
+              else if (remove && gimp_item_get_visible (GIMP_ITEM (iter->data)))
+                to_remove = g_list_prepend (to_remove, iter->data);
+            }
+
+          if (layers->data == bottom_layer)
+            n_bottom_removed = g_list_length (to_remove);
+
+          for (iter = to_remove; iter; iter = iter->next)
+            gimp_image_remove_layer (image, iter->data, TRUE, NULL);
+
+          g_list_free (to_remove);
+        }
+
+      /*  Remove the merged layers from the image  */
+      gimp_image_remove_layer (image, layers->data, TRUE, NULL);
+    }
 
   gimp_item_set_visible (GIMP_ITEM (merge_layer), TRUE, FALSE);
 
@@ -808,12 +972,13 @@ gimp_image_merge_layers (GimpImage     *image,
     {
       /*  Add the layer to the image  */
       gimp_image_add_layer (image, merge_layer, parent,
-                            gimp_container_get_n_children (container) -
-                            position + 1,
+                            gimp_container_get_n_children (container) +
+                            n_bottom_removed - position + 1,
                             TRUE);
     }
 
   gimp_drawable_update (GIMP_DRAWABLE (merge_layer), 0, 0, -1, -1);
+  g_slist_free (trimmed_list);
 
   return merge_layer;
 }

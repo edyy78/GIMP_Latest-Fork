@@ -1,5 +1,5 @@
 # Similarly to libgimpthumb/gimpthumb-enums.c, libgimp/gimpenums.c is
-# not versionned so we don't use the mkenums_wrap.
+# not versioned so we don't use the mkenums_wrap.
 # Moreover it is generated in 2 steps, first with common mkenums
 # arguments, then concatenating with a "tail" file.
 gimpenums_notail = custom_target('gimpenums.c.notail',
@@ -10,7 +10,6 @@ gimpenums_notail = custom_target('gimpenums.c.notail',
     '--fhead','#include "config.h"\n'
             + '#include <gio/gio.h>\n'
             + '#include <gegl.h>\n'
-            + '#undef GIMP_DISABLE_DEPRECATED\n'
             + '#include "libgimpbase/gimpbase.h"\n'
             + '#include "libgimpbase/gimpbase-private.h"\n'
             + '#include "libgimpconfig/gimpconfigenums.h"\n'
@@ -72,6 +71,7 @@ pdb_wrappers_sources = [
   'gimpdrawable_pdb.c',
   'gimpdrawablecolor_pdb.c',
   'gimpdrawableedit_pdb.c',
+  'gimpdrawablefilter_pdb.c',
   'gimpdrawableselect_pdb.c',
   'gimpdynamics_pdb.c',
   'gimpedit_pdb.c',
@@ -84,8 +84,10 @@ pdb_wrappers_sources = [
   'gimpgradient_pdb.c',
   'gimpgradients_pdb.c',
   'gimpgradientselect_pdb.c',
+  'gimpgrouplayer_pdb.c',
   'gimphelp_pdb.c',
   'gimpimage_pdb.c',
+  'gimpimageautocrop_pdb.c',
   'gimpimagecolorprofile_pdb.c',
   'gimpimageconvert_pdb.c',
   'gimpimagegrid_pdb.c',
@@ -102,6 +104,7 @@ pdb_wrappers_sources = [
   'gimppalette_pdb.c',
   'gimppalettes_pdb.c',
   'gimppaletteselect_pdb.c',
+  'gimppath_pdb.c',
   'gimppattern_pdb.c',
   'gimppatterns_pdb.c',
   'gimppatternselect_pdb.c',
@@ -110,7 +113,7 @@ pdb_wrappers_sources = [
   'gimpselection_pdb.c',
   'gimptextlayer_pdb.c',
   'gimptexttool_pdb.c',
-  'gimpvectors_pdb.c',
+  'gimpunit_pdb.c',
 ]
 
 pdb_wrappers_headers = [
@@ -127,6 +130,7 @@ pdb_wrappers_headers = [
   'gimpdrawable_pdb.h',
   'gimpdrawablecolor_pdb.h',
   'gimpdrawableedit_pdb.h',
+  'gimpdrawablefilter_pdb.h',
   'gimpdrawableselect_pdb.h',
   'gimpdynamics_pdb.h',
   'gimpedit_pdb.h',
@@ -139,8 +143,10 @@ pdb_wrappers_headers = [
   'gimpgradient_pdb.h',
   'gimpgradients_pdb.h',
   'gimpgradientselect_pdb.h',
+  'gimpgrouplayer_pdb.h',
   'gimphelp_pdb.h',
   'gimpimage_pdb.h',
+  'gimpimageautocrop_pdb.h',
   'gimpimagecolorprofile_pdb.h',
   'gimpimageconvert_pdb.h',
   'gimpimagegrid_pdb.h',
@@ -157,6 +163,7 @@ pdb_wrappers_headers = [
   'gimppalette_pdb.h',
   'gimppalettes_pdb.h',
   'gimppaletteselect_pdb.h',
+  'gimppath_pdb.h',
   'gimppattern_pdb.h',
   'gimppatterns_pdb.h',
   'gimppatternselect_pdb.h',
@@ -165,7 +172,7 @@ pdb_wrappers_headers = [
   'gimpselection_pdb.h',
   'gimptextlayer_pdb.h',
   'gimptexttool_pdb.h',
-  'gimpvectors_pdb.h',
+  'gimpunit_pdb.h',
 ]
 
 libgimp_sources_introspectable = [
@@ -175,10 +182,14 @@ libgimp_sources_introspectable = [
   'gimpchannel.c',
   'gimpdisplay.c',
   'gimpdrawable.c',
+  'gimpdrawablefilter.c',
+  'gimpdrawablefilterconfig.c',
+  'gimpexportoptions.c',
   'gimpfileprocedure.c',
   'gimpfont.c',
   'gimpgimprc.c',
   'gimpgradient.c',
+  'gimpgrouplayer.c',
   'gimpimage.c',
   'gimpimagecolorprofile.c',
   'gimpimagemetadata.c',
@@ -190,19 +201,20 @@ libgimp_sources_introspectable = [
   'gimploadprocedure.c',
   'gimppalette.c',
   'gimpparamspecs.c',
+  'gimppath.c',
   'gimppattern.c',
   'gimppdb.c',
   'gimpplugin.c',
   'gimpprocedure.c',
+  'gimpprocedure-params.c',
   'gimpprocedureconfig.c',
   'gimpprogress.c',
   'gimpresource.c',
-  'gimpresourceselect.c',
-  'gimpsaveprocedure.c',
+  'gimpexportprocedure.c',
   'gimpselection.c',
   'gimptextlayer.c',
   'gimpthumbnailprocedure.c',
-  'gimpvectors.c',
+  'gimpvectorloadprocedure.c',
   gimpenums,
   pdb_wrappers_sources,
 ]
@@ -217,8 +229,7 @@ libgimp_sources = [
   'gimppdbprocedure.c',
   'gimppixbuf.c',
   'gimpplugin_pdb.c',
-  'gimpunit_pdb.c',
-  'gimpunitcache.c',
+  'gimpresourceselect.c',
   'gimptilebackendplugin.c',
 ]
 
@@ -234,10 +245,14 @@ libgimp_headers_introspectable = [
   'gimpchannel.h',
   'gimpdisplay.h',
   'gimpdrawable.h',
+  'gimpdrawablefilter.h',
+  'gimpdrawablefilterconfig.h',
+  'gimpexportoptions.h',
   'gimpfileprocedure.h',
   'gimpfont.h',
   'gimpgimprc.h',
   'gimpgradient.h',
+  'gimpgrouplayer.h',
   'gimpimage.h',
   'gimpimagecolorprofile.h',
   'gimpimagemetadata.h',
@@ -248,25 +263,25 @@ libgimp_headers_introspectable = [
   'gimploadprocedure.h',
   'gimppalette.h',
   'gimpparamspecs.h',
+  'gimppath.h',
   'gimppattern.h',
   'gimppdb.h',
   'gimpplugin.h',
   'gimpprocedure.h',
+  'gimpprocedure-params.h',
   'gimpprocedureconfig.h',
   'gimpprogress.h',
   'gimpresource.h',
-  'gimpresourceselect.h',
-  'gimpsaveprocedure.h',
+  'gimpexportprocedure.h',
   'gimpselection.h',
   'gimptextlayer.h',
   'gimpthumbnailprocedure.h',
-  'gimpvectors.h',
+  'gimpvectorloadprocedure.h',
   pdb_wrappers_headers,
 ]
 
 libgimp_headers = [
   libgimp_headers_introspectable,
-  'gimpprocedure-params.h',
 ]
 
 libgimpui_sources_introspectable = [
@@ -274,7 +289,6 @@ libgimpui_sources_introspectable = [
   'gimpbrushchooser.c',
   'gimpdrawablechooser.c',
   'gimpdrawablepreview.c',
-  'gimpexport.c',
   'gimpfontchooser.c',
   'gimpgradientchooser.c',
   'gimpimagecombobox.c',
@@ -287,14 +301,18 @@ libgimpui_sources_introspectable = [
   'gimpprogressbar.c',
   'gimppropwidgets.c',
   'gimpresourcechooser.c',
-  'gimpsaveproceduredialog.c',
+  'gimpexportproceduredialog.c',
   'gimpui.c',
   'gimpzoompreview.c',
+  'gimpvectorloadproceduredialog.c',
 ]
 
 libgimpui_sources = [
   libgimpui_sources_introspectable,
   gimpuimarshal,
+
+  # TODO: eventually move to libgimpwidgets.
+  'gimpresolutionentry-private.c'
 ]
 
 libgimpui_headers_introspectable = [
@@ -307,7 +325,6 @@ libgimpui_headers_introspectable = [
   'gimpbrushchooser.h',
   'gimpdrawablechooser.h',
   'gimpdrawablepreview.h',
-  'gimpexport.h',
   'gimpfontchooser.h',
   'gimpgradientchooser.h',
   'gimpimagecombobox.h',
@@ -320,7 +337,8 @@ libgimpui_headers_introspectable = [
   'gimpprogressbar.h',
   'gimppropwidgets.h',
   'gimpresourcechooser.h',
-  'gimpsaveproceduredialog.h',
+  'gimpexportproceduredialog.h',
+  'gimpvectorloadproceduredialog.h',
   'gimpzoompreview.h',
 ]
 
@@ -344,6 +362,7 @@ libgimp = library('gimp-'+ gimp_api_version,
     gegl,
     gexiv2,
     drmingw,
+    math,
     pango,
     pangoft2,
   ],
@@ -387,6 +406,9 @@ libgimpui = library('gimpui-'+ gimp_api_version,
     libgimp_dep,
     gexiv2,
     gtk3,
+  ],
+  sources: [
+    pdbgen
   ],
   c_args: [ '-DG_LOG_DOMAIN="LibGimpUI"', '-DGIMP_COMPILATION', ],
   link_with: [
@@ -479,7 +501,6 @@ else
     '-DGIMP_MODULE_COMPILATION',
     '-DGIMP_THUMB_COMPILATION',
     '-DGIMP_WIDGETS_COMPILATION',
-    '-DGIMP_DISABLE_DEPRECATED',
     '--quiet',
   ]
 
@@ -521,6 +542,17 @@ else
     install: true,
   )
 
+  if platform_osx
+    g_ir_compiler = find_program('g-ir-compiler')
+    gimp_exe_typelib = custom_target('macos-typelib.stamp',
+                                     output: [ 'macos-typelib.stamp' ],
+                                     command: [
+                                       'make-in-build-typelib.sh', libgimp_gir, libgimpui_gir,
+                                       meson.current_build_dir(), prefix, g_ir_compiler
+                                     ],
+                                     build_by_default: true)
+  endif
+
   if have_vala
     vapi_deps = [
       'babl-0.1',
@@ -547,7 +579,7 @@ else
   endif
 endif
 
-if have_python and not platform_windows and not platform_osx
+if not platform_windows and not platform_osx
   # Verify .def files for Windows.
   # Ironically we only check this on non-Windows platform, since the
   # script expects .so libraries, and I'm not sure that the `nm` tool is

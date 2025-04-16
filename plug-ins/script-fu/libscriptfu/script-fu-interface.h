@@ -19,9 +19,8 @@
 #define __SCRIPT_FU_INTERFACE_H__
 
 
-GimpPDBStatusType  script_fu_interface           (SFScript     *script,
+GimpPDBStatusType  script_fu_interface_dialog    (SFScript     *script,
                                                   gint          start_arg);
-void               script_fu_interface_report_cc (const gchar  *command);
 gboolean           script_fu_interface_is_active (void);
 
 

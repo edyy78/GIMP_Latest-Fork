@@ -47,7 +47,7 @@ static gchar      * gimp_utils_make_canonical_menu_label (const gchar           
  * @property_name: Name of a [class@Gimp.Brush] property.
  * @chooser_title: (nullable): title for the poppable dialog.
  *
- * Creates a [class@Gimp.Brush.Chooser] controlled by the specified property.
+ * Creates a [class@GimpUi.BrushChooser] controlled by the specified property.
  *
  * Returns: (transfer full): A new [class@GimpUi.BrushChooser].
  *
@@ -58,7 +58,7 @@ gimp_prop_brush_chooser_new (GObject     *config,
                              const gchar *property_name,
                              const gchar *chooser_title)
 {
-  return gimp_prop_resource_chooser_factory (gimp_brush_chooser_new,
+  return gimp_prop_resource_chooser_factory ((GimpResourceWidgetCreator) gimp_brush_chooser_new,
                                              config, property_name, chooser_title);
 }
 
@@ -79,7 +79,7 @@ gimp_prop_font_chooser_new (GObject     *config,
                             const gchar *property_name,
                             const gchar *chooser_title)
 {
-  return gimp_prop_resource_chooser_factory (gimp_font_chooser_new,
+  return gimp_prop_resource_chooser_factory ((GimpResourceWidgetCreator) gimp_font_chooser_new,
                                              config, property_name, chooser_title);
 }
 
@@ -100,7 +100,7 @@ gimp_prop_gradient_chooser_new (GObject     *config,
                                 const gchar *property_name,
                                 const gchar *chooser_title)
 {
-  return gimp_prop_resource_chooser_factory (gimp_gradient_chooser_new,
+  return gimp_prop_resource_chooser_factory ((GimpResourceWidgetCreator) gimp_gradient_chooser_new,
                                              config, property_name, chooser_title);
 }
 
@@ -121,7 +121,7 @@ gimp_prop_palette_chooser_new (GObject     *config,
                                const gchar *property_name,
                                const gchar *chooser_title)
 {
-  return gimp_prop_resource_chooser_factory (gimp_palette_chooser_new,
+  return gimp_prop_resource_chooser_factory ((GimpResourceWidgetCreator) gimp_palette_chooser_new,
                                              config, property_name, chooser_title);
 }
 
@@ -142,7 +142,7 @@ gimp_prop_pattern_chooser_new (GObject     *config,
                                const gchar *property_name,
                                const gchar *chooser_title)
 {
-  return gimp_prop_resource_chooser_factory (gimp_pattern_chooser_new,
+  return gimp_prop_resource_chooser_factory ((GimpResourceWidgetCreator) gimp_pattern_chooser_new,
                                              config, property_name, chooser_title);
 }
 

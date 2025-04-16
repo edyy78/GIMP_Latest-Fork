@@ -62,10 +62,10 @@ struct _ResizeDialog
 
   gdouble             old_xres;
   gdouble             old_yres;
-  GimpUnit            old_res_unit;
+  GimpUnit           *old_res_unit;
   gint                old_width;
   gint                old_height;
-  GimpUnit            old_unit;
+  GimpUnit           *old_unit;
   GimpFillType        old_fill_type;
   GimpItemSet         old_layer_set;
   gboolean            old_resize_text_layers;
@@ -123,7 +123,7 @@ resize_dialog_new (GimpViewable       *viewable,
                    GtkWidget          *parent,
                    GimpHelpFunc        help_func,
                    const gchar        *help_id,
-                   GimpUnit            unit,
+                   GimpUnit           *unit,
                    GimpFillType        fill_type,
                    GimpItemSet         layer_set,
                    gboolean            resize_text_layers,
@@ -388,7 +388,7 @@ resize_dialog_new (GimpViewable       *viewable,
   gtk_spin_button_set_numeric (GTK_SPIN_BUTTON (spinbutton), TRUE);
   gtk_entry_set_width_chars (GTK_ENTRY (spinbutton), SB_WIDTH);
 
-  private->offset = entry = gimp_size_entry_new (1, unit, "%p",
+  private->offset = entry = gimp_size_entry_new (1, unit, "%n",
                                                  TRUE, FALSE, FALSE, SB_WIDTH,
                                                  GIMP_SIZE_ENTRY_UPDATE_SIZE);
   gimp_size_entry_add_field (GIMP_SIZE_ENTRY (entry),
@@ -554,12 +554,12 @@ resize_dialog_response (GtkWidget    *dialog,
                         ResizeDialog *private)
 {
   GimpSizeEntry *entry = GIMP_SIZE_ENTRY (private->offset);
-  GimpUnit       unit;
+  GimpUnit      *unit;
   gint           width;
   gint           height;
   gdouble        xres;
   gdouble        yres;
-  GimpUnit       res_unit;
+  GimpUnit      *res_unit;
 
   switch (response_id)
     {
@@ -729,7 +729,7 @@ template_changed (GimpContext  *context,
                   GimpTemplate *template,
                   ResizeDialog *private)
 {
-  GimpUnit unit = private->old_unit;
+  GimpUnit *unit = private->old_unit;
 
   private->template = template;
 
@@ -738,10 +738,10 @@ template_changed (GimpContext  *context,
 
   if (template != NULL)
     {
-      gdouble  xres;
-      gdouble  yres;
-      GimpUnit res_unit;
-      gboolean resolution_mismatch;
+      gdouble   xres;
+      gdouble   yres;
+      GimpUnit *res_unit;
+      gboolean  resolution_mismatch;
 
       unit     = gimp_template_get_unit            (template);
       xres     = gimp_template_get_resolution_x    (template);
@@ -752,8 +752,7 @@ template_changed (GimpContext  *context,
                             yres     != private->old_yres ||
                             res_unit != private->old_res_unit;
 
-      if (resolution_mismatch &&
-          unit != GIMP_UNIT_PIXEL)
+      if (resolution_mismatch && unit != gimp_unit_pixel ())
         {
           gchar *text;
 
@@ -785,10 +784,10 @@ ppi_select_toggled (GtkWidget    *radio,
 {
   gint             width;
   gint             height;
-  GimpUnit         unit;
+  GimpUnit        *unit;
   gdouble          xres;
   gdouble          yres;
-  GimpUnit         res_unit;
+  GimpUnit        *res_unit;
   GtkToggleButton *image_button;
   gboolean         use_image_ppi;
 
@@ -812,8 +811,7 @@ ppi_select_toggled (GtkWidget    *radio,
       res_unit = gimp_template_get_resolution_unit (private->template);
     }
 
-  if (private->template != NULL &&
-      unit != GIMP_UNIT_PIXEL)
+  if (private->template != NULL && unit != gimp_unit_pixel ())
     {
       if (use_image_ppi)
         {

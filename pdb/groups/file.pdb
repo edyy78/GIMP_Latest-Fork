@@ -176,9 +176,7 @@ HELP
 
     @outargs = (
         { name => 'layers', type => 'layerarray',
-          desc => 'The list of loaded layers',
-          array => { name => 'num_layers',
-                     desc => 'The number of loaded layers' } }
+          desc => 'The list of loaded layers' }
     );
 
     %invoke = (
@@ -194,34 +192,41 @@ HELP
   if (layer_list)
     {
       GList *list;
-      gint i;
+      gsize  num_layers;
+      gint   i;
 
       num_layers = g_list_length (layer_list);
 
-      layers = g_new (GimpLayer *, num_layers);
+      layers = g_new0 (GimpLayer *, num_layers + 1);
 
       for (i = 0, list = layer_list;
            i < num_layers;
            i++, list = g_list_next (list))
         {
-          layers[i] = g_object_ref (list->data);
+          layers[i] = list->data;
         }
 
       g_list_free (layer_list);
     }
   else
-    success = FALSE;
+    {
+      success = FALSE;
+    }
 }
 CODE
     );
 }
 
 sub file_save {
-    $blurb = 'Saves a file by extension.';
+    $blurb = 'Saves to XCF or export @image to any supported format by extension.';
 
     $help = <<'HELP';
-This procedure invokes the correct file save handler according to the
-file's extension and/or prefix.
+This procedure invokes the correct file save/export handler according to
+@file's extension and/or prefix.
+
+
+The @options argument is currently unused and should be set to %NULL
+right now.
 HELP
 
     &josh_pdb_misc('1997');
@@ -231,14 +236,10 @@ HELP
           desc => 'The run mode' },
         { name => 'image', type => 'image',
           desc => 'Input image' },
-	{ name => 'drawables', type => 'itemarray',
-          desc => 'Drawables to save',
-          no_validate => 1,
-	  array => { name => 'num_drawables',
-                     type => '1 <= int32',
-		     desc => "The number of drawables to save" } },
         { name => 'file', type => 'file',
-          desc => 'The file to save the image in' }
+          desc => 'The file to save or export the image in' },
+        { name => 'options', type => 'export_options',
+          desc => 'Export option settings' }
     );
 
     %invoke = (
@@ -251,9 +252,10 @@ HELP
   GimpPlugInProcedure *file_proc;
   GFile               *file;
   GimpProcedure       *proc;
+  gint                 custom_args_start = 3;
   gint                 i;
 
-  file = g_value_get_object (gimp_value_array_index (args, 4));
+  file = g_value_get_object (gimp_value_array_index (args, 2));
 
   file_proc = gimp_plug_in_manager_file_procedure_find (gimp->plug_in_manager,
                                                         GIMP_FILE_PROCEDURE_GROUP_SAVE,
@@ -278,14 +280,25 @@ HELP
                      gimp_value_array_index (new_args, 1));
   g_value_transform (gimp_value_array_index (args, 2),
                      gimp_value_array_index (new_args, 2));
-  g_value_transform (gimp_value_array_index (args, 3),
-                     gimp_value_array_index (new_args, 3));
-  g_value_transform (gimp_value_array_index (args, 4),
-                     gimp_value_array_index (new_args, 4));
+  if (proc->num_args > 3)
+    {
+      custom_args_start++;
+      g_value_transform (gimp_value_array_index (args, 3),
+                         gimp_value_array_index (new_args, 3));
+    }
 
-  for (i = 5; i < proc->num_args; i++)
-    if (G_IS_PARAM_SPEC_STRING (proc->args[i]))
-      g_value_set_static_string (gimp_value_array_index (new_args, i), "");
+  for (i = custom_args_start; i < proc->num_args; i++)
+    if (GIMP_IS_PARAM_SPEC_CHOICE (proc->args[i]))
+      {
+        GParamSpecString *string_spec = G_PARAM_SPEC_STRING (proc->args[i]);
+
+        g_value_set_static_string (gimp_value_array_index (new_args, i),
+                                   string_spec->default_value);
+      }
+    else if (G_IS_PARAM_SPEC_STRING (proc->args[i]))
+      {
+        g_value_set_static_string (gimp_value_array_index (new_args, i), "");
+      }
 
   return_vals =
     gimp_pdb_execute_procedure_by_name_args (gimp->pdb,
@@ -350,16 +363,22 @@ CODE
     );
 }
 
-sub file_save_thumbnail {
-    $blurb = 'Saves a thumbnail for the given image';
+sub file_create_thumbnail {
+    $blurb = 'Creates a thumbnail of @image for the given @file';
 
     $help = <<'HELP';
-This procedure saves a thumbnail for the given image according to the
-Free Desktop Thumbnail Managing Standard. The thumbnail is saved so
-that it belongs to the given file. This means you have to save the image
-under this name first, otherwise this procedure will fail.  This
-procedure may become useful if you want to explicitly save a thumbnail
-with a file.
+This procedure creates a thumbnail for the given @file and stores it
+according to relevant standards.
+
+In particular, it will follow the [Free Desktop Thumbnail Managing
+Standard](https://specifications.freedesktop.org/thumbnail-spec/latest/thumbsave.html)
+when relevant.
+
+
+The thumbnail is stored so that it belongs to the given @file. This
+means you have to save @image under this name first. As a fallback, the
+call will work if @image was exported or imported as @file. In any other
+case, this procedure will fail.
 HELP
 
     &josh_pdb_misc('1997');
@@ -392,13 +411,13 @@ CODE
             file_load_layers
             file_save
             file_load_thumbnail
-            file_save_thumbnail);
+            file_create_thumbnail);
 
 %exports = (app => [@procs], lib => [@procs[0..3,5]]);
 
 $desc = 'File Operations';
 $doc_title = 'gimpfile';
-$doc_short_desc = 'Image file operations (load, save, etc.)';
-$doc_long_desc = 'Image file operations (load, save, etc.)';
+$doc_short_desc = 'Image file operations (load, export, etc.)';
+$doc_long_desc = 'Image file operations (load, export, etc.)';
 
 1;

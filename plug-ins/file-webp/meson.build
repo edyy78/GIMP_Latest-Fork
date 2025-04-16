@@ -5,7 +5,7 @@ plugin_name = 'file-webp'
 plugin_sources = [
   'file-webp-dialog.c',
   'file-webp-load.c',
-  'file-webp-save.c',
+  'file-webp-export.c',
   'file-webp.c',
 ]
 
@@ -23,15 +23,16 @@ if platform_windows
   )
 endif
 
-executable(plugin_name,
-  plugin_sources,
-  dependencies: [
-    libgimpui_dep,
-    gexiv2,
-    webp_libs,
-  ],
-  install: true,
-  install_dir: gimpplugindir / 'plug-ins' / plugin_name,
-)
+plugin_exe = executable(plugin_name,
+                        plugin_sources,
+                        dependencies: [
+                          libgimpui_dep,
+                          gexiv2,
+                          webp_libs,
+                        ],
+                        win_subsystem: 'windows',
+                        install: true,
+                        install_dir: gimpplugindir / 'plug-ins' / plugin_name)
+plugin_executables += [plugin_exe.full_path()]
 
 endif

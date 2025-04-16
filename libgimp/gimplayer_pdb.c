@@ -37,35 +37,39 @@
 
 
 /**
- * _gimp_layer_new:
+ * gimp_layer_new:
  * @image: The image to which to add the layer.
+ * @name: (nullable): The layer name.
  * @width: The layer width.
  * @height: The layer height.
  * @type: The layer type.
- * @name: The layer name.
  * @opacity: The layer opacity.
  * @mode: The layer combination mode.
  *
  * Create a new layer.
  *
- * This procedure creates a new layer with the specified width, height,
- * and type. If @name is %NULL, a default layer name will be used.
- * Opacity, and mode are also supplied parameters. The new layer still
- * needs to be added to the image, as this is not automatic. Add the
- * new layer with the gimp_image_insert_layer() command. Other
- * attributes such as layer mask modes, and offsets should be set with
- * explicit procedure calls.
+ * This procedure creates a new layer with the specified @width,
+ * @height and @type. If @name is %NULL, a default layer name will be
+ * used. @opacity and @mode are also supplied parameters.
  *
- * Returns: (transfer none): The newly created layer.
+ * The new layer still needs to be added to the image as this is not
+ * automatic. Add the new layer with the [method@Image.insert_layer]
+ * method.
+ *
+ * Other attributes such as layer mask modes and offsets should be set
+ * with explicit procedure calls.
+ *
+ * Returns: (transfer none):
+ *          The newly created layer. The object belongs to libgimp and you should not free it.
  **/
 GimpLayer *
-_gimp_layer_new (GimpImage     *image,
-                 gint           width,
-                 gint           height,
-                 GimpImageType  type,
-                 const gchar   *name,
-                 gdouble        opacity,
-                 GimpLayerMode  mode)
+gimp_layer_new (GimpImage     *image,
+                const gchar   *name,
+                gint           width,
+                gint           height,
+                GimpImageType  type,
+                gdouble        opacity,
+                GimpLayerMode  mode)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
@@ -73,10 +77,10 @@ _gimp_layer_new (GimpImage     *image,
 
   args = gimp_value_array_new_from_types (NULL,
                                           GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_STRING, name,
                                           G_TYPE_INT, width,
                                           G_TYPE_INT, height,
                                           GIMP_TYPE_IMAGE_TYPE, type,
-                                          G_TYPE_STRING, name,
                                           G_TYPE_DOUBLE, opacity,
                                           GIMP_TYPE_LAYER_MODE, mode,
                                           G_TYPE_NONE);
@@ -98,7 +102,7 @@ _gimp_layer_new (GimpImage     *image,
  * gimp_layer_new_from_visible:
  * @image: The source image from where the content is copied.
  * @dest_image: The destination image to which to add the layer.
- * @name: The layer name.
+ * @name: (nullable): The layer name.
  *
  * Create a new layer from what is visible in an image.
  *
@@ -182,66 +186,20 @@ gimp_layer_new_from_drawable (GimpDrawable *drawable,
 }
 
 /**
- * gimp_layer_group_new:
- * @image: The image to which to add the layer group.
- *
- * Create a new layer group.
- *
- * This procedure creates a new layer group. Attributes such as layer
- * mode and opacity should be set with explicit procedure calls. Add
- * the new layer group (which is a kind of layer) with the
- * gimp_image_insert_layer() command.
- * Other procedures useful with layer groups:
- * gimp_image_reorder_item(), gimp_item_get_parent(),
- * gimp_item_get_children(), gimp_item_is_group().
- *
- * Returns: (transfer none): The newly created layer group.
- *
- * Since: 2.8
- **/
-GimpLayer *
-gimp_layer_group_new (GimpImage *image)
-{
-  GimpValueArray *args;
-  GimpValueArray *return_vals;
-  GimpLayer *layer_group = NULL;
-
-  args = gimp_value_array_new_from_types (NULL,
-                                          GIMP_TYPE_IMAGE, image,
-                                          G_TYPE_NONE);
-
-  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
-                                               "gimp-layer-group-new",
-                                               args);
-  gimp_value_array_unref (args);
-
-  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
-    layer_group = GIMP_VALUES_GET_LAYER (return_vals, 1);
-
-  gimp_value_array_unref (return_vals);
-
-  return layer_group;
-}
-
-/**
- * _gimp_layer_copy:
+ * gimp_layer_copy:
  * @layer: The layer to copy.
- * @add_alpha: Add an alpha channel to the copied layer.
  *
  * Copy a layer.
  *
  * This procedure copies the specified layer and returns the copy. The
  * newly copied layer is for use within the original layer's image. It
- * should not be subsequently added to any other image. The copied
- * layer can optionally have an added alpha channel. This is useful if
- * the background layer in an image is being copied and added to the
- * same image.
+ * should not be subsequently added to any other image.
  *
- * Returns: (transfer none): The newly copied layer.
+ * Returns: (transfer none):
+ *          The newly copied layer. The object belongs to libgimp and you should not free it.
  **/
 GimpLayer *
-_gimp_layer_copy (GimpLayer *layer,
-                  gboolean   add_alpha)
+gimp_layer_copy (GimpLayer *layer)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
@@ -249,7 +207,6 @@ _gimp_layer_copy (GimpLayer *layer,
 
   args = gimp_value_array_new_from_types (NULL,
                                           GIMP_TYPE_LAYER, layer,
-                                          G_TYPE_BOOLEAN, add_alpha,
                                           G_TYPE_NONE);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),

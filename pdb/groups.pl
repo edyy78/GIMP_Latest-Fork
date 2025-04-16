@@ -11,6 +11,7 @@
     drawable
     drawable_color
     drawable_edit
+    drawable_filter
     drawable_select
     dynamics
     edit
@@ -24,8 +25,10 @@
     gradient
     gradient_select
     gradients
+    group_layer
     help
     image
+    image_autocrop
     image_color_profile
     image_convert
     image_grid
@@ -42,17 +45,16 @@
     palette
     palette_select
     palettes
+    path
     pattern
     pattern_select
     patterns
     pdb
     plug_in
-    plug_in_compat
     progress
     resource
     selection
     text_layer
     text_tool
     unit
-    vectors
 );

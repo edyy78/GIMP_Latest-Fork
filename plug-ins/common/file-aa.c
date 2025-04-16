@@ -17,7 +17,7 @@
 
 /**
  * aa.c version 1.0
- * A plugin that uses libaa (ftp://ftp.ta.jcu.cz/pub/aa) to save images as
+ * A plugin that uses libaa (ftp://ftp.ta.jcu.cz/pub/aa) to export images as
  * ASCII.
  * NOTE: This plugin *requires* aalib 1.2 or later. Earlier versions will
  * not work.
@@ -31,13 +31,15 @@
 
 #include <aalib.h>
 
+#include "libgimpcolor/gimpcolor-private.h"
+
 #include <libgimp/gimp.h>
 #include <libgimp/gimpui.h>
 
 #include "libgimp/stdplugins-intl.h"
 
 
-#define SAVE_PROC      "file-aa-save"
+#define EXPORT_PROC    "file-aa-export"
 #define PLUG_IN_BINARY "file-aa"
 
 
@@ -64,17 +66,16 @@ static GList          * ascii_query_procedures (GimpPlugIn           *plug_in);
 static GimpProcedure  * ascii_create_procedure (GimpPlugIn           *plug_in,
                                                 const gchar          *name);
 
-static GimpValueArray * ascii_save             (GimpProcedure        *procedure,
+static GimpValueArray * ascii_export           (GimpProcedure        *procedure,
                                                 GimpRunMode           run_mode,
                                                 GimpImage            *image,
-                                                gint                  n_drawables,
-                                                GimpDrawable        **drawables,
                                                 GFile                *file,
+                                                GimpExportOptions    *options,
                                                 GimpMetadata         *metadata,
                                                 GimpProcedureConfig  *config,
                                                 gpointer              run_data);
 
-static gboolean         save_aa                (GFile                *file,
+static gboolean         export_aa              (GFile                *file,
                                                 GimpDrawable         *drawable,
                                                 GObject              *config,
                                                 GError              **error);
@@ -110,7 +111,7 @@ ascii_init (Ascii *ascii)
 static GList *
 ascii_query_procedures (GimpPlugIn *plug_in)
 {
-  return g_list_append (NULL, g_strdup (SAVE_PROC));
+  return g_list_append (NULL, g_strdup (EXPORT_PROC));
 }
 
 static GimpProcedure *
@@ -119,13 +120,13 @@ ascii_create_procedure (GimpPlugIn  *plug_in,
 {
   GimpProcedure *procedure = NULL;
 
-  if (! strcmp (name, SAVE_PROC))
+  if (! strcmp (name, EXPORT_PROC))
     {
       gint i;
 
-      procedure = gimp_save_procedure_new (plug_in, name,
-                                           GIMP_PDB_PROC_TYPE_PLUGIN,
-                                           FALSE, ascii_save, NULL, NULL);
+      procedure = gimp_export_procedure_new (plug_in, name,
+                                             GIMP_PDB_PROC_TYPE_PLUGIN,
+                                             FALSE, ascii_export, NULL, NULL);
 
       gimp_procedure_set_image_types (procedure, "*");
 
@@ -150,95 +151,73 @@ ascii_create_procedure (GimpPlugIn  *plug_in,
       gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
                                           "txt,ansi,text");
 
+      gimp_export_procedure_set_capabilities (GIMP_EXPORT_PROCEDURE (procedure),
+                                              GIMP_EXPORT_CAN_HANDLE_RGB     |
+                                              GIMP_EXPORT_CAN_HANDLE_GRAY    |
+                                              GIMP_EXPORT_CAN_HANDLE_INDEXED |
+                                              GIMP_EXPORT_CAN_HANDLE_ALPHA,
+                                              NULL, NULL, NULL);
+
       for (i = 0; aa_formats[i]; i++);
 
-      GIMP_PROC_ARG_INT (procedure, "file-type",
-                         _("_Format"),
-                         _("File type to use"),
-                         0, i, 0,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "file-type",
+                                       _("_Format"),
+                                       _("File type to use"),
+                                       0, i, 0,
+                                       G_PARAM_READWRITE);
     }
 
   return procedure;
 }
 
 static GimpValueArray *
-ascii_save (GimpProcedure        *procedure,
-            GimpRunMode           run_mode,
-            GimpImage            *image,
-            gint                  n_drawables,
-            GimpDrawable        **drawables,
-            GFile                *file,
-            GimpMetadata         *metadata,
-            GimpProcedureConfig  *config,
-            gpointer              run_data)
+ascii_export (GimpProcedure        *procedure,
+              GimpRunMode           run_mode,
+              GimpImage            *image,
+              GFile                *file,
+              GimpExportOptions    *options,
+              GimpMetadata         *metadata,
+              GimpProcedureConfig  *config,
+              gpointer              run_data)
 {
   GimpPDBStatusType  status = GIMP_PDB_SUCCESS;
-  GimpExportReturn   export = GIMP_EXPORT_CANCEL;
+  GimpExportReturn   export = GIMP_EXPORT_IGNORE;
+  GList             *drawables;
   GError            *error  = NULL;
 
   gegl_init (NULL, NULL);
 
-  switch (run_mode)
-    {
-    case GIMP_RUN_INTERACTIVE:
-    case GIMP_RUN_WITH_LAST_VALS:
-      gimp_ui_init (PLUG_IN_BINARY);
-
-      export = gimp_export_image (&image, &n_drawables, &drawables, "AA",
-                                  GIMP_EXPORT_CAN_HANDLE_RGB     |
-                                  GIMP_EXPORT_CAN_HANDLE_GRAY    |
-                                  GIMP_EXPORT_CAN_HANDLE_INDEXED |
-                                  GIMP_EXPORT_CAN_HANDLE_ALPHA);
-
-      if (export == GIMP_EXPORT_CANCEL)
-        return gimp_procedure_new_return_values (procedure,
-                                                 GIMP_PDB_CANCEL,
-                                                 NULL);
-      break;
-
-    default:
-      break;
-    }
-
-  if (n_drawables != 1)
-    {
-      g_set_error (&error, G_FILE_ERROR, 0,
-                   _("ASCII art does not support multiple layers."));
-
-      return gimp_procedure_new_return_values (procedure,
-                                               GIMP_PDB_CALLING_ERROR,
-                                               error);
-    }
-
   if (run_mode == GIMP_RUN_INTERACTIVE)
     {
+      gimp_ui_init (PLUG_IN_BINARY);
+
       if (! save_dialog (procedure, G_OBJECT (config), image))
         status = GIMP_PDB_CANCEL;
     }
 
+  export = gimp_export_options_get_image (options, &image);
+  drawables = gimp_image_list_layers (image);
+
   if (status == GIMP_PDB_SUCCESS)
     {
-      if (! save_aa (file, drawables[0], G_OBJECT (config), &error))
+      if (! export_aa (file, drawables->data, G_OBJECT (config), &error))
         {
           status = GIMP_PDB_EXECUTION_ERROR;
         }
     }
 
   if (export == GIMP_EXPORT_EXPORT)
-    {
-      gimp_image_delete (image);
-      g_free (drawables);
-    }
+    gimp_image_delete (image);
 
+  g_list_free (drawables);
   return gimp_procedure_new_return_values (procedure, status, error);
 }
 
 static gboolean
-save_aa (GFile         *file,
-         GimpDrawable  *drawable,
-         GObject       *config,
-         GError       **error)
+export_aa (GFile         *file,
+           GimpDrawable  *drawable,
+           GObject       *config,
+           GError       **error)
 {
   aa_savedata  savedata;
   aa_context  *context;
@@ -377,9 +356,9 @@ save_dialog (GimpProcedure *procedure,
   gint          i;
   gboolean      run;
 
-  dialog = gimp_save_procedure_dialog_new (GIMP_SAVE_PROCEDURE (procedure),
-                                           GIMP_PROCEDURE_CONFIG (config),
-                                           image);
+  dialog = gimp_export_procedure_dialog_new (GIMP_EXPORT_PROCEDURE (procedure),
+                                             GIMP_PROCEDURE_CONFIG (config),
+                                             image);
 
   store = g_object_new (GIMP_TYPE_INT_STORE, NULL);
 

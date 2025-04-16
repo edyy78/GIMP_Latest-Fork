@@ -49,8 +49,10 @@
  */
 
 
-struct _GimpImageProcedurePrivate
+struct _GimpImageProcedure
 {
+  GimpProcedure    parent_instance;
+
   GimpRunImageFunc run_func;
   gpointer         run_data;
   GDestroyNotify   run_data_destroy;
@@ -72,8 +74,7 @@ static gboolean
                                                   gint                  sensitivity_mask);
 
 
-G_DEFINE_TYPE_WITH_PRIVATE (GimpImageProcedure, gimp_image_procedure,
-                            GIMP_TYPE_PROCEDURE)
+G_DEFINE_TYPE (GimpImageProcedure, gimp_image_procedure, GIMP_TYPE_PROCEDURE)
 
 #define parent_class gimp_image_procedure_parent_class
 
@@ -95,7 +96,6 @@ gimp_image_procedure_class_init (GimpImageProcedureClass *klass)
 static void
 gimp_image_procedure_init (GimpImageProcedure *procedure)
 {
-  procedure->priv = gimp_image_procedure_get_instance_private (procedure);
 }
 
 static void
@@ -105,30 +105,28 @@ gimp_image_procedure_constructed (GObject *object)
 
   G_OBJECT_CLASS (parent_class)->constructed (object);
 
-  GIMP_PROC_ARG_ENUM (procedure, "run-mode",
-                      "Run mode",
-                      "The run mode",
-                      GIMP_TYPE_RUN_MODE,
-                      GIMP_RUN_NONINTERACTIVE,
-                      G_PARAM_READWRITE);
+  gimp_procedure_add_enum_argument (procedure, "run-mode",
+                                    "Run mode",
+                                    "The run mode",
+                                    GIMP_TYPE_RUN_MODE,
+                                    GIMP_RUN_NONINTERACTIVE,
+                                    G_PARAM_READWRITE);
 
-  GIMP_PROC_ARG_IMAGE (procedure, "image",
-                       "Image",
-                       "The input image",
-                       FALSE,
-                       G_PARAM_READWRITE);
+  gimp_procedure_add_image_argument (procedure, "image",
+                                     "Image",
+                                     "The input image",
+                                     FALSE,
+                                     G_PARAM_READWRITE);
 
-  GIMP_PROC_ARG_INT (procedure, "num-drawables",
-                     "Number of drawables",
-                     "Number of input drawables",
-                     0, G_MAXINT, 1,
-                     G_PARAM_READWRITE);
+  gimp_procedure_add_core_object_array_argument (procedure, "drawables",
+                                                 "Drawables",
+                                                 "The input drawables",
+                                                 GIMP_TYPE_DRAWABLE,
+                                                 G_PARAM_READWRITE | GIMP_PARAM_NO_VALIDATE);
 
-  GIMP_PROC_ARG_OBJECT_ARRAY (procedure, "drawables",
-                              "Drawables",
-                              "The input drawables",
-                              GIMP_TYPE_DRAWABLE,
-                              G_PARAM_READWRITE | GIMP_PARAM_NO_VALIDATE);
+  gimp_procedure_set_sensitivity_mask (GIMP_PROCEDURE (procedure),
+                                       GIMP_PROCEDURE_SENSITIVE_DRAWABLE |
+                                       GIMP_PROCEDURE_SENSITIVE_DRAWABLES);
 }
 
 static void
@@ -136,13 +134,13 @@ gimp_image_procedure_finalize (GObject *object)
 {
   GimpImageProcedure *procedure = GIMP_IMAGE_PROCEDURE (object);
 
-  if (procedure->priv->run_data_destroy)
-    procedure->priv->run_data_destroy (procedure->priv->run_data);
+  if (procedure->run_data_destroy)
+    procedure->run_data_destroy (procedure->run_data);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
 
-#define ARG_OFFSET 4
+#define ARG_OFFSET 3
 
 static GimpValueArray *
 gimp_image_procedure_run (GimpProcedure        *procedure,
@@ -157,15 +155,13 @@ gimp_image_procedure_run (GimpProcedure        *procedure,
   GimpRunMode          run_mode;
   GimpImage           *image;
   GimpDrawable       **drawables;
-  gint                 n_drawables;
   gint                 i;
 
-  run_mode    = GIMP_VALUES_GET_ENUM         (args, 0);
-  image       = GIMP_VALUES_GET_IMAGE        (args, 1);
-  n_drawables = GIMP_VALUES_GET_INT          (args, 2);
-  drawables   = GIMP_VALUES_GET_OBJECT_ARRAY (args, 3);
+  run_mode    = GIMP_VALUES_GET_ENUM              (args, 0);
+  image       = GIMP_VALUES_GET_IMAGE             (args, 1);
+  drawables   = GIMP_VALUES_GET_CORE_OBJECT_ARRAY (args, 2);
 
-  remaining = gimp_value_array_new (gimp_value_array_length (args) - ARG_OFFSET);
+  remaining   = gimp_value_array_new (gimp_value_array_length (args) - ARG_OFFSET);
 
   for (i = ARG_OFFSET; i < gimp_value_array_length (args); i++)
     {
@@ -174,14 +170,11 @@ gimp_image_procedure_run (GimpProcedure        *procedure,
       gimp_value_array_append (remaining, value);
     }
 
-  config = gimp_procedure_create_config (procedure);
-  _gimp_procedure_config_begin_run (config, image, run_mode, remaining);
+  config = _gimp_procedure_create_run_config (procedure);
+  _gimp_procedure_config_begin_run (config, image, run_mode, remaining, NULL);
 
-  return_values = image_proc->priv->run_func (procedure,
-                                              run_mode,
-                                              image, n_drawables, drawables,
-                                              config,
-                                              image_proc->priv->run_data);
+  return_values = image_proc->run_func (procedure, run_mode, image, drawables,
+                                        config, image_proc->run_data);
 
   if (return_values != NULL                       &&
       gimp_value_array_length (return_values) > 0 &&
@@ -235,12 +228,16 @@ gimp_image_procedure_set_sensitivity (GimpProcedure *procedure,
   g_return_val_if_fail (GIMP_IS_IMAGE_PROCEDURE (procedure), FALSE);
 
   pspec = gimp_procedure_find_argument (procedure, "image");
-  g_return_val_if_fail (pspec, FALSE);
-
-  if (sensitivity_mask & GIMP_PROCEDURE_SENSITIVE_NO_IMAGE)
-    pspec->flags |= GIMP_PARAM_NO_VALIDATE;
-  else
-    pspec->flags &= ~GIMP_PARAM_NO_VALIDATE;
+  /* The pspec may not exist yet while we are constructing the
+   * procedure.
+   */
+  if (pspec)
+    {
+      if (sensitivity_mask & GIMP_PROCEDURE_SENSITIVE_NO_IMAGE)
+        pspec->flags |= GIMP_PARAM_NO_VALIDATE;
+      else
+        pspec->flags &= ~GIMP_PARAM_NO_VALIDATE;
+    }
 
   return TRUE;
 }
@@ -278,7 +275,7 @@ gimp_image_procedure_new (GimpPlugIn       *plug_in,
   g_return_val_if_fail (GIMP_IS_PLUG_IN (plug_in), NULL);
   g_return_val_if_fail (gimp_is_canonical_identifier (name), NULL);
   g_return_val_if_fail (proc_type != GIMP_PDB_PROC_TYPE_INTERNAL, NULL);
-  g_return_val_if_fail (proc_type != GIMP_PDB_PROC_TYPE_EXTENSION, NULL);
+  g_return_val_if_fail (proc_type != GIMP_PDB_PROC_TYPE_PERSISTENT, NULL);
   g_return_val_if_fail (run_func != NULL, NULL);
 
   procedure = g_object_new (GIMP_TYPE_IMAGE_PROCEDURE,
@@ -287,9 +284,9 @@ gimp_image_procedure_new (GimpPlugIn       *plug_in,
                             "procedure-type", proc_type,
                             NULL);
 
-  procedure->priv->run_func         = run_func;
-  procedure->priv->run_data         = run_data;
-  procedure->priv->run_data_destroy = run_data_destroy;
+  procedure->run_func         = run_func;
+  procedure->run_data         = run_data;
+  procedure->run_data_destroy = run_data_destroy;
 
   return GIMP_PROCEDURE (procedure);
 }

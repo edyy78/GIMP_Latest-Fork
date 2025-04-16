@@ -27,7 +27,7 @@
 #include "libgimp/stdplugins-intl.h"
 
 
-#define SAVE_PROC      "file-pat-save"
+#define EXPORT_PROC    "file-pat-export"
 #define PLUG_IN_BINARY "file-pat"
 
 
@@ -54,12 +54,11 @@ static GList          * pat_query_procedures (GimpPlugIn           *plug_in);
 static GimpProcedure  * pat_create_procedure (GimpPlugIn           *plug_in,
                                               const gchar          *name);
 
-static GimpValueArray * pat_save             (GimpProcedure        *procedure,
+static GimpValueArray * pat_export           (GimpProcedure        *procedure,
                                               GimpRunMode           run_mode,
                                               GimpImage            *image,
-                                              gint                  n_drawables,
-                                              GimpDrawable        **drawables,
                                               GFile                *file,
+                                              GimpExportOptions    *options,
                                               GimpMetadata         *metadata,
                                               GimpProcedureConfig  *config,
                                               gpointer              run_data);
@@ -93,7 +92,7 @@ pat_init (Pat *pat)
 static GList *
 pat_query_procedures (GimpPlugIn *plug_in)
 {
-  return g_list_append (NULL, g_strdup (SAVE_PROC));
+  return g_list_append (NULL, g_strdup (EXPORT_PROC));
 }
 
 static GimpProcedure *
@@ -102,11 +101,11 @@ pat_create_procedure (GimpPlugIn  *plug_in,
 {
   GimpProcedure *procedure = NULL;
 
-  if (! strcmp (name, SAVE_PROC))
+  if (! strcmp (name, EXPORT_PROC))
     {
-      procedure = gimp_save_procedure_new (plug_in, name,
-                                           GIMP_PDB_PROC_TYPE_PLUGIN,
-                                           FALSE, pat_save, NULL, NULL);
+      procedure = gimp_export_procedure_new (plug_in, name,
+                                             GIMP_PDB_PROC_TYPE_PLUGIN,
+                                             FALSE, pat_export, NULL, NULL);
 
       gimp_procedure_set_image_types (procedure, "*");
 
@@ -118,7 +117,7 @@ pat_create_procedure (GimpPlugIn  *plug_in,
                                         _("New GIMP patterns can be created "
                                           "by exporting them in the "
                                           "appropriate place with this plug-in."),
-                                        SAVE_PROC);
+                                        EXPORT_PROC);
       gimp_procedure_set_attribution (procedure,
                                       "Tim Newsome",
                                       "Tim Newsome",
@@ -133,29 +132,36 @@ pat_create_procedure (GimpPlugIn  *plug_in,
       gimp_file_procedure_set_handles_remote (GIMP_FILE_PROCEDURE (procedure),
                                               TRUE);
 
-      GIMP_PROC_ARG_STRING (procedure, "description",
-                            _("_Description"),
-                            _("Short description of the pattern"),
-                            _("GIMP Pattern"),
-                            GIMP_PARAM_READWRITE);
+      gimp_export_procedure_set_capabilities (GIMP_EXPORT_PROCEDURE (procedure),
+                                              GIMP_EXPORT_CAN_HANDLE_GRAY    |
+                                              GIMP_EXPORT_CAN_HANDLE_RGB     |
+                                              GIMP_EXPORT_CAN_HANDLE_INDEXED |
+                                              GIMP_EXPORT_CAN_HANDLE_ALPHA,
+                                              NULL, NULL, NULL);
+
+      gimp_procedure_add_string_argument (procedure, "description",
+                                          _("_Description"),
+                                          _("Short description of the pattern"),
+                                          _("GIMP Pattern"),
+                                          GIMP_PARAM_READWRITE);
     }
 
   return procedure;
 }
 
 static GimpValueArray *
-pat_save (GimpProcedure        *procedure,
-          GimpRunMode           run_mode,
-          GimpImage            *image,
-          gint                  n_drawables,
-          GimpDrawable        **drawables,
-          GFile                *file,
-          GimpMetadata         *metadata,
-          GimpProcedureConfig  *config,
-          gpointer              run_data)
+pat_export (GimpProcedure        *procedure,
+            GimpRunMode           run_mode,
+            GimpImage            *image,
+            GFile                *file,
+            GimpExportOptions    *options,
+            GimpMetadata         *metadata,
+            GimpProcedureConfig  *config,
+            gpointer              run_data)
 {
   GimpPDBStatusType  status = GIMP_PDB_SUCCESS;
-  GimpExportReturn   export = GIMP_EXPORT_CANCEL;
+  GimpExportReturn   export = GIMP_EXPORT_IGNORE;
+  GimpLayer        **layers;
   gchar             *description;
   GError            *error  = NULL;
 
@@ -180,59 +186,39 @@ pat_save (GimpProcedure        *procedure,
 
   g_free (description);
 
-  switch (run_mode)
-    {
-    case GIMP_RUN_INTERACTIVE:
-    case GIMP_RUN_WITH_LAST_VALS:
-      gimp_ui_init (PLUG_IN_BINARY);
-
-      export = gimp_export_image (&image, &n_drawables, &drawables, "PAT",
-                                  GIMP_EXPORT_CAN_HANDLE_GRAY    |
-                                  GIMP_EXPORT_CAN_HANDLE_RGB     |
-                                  GIMP_EXPORT_CAN_HANDLE_INDEXED |
-                                  GIMP_EXPORT_CAN_HANDLE_ALPHA);
-
-      if (export == GIMP_EXPORT_CANCEL)
-        return gimp_procedure_new_return_values (procedure, GIMP_PDB_CANCEL,
-                                                 NULL);
-      break;
-
-    default:
-      break;
-    }
-
   if (run_mode == GIMP_RUN_INTERACTIVE)
     {
+      gimp_ui_init (PLUG_IN_BINARY);
+
       if (! save_dialog (image, procedure, G_OBJECT (config)))
         status = GIMP_PDB_CANCEL;
     }
+
+  export = gimp_export_options_get_image (options, &image);
+  layers = gimp_image_get_layers (image);
 
   if (status == GIMP_PDB_SUCCESS)
     {
       GimpProcedure   *procedure;
       GimpValueArray  *save_retvals;
-      GimpObjectArray *drawables_array;
-
-      drawables_array = gimp_object_array_new (GIMP_TYPE_DRAWABLE, (GObject **) drawables, n_drawables, FALSE);
 
       g_object_get (config,
                     "description", &description,
                     NULL);
 
       procedure    = gimp_pdb_lookup_procedure (gimp_get_pdb (),
-                                                "file-pat-save-internal");
+                                                "file-pat-export-internal");
       save_retvals = gimp_procedure_run (procedure,
-                                         "image",         image,
-                                         "num-drawables", n_drawables,
-                                         "drawables",     drawables_array,
-                                         "file",          file,
-                                         "name",          description,
+                                         "image",     image,
+                                         "drawables", (GimpDrawable **) layers,
+                                         "file",      file,
+                                         "name",      description,
                                          NULL);
 
       if (GIMP_VALUES_GET_ENUM (save_retvals, 0) != GIMP_PDB_SUCCESS)
         {
           g_set_error (&error, 0, 0,
-                       "Running procedure 'file-pat-save-internal' "
+                       "Running procedure 'file-pat-export-internal' "
                        "failed: %s",
                        gimp_pdb_get_last_error (gimp_get_pdb ()));
 
@@ -240,14 +226,12 @@ pat_save (GimpProcedure        *procedure,
         }
 
       gimp_value_array_unref (save_retvals);
-      gimp_object_array_free (drawables_array);
     }
 
   if (export == GIMP_EXPORT_EXPORT)
-    {
-      gimp_image_delete (image);
-      g_free (drawables);
-    }
+    gimp_image_delete (image);
+
+  g_free (layers);
 
   return gimp_procedure_new_return_values (procedure, status, error);
 }
@@ -262,9 +246,9 @@ save_dialog (GimpImage     *image,
   GtkWidget *real_entry;
   gboolean   run;
 
-  dialog = gimp_save_procedure_dialog_new (GIMP_SAVE_PROCEDURE (procedure),
-                                           GIMP_PROCEDURE_CONFIG (config),
-                                           image);
+  dialog = gimp_export_procedure_dialog_new (GIMP_EXPORT_PROCEDURE (procedure),
+                                             GIMP_PROCEDURE_CONFIG (config),
+                                             image);
 
   entry = gimp_procedure_dialog_get_widget (GIMP_PROCEDURE_DIALOG (dialog),
                                             "description", GIMP_TYPE_LABEL_ENTRY);

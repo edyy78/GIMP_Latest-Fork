@@ -156,7 +156,9 @@
   CGImageRef        root_image_ref;
   CFDataRef         pixel_data;
   const guchar     *data;
-  GimpRGB           rgb;
+  GeglColor        *rgb         = gegl_color_new ("black");
+  guchar            temp_rgb[3];
+  const Babl       *space       = NULL;
   NSPoint           point;
   GimpColorProfile *profile     = NULL;
   CGColorSpaceRef   color_space = NULL;
@@ -187,7 +189,7 @@
     {
       CFDataRef icc_data = NULL;
 
-      icc_data = CGColorSpaceCopyICCProfile (color_space);
+      icc_data = CGColorSpaceCopyICCData (color_space);
       if (icc_data)
         {
           UInt8 *buffer = g_malloc (CFDataGetLength (icc_data));
@@ -203,43 +205,25 @@
         }
     }
 
-  gimp_rgba_set_uchar (&rgb, data[2], data[1], data[0], 255);
   if (profile)
     {
-      GimpColorProfile        *srgb_profile;
-      GimpColorTransform      *transform;
-      const Babl              *format;
-      GimpColorTransformFlags  flags = 0;
-
-      format = babl_format ("R'G'B'A double");
-
-      flags |= GIMP_COLOR_TRANSFORM_FLAGS_NOOPTIMIZE;
-      flags |= GIMP_COLOR_TRANSFORM_FLAGS_BLACK_POINT_COMPENSATION;
-
-      srgb_profile = gimp_color_profile_new_rgb_srgb ();
-      transform = gimp_color_transform_new (profile,      format,
-                                            srgb_profile, format,
+      space = gimp_color_profile_get_space (profile,
                                             GIMP_COLOR_RENDERING_INTENT_PERCEPTUAL,
-                                            flags);
-
-      if (transform)
-        {
-          gimp_color_transform_process_pixels (transform,
-                                               format, &rgb,
-                                               format, &rgb,
-                                               1);
-          gimp_rgb_clamp (&rgb);
-
-          g_object_unref (transform);
-        }
-      g_object_unref (srgb_profile);
+                                            NULL);
       g_object_unref (profile);
     }
+
+  for (gint i = 0; i < 3; i++)
+    temp_rgb[i] = data[2 - i];
+
+  gegl_color_set_pixel (rgb, babl_format_with_space ("R'G'B' u8", space),
+                        temp_rgb);
 
   CGImageRelease (root_image_ref);
   CFRelease (pixel_data);
 
-  g_signal_emit_by_name (button, "color-picked", &rgb);
+  g_signal_emit_by_name (button, "color-picked", rgb);
+  g_object_unref (rgb);
 }
 @end
 

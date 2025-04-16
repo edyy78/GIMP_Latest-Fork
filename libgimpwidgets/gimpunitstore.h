@@ -34,11 +34,9 @@ enum
   GIMP_UNIT_STORE_UNIT,
   GIMP_UNIT_STORE_UNIT_FACTOR,
   GIMP_UNIT_STORE_UNIT_DIGITS,
-  GIMP_UNIT_STORE_UNIT_IDENTIFIER,
+  GIMP_UNIT_STORE_UNIT_NAME,
   GIMP_UNIT_STORE_UNIT_SYMBOL,
   GIMP_UNIT_STORE_UNIT_ABBREVIATION,
-  GIMP_UNIT_STORE_UNIT_SINGULAR,
-  GIMP_UNIT_STORE_UNIT_PLURAL,
   GIMP_UNIT_STORE_UNIT_SHORT_FORMAT,
   GIMP_UNIT_STORE_UNIT_LONG_FORMAT,
   GIMP_UNIT_STORE_UNIT_COLUMNS,
@@ -46,29 +44,15 @@ enum
 };
 
 
-#define GIMP_TYPE_UNIT_STORE            (gimp_unit_store_get_type ())
-#define GIMP_UNIT_STORE(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_UNIT_STORE, GimpUnitStore))
-#define GIMP_UNIT_STORE_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_UNIT_STORE, GimpUnitStoreClass))
-#define GIMP_IS_UNIT_STORE(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_UNIT_STORE))
-#define GIMP_IS_UNIT_STORE_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_UNIT_STORE))
-#define GIMP_UNIT_STORE_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_UNIT_STORE, GimpUnitStoreClass))
-
-
-typedef struct _GimpUnitStorePrivate GimpUnitStorePrivate;
-typedef struct _GimpUnitStoreClass   GimpUnitStoreClass;
-
-struct _GimpUnitStore
-{
-  GObject               parent_instance;
-
-  GimpUnitStorePrivate *priv;
-};
+#define GIMP_TYPE_UNIT_STORE (gimp_unit_store_get_type ())
+G_DECLARE_DERIVABLE_TYPE (GimpUnitStore, gimp_unit_store, GIMP, UNIT_STORE, GObject)
 
 struct _GimpUnitStoreClass
 {
   GObjectClass  parent_class;
 
   /* Padding for future expansion */
+  void (*_gimp_reserved0) (void);
   void (*_gimp_reserved1) (void);
   void (*_gimp_reserved2) (void);
   void (*_gimp_reserved3) (void);
@@ -77,10 +61,9 @@ struct _GimpUnitStoreClass
   void (*_gimp_reserved6) (void);
   void (*_gimp_reserved7) (void);
   void (*_gimp_reserved8) (void);
+  void (*_gimp_reserved9) (void);
 };
 
-
-GType           gimp_unit_store_get_type         (void) G_GNUC_CONST;
 
 GimpUnitStore * gimp_unit_store_new              (gint           num_values);
 
@@ -105,10 +88,10 @@ void            gimp_unit_store_set_resolutions  (GimpUnitStore *store,
                                                   gdouble        first_resolution,
                                                   ...);
 gdouble         gimp_unit_store_get_nth_value    (GimpUnitStore *store,
-                                                  GimpUnit       unit,
+                                                  GimpUnit      *unit,
                                                   gint           index);
 void            gimp_unit_store_get_values       (GimpUnitStore *store,
-                                                  GimpUnit       unit,
+                                                  GimpUnit      *unit,
                                                   gdouble       *first_value,
                                                   ...);
 

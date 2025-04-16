@@ -26,6 +26,13 @@
 #include <windows.h>
 #endif
 
+#ifdef __APPLE__
+/* Not include gtk/gtk.h and depend on gtk just for GDK_WINDOWING_QUARTZ macro.
+ * __APPLE__ suffices, we only build for MacOS (vs iOS) and Quartz (vs X11)
+ */
+#import <Cocoa/Cocoa.h>
+#endif
+
 #include "libgimpbase/gimpbase.h"
 #include "libgimpbase/gimpprotocol.h"
 #include "libgimpbase/gimpwire.h"
@@ -78,7 +85,7 @@ gimp_plug_in_manager_call_query (GimpPlugInManager *manager,
   g_return_if_fail (GIMP_IS_PLUG_IN_DEF (plug_in_def));
 
   plug_in = gimp_plug_in_new (manager, context, NULL,
-                              NULL, plug_in_def->file);
+                              NULL, plug_in_def->file, NULL);
 
   if (plug_in)
     {
@@ -118,7 +125,7 @@ gimp_plug_in_manager_call_init (GimpPlugInManager *manager,
   g_return_if_fail (GIMP_IS_PLUG_IN_DEF (plug_in_def));
 
   plug_in = gimp_plug_in_new (manager, context, NULL,
-                              NULL, plug_in_def->file);
+                              NULL, plug_in_def->file, NULL);
 
   if (plug_in)
     {
@@ -165,7 +172,10 @@ gimp_plug_in_manager_call_run (GimpPlugInManager   *manager,
   g_return_val_if_fail (args != NULL, NULL);
   g_return_val_if_fail (display == NULL || GIMP_IS_DISPLAY (display), NULL);
 
-  plug_in = gimp_plug_in_new (manager, context, progress, procedure, NULL);
+  if (! display)
+    display = gimp_context_get_display (context);
+
+  plug_in = gimp_plug_in_new (manager, context, progress, procedure, NULL, display);
 
   if (plug_in)
     {
@@ -198,9 +208,6 @@ gimp_plug_in_manager_call_run (GimpPlugInManager   *manager,
 
           return return_vals;
         }
-
-      if (! display)
-        display = gimp_context_get_display (context);
 
       display_id = display ? gimp_display_get_id (display) : -1;
 
@@ -291,7 +298,7 @@ gimp_plug_in_manager_call_run (GimpPlugInManager   *manager,
       /* If this is an extension,
        * wait for an installation-confirmation message
        */
-      if (GIMP_PROCEDURE (procedure)->proc_type == GIMP_PDB_PROC_TYPE_EXTENSION)
+      if (GIMP_PROCEDURE (procedure)->proc_type == GIMP_PDB_PROC_TYPE_PERSISTENT)
         {
           plug_in->ext_main_loop = g_main_loop_new (NULL, FALSE);
 
@@ -384,6 +391,18 @@ gimp_plug_in_manager_call_run_temp (GimpPlugInManager      *manager,
       gimp_plug_in_proc_frame_ref (proc_frame);
 
       gimp_plug_in_main_loop (plug_in);
+
+#ifdef __APPLE__
+      /* The plugin temporary procedure returned, from separate, active process.
+      * Ensure gimp app active.
+      * Usually extension-script-fu was active, except when the temporary procedure
+      * was say a callback from a Resource chooser dialog.
+      * In that case, when the chooser is closing, it would be better
+      * to activate the plugin, avoiding an extra click by the user.
+      * We can't do that here, unless we use the more cooperative API of MacOS.
+      */
+      [NSApp activateIgnoringOtherApps:YES];
+#endif
 
       /*  main_loop is quit and proc_frame is popped in
        *  gimp_plug_in_handle_temp_proc_return()

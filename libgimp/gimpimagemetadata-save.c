@@ -57,23 +57,31 @@ static GList*     gimp_image_metadata_set_xmp_structs       (GList              
  * gimp_image_metadata_save_prepare:
  * @image:           The original image
  * @mime_type:       The saved file's mime-type
- * @suggested_flags: Suggested default values for the @flags passed to
- *                   gimp_image_metadata_save_finish()
+ * @suggested_flags: Suggested default values for the metadata to export.
  *
- * Gets the image metadata for saving it using
- * gimp_image_metadata_save_finish().
+ * Gets the image metadata for storing it in an exported file.
  *
- * The @suggested_flags are determined from what kind of metadata
- * (Exif, XMP, ...) is actually present in the image and the preferences
- * for metadata exporting.
- * The calling application may still update @available_flags, for
+ * *Note: There is normally no need to call this function because it's
+ * already called by [class@ExportProcedure] at the start and the
+ * metadata is passed to the `run()` callback.*
+ *
+ * *You may call it separately for instance if you set @export_metadata
+ * to %NULL in [ctor@Gimp.ExportProcedure.new] to prevent `libgimp`
+ * from trying to store the metadata in the exported file, yet you wish
+ * to process and store the metadata yourself using custom API.*
+ *
+ * The @suggested_flags are determined from what kind of metadata (Exif,
+ * XMP, ...) is actually present in the image and the preferences for
+ * metadata exporting.
+ * The calling application may still ignore @suggested_flags, for
  * instance to follow the settings from a previous export in the same
  * session, or a previous export of the same image. But it should not
  * override the preferences without a good reason since it is a data
  * leak.
  *
- * The suggested value for %GIMP_METADATA_SAVE_THUMBNAIL is determined by
- * whether there was a thumbnail in the previously imported image.
+ * The suggested value for [flags@Gimp.MetadataSaveFlags.THUMBNAIL] is
+ * determined by whether there was a thumbnail in the previously
+ * imported image.
  *
  * Returns: (transfer full): The image's metadata, prepared for saving.
  *
@@ -330,7 +338,11 @@ gimp_image_metadata_save_prepare (GimpImage             *image,
 static const gchar *
 gimp_fix_xmp_tag (const gchar *tag)
 {
-  gchar *substring;
+  const gchar org[] = "/Iptc4xmpExt";
+  const gchar new[] = "/iptcExt";
+  gchar *substring, *tail;
+
+  G_STATIC_ASSERT (sizeof new < sizeof org);
 
   /* Due to problems using /Iptc4xmpExt namespace (/iptcExt is used
    * instead by Exiv2) we replace all occurrences with /iptcExt which
@@ -338,28 +350,21 @@ gimp_fix_xmp_tag (const gchar *tag)
    * metadata to fail. This has to be done after getting the values
    * from the source metadata since that source uses the original
    * tag names and would otherwise return NULL as value.
-   * /Iptc4xmpExt length = 12
-   * /iptcExt     length =  8
+   * Multiple occurrences are possible: e.g.:
+   * Xmp.iptcExt.ImageRegion[3]/Iptc4xmpExt:RegionBoundary/Iptc4xmpExt:rbVertices[1]/Iptc4xmpExt:rbX
    */
 
-  substring = strstr (tag, "/Iptc4xmpExt");
-  while (substring)
+  while ((substring = strstr (tag, org)))
     {
-      gint len_tag = strlen (tag);
-      gint len_end;
+      strcpy (substring, new);
 
-      len_end = len_tag - (substring - tag) - 12;
-      strncpy (substring, "/iptcExt", 8);
-      substring += 8;
-      /* Using memmove: we have overlapping source and dest */
-      memmove (substring, substring+4, len_end);
-      substring[len_end] = '\0';
+      tail = substring + strlen (org);
+      substring += strlen (new);
+
+      while ((*substring++ = *tail++))
+        ;
+
       g_debug ("Fixed tag value: %s", tag);
-
-      /* Multiple occurrences are possible: e.g.:
-       * Xmp.iptcExt.ImageRegion[3]/Iptc4xmpExt:RegionBoundary/Iptc4xmpExt:rbVertices[1]/Iptc4xmpExt:rbX
-       */
-      substring = strstr (tag, "/Iptc4xmpExt");
     }
   return tag;
 }
@@ -644,19 +649,24 @@ gimp_image_metadata_set_xmp_structs (GList          *xmp_list,
  * @error:     Return location for error message
  *
  * Filters the @metadata retrieved from the image with
- * gimp_image_metadata_save_prepare(),
- * taking into account the passed @flags.
+ * [method@Gimp.Image.metadata_save_prepare], taking into account the
+ * passed @flags.
+ *
+ * *Note: There is normally no need to call this function because it's
+ * already called by [class@ExportProcedure] after the `run()`
+ * callback.*
  *
  * Note that the @image passed to this function might be different
- * from the image passed to gimp_image_metadata_save_prepare(), due
+ * from the image passed to `gimp_image_metadata_save_prepare()`, due
  * to whatever file export conversion happened in the meantime
  *
- * This is an alternative to gimp_image_metadata_save_finish when you
- * want to save metadata yourself and you need only filtering processing.
+ * This can be used as an alternative to core metadata handling when you
+ * want to save metadata yourself and you need only filtering
+ * processing.
  *
- * Returns: (transfer full): Filtered metadata or NULL in case of failure.
- *
- * Use g_object_unref() when returned metadata are no longer needed
+ * Returns: (transfer full): Filtered metadata or %NULL in case of failure.
+ *          Use [GObject.Object.unref] when returned metadata are no
+ *          longer needed
  *
  * Since: 3.0
  */
@@ -1008,8 +1018,11 @@ gimp_image_metadata_save_filter (GimpImage            *image,
   return new_metadata;
 }
 
+
+/* Internal functions */
+
 /**
- * gimp_image_metadata_save_finish:
+ * _gimp_image_metadata_save_finish:
  * @image:     The actually saved image
  * @mime_type: The saved file's mime-type
  * @metadata:  The metadata to write to @file
@@ -1017,25 +1030,28 @@ gimp_image_metadata_save_filter (GimpImage            *image,
  * @file:      The file @image was saved to
  * @error:     Return location for error message
  *
+ * *Note: There is normally no need to call this function because it's
+ * already called by [class@ExportProcedure] at the end of the `run()` callback.*
+ *
  * Saves the @metadata retrieved from the image with
- * gimp_image_metadata_save_prepare() to @file, taking into account
- * the passed @flags.
+ * [method@Gimp.Image.metadata_save_prepare] to @file, taking into
+ * account the passed @flags.
  *
  * Note that the @image passed to this function might be different
- * from the image passed to gimp_image_metadata_save_prepare(), due
- * to whatever file export conversion happened in the meantime
+ * from the image passed to `gimp_image_metadata_save_prepare()`, due to
+ * whatever file export conversion happened in the meantime
  *
  * Returns: Whether the save was successful.
  *
  * Since: 2.10
  */
 gboolean
-gimp_image_metadata_save_finish (GimpImage            *image,
-                                 const gchar          *mime_type,
-                                 GimpMetadata         *metadata,
-                                 GimpMetadataSaveFlags flags,
-                                 GFile                *file,
-                                 GError              **error)
+_gimp_image_metadata_save_finish (GimpImage            *image,
+                                  const gchar          *mime_type,
+                                  GimpMetadata         *metadata,
+                                  GimpMetadataSaveFlags flags,
+                                  GFile                *file,
+                                  GError              **error)
 {
   GimpMetadata *new_metadata;
   gboolean      success = FALSE;

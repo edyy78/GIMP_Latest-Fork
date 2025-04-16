@@ -62,17 +62,17 @@
         (greyness 0)
         (thickness (abs thickness))
         (image (if (= work-on-copy TRUE) (car (gimp-image-duplicate img)) img))
-        (pic-layer (aref (cadr (gimp-image-get-selected-drawables image)) 0))
+        (pic-layer (vector-ref (car (gimp-image-get-selected-drawables image)) 0))
         (offsets (gimp-drawable-get-offsets pic-layer))
         (width (car (gimp-drawable-get-width pic-layer)))
         (height (car (gimp-drawable-get-height pic-layer)))
 
         ; Bumpmap has a one pixel border on each side
         (bump-layer (car (gimp-layer-new image
+                                         _"Bumpmap"
                                          (+ width 2)
                                          (+ height 2)
                                          RGB-IMAGE
-                                         _"Bumpmap"
                                          100
                                          LAYER-MODE-NORMAL)))
 
@@ -141,13 +141,24 @@
     (gimp-selection-none image)
 
     ; To further lessen jaggies?
-    ;(plug-in-gauss-rle RUN-NONINTERACTIVE image bump-layer thickness TRUE TRUE)
+    ;(gimp-drawable-merge-new-filter bump-layer "gegl:gaussian-blur" 0 LAYER-MODE-REPLACE 1.0
+    ;                                "std-dev-x" (* 0.32 thickness)
+    ;                                "std-dev-y" (* 0.32 thickness)
+    ;                                "filter" "auto")
 
 
     ;
     ; BUMPMAP INVOCATION:
     ;
-    (plug-in-bump-map RUN-NONINTERACTIVE image pic-layer bump-layer 125 45 3 0 0 0 0 TRUE FALSE 1)
+    (let* ((filter (car (gimp-drawable-filter-new pic-layer "gegl:bump-map" ""))))
+      (gimp-drawable-filter-configure filter LAYER-MODE-REPLACE 1.0
+                                      "azimuth" 125.0 "elevation" 45.0 "depth" 3
+                                      "offset-x" 0 "offset-y" 0 "waterlevel" 0.0 "ambient" 0.0
+                                      "compensate" TRUE "invert" FALSE "type" "spherical"
+                                      "tiled" FALSE)
+      (gimp-drawable-filter-set-aux-input filter "aux" bump-layer)
+      (gimp-drawable-merge-filter pic-layer filter)
+    )
 
     ;------------------------------------------------------------
     ;
@@ -167,7 +178,7 @@
         (gimp-image-remove-layer image bump-layer)
     )
 
-    (gimp-image-set-selected-layers image 1 (vector pic-layer))
+    (gimp-image-set-selected-layers image (vector pic-layer))
 
     ; enable undo / end undo group
     (if (= work-on-copy TRUE)

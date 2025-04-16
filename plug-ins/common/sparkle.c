@@ -76,7 +76,6 @@ static GimpProcedure  * sparkle_create_procedure (GimpPlugIn           *plug_in,
 static GimpValueArray * sparkle_run              (GimpProcedure        *procedure,
                                                   GimpRunMode           run_mode,
                                                   GimpImage            *image,
-                                                  gint                  n_drawables,
                                                   GimpDrawable        **drawables,
                                                   GimpProcedureConfig  *config,
                                                   gpointer              run_data);
@@ -192,87 +191,90 @@ sparkle_create_procedure (GimpPlugIn  *plug_in,
                                       "John Beale",
                                       "Version 1.27, September 2003");
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "lum-threshold",
-                            _("Lu_minosity threshold"),
-                            _("Adjust the luminosity threshold"),
-                            0.0, 0.1, 0.01,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "lum-threshold",
+                                          _("Lu_minosity threshold"),
+                                          _("Adjust the luminosity threshold"),
+                                          0.0, 0.1, 0.01,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "flare-inten",
-                            _("_Flare intensity"),
-                            _("Adjust the flare intensity"),
-                            0.0, 1.0, 0.5,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "flare-inten",
+                                          _("_Flare intensity"),
+                                          _("Adjust the flare intensity"),
+                                          0.0, 1.0, 0.5,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "spike-len",
-                         _("Spi_ke length"),
-                         _("Adjust the spike length (in pixels)"),
-                         1, 100, 20,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "spike-len",
+                                       _("Spi_ke length"),
+                                       _("Adjust the spike length (in pixels)"),
+                                       1, 100, 20,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "spike-points",
-                         _("Spike _points"),
-                         _("Adjust the number of spikes"),
-                         1, 16, 4,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "spike-points",
+                                       _("Spike _points"),
+                                       _("Adjust the number of spikes"),
+                                       1, 16, 4,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "spike-angle",
-                         _("Spike angle (-_1: random)"),
-                         _("Adjust the spike angle "
-                           "(-1 causes a random angle to be chosen)"),
-                         -1, 360, 15,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "spike-angle",
+                                       _("Spike angle (-_1: random)"),
+                                       _("Adjust the spike angle "
+                                         "(-1 causes a random angle to be chosen)"),
+                                       -1, 360, 15,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "density",
-                            _("Spike _density"),
-                            _("Adjust the spike density"),
-                            0.0, 1.0, 1.0,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "density",
+                                          _("Spike _density"),
+                                          _("Adjust the spike density"),
+                                          0.0, 1.0, 1.0,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "transparency",
-                            _("_Transparency"),
-                            _("Adjust the opacity of the spikes"),
-                            0.0, 1.0, 0.0,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "transparency",
+                                          _("_Transparency"),
+                                          _("Adjust the opacity of the spikes"),
+                                          0.0, 1.0, 0.0,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "random-hue",
-                            _("Random _hue"),
-                            _("Adjust how much the hue should be "
-                              "changed randomly"),
-                            0.0, 1.0, 0.0,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "random-hue",
+                                          _("Random _hue"),
+                                          _("Adjust how much the hue should be "
+                                            "changed randomly"),
+                                          0.0, 1.0, 0.0,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "random-saturation",
-                            _("R_andom saturation"),
-                            _("Adjust how much the saturation should be "
-                              "changed randomly"),
-                            0.0, 1.0, 0.0,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "random-saturation",
+                                          _("R_andom saturation"),
+                                          _("Adjust how much the saturation should be "
+                                            "changed randomly"),
+                                          0.0, 1.0, 0.0,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "preserve-luminosity",
-                             _("Preserve l_uminosity"),
-                             _("Should the luminosity be preserved?"),
-                             FALSE,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "preserve-luminosity",
+                                           _("Preserve l_uminosity"),
+                                           _("Should the luminosity be preserved?"),
+                                           FALSE,
+                                           G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "inverse",
-                             _("In_verse"),
-                             _("Should the effect be inversed?"),
-                             FALSE,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "inverse",
+                                           _("In_verse"),
+                                           _("Should the effect be inversed?"),
+                                           FALSE,
+                                           G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "border",
-                             _("Add _border"),
-                             _("Draw a border of spikes around the image"),
-                             FALSE,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "border",
+                                           _("Add _border"),
+                                           _("Draw a border of spikes around the image"),
+                                           FALSE,
+                                           G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "color-type",
-                         _("Color type"),
-                         _("Color of sparkles: { NATURAL (0), "
-                           "FOREGROUND (1), BACKGROUND (2) }"),
-                         0, 2, NATURAL,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_choice_argument (procedure, "color-type",
+                                          _("_Color type"),
+                                          _("Color of sparkles"),
+                                          gimp_choice_new_with_values ("natural-color",    NATURAL,    _("Natural color"),    NULL,
+                                                                       "foreground-color", FOREGROUND, _("Foreground color"), NULL,
+                                                                       "background-color", BACKGROUND, _("Background color"), NULL,
+                                                                       NULL),
+                                          "natural-color",
+                                          G_PARAM_READWRITE);
     }
 
   return procedure;
@@ -282,7 +284,6 @@ static GimpValueArray *
 sparkle_run (GimpProcedure        *procedure,
              GimpRunMode           run_mode,
              GimpImage            *image,
-             gint                  n_drawables,
              GimpDrawable        **drawables,
              GimpProcedureConfig  *config,
              gpointer              run_data)
@@ -292,7 +293,7 @@ sparkle_run (GimpProcedure        *procedure,
 
   gegl_init (NULL, NULL);
 
-  if (n_drawables != 1)
+  if (gimp_core_object_array_get_length ((GObject **) drawables) != 1)
     {
       GError *error = NULL;
 
@@ -348,12 +349,11 @@ sparkle_dialog (GimpProcedure *procedure,
                 GObject       *config,
                 GimpDrawable  *drawable)
 {
-  GtkWidget    *dialog;
-  GtkWidget    *preview;
-  GtkWidget    *hbox;
-  GtkWidget    *scale;
-  GtkListStore *store;
-  gboolean      run;
+  GtkWidget *dialog;
+  GtkWidget *preview;
+  GtkWidget *hbox;
+  GtkWidget *scale;
+  gboolean   run;
 
   gimp_ui_init (PLUG_IN_BINARY);
 
@@ -361,12 +361,6 @@ sparkle_dialog (GimpProcedure *procedure,
                                       GIMP_PROCEDURE_CONFIG (config),
                                       _("Sparkle"));
 
-  gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
-                                            GTK_RESPONSE_OK,
-                                            GTK_RESPONSE_CANCEL,
-                                           -1);
-
-  gimp_window_set_transient (GTK_WINDOW (dialog));
   gtk_widget_set_size_request (dialog, 430, -1);
   gtk_container_set_border_width (
     GTK_CONTAINER (gtk_dialog_get_content_area (GTK_DIALOG (dialog))), 12);
@@ -416,12 +410,8 @@ sparkle_dialog (GimpProcedure *procedure,
                                     FALSE, "sparkle-bool-vbox");
 
   /*  colortype  */
-  store = gimp_int_store_new (_("Natural color"),    NATURAL,
-                              _("Foreground color"), FOREGROUND,
-                              _("Background color"), BACKGROUND,
-                              NULL);
-  gimp_procedure_dialog_get_int_radio (GIMP_PROCEDURE_DIALOG (dialog),
-                                       "color-type", GIMP_INT_STORE (store));
+  gimp_procedure_dialog_get_widget (GIMP_PROCEDURE_DIALOG (dialog),
+                                    "color-type", GIMP_TYPE_INT_RADIO_FRAME);
 
   hbox = gimp_procedure_dialog_fill_box (GIMP_PROCEDURE_DIALOG (dialog),
                                         "sparkle-row", "sparkle-bool-frame",
@@ -1007,8 +997,9 @@ fspike (GObject      *config,
                 "random-hue",        &random_hue,
                 "random-saturation", &random_saturation,
                 "inverse",           &inverse,
-                "color-type",        &colortype,
                 NULL);
+  colortype = gimp_procedure_config_get_choice_id (GIMP_PROCEDURE_CONFIG (config),
+                                                   "color-type");
 
   theta = angle;
 
@@ -1030,6 +1021,7 @@ fspike (GObject      *config,
       break;
     }
 
+  gegl_color = gegl_color_new ("black");
   /* draw the major spikes */
   for (i = 0; i < spike_pts; i++)
     {
@@ -1060,32 +1052,32 @@ fspike (GObject      *config,
 
       if (random_hue > 0.0 || random_saturation > 0.0)
         {
-          GimpRGB rgb;
-          GimpHSV hsv;
+          gfloat rgb[3];
+          gfloat hsv[3];
 
-          rgb.r = (gdouble) (255 - color[0]) / 255.0;
-          rgb.g = (gdouble) (255 - color[1]) / 255.0;
-          rgb.b = (gdouble) (255 - color[2]) / 255.0;
+          for (gint j = 0; j < 3; j++)
+            rgb[j] = (gdouble) (255 - color[j]) / 255.0;
 
-          gimp_rgb_to_hsv (&rgb, &hsv);
+          gegl_color_set_pixel (gegl_color, babl_format ("R'G'B' float"), rgb);
+          gegl_color_set_pixel (gegl_color, babl_format ("HSV float"), hsv);
 
-          hsv.h += random_hue * g_rand_double_range (gr, -0.5, 0.5);
+          hsv[0] += random_hue * g_rand_double_range (gr, -0.5, 0.5);
 
-          if (hsv.h >= 1.0)
-            hsv.h -= 1.0;
-          else if (hsv.h < 0.0)
-            hsv.h += 1.0;
+          if (hsv[0] >= 1.0)
+            hsv[0] -= 1.0;
+          else if (hsv[0] < 0.0)
+            hsv[0] += 1.0;
 
-          hsv.v += (random_saturation *
+          hsv[2] += (random_saturation *
                     g_rand_double_range (gr, -1.0, 1.0));
 
-          hsv.v = CLAMP (hsv.v, 0.0, 1.0);
+          hsv[2] = CLAMP (hsv[2], 0.0, 1.0);
 
-          gimp_hsv_to_rgb (&hsv, &rgb);
+          gegl_color_set_pixel (gegl_color, babl_format ("HSV float"), hsv);
+          gegl_color_get_pixel (gegl_color, babl_format ("R'G'B' float"), rgb);
 
-          color[0] = 255 - ROUND (rgb.r * 255.0);
-          color[1] = 255 - ROUND (rgb.g * 255.0);
-          color[2] = 255 - ROUND (rgb.b * 255.0);
+          for (gint j = 0; j < 3; j++)
+            color[j] = 255 - ROUND (rgb[j] * 255.0);
         }
 
       dx = 0.2 * cos (theta * G_PI / 180.0);
@@ -1127,4 +1119,5 @@ fspike (GObject      *config,
 
       theta += 360.0 / spike_pts;
     }
+  g_object_unref (gegl_color);
 }

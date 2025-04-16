@@ -36,8 +36,7 @@
 #define ZOOM_UNDO_SIZE 100
 
 
-static gint              n_gradient_samples = 0;
-static gdouble          *gradient_samples = NULL;
+static GeglColor       **gradient_samples = NULL;
 static GimpGradient     *gradient = NULL;
 static gboolean          ready_now = FALSE;
 static gchar            *tpath = NULL;
@@ -356,8 +355,8 @@ explorer_gradient_select_callback (gpointer      data,  /* config */
 
   g_object_get (config,
                 "n-colors",   &n_colors,
-                "color-mode", &color_mode,
                 NULL);
+  color_mode = gimp_procedure_config_get_choice_id (config, "color-mode");
   set_grad_data_cache (gradient, n_colors);
 
   if (color_mode == 1)
@@ -563,19 +562,18 @@ gint
 explorer_dialog (GimpProcedure       *procedure,
                  GimpProcedureConfig *config)
 {
-  GtkWidget    *dialog;
-  GtkWidget    *top_hbox;
-  GtkWidget    *left_vbox;
-  GtkWidget    *vbox;
-  GtkWidget    *bbox;
-  GtkWidget    *frame;
-  GtkWidget    *toggle;
-  GtkWidget    *hbox;
-  GtkWidget    *button;
-  GtkWidget    *gradient_button;
-  gchar        *path;
-  GtkListStore *store;
-  gint          n_colors;
+  GtkWidget *dialog;
+  GtkWidget *top_hbox;
+  GtkWidget *left_vbox;
+  GtkWidget *vbox;
+  GtkWidget *bbox;
+  GtkWidget *frame;
+  GtkWidget *toggle;
+  GtkWidget *hbox;
+  GtkWidget *button;
+  GtkWidget *gradient_button;
+  gchar     *path;
+  gint       n_colors;
 
   gimp_ui_init (PLUG_IN_BINARY);
 
@@ -929,11 +927,8 @@ explorer_dialog (GimpProcedure       *procedure,
                                     "color-function-label", FALSE,
                                     "function-hbox");
 
-  store = gimp_int_store_new (_("As specified above"),                   0,
-                              _("Apply active gradient to final image"), 1,
-                              NULL);
-  gimp_procedure_dialog_get_int_radio (GIMP_PROCEDURE_DIALOG (dialog),
-                                       "color-mode", GIMP_INT_STORE (store));
+  gimp_procedure_dialog_get_widget (GIMP_PROCEDURE_DIALOG (dialog),
+                                    "color-mode", GIMP_TYPE_INT_RADIO_FRAME);
 
   hbox = gimp_procedure_dialog_fill_box (GIMP_PROCEDURE_DIALOG (dialog),
                                          "color-mode-hbox",
@@ -948,8 +943,7 @@ explorer_dialog (GimpProcedure       *procedure,
   /* Pass NULL to set local gradient data from context. */
   set_grad_data_cache (NULL, n_colors);
 
-  gradient_button = gimp_gradient_chooser_new (_("FractalExplorer Gradient"),
-                                               NULL, GIMP_RESOURCE (gradient));
+  gradient_button = gimp_gradient_chooser_new (_("FractalExplorer Gradient"), NULL, gradient);
   g_signal_connect_swapped (gradient_button, "resource-set",
                             G_CALLBACK (explorer_gradient_select_callback), config);
   gtk_box_pack_start (GTK_BOX (hbox), gradient_button, TRUE, TRUE, 0);
@@ -1191,36 +1185,37 @@ set_cmap_preview (GimpProcedureConfig *config)
 void
 make_color_map (GimpProcedureConfig *config)
 {
-  gint     i;
-  gint     r;
-  gint     gr;
-  gint     bl;
-  gdouble  redstretch;
-  gdouble  greenstretch;
-  gdouble  bluestretch;
-  gdouble  pi = atan (1) * 4;
-  gint     n_colors;
-  gint     color_mode;
-  gint     red_mode;
-  gint     green_mode;
-  gint     blue_mode;
-  gboolean red_invert;
-  gboolean green_invert;
-  gboolean blue_invert;
+  const Babl *colormap_format = babl_format ("R'G'B' u8");
+  gint        i;
+  gint        r;
+  gint        gr;
+  gint        bl;
+  gdouble     redstretch;
+  gdouble     greenstretch;
+  gdouble     bluestretch;
+  gdouble     pi = atan (1) * 4;
+  gint        n_colors;
+  gint        color_mode;
+  gint        red_mode;
+  gint        green_mode;
+  gint        blue_mode;
+  gboolean    red_invert;
+  gboolean    green_invert;
+  gboolean    blue_invert;
 
   g_object_get (config,
                 "n-colors",      &n_colors,
                 "red-stretch",   &redstretch,
                 "green-stretch", &greenstretch,
                 "blue-stretch",  &bluestretch,
-                "color-mode",    &color_mode,
                 "red-invert",    &red_invert,
                 "green-invert",  &green_invert,
                 "blue-invert",   &blue_invert,
                 NULL);
-  red_mode   = gimp_procedure_config_get_choice_id (config, "red-mode");
-  green_mode = gimp_procedure_config_get_choice_id (config, "green-mode");
-  blue_mode  = gimp_procedure_config_get_choice_id (config, "blue-mode");
+  red_mode    = gimp_procedure_config_get_choice_id (config, "red-mode");
+  green_mode  = gimp_procedure_config_get_choice_id (config, "green-mode");
+  blue_mode   = gimp_procedure_config_get_choice_id (config, "blue-mode");
+  color_mode  = gimp_procedure_config_get_choice_id (config, "color-mode");
 
   /*  get gradient samples if they don't exist -- fixes gradient color
    *  mode for noninteractive use (bug #103470).
@@ -1229,11 +1224,8 @@ make_color_map (GimpProcedureConfig *config)
     {
       GimpGradient *gradient = gimp_context_get_gradient ();
 
-      gimp_gradient_get_uniform_samples (gradient,
-                                         n_colors,
-                                         FALSE,
-                                         &n_gradient_samples,
-                                         &gradient_samples);
+      gradient_samples = gimp_gradient_get_uniform_samples (gradient,
+                                                            n_colors, FALSE);
     }
 
   redstretch   *= 127.5;
@@ -1243,9 +1235,7 @@ make_color_map (GimpProcedureConfig *config)
   for (i = 0; i < n_colors; i++)
     if (color_mode == 1)
       {
-        colormap[i].r = (guchar)(gradient_samples[i * 4] * 255.9);
-        colormap[i].g = (guchar)(gradient_samples[i * 4 + 1] * 255.9);
-        colormap[i].b = (guchar)(gradient_samples[i * 4 + 2] * 255.9);
+        gegl_color_get_pixel (gradient_samples[i], colormap_format, (void *) &(colormap[i]));
       }
     else
       {
@@ -1354,7 +1344,6 @@ save_options (FILE * fp)
                 "red-stretch",   &red_stretch,
                 "green-stretch", &green_stretch,
                 "blue-stretch",  &blue_stretch,
-                "color-mode",    &color_mode,
                 "red-invert",    &red_invert,
                 "green-invert",  &green_invert,
                 "blue-invert",   &blue_invert,
@@ -1364,6 +1353,7 @@ save_options (FILE * fp)
   red_mode = gimp_procedure_config_get_choice_id (wvals.config, "red-mode");
   green_mode = gimp_procedure_config_get_choice_id (wvals.config, "green-mode");
   blue_mode = gimp_procedure_config_get_choice_id (wvals.config, "blue-mode");
+  color_mode = gimp_procedure_config_get_choice_id (wvals.config, "color-mode");
 
   /* Save options */
 
@@ -1592,8 +1582,8 @@ create_save_file_chooser (GtkWidget *widget,
 
 /* Set cache of gradient and samples from it.
  *
- * The cache is in three global variables:
- * gradient, gradient_samples, n_gradient_samples.
+ * The cache is in 2 global variables:
+ * gradient, gradient_samples.
  * This keeps the three variables coherent.
  *
  * !!! There is one other writer of gradient_samples, see below.
@@ -1619,13 +1609,10 @@ set_grad_data_cache (GimpGradient *in_gradient,
 
   /* Refresh the global cache of samples. */
   if (gradient_samples != NULL)
-    g_free (gradient_samples);
+    gimp_color_array_free (gradient_samples);
 
-  gimp_gradient_get_uniform_samples (gradient,
-                                     n_colors,
-                                     FALSE,
-                                     &n_gradient_samples,
-                                     &gradient_samples);
+  gradient_samples = gimp_gradient_get_uniform_samples (gradient,
+                                                        n_colors, FALSE);
 }
 
 gchar*
@@ -1813,7 +1800,8 @@ explorer_load (void)
                 "red-stretch",   current_obj->opts.redstretch,
                 "green-stretch", current_obj->opts.greenstretch,
                 "blue-stretch",  current_obj->opts.bluestretch,
-                "color-mode",    current_obj->opts.colormode,
+                "color-mode",    (current_obj->opts.colormode == 0) ?
+                                 "colormap" : "gradient",
                 "red-invert",    current_obj->opts.redinvert,
                 "green-invert",  current_obj->opts.greeninvert,
                 "blue-invert",   current_obj->opts.blueinvert,

@@ -299,7 +299,7 @@ register_progress_procs (GimpPDB *pdb)
   /*
    * gimp-progress-init
    */
-  procedure = gimp_procedure_new (progress_init_invoker);
+  procedure = gimp_procedure_new (progress_init_invoker, TRUE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-progress-init");
   gimp_procedure_set_static_help (procedure,
@@ -329,7 +329,7 @@ register_progress_procs (GimpPDB *pdb)
   /*
    * gimp-progress-update
    */
-  procedure = gimp_procedure_new (progress_update_invoker);
+  procedure = gimp_procedure_new (progress_update_invoker, TRUE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-progress-update");
   gimp_procedure_set_static_help (procedure,
@@ -352,7 +352,7 @@ register_progress_procs (GimpPDB *pdb)
   /*
    * gimp-progress-pulse
    */
-  procedure = gimp_procedure_new (progress_pulse_invoker);
+  procedure = gimp_procedure_new (progress_pulse_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-progress-pulse");
   gimp_procedure_set_static_help (procedure,
@@ -369,7 +369,7 @@ register_progress_procs (GimpPDB *pdb)
   /*
    * gimp-progress-set-text
    */
-  procedure = gimp_procedure_new (progress_set_text_invoker);
+  procedure = gimp_procedure_new (progress_set_text_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-progress-set-text");
   gimp_procedure_set_static_help (procedure,
@@ -393,7 +393,7 @@ register_progress_procs (GimpPDB *pdb)
   /*
    * gimp-progress-end
    */
-  procedure = gimp_procedure_new (progress_end_invoker);
+  procedure = gimp_procedure_new (progress_end_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-progress-end");
   gimp_procedure_set_static_help (procedure,
@@ -410,12 +410,12 @@ register_progress_procs (GimpPDB *pdb)
   /*
    * gimp-progress-get-window-handle
    */
-  procedure = gimp_procedure_new (progress_get_window_handle_invoker);
+  procedure = gimp_procedure_new (progress_get_window_handle_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-progress-get-window-handle");
   gimp_procedure_set_static_help (procedure,
-                                  "Returns the native handle of the toplevel window this plug-in's progress is displayed in.",
-                                  "This function returns the native handle allowing to identify the toplevel window this plug-in's progress is displayed in.\n"
+                                  "Returns the native handle of the toplevel window this plug-in's progress is or would be displayed in.",
+                                  "This function returns the native handle allowing to identify the toplevel window this plug-in's progress is displayed in. It should still work even if the progress bar has not been initialized yet, unless the plug-in wasn't called from a GUI.\n"
                                   "This handle can be of various types (integer, string, etc.) depending on the platform you are running on which is why it returns a GBytes. There are usually no reasons to call this directly.",
                                   NULL);
   gimp_procedure_set_static_attribution (procedure,
@@ -434,7 +434,7 @@ register_progress_procs (GimpPDB *pdb)
   /*
    * gimp-progress-install
    */
-  procedure = gimp_procedure_new (progress_install_invoker);
+  procedure = gimp_procedure_new (progress_install_invoker, TRUE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-progress-install");
   gimp_procedure_set_static_help (procedure,
@@ -458,7 +458,7 @@ register_progress_procs (GimpPDB *pdb)
   /*
    * gimp-progress-uninstall
    */
-  procedure = gimp_procedure_new (progress_uninstall_invoker);
+  procedure = gimp_procedure_new (progress_uninstall_invoker, TRUE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-progress-uninstall");
   gimp_procedure_set_static_help (procedure,
@@ -482,7 +482,7 @@ register_progress_procs (GimpPDB *pdb)
   /*
    * gimp-progress-cancel
    */
-  procedure = gimp_procedure_new (progress_cancel_invoker);
+  procedure = gimp_procedure_new (progress_cancel_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-progress-cancel");
   gimp_procedure_set_static_help (procedure,

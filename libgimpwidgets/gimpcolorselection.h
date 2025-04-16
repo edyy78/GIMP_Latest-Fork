@@ -31,43 +31,9 @@ G_BEGIN_DECLS
 /* For information look at the html documentation */
 
 
-#define GIMP_TYPE_COLOR_SELECTION            (gimp_color_selection_get_type ())
-#define GIMP_COLOR_SELECTION(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_COLOR_SELECTION, GimpColorSelection))
-#define GIMP_COLOR_SELECTION_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_COLOR_SELECTION, GimpColorSelectionClass))
-#define GIMP_IS_COLOR_SELECTION(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_COLOR_SELECTION))
-#define GIMP_IS_COLOR_SELECTION_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_COLOR_SELECTION))
-#define GIMP_COLOR_SELECTION_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_COLOR_SELECTION, GimpColorSelectionClass))
+#define GIMP_TYPE_COLOR_SELECTION (gimp_color_selection_get_type ())
+G_DECLARE_FINAL_TYPE (GimpColorSelection, gimp_color_selection, GIMP, COLOR_SELECTION, GtkBox)
 
-
-typedef struct _GimpColorSelectionPrivate GimpColorSelectionPrivate;
-typedef struct _GimpColorSelectionClass   GimpColorSelectionClass;
-
-struct _GimpColorSelection
-{
-  GtkBox                     parent_instance;
-
-  GimpColorSelectionPrivate *priv;
-};
-
-struct _GimpColorSelectionClass
-{
-  GtkBoxClass  parent_class;
-
-  void (* color_changed) (GimpColorSelection *selection);
-
-  /* Padding for future expansion */
-  void (* _gimp_reserved1) (void);
-  void (* _gimp_reserved2) (void);
-  void (* _gimp_reserved3) (void);
-  void (* _gimp_reserved4) (void);
-  void (* _gimp_reserved5) (void);
-  void (* _gimp_reserved6) (void);
-  void (* _gimp_reserved7) (void);
-  void (* _gimp_reserved8) (void);
-};
-
-
-GType       gimp_color_selection_get_type       (void) G_GNUC_CONST;
 
 GtkWidget * gimp_color_selection_new            (void);
 

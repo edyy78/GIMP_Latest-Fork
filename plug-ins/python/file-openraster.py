@@ -188,10 +188,7 @@ def thumbnail_ora(procedure, file, thumb_size, args, data):
     else:
         return procedure.new_return_values(result.index(0), GLib.Error(result.index(1)))
 
-# We would expect the n_drawables parameter to not be there with introspection but
-# currently that isn't working, see issue #5312. Until that is resolved we keep
-# this parameter here or else saving would fail.
-def save_ora(procedure, run_mode, image, n_drawables, drawables, file, metadata, config, data):
+def export_ora(procedure, run_mode, image, file, options, metadata, config, data):
     def write_file_str(zfile, fname, data):
         # work around a permission bug in the zipfile library:
         # http://bugs.python.org/issue3394
@@ -219,13 +216,20 @@ def save_ora(procedure, run_mode, image, n_drawables, drawables, file, metadata,
         tmp = os.path.join(tempdir, 'tmp.png')
         interlace, compression = 0, 2
 
-        pdb_proc   = Gimp.get_pdb().lookup_procedure('file-png-save')
+        width, height = drawable.get_width(), drawable.get_height()
+        tmp_img = Gimp.Image.new(width, height, image.get_base_type())
+        if (image.get_base_type() == Gimp.ImageBaseType.INDEXED):
+            tmp_img.set_palette(image.get_palette())
+
+        tmp_layer = Gimp.Layer.new_from_drawable (drawable, tmp_img)
+        tmp_img.insert_layer (tmp_layer, None, 0)
+
+        pdb_proc   = Gimp.get_pdb().lookup_procedure('file-png-export')
         pdb_config = pdb_proc.create_config()
         pdb_config.set_property('run-mode', Gimp.RunMode.NONINTERACTIVE)
-        pdb_config.set_property('image', image)
-        pdb_config.set_property('num-drawables', 1)
-        pdb_config.set_property('drawables', Gimp.ObjectArray.new(Gimp.Drawable, [drawable], False))
+        pdb_config.set_property('image', tmp_img)
         pdb_config.set_property('file', Gio.File.new_for_path(tmp))
+        pdb_config.set_property('options', None)
         pdb_config.set_property('interlaced', interlace)
         pdb_config.set_property('compression', compression)
         # write all PNG chunks except oFFs(ets)
@@ -240,6 +244,8 @@ def save_ora(procedure, run_mode, image, n_drawables, drawables, file, metadata,
             os.remove(tmp)
         else:
             print("Error removing ", tmp)
+
+        tmp_img.delete()
 
     def add_layer(parent, x, y, opac, gimp_layer, path, visible=True):
         store_layer(image, gimp_layer, path)
@@ -274,7 +280,7 @@ def save_ora(procedure, run_mode, image, n_drawables, drawables, file, metadata,
                 yield layer
             else:
                 yield layer
-                for sublayer in enumerate_layers(layer.list_children()):
+                for sublayer in enumerate_layers(layer.get_children()):
                     yield sublayer
                 yield NESTED_STACK_END
 
@@ -282,7 +288,7 @@ def save_ora(procedure, run_mode, image, n_drawables, drawables, file, metadata,
     parent_groups = []
     i = 0
 
-    layer_stack = image.list_layers()
+    layer_stack = image.get_layers()
     # Number of top level layers for tracking progress
     lay_cnt = len(layer_stack)
 
@@ -329,8 +335,8 @@ def save_ora(procedure, run_mode, image, n_drawables, drawables, file, metadata,
         else:
             w, h = max(w*256/h, 1), 256
         thumb_layer.scale(w, h, False)
-    if thumb.get_precision() != Gimp.Precision.U8_GAMMA:
-        thumb.convert_precision (Gimp.Precision.U8_GAMMA)
+    if thumb.get_precision() != Gimp.Precision.U8_NON_LINEAR:
+        thumb.convert_precision (Gimp.Precision.U8_NON_LINEAR)
     store_layer(thumb, thumb_layer, 'Thumbnails/thumbnail.png')
     thumb.delete()
 
@@ -386,7 +392,7 @@ def load_ora(procedure, run_mode, file, metadata, flags, config, data):
 
         if item.tag == 'stack':
             name, x, y, opac, visible, layer_mode = get_group_layer_attributes(item)
-            gimp_layer = Gimp.Layer.group_new(img)
+            gimp_layer = Gimp.GroupLayer.new(img, name)
 
         else:
             path, name, x, y, opac, visible, layer_mode = get_layer_attributes(item)
@@ -460,13 +466,13 @@ class FileOpenRaster (Gimp.PlugIn):
     def do_query_procedures(self):
         return [ 'file-openraster-load-thumb',
                  'file-openraster-load',
-                 'file-openraster-save' ]
+                 'file-openraster-export' ]
 
     def do_create_procedure(self, name):
-        if name == 'file-openraster-save':
-            procedure = Gimp.SaveProcedure.new(self, name,
-                                               Gimp.PDBProcType.PLUGIN,
-                                               False, save_ora, None)
+        if name == 'file-openraster-export':
+            procedure = Gimp.ExportProcedure.new(self, name,
+                                                 Gimp.PDBProcType.PLUGIN,
+                                                 False, export_ora, None)
             procedure.set_image_types("*");
             procedure.set_documentation ('save an OpenRaster (.ora) file',
                                          'save an OpenRaster (.ora) file',

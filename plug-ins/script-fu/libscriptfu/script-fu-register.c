@@ -119,6 +119,100 @@ script_fu_script_new_from_metadata_args (scheme  *sc,
   return script;
 }
 
+/* Traverse Scheme argument list
+ * creating a new SFScript with metadata, but empty SFArgs (formal arg specs)
+ *
+ * Takes a handle to a pointer into the argument list.
+ * Advances the pointer past the metadata args.
+ *
+ * Returns new SFScript.
+ *
+ * For a script declaring using script-fu-register-procedure,
+ * declared without image_type or drawable_arity.
+ */
+SFScript*
+script_fu_script_new_from_metadata_regular (scheme  *sc,
+                                            pointer *handle)
+{
+  SFScript    *script;
+  const gchar *name;
+  const gchar *menu_label;
+  const gchar *blurb;
+  const gchar *author;
+  const gchar *copyright;
+  const gchar *date;
+  const gchar *image_types;
+  guint        n_args;
+
+  /* dereference handle into local pointer. */
+  pointer a = *handle;
+
+  g_debug ("script_fu_script_new_from_metadata_args");
+
+  /* Require list_length starting at a is >= 5
+   * else strange parsing errors at plugin query time.
+   */
+
+  name = sc->vptr->string_value (sc->vptr->pair_car (a));
+  a = sc->vptr->pair_cdr (a);
+  menu_label = sc->vptr->string_value (sc->vptr->pair_car (a));
+  a = sc->vptr->pair_cdr (a);
+  blurb = sc->vptr->string_value (sc->vptr->pair_car (a));
+  a = sc->vptr->pair_cdr (a);
+  author = sc->vptr->string_value (sc->vptr->pair_car (a));
+  a = sc->vptr->pair_cdr (a);
+  /* Copyright is same as author.
+   * script-fu-register-procedure does not require declaring copyright owner
+   * separately from the author.
+   */
+  copyright = author;
+  date = sc->vptr->string_value (sc->vptr->pair_car (a));
+  a = sc->vptr->pair_cdr (a);
+
+  /* Image types not used for regular procedures. */
+  image_types = NULL;
+
+  /* Store local, advanced pointer at handle from caller. */
+  *handle = a;
+
+  /* Calculate supplied number of formal arguments of the PDB procedure,
+   * each takes three actual args from Scheme call.
+   */
+  n_args = sc->vptr->list_length (sc, a) / 3;
+
+  /* This allocates empty array of SFArg. Hereafter, script knows its n_args. */
+  script = script_fu_script_new (name,
+                                 menu_label,
+                                 blurb,
+                                 author,
+                                 copyright,
+                                 date,
+                                 image_types,
+                                 n_args);
+  return script;
+}
+
+ /* GimpResource
+  *
+  * Store the subclass type and the declared default name.
+  *
+  * Default_spec given by author is a name of resource.
+  * It must be an untranslated name.
+  * FIXME some generated Gradients have translated names.
+  */
+static pointer
+script_fu_parse_default_spec_resource (scheme   *sc,
+                                       pointer   default_spec,
+                                       SFArg    *arg,
+                                       GType     resource_type)
+{
+  if (!sc->vptr->is_string (default_spec))
+        return registration_error (sc, "resource defaults must be strings");
+  sf_resource_arg_set_name_default (arg, resource_type, sc->vptr->string_value (default_spec));
+  /* success */
+  return sc->NIL;
+}
+
 
 /* Parse a default spec from registration data.
  *
@@ -175,7 +269,7 @@ script_fu_parse_default_spec (scheme   *sc,
       else if (sc->vptr->is_list (sc, default_spec))
         {
           /* default_spec is list of numbers. */
-          GeglColor *color = marshal_component_list_to_color (sc, default_spec);
+          GeglColor *color = marshal_component_list_to_color (sc, default_spec, NULL);
 
           if (color == NULL)
             {
@@ -214,14 +308,6 @@ script_fu_parse_default_spec (scheme   *sc,
         arg->default_value.sfa_toggle = 0;
       else
         return registration_error (sc, "toggle default must yield an integer, #t, or #f");
-      break;
-
-    case SF_VALUE:
-      if (!sc->vptr->is_string (default_spec))
-        return registration_error (sc, "value defaults must be strings");
-
-      arg->default_value.sfa_value =
-        g_strdup (sc->vptr->string_value (default_spec));
       break;
 
     case SF_STRING:
@@ -302,17 +388,21 @@ script_fu_parse_default_spec (scheme   *sc,
 #endif
       break;
 
+    /* For GimpResource subclasses. */
     case SF_FONT:
+      return script_fu_parse_default_spec_resource (sc, default_spec, arg, GIMP_TYPE_FONT);
+      break;
     case SF_PALETTE:
+      return script_fu_parse_default_spec_resource (sc, default_spec, arg, GIMP_TYPE_PALETTE);
+      break;
     case SF_PATTERN:
+      return script_fu_parse_default_spec_resource (sc, default_spec, arg, GIMP_TYPE_PATTERN);
+      break;
     case SF_BRUSH:
+      return script_fu_parse_default_spec_resource (sc, default_spec, arg, GIMP_TYPE_BRUSH);
+      break;
     case SF_GRADIENT:
-      /* Default_spec given by author is a name. */
-      if (!sc->vptr->is_string (default_spec))
-        return registration_error (sc, "resource defaults must be strings");
-
-      sf_resource_set_default (&arg->default_value.sfa_resource,
-                               sc->vptr->string_value (default_spec));
+      return script_fu_parse_default_spec_resource (sc, default_spec, arg, GIMP_TYPE_GRADIENT);
       break;
 
     case SF_OPTION:

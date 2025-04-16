@@ -85,10 +85,11 @@ select_window (GimpProcedureConfig *config,
   gint          y2 = 0;
 
   g_object_get (config,
-                "shoot-type",         &shoot_type,
                 "screenshot-delay",   &screenshot_delay,
                 "include-decoration", &decorate,
                 NULL);
+  shoot_type = gimp_procedure_config_get_choice_id (GIMP_PROCEDURE_CONFIG (config),
+                                                    "shoot-type");
 
   if (shoot_type == SHOOT_REGION)
     mask |= PointerMotionMask;
@@ -546,8 +547,12 @@ add_cursor_image (GimpImage  *image,
 gboolean
 screenshot_x11_available (void)
 {
-  return (gdk_display_get_default () &&
-          GDK_IS_X11_DISPLAY (gdk_display_get_default ()));
+  int         major_opcode, first_event, first_error;
+  GdkDisplay *d = gdk_display_get_default ();
+
+  return (d && GDK_IS_X11_DISPLAY (d) &&
+          ! XQueryExtension (GDK_DISPLAY_XDISPLAY (d), "XWAYLAND",
+                             &major_opcode, &first_event, &first_error));
 }
 
 ScreenshotCapabilities
@@ -596,11 +601,12 @@ screenshot_x11_shoot (GimpProcedureConfig  *config,
   guint             window_id = 0;
 
   g_object_get (config,
-                "shoot-type",       &shoot_type,
                 "screenshot-delay", &screenshot_delay,
                 "selection-delay",  &select_delay,
                 "include-pointer",  &show_cursor,
                 NULL);
+  shoot_type = gimp_procedure_config_get_choice_id (GIMP_PROCEDURE_CONFIG (config),
+                                                    "shoot-type");
 
   /* use default screen if we are running non-interactively */
   if (monitor == NULL)

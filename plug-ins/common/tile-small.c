@@ -109,7 +109,6 @@ static GimpProcedure  * tile_create_procedure (GimpPlugIn           *plug_in,
 static GimpValueArray * tile_run              (GimpProcedure        *procedure,
                                                GimpRunMode           run_mode,
                                                GimpImage            *image,
-                                               gint                  n_drawables,
                                                GimpDrawable        **drawables,
                                                GimpProcedureConfig  *config,
                                                gpointer              run_data);
@@ -281,11 +280,11 @@ tile_create_procedure (GimpPlugIn  *plug_in,
                                       "Andy Thomas",
                                       "1997");
 
-      GIMP_PROC_ARG_INT (procedure, "num-tiles",
-                         _("_n²"),
-                         _("Number of tiles to make"),
-                         2, MAX_SEGS, 2,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "num-tiles",
+                                       _("_n²"),
+                                       _("Number of tiles to make"),
+                                       2, MAX_SEGS, 2,
+                                       G_PARAM_READWRITE);
     }
 
   return procedure;
@@ -295,7 +294,6 @@ static GimpValueArray *
 tile_run (GimpProcedure        *procedure,
           GimpRunMode           run_mode,
           GimpImage            *image,
-          gint                  n_drawables,
           GimpDrawable        **drawables,
           GimpProcedureConfig  *config,
           gpointer              run_data)
@@ -306,7 +304,7 @@ tile_run (GimpProcedure        *procedure,
 
   gegl_init (NULL, NULL);
 
-  if (n_drawables != 1)
+  if (gimp_core_object_array_get_length ((GObject **) drawables) != 1)
     {
       GError *error = NULL;
 

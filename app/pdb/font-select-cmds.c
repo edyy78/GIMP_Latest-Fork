@@ -146,7 +146,7 @@ register_font_select_procs (GimpPDB *pdb)
   /*
    * gimp-fonts-popup
    */
-  procedure = gimp_procedure_new (fonts_popup_invoker);
+  procedure = gimp_procedure_new (fonts_popup_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-fonts-popup");
   gimp_procedure_set_static_help (procedure,
@@ -175,6 +175,8 @@ register_font_select_procs (GimpPDB *pdb)
                                gimp_param_spec_font ("initial-font",
                                                      "initial font",
                                                      "The name of the initial font choice.",
+                                                     TRUE,
+                                                     NULL,
                                                      FALSE,
                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
@@ -189,7 +191,7 @@ register_font_select_procs (GimpPDB *pdb)
   /*
    * gimp-fonts-close-popup
    */
-  procedure = gimp_procedure_new (fonts_close_popup_invoker);
+  procedure = gimp_procedure_new (fonts_close_popup_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-fonts-close-popup");
   gimp_procedure_set_static_help (procedure,
@@ -213,7 +215,7 @@ register_font_select_procs (GimpPDB *pdb)
   /*
    * gimp-fonts-set-popup
    */
-  procedure = gimp_procedure_new (fonts_set_popup_invoker);
+  procedure = gimp_procedure_new (fonts_set_popup_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-fonts-set-popup");
   gimp_procedure_set_static_help (procedure,
@@ -235,6 +237,8 @@ register_font_select_procs (GimpPDB *pdb)
                                gimp_param_spec_font ("font",
                                                      "font",
                                                      "The font to set as selected",
+                                                     FALSE,
+                                                     NULL,
                                                      FALSE,
                                                      GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);

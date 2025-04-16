@@ -31,45 +31,9 @@ G_BEGIN_DECLS
 /* For information look into the C source or the html documentation */
 
 
-#define GIMP_TYPE_BROWSER            (gimp_browser_get_type ())
-#define GIMP_BROWSER(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_BROWSER, GimpBrowser))
-#define GIMP_BROWSER_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_BROWSER, GimpBrowserClass))
-#define GIMP_IS_BROWSER(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_BROWSER))
-#define GIMP_IS_BROWSER_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_BROWSER))
-#define GIMP_BROWSER_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_BROWSER, GimpBrowserClass))
+#define GIMP_TYPE_BROWSER (gimp_browser_get_type ())
+G_DECLARE_FINAL_TYPE (GimpBrowser, gimp_browser, GIMP, BROWSER, GtkPaned)
 
-
-typedef struct _GimpBrowserPrivate GimpBrowserPrivate;
-typedef struct _GimpBrowserClass   GimpBrowserClass;
-
-struct _GimpBrowser
-{
-  GtkPaned            parent_instance;
-
-  GimpBrowserPrivate *priv;
-};
-
-struct _GimpBrowserClass
-{
-  GtkPanedClass  parent_class;
-
-  void (* search) (GimpBrowser *browser,
-                   const gchar *search_string,
-                   gint         search_type);
-
-  /* Padding for future expansion */
-  void (* _gimp_reserved1) (void);
-  void (* _gimp_reserved2) (void);
-  void (* _gimp_reserved3) (void);
-  void (* _gimp_reserved4) (void);
-  void (* _gimp_reserved5) (void);
-  void (* _gimp_reserved6) (void);
-  void (* _gimp_reserved7) (void);
-  void (* _gimp_reserved8) (void);
-};
-
-
-GType       gimp_browser_get_type         (void) G_GNUC_CONST;
 
 GtkWidget * gimp_browser_new                (void);
 

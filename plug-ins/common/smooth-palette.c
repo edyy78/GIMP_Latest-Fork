@@ -60,7 +60,6 @@ static GimpProcedure  * palette_create_procedure (GimpPlugIn           *plug_in,
 static GimpValueArray * palette_run              (GimpProcedure        *procedure,
                                                   GimpRunMode           run_mode,
                                                   GimpImage            *image,
-                                                  gint                  n_drawables,
                                                   GimpDrawable        **drawables,
                                                   GimpProcedureConfig  *config,
                                                   gpointer              run_data);
@@ -131,41 +130,41 @@ palette_create_procedure (GimpPlugIn  *plug_in,
                                       "Scott Draves",
                                       "1997");
 
-      GIMP_PROC_ARG_INT (procedure, "width",
-                         _("_Width"),
-                         _("Width"),
-                         2, GIMP_MAX_IMAGE_SIZE, 256,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "width",
+                                       _("_Width"),
+                                       _("Width"),
+                                       2, GIMP_MAX_IMAGE_SIZE, 256,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "height",
-                         _("_Height"),
-                         _("Height"),
-                         2, GIMP_MAX_IMAGE_SIZE, 64,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "height",
+                                       _("_Height"),
+                                       _("Height"),
+                                       2, GIMP_MAX_IMAGE_SIZE, 64,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "n-tries",
-                         _("Search _depth"),
-                         _("Search depth"),
-                         1, 1024, 50,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "n-tries",
+                                       _("Search _depth"),
+                                       _("Search depth"),
+                                       1, 1024, 50,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "show-image",
-                             _("Show image"),
-                             _("Show image"),
-                             TRUE,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "show-image",
+                                           _("Show image"),
+                                           _("Show image"),
+                                           TRUE,
+                                           G_PARAM_READWRITE);
 
-      GIMP_PROC_VAL_IMAGE (procedure, "new-image",
-                           _("New image"),
-                           _("Output image"),
-                           FALSE,
-                           G_PARAM_READWRITE);
+      gimp_procedure_add_image_return_value (procedure, "new-image",
+                                             _("New image"),
+                                             _("Output image"),
+                                             FALSE,
+                                             G_PARAM_READWRITE);
 
-      GIMP_PROC_VAL_LAYER (procedure, "new-layer",
-                           _("New layer"),
-                           _("Output layer"),
-                           FALSE,
-                           G_PARAM_READWRITE);
+      gimp_procedure_add_layer_return_value (procedure, "new-layer",
+                                             _("New layer"),
+                                             _("Output layer"),
+                                             FALSE,
+                                             G_PARAM_READWRITE);
     }
 
   return procedure;
@@ -175,7 +174,6 @@ static GimpValueArray *
 palette_run (GimpProcedure        *procedure,
              GimpRunMode           run_mode,
              GimpImage            *image,
-             gint                  n_drawables,
              GimpDrawable        **drawables,
              GimpProcedureConfig  *config,
              gpointer              run_data)
@@ -187,7 +185,7 @@ palette_run (GimpProcedure        *procedure,
 
   gegl_init (NULL, NULL);
 
-  if (n_drawables != 1)
+  if (gimp_core_object_array_get_length ((GObject **) drawables) != 1)
     {
       GError *error = NULL;
 
@@ -284,7 +282,8 @@ smooth_palette (GimpProcedureConfig  *config,
   gfloat       *pal;
   GRand        *gr;
 
-  const Babl *format = babl_format ("RGB float");
+  const Babl *format = gimp_drawable_has_alpha (drawable) ?
+                       babl_format ("RGBA float") : babl_format ("RGB float");
 
   g_object_get (config,
                 "width",   &config_width,
@@ -468,7 +467,7 @@ dialog (GimpProcedure       *procedure,
   GtkWidget     *dlg;
   GtkWidget     *sizeentry;
   GimpImage     *image;
-  GimpUnit       unit;
+  GimpUnit      *unit;
   gdouble        xres, yres;
   gint           width;
   gint           height;

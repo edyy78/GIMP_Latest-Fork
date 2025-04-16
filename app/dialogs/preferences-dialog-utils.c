@@ -143,12 +143,14 @@ prefs_switch_add (GObject      *config,
                   const gchar  *property_name,
                   const gchar  *label,
                   GtkBox       *vbox,
-                  GtkSizeGroup *group)
+                  GtkSizeGroup *group,
+                  GtkWidget   **switch_out)
 {
   GtkWidget *box;
   GtkWidget *plabel;
 
-  box = gimp_prop_switch_new (config, property_name, label, &plabel, NULL);
+  box = gimp_prop_switch_new (config, property_name, label, &plabel,
+                              switch_out);
 
   if (!box)
     return NULL;
@@ -231,23 +233,20 @@ prefs_color_button_add (GObject      *config,
 {
   GtkWidget  *button;
   GParamSpec *pspec;
-  gboolean    has_alpha = TRUE;
+  gboolean    has_alpha;
 
   pspec = g_object_class_find_property (G_OBJECT_GET_CLASS (config),
                                         property_name);
 
-  /* TODO: GimpRGB parameter specs had an "alpha" argument, unlike GeglColor
-   * space. We need to add back such an argument.
-   */
-  /*has_alpha = gimp_param_spec_rgb_has_alpha (pspec);*/
+  has_alpha = gimp_param_spec_color_has_alpha (pspec);
 
-  button = gimp_prop_gegl_color_button_new (config, property_name,
-                                            title,
-                                            PREFS_COLOR_BUTTON_WIDTH,
-                                            PREFS_COLOR_BUTTON_HEIGHT,
-                                            has_alpha ?
-                                            GIMP_COLOR_AREA_SMALL_CHECKS :
-                                            GIMP_COLOR_AREA_FLAT);
+  button = gimp_prop_color_button_new (config, property_name,
+                                       title,
+                                       PREFS_COLOR_BUTTON_WIDTH,
+                                       PREFS_COLOR_BUTTON_HEIGHT,
+                                       has_alpha ?
+                                       GIMP_COLOR_AREA_SMALL_CHECKS :
+                                       GIMP_COLOR_AREA_FLAT);
 
   if (button)
     {

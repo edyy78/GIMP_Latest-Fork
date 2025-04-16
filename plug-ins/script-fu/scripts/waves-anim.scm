@@ -29,7 +29,7 @@
 ; the gif-plug-in.
 
 (define (script-fu-waves-anim img
-                              drawable
+                              drawables
                               amplitude
                               wavelength
                               num-frames
@@ -41,7 +41,7 @@
          (phase 0)
          (phaseshift (/ 360 num-frames))
          (image (car (gimp-image-duplicate img)))
-         (source-layer (aref (cadr (gimp-image-get-selected-layers image)) 0)))
+         (source-layer (vector-ref (car (gimp-image-get-selected-layers image)) 0)))
 
   (gimp-image-undo-disable image)
 
@@ -50,26 +50,34 @@
 
   (while (> remaining-frames 1)
     (let* (
-          (waves-layer (car (gimp-layer-copy source-layer TRUE)))
+          (waves-layer (car (gimp-layer-copy source-layer)))
           (layer-name (string-append "Frame "
                                      (number->string
                                        (- (+ num-frames 2)
                                           remaining-frames) 10
                                        )
                                      " (replace)"))
+          (phi phase)
+          (width (car (gimp-drawable-get-width waves-layer)))
+          (height (car (gimp-drawable-get-height waves-layer)))
+          (aspect (/ width height))
           )
+    (gimp-layer-add-alpha waves-layer)
     (gimp-layer-set-lock-alpha waves-layer FALSE)
     (gimp-image-insert-layer image waves-layer 0 -1)
     (gimp-item-set-name waves-layer layer-name)
 
-    (plug-in-waves RUN-NONINTERACTIVE
-                   image
-                   waves-layer
-                   amplitude
-                   phase
-                   wavelength
-                   0
-                   FALSE)
+    (while (< phi 0)
+      (set! phi (+ phi 360.0))
+    )
+    (set! phi (/ (- (modulo (round phase) 360.0) 180.0) 180.0))
+    (if (< aspect 0.1)
+      (set! aspect 0.1))
+    (if (> aspect 10.0)
+      (set! aspect 10.0))
+    (gimp-drawable-merge-new-filter waves-layer "gegl:waves" 0 LAYER-MODE-REPLACE 1.0 "amplitude" amplitude "phi" phi
+                                                                                      "period" (* wavelength 2.0)
+                                                                                      "clamp" TRUE "aspect" aspect)
 
     (set! remaining-frames (- remaining-frames 1))
     (set! phase (- phase phaseshift))
@@ -77,29 +85,41 @@
   )
 
   (gimp-item-set-name source-layer "Frame 1")
-  (plug-in-waves RUN-NONINTERACTIVE
-                 image
-                 source-layer
-                 amplitude
-                 phase
-                 wavelength
-                 0
-                 FALSE)
+
+  (let* (
+        (phi phase)
+        (width (car (gimp-drawable-get-width source-layer)))
+        (height (car (gimp-drawable-get-height source-layer)))
+        (aspect (/ width height))
+        )
+
+    (while (< phi 0)
+      (set! phi (+ phi 360.0))
+    )
+    (set! phi (/ (- (modulo (round phase) 360.0) 180.0) 180.0))
+
+    (if (< aspect 0.1)
+      (set! aspect 0.1))
+    (if (> aspect 10.0)
+      (set! aspect 10.0))
+    (gimp-drawable-merge-new-filter source-layer "gegl:waves" 0 LAYER-MODE-REPLACE 1.0 "amplitude" amplitude "phi" phi
+                                                                                       "period" (* wavelength 2.0)
+                                                                                       "clamp" TRUE "aspect" aspect)
+  )
 
   (gimp-image-undo-enable image)
   (gimp-display-new image)
   )
 )
 
-(script-fu-register "script-fu-waves-anim"
+(script-fu-register-filter "script-fu-waves-anim"
   _"_Waves..."
   _"Create a multi-layer image with an effect like a stone was thrown into the current image"
   "Sven Neumann <sven@gimp.org>"
   "Sven Neumann"
   "1997/13/12"
   "RGB* GRAY*"
-  SF-IMAGE       "Image" 0
-  SF-DRAWABLE    "Drawable" 0
+  SF-ONE-OR-MORE-DRAWABLE
   SF-ADJUSTMENT _"Amplitude"        '(10 1   101 1 10 1 0)
   SF-ADJUSTMENT _"Wavelength"       '(10 0.1 100 1 10 1 0)
   SF-ADJUSTMENT _"Number of frames" '(6  1   512 1 10 0 1)

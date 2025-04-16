@@ -24,9 +24,9 @@
 (define (script-fu-make-brush-rectangular name width height spacing)
   (let* (
         (img (car (gimp-image-new width height GRAY)))
-        (drawable (car (gimp-layer-new img
+        (drawable (car (gimp-layer-new img "MakeBrush"
                                        width height GRAY-IMAGE
-                                       "MakeBrush" 100 LAYER-MODE-NORMAL)))
+                                       100 LAYER-MODE-NORMAL)))
         (filename (string-append gimp-directory
                                  "/brushes/r"
                                  (number->string width)
@@ -49,23 +49,22 @@
     (gimp-context-set-background '(0 0 0))
     (gimp-drawable-edit-fill drawable FILL-BACKGROUND)
 
-    (file-gbr-save 1 img 1 (vector drawable) filename spacing name)
+    ; -1: NULL export_options
+    (file-gbr-export 1 img filename -1 spacing name)
     (gimp-image-delete img)
 
     (gimp-context-pop)
 
     (gimp-brushes-refresh)
-    (gimp-context-set-brush name)
+    (gimp-context-set-brush (car (gimp-brush-get-by-name name)))
   )
 )
 
-(script-fu-register "script-fu-make-brush-rectangular"
+(script-fu-register-procedure "script-fu-make-brush-rectangular"
   _"_Rectangular..."
   _"Create a rectangular brush"
   "Seth Burgess <sjburges@ou.edu>"
-  "Seth Burgess"
   "1997"
-  ""
   SF-STRING     _"Name"    "Rectangle"
   SF-ADJUSTMENT _"Width"   '(20 1 200 1 10 0 1)
   SF-ADJUSTMENT _"Height"  '(20 1 200 1 10 0 1)
@@ -82,9 +81,9 @@
         (widthplus (+ width feathering))
         (heightplus (+ height feathering))
         (img (car (gimp-image-new widthplus heightplus GRAY)))
-        (drawable (car (gimp-layer-new img
+        (drawable (car (gimp-layer-new img "MakeBrush"
                                        widthplus heightplus GRAY-IMAGE
-                                       "MakeBrush" 100 LAYER-MODE-NORMAL)))
+                                       100 LAYER-MODE-NORMAL)))
         (filename (string-append gimp-directory
                                  "/brushes/r"
                                  (number->string width)
@@ -119,23 +118,21 @@
     (gimp-context-set-background '(0 0 0))
     (gimp-drawable-edit-fill drawable FILL-BACKGROUND)
 
-    (file-gbr-save 1 img 1 (vector drawable) filename spacing name)
+    (file-gbr-export 1 img filename -1 spacing name)
     (gimp-image-delete img)
 
     (gimp-context-pop)
 
     (gimp-brushes-refresh)
-    (gimp-context-set-brush name)
+    (gimp-context-set-brush (car (gimp-brush-get-by-name name)))
   )
 )
 
-(script-fu-register "script-fu-make-brush-rectangular-feathered"
+(script-fu-register-procedure "script-fu-make-brush-rectangular-feathered"
   _"Re_ctangular, Feathered..."
   _"Create a rectangular brush with feathered edges"
   "Seth Burgess <sjburges@ou.edu>"
-  "Seth Burgess"
   "1997"
-  ""
   SF-STRING     _"Name"       "Rectangle"
   SF-ADJUSTMENT _"Width"      '(20 1 200 1 10 0 1)
   SF-ADJUSTMENT _"Height"     '(20 1 200 1 10 0 1)
@@ -150,9 +147,9 @@
 (define (script-fu-make-brush-elliptical name width height spacing)
   (let* (
         (img (car (gimp-image-new width height GRAY)))
-        (drawable (car (gimp-layer-new img
+        (drawable (car (gimp-layer-new img "MakeBrush"
                                        width height GRAY-IMAGE
-                                       "MakeBrush" 100 LAYER-MODE-NORMAL)))
+                                       100 LAYER-MODE-NORMAL)))
         (filename (string-append gimp-directory
                                  "/brushes/e"
                                  (number->string width)
@@ -175,23 +172,21 @@
 
     (gimp-drawable-edit-fill drawable FILL-BACKGROUND)
 
-    (file-gbr-save 1 img 1 (vector drawable) filename spacing name)
+    (file-gbr-export 1 img filename -1 spacing name)
     (gimp-image-delete img)
 
     (gimp-context-pop)
 
     (gimp-brushes-refresh)
-    (gimp-context-set-brush name)
+    (gimp-context-set-brush (car (gimp-brush-get-by-name name)))
   )
 )
 
-(script-fu-register "script-fu-make-brush-elliptical"
+(script-fu-register-procedure "script-fu-make-brush-elliptical"
   _"_Elliptical..."
   _"Create an elliptical brush"
   "Seth Burgess <sjburges@ou.edu>"
-  "Seth Burgess"
   "1997"
-  ""
   SF-STRING     _"Name"    "Ellipse"
   SF-ADJUSTMENT _"Width"   '(20 1 200 1 10 0 1)
   SF-ADJUSTMENT _"Height"  '(20 1 200 1 10 0 1)
@@ -209,9 +204,9 @@
         (widthplus (+ feathering width)) ; add 3 for blurring
         (heightplus (+ feathering height))
         (img (car (gimp-image-new widthplus heightplus GRAY)))
-        (drawable (car (gimp-layer-new img
+        (drawable (car (gimp-layer-new img "MakeBrush"
                                        widthplus heightplus GRAY-IMAGE
-                                       "MakeBrush" 100 LAYER-MODE-NORMAL)))
+                                       100 LAYER-MODE-NORMAL)))
         (filename (string-append gimp-directory
                                  "/brushes/e"
                                  (number->string width)
@@ -244,23 +239,21 @@
     (gimp-context-set-background '(0 0 0))
     (gimp-drawable-edit-fill drawable FILL-BACKGROUND)
 
-    (file-gbr-save 1 img 1 (vector drawable) filename spacing name)
+    (file-gbr-export 1 img filename -1 spacing name)
     (gimp-image-delete img)
 
     (gimp-context-pop)
 
     (gimp-brushes-refresh)
-    (gimp-context-set-brush name)
+    (gimp-context-set-brush (car (gimp-brush-get-by-name name)))
   )
 )
 
-(script-fu-register "script-fu-make-brush-elliptical-feathered"
+(script-fu-register-procedure "script-fu-make-brush-elliptical-feathered"
   _"Elli_ptical, Feathered..."
   _"Create an elliptical brush with feathered edges"
   "Seth Burgess <sjburges@ou.edu>"
-  "Seth Burgess"
   "1997"
-  ""
   SF-STRING     _"Name"       "Ellipse"
   SF-ADJUSTMENT _"Width"      '(20 1 200 1 10 0 1)
   SF-ADJUSTMENT _"Height"     '(20 1 200 1 10 0 1)

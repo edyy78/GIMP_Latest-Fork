@@ -23,7 +23,6 @@
 
 #include "gimpwidgetstypes.h"
 #include "gimppickbutton.h"
-#include "gimppickbutton-default.h"
 #include "gimppickbutton-kwin.h"
 
 #include "libgimp/libgimp-intl.h"
@@ -82,18 +81,22 @@ _gimp_pick_button_kwin_pick (GimpPickButton *button)
                                    -1, NULL, &error);
   if (retval)
     {
-      GimpRGB rgb;
-      guint32 color;
+      GeglColor *rgb = gegl_color_new ("black");
+      guint32    color;
+      guchar     temp_rgba[4];
 
       g_variant_get (retval, "((u))", &color);
       g_variant_unref (retval);
       /* Returned value is ARGB stored in uint32. */
-      gimp_rgba_set_uchar (&rgb,
-                           (color  >> 16 ) & 0xff, /* Red                           */
-                           (color >> 8) & 0xff,    /* Green                         */
-                           color & 0xff,           /* Blue: least significant byte. */
-                           (color >> 24) & 0xff);  /* Alpha: most significant byte. */
-      g_signal_emit_by_name (button, "color-picked", &rgb);
+      temp_rgba[0] = (color >> 16) & 0xff; /* Red                           */
+      temp_rgba[1] = (color >> 8) & 0xff;  /* Green                         */
+      temp_rgba[2] = color & 0xff;         /* Blue: least significant byte. */
+      temp_rgba[3] = (color >> 24) & 0xff; /* Alpha: most significant byte. */
+
+      gegl_color_set_pixel (rgb, babl_format ("R'G'B'A u8"), temp_rgba);
+
+      g_signal_emit_by_name (button, "color-picked", rgb);
+      g_object_unref (rgb);
     }
   else
     {

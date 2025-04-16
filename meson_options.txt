@@ -1,10 +1,11 @@
 # Build properties
 option('ansi',              type: 'boolean', value: false,  description: 'Turn on strict ansi')
 option('enable-console-bin',type: 'boolean', value: true,   description: 'Build a console-only binary which does not link GTK')
-option('win32-debug-console',type:'boolean', value: true,   description: 'Open a console when starting the program')
+option('win32-debug-console',type:'feature', value: 'auto', description: 'Open a console when starting the program')
 option('enable-multiproc',  type: 'boolean', value: true,   description: 'Support for multiple processors')
 option('profiling',         type: 'boolean', value: false,  description: 'Enable profiling')
-option('windows-installer', type: 'boolean', value: false,  description: 'Generate files needed for the Windows installer')
+option('windows-installer', type: 'boolean', value: false,  description: 'Generate files needed for the Inno Windows installer')
+option('ms-store',          type: 'boolean', value: false,  description: 'Generate files needed for the Microsoft Store .msixupload and/or .msixbundle')
 
 option('relocatable-bundle', type: 'combo', value: 'platform-default',
                              description: 'build with resources considered bundled under the same prefix',
@@ -20,7 +21,7 @@ option('check-update',      type: 'combo', value: 'platform-default',
                             choices: [ 'yes', 'no', 'platform-default' ])
 
 option('bug-report-url',    type: 'string',  value: '',   description: 'URL used by the debug dialog to report bugs')
-option('gimpdir',           type: 'string',  value: '',   description: 'Change default gimpdir from ~/.config/GIMP/2.9 to ~/.config/DIR/2.9 (if relative), or to DIR (if absolute)')
+option('gimpdir',           type: 'string',  value: '',   description: 'Change default gimpdir from ~/.config/GIMP/3.0 to ~/.config/DIR/3.0 (if relative), or to DIR (if absolute)')
 option('icc-directory',     type: 'string',  value: '',   description: 'Path to default color profiles for this system')
 option('directx-sdk-dir',   type: 'string',  value: '',   description: 'Prefix where the DirectX SDK is installed(optional)')
 option('with-sendmail',     type: 'string',  value: '',   description: 'Use Sendmail instead of Xdg-email')
@@ -31,7 +32,7 @@ option('libbacktrace',      type: 'boolean', value: true, description: 'Build wi
 
 # Features
 
-option('enable-default-bin',type: 'feature', value: 'auto', description: 'Install unversioned symlinks pointing to versioned executables')
+option('enable-default-bin',type: 'feature', value: 'auto', description: 'Install unversioned symlinks pointing to versioned executables (on UNIX) or unversioned duplicates (on Windows)')
 option('aa',                type: 'feature', value: 'auto', description: 'AA plugin')
 option('alsa',              type: 'feature', value: 'auto', description: 'Alsa support in midi input controller')
 option('appdata-test',      type: 'feature', value: 'auto', description: 'Validate the appdata file')
@@ -53,16 +54,17 @@ option('wmf',               type: 'feature', value: 'auto', description: 'Wmf su
 option('xcursor',           type: 'feature', value: 'auto', description: 'Xcursor support')
 option('xpm',               type: 'feature', value: 'auto', description: 'XPM support')
 option('headless-tests',    type: 'feature', value: 'auto', description: 'Use xvfb-run/dbus-run-session for UI-dependent automatic tests')
+option('file-plug-ins-test', type: 'boolean', value: 'false', description: 'Always install test-file-plug-ins (mostly for CI testing)')
 
 option('can-crosscompile-gir', type: 'boolean', value: false, description: 'GIR is buildable even if crosscompiling')
 
 option('gi-docgen',         type: 'feature', value: 'auto', description: 'Build developer documentation (uses gi-docgen)')
-option('g-ir-doc',          type: 'boolean', value: false,  description: 'Build developer documentation for introspected API')
 
 option('linux-input',       type: 'feature', value: 'auto', description: 'Linux input event controller module')
 option('vector-icons',      type: 'boolean', value: true,   description: 'Use vector icons rather than raster ones')
 
 option('vala',              type: 'feature', value: 'auto', description: 'Build VAPI and Vala plugins')
 option('javascript',        type: 'feature', value: 'auto', description: 'Install Javascript plug-ins')
-option('lua',               type: 'feature', value: 'auto', description: 'Install Lua plug-ins')
-option('python',            type: 'feature', value: 'auto', description: 'Install Python 3 plug-ins')
+option('lua',               type: 'boolean', value: false,  description: 'Install Lua plug-ins (experimental)')
+
+option('debug-self-in-build', type: 'boolean', value: false, description: 'Run in-build GIMP within gdb for debugging purpose')

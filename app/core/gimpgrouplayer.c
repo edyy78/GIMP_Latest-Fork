@@ -33,7 +33,9 @@
 #include "gegl/gimp-babl.h"
 #include "gegl/gimp-gegl-loops.h"
 
+#include "gimpchannel.h"
 #include "gimpdrawable-filters.h"
+#include "gimpdrawablefilter.h"
 #include "gimpgrouplayer.h"
 #include "gimpgrouplayerundo.h"
 #include "gimpimage.h"
@@ -170,6 +172,8 @@ static void            gimp_group_layer_convert_type (GimpLayer         *layer,
                                                       GimpProgress      *progress);
 static GeglNode   * gimp_group_layer_get_source_node (GimpDrawable      *drawable);
 
+static void         gimp_group_layer_filters_changed (GimpDrawable      *drawable);
+
 static void         gimp_group_layer_opacity_changed (GimpLayer         *layer);
 static void  gimp_group_layer_effective_mode_changed (GimpLayer         *layer);
 static void
@@ -299,6 +303,7 @@ gimp_group_layer_class_init (GimpGroupLayerClass *klass)
   drawable_class->estimate_memsize       = gimp_group_layer_estimate_memsize;
   drawable_class->update_all             = gimp_group_layer_update_all;
   drawable_class->get_source_node        = gimp_group_layer_get_source_node;
+  drawable_class->filters_changed        = gimp_group_layer_filters_changed;
 
   layer_class->opacity_changed           = gimp_group_layer_opacity_changed;
   layer_class->effective_mode_changed    = gimp_group_layer_effective_mode_changed;
@@ -589,6 +594,7 @@ gimp_group_layer_duplicate (GimpItem *item,
           GimpItem      *child = list->data;
           GimpItem      *new_child;
           GimpLayerMask *mask;
+          GimpContainer *filters;
 
           new_child = gimp_item_duplicate (child, G_TYPE_FROM_INSTANCE (child));
 
@@ -613,6 +619,36 @@ gimp_group_layer_duplicate (GimpItem *item,
           gimp_container_insert (new_private->children,
                                  GIMP_OBJECT (new_child),
                                  position++);
+
+          /* Copy any attached layer effects */
+          filters = gimp_drawable_get_filters (GIMP_DRAWABLE (child));
+          if (gimp_container_get_n_children (filters) > 0)
+            {
+              GList *filter_list;
+
+              for (filter_list = GIMP_LIST (filters)->queue->tail; filter_list;
+                   filter_list = g_list_previous (filter_list))
+                {
+                  if (GIMP_IS_DRAWABLE_FILTER (filter_list->data))
+                    {
+                      GimpDrawableFilter *old_filter = filter_list->data;
+                      GimpDrawableFilter *filter;
+
+                      filter =
+                        gimp_drawable_filter_duplicate (GIMP_DRAWABLE (new_child),
+                                                        old_filter);
+
+                      if (filter != NULL)
+                        {
+                          gimp_drawable_filter_apply (filter, NULL);
+                          gimp_drawable_filter_commit (filter, TRUE, NULL, FALSE);
+
+                          gimp_drawable_filter_layer_mask_freeze (filter);
+                          g_object_unref (filter);
+                        }
+                    }
+                }
+            }
         }
 
       /*  force the projection to reallocate itself  */
@@ -1150,6 +1186,15 @@ gimp_group_layer_get_source_node (GimpDrawable *drawable)
 }
 
 static void
+gimp_group_layer_filters_changed (GimpDrawable *drawable)
+{
+  gimp_layer_update_effective_mode (GIMP_LAYER (drawable));
+
+  if (GIMP_DRAWABLE_CLASS (parent_class)->filters_changed)
+    GIMP_DRAWABLE_CLASS (parent_class)->filters_changed (drawable);
+}
+
+static void
 gimp_group_layer_opacity_changed (GimpLayer *layer)
 {
   gimp_layer_update_effective_mode (layer);
@@ -1242,6 +1287,7 @@ gimp_group_layer_get_effective_mode (GimpLayer              *layer,
    * cheaper.
    */
   if (gimp_layer_get_mode (layer) == GIMP_LAYER_MODE_PASS_THROUGH &&
+      ! gimp_drawable_has_visible_filters (GIMP_DRAWABLE (layer)) &&
       ! no_pass_through_strength_reduction)
     {
       /* we perform the strength-reduction if:
@@ -1956,6 +2002,7 @@ gimp_group_layer_update_size (GimpGroupLayer *group)
   gboolean               size_changed;
   gboolean               resize_mask;
   GList                 *list;
+  GimpContainer         *filters;
 
   old_bounds.x      = gimp_item_get_offset_x (item);
   old_bounds.y      = gimp_item_get_offset_y (item);
@@ -2089,6 +2136,29 @@ gimp_group_layer_update_size (GimpGroupLayer *group)
    */
   if (resize_mask && ! private->transforming)
     gimp_group_layer_update_mask_size (group);
+
+  /* Update the crop of any filters */
+  if (size_changed)
+    {
+      filters = gimp_drawable_get_filters (GIMP_DRAWABLE (group));
+      for (list = GIMP_LIST (filters)->queue->tail;
+           list; list = g_list_previous (list))
+        {
+          if (GIMP_IS_DRAWABLE_FILTER (list->data))
+            {
+              GimpDrawableFilter *filter = list->data;
+              GimpChannel        *filter_mask;
+
+              filter_mask = GIMP_CHANNEL (gimp_drawable_filter_get_mask (filter));
+
+              /* Don't resize partial layer effects */
+              if (gimp_channel_is_empty (filter_mask))
+                gimp_drawable_filter_refresh_crop (filter, &bounding_box);
+            }
+        }
+      if (list)
+        g_list_free (list);
+    }
 
   /* if we show the mask, invalidate the new mask area */
   if (resize_mask && gimp_layer_get_show_mask (layer))
@@ -2302,7 +2372,7 @@ gimp_group_layer_proj_update (GimpProjection *proj,
        * negatively impacts the performance of the warp tool, which does perform
        * accurate drawable updates while using a filter.
        */
-      if (gimp_drawable_has_filters (GIMP_DRAWABLE (group)))
+      if (gimp_drawable_has_visible_filters (GIMP_DRAWABLE (group)))
         {
           width  = -1;
           height = -1;

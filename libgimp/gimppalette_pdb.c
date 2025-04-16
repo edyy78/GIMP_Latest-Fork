@@ -81,9 +81,10 @@ gimp_palette_new (const gchar *name)
  *
  * Returns the palette with the given name.
  *
- * Returns the palette with the given name.
+ * Returns an existing palette having the given name. Returns %NULL
+ * when no palette exists of that name.
  *
- * Returns: (transfer none): The palette.
+ * Returns: (nullable) (transfer none): The palette.
  *
  * Since: 3.0
  **/
@@ -158,6 +159,7 @@ gimp_palette_get_color_count (GimpPalette *palette)
  *
  * Returns: (array zero-terminated=1) (transfer full):
  *          The colors in the palette.
+ *          The returned value must be freed with gimp_color_array_free().
  *
  * Since: 2.6
  **/
@@ -264,7 +266,7 @@ gimp_palette_set_columns (GimpPalette *palette,
 /**
  * gimp_palette_add_entry:
  * @palette: The palette.
- * @entry_name: A name for the entry.
+ * @entry_name: (nullable): A name for the entry.
  * @color: The color for the added entry.
  * @entry_num: (out): The index of the added entry.
  *
@@ -354,7 +356,7 @@ gimp_palette_delete_entry (GimpPalette *palette,
 }
 
 /**
- * gimp_palette_entry_get_color:
+ * gimp_palette_get_entry_color:
  * @palette: The palette.
  * @entry_num: The index of the entry to get the color of.
  *
@@ -368,7 +370,7 @@ gimp_palette_delete_entry (GimpPalette *palette,
  * Since: 2.2
  **/
 GeglColor *
-gimp_palette_entry_get_color (GimpPalette *palette,
+gimp_palette_get_entry_color (GimpPalette *palette,
                               gint         entry_num)
 {
   GimpValueArray *args;
@@ -381,7 +383,7 @@ gimp_palette_entry_get_color (GimpPalette *palette,
                                           G_TYPE_NONE);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
-                                               "gimp-palette-entry-get-color",
+                                               "gimp-palette-get-entry-color",
                                                args);
   gimp_value_array_unref (args);
 
@@ -394,7 +396,7 @@ gimp_palette_entry_get_color (GimpPalette *palette,
 }
 
 /**
- * gimp_palette_entry_set_color:
+ * gimp_palette_set_entry_color:
  * @palette: The palette.
  * @entry_num: The entry to get.
  * @color: The new color.
@@ -410,7 +412,7 @@ gimp_palette_entry_get_color (GimpPalette *palette,
  * Since: 2.2
  **/
 gboolean
-gimp_palette_entry_set_color (GimpPalette *palette,
+gimp_palette_set_entry_color (GimpPalette *palette,
                               gint         entry_num,
                               GeglColor   *color)
 {
@@ -425,7 +427,7 @@ gimp_palette_entry_set_color (GimpPalette *palette,
                                           G_TYPE_NONE);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
-                                               "gimp-palette-entry-set-color",
+                                               "gimp-palette-set-entry-color",
                                                args);
   gimp_value_array_unref (args);
 
@@ -437,7 +439,7 @@ gimp_palette_entry_set_color (GimpPalette *palette,
 }
 
 /**
- * gimp_palette_entry_get_name:
+ * gimp_palette_get_entry_name:
  * @palette: The palette.
  * @entry_num: The entry to get.
  * @entry_name: (out) (transfer full): The name of the entry.
@@ -452,7 +454,7 @@ gimp_palette_entry_set_color (GimpPalette *palette,
  * Since: 2.2
  **/
 gboolean
-gimp_palette_entry_get_name (GimpPalette  *palette,
+gimp_palette_get_entry_name (GimpPalette  *palette,
                              gint          entry_num,
                              gchar       **entry_name)
 {
@@ -466,7 +468,7 @@ gimp_palette_entry_get_name (GimpPalette  *palette,
                                           G_TYPE_NONE);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
-                                               "gimp-palette-entry-get-name",
+                                               "gimp-palette-get-entry-name",
                                                args);
   gimp_value_array_unref (args);
 
@@ -483,10 +485,10 @@ gimp_palette_entry_get_name (GimpPalette  *palette,
 }
 
 /**
- * gimp_palette_entry_set_name:
+ * gimp_palette_set_entry_name:
  * @palette: The palette.
  * @entry_num: The entry to get.
- * @entry_name: The new name.
+ * @entry_name: (nullable): The new name.
  *
  * Sets the name of an entry in the palette.
  *
@@ -499,7 +501,7 @@ gimp_palette_entry_get_name (GimpPalette  *palette,
  * Since: 2.2
  **/
 gboolean
-gimp_palette_entry_set_name (GimpPalette *palette,
+gimp_palette_set_entry_name (GimpPalette *palette,
                              gint         entry_num,
                              const gchar *entry_name)
 {
@@ -514,7 +516,105 @@ gimp_palette_entry_set_name (GimpPalette *palette,
                                           G_TYPE_NONE);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
-                                               "gimp-palette-entry-set-name",
+                                               "gimp-palette-set-entry-name",
+                                               args);
+  gimp_value_array_unref (args);
+
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
+
+  return success;
+}
+
+/**
+ * _gimp_palette_get_bytes:
+ * @palette: The palette.
+ * @format: The desired color format.
+ * @num_colors: (out): The number of colors in the palette.
+ *
+ * Returns the palette's colormap
+ *
+ * This procedure returns a palette's colormap as a bytes array with
+ * all colors converted to a given Babl @format.
+ * The byte-size of the returned colormap depends on the number of
+ * colors and on the bytes-per-pixel size of @format. E.g. that the
+ * following equality is ensured:
+ *
+ * ```C
+ * g_bytes_get_size (colormap) == num_colors *
+ * babl_format_get_bytes_per_pixel (format)
+ * ```
+ *
+ * Returns: (transfer full): The image's colormap.
+ *
+ * Since: 3.0
+ **/
+GBytes *
+_gimp_palette_get_bytes (GimpPalette *palette,
+                         const Babl  *format,
+                         gint        *num_colors)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GBytes *colormap = NULL;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_PALETTE, palette,
+                                          GIMP_TYPE_BABL_FORMAT, format,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-palette-get-bytes",
+                                               args);
+  gimp_value_array_unref (args);
+
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    {
+      colormap = GIMP_VALUES_DUP_BYTES (return_vals, 1);
+      *num_colors = GIMP_VALUES_GET_INT (return_vals, 2);
+    }
+
+  gimp_value_array_unref (return_vals);
+
+  return colormap;
+}
+
+/**
+ * _gimp_palette_set_bytes:
+ * @palette: The palette.
+ * @format: The desired color format.
+ * @colormap: The new colormap values.
+ *
+ * Sets the entries in the image's colormap.
+ *
+ * This procedure sets the entries in the specified palette in one go.
+ * The number of entries depens on the size of @colormap and the
+ * bytes-per-pixel size of @format.
+ * The procedure will fail if the size of @colormap is not an exact
+ * multiple of the number of bytes per pixel of @format.
+ *
+ * Returns: TRUE on success.
+ *
+ * Since: 3.0
+ **/
+gboolean
+_gimp_palette_set_bytes (GimpPalette *palette,
+                         const Babl  *format,
+                         GBytes      *colormap)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean success = TRUE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_PALETTE, palette,
+                                          GIMP_TYPE_BABL_FORMAT, format,
+                                          G_TYPE_BYTES, colormap,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-palette-set-bytes",
                                                args);
   gimp_value_array_unref (args);
 

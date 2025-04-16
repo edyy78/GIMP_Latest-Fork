@@ -39,6 +39,12 @@
 
 #define COMP_MODE_SIZE sizeof(guint16)
 
+typedef struct
+{
+  gint32  group_index; /* first layer from the top that has clipping */
+  gint32  last_index;  /* last layer that will be part of the clipping group */
+} ClippingInfo;
+
 
 /*  Local function prototypes  */
 static gint             read_header_block          (PSDimage       *img_a,
@@ -84,16 +90,30 @@ static gint             add_layers                 (GimpImage      *image,
                                                     GInputStream   *input,
                                                     GError        **error);
 
+static void             add_legacy_layer_effects   (GimpLayer      *layer,
+                                                    PSDlayer       *lyr_a,
+                                                    gboolean        ibm_pc_format);
+
 static gint             add_merged_image           (GimpImage      *image,
                                                     PSDimage       *img_a,
                                                     GInputStream   *input,
                                                     GError        **error);
 
 /*  Local utility function prototypes  */
+static void       check_duplicate_clipping_group   (PSDlayer      **lyr_a,
+                                                    gint16          num_layers,
+                                                    ClippingInfo   *clipping_info);
+static void             mark_clipping_groups       (PSDimage       *img_a,
+                                                    PSDlayer      **lyr_a);
 static GimpLayer      * add_clipping_group         (GimpImage      *image,
                                                     GimpLayer      *parent);
 
 static gchar          * get_psd_color_mode_name    (PSDColorMode    mode);
+
+static void             convert_legacy_psd_color   (GeglColor      *color,
+                                                    guint16        *psd_color,
+                                                    const Babl     *space,
+                                                    gboolean        ibm_pc_format);
 
 static void             psd_to_gimp_color_map      (guchar         *map256);
 
@@ -385,6 +405,10 @@ load_image_metadata (GFile        *file,
           g_object_unref (input);
           return image;
         }
+      if (data_length > 8)
+        data_length -= 8;
+      else
+        data_length  = 0;
 
       /* Treat labels/ints as Little Endian */
       if (memcmp (sig, "MIB8", 4) == 0)
@@ -576,8 +600,7 @@ read_header_block (PSDimage      *img_a,
 
   if (img_a->color_mode == PSD_CMYK || img_a->color_mode == PSD_LAB)
     {
-      if (img_a->bps != 8 &&
-         (img_a->bps != 16 || img_a->color_mode == PSD_LAB))
+      if (img_a->bps != 8 && img_a->bps != 16)
         {
           g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
                        _("Unsupported color mode: %s"),
@@ -792,7 +815,6 @@ read_layer_info (PSDimage      *img_a,
           lyr_a[lidx] = (PSDlayer *) g_malloc (sizeof (PSDlayer) );
 
           /* Initialise record */
-          lyr_a[lidx]->drop = FALSE;
           lyr_a[lidx]->id = 0;
           lyr_a[lidx]->group_type = 0;
 
@@ -1221,6 +1243,8 @@ read_layer_info (PSDimage      *img_a,
                             PSD_TELL(input), block_rem);
 
           /* Adjustment layer info */           /* FIXME */
+          lyr_a[lidx]->layer_styles = g_new (PSDLayerStyles, 1);
+          lyr_a[lidx]->layer_styles->count = 0;
 
           while (block_rem > 7)
             {
@@ -1301,6 +1325,7 @@ read_layer_block (PSDimage      *img_a,
   guint64    block_len;
   guint64    block_end;
   gint       block_len_size = (img_a->version == 1 ? 4 : 8);
+  gboolean   enclosed_data = FALSE;
 
   /* If layer data is being loaded for non-PSD files (like TIFF),
    * then mask_layer_len will have its size preloaded */
@@ -1315,6 +1340,10 @@ read_layer_block (PSDimage      *img_a,
         {
           img_a->mask_layer_len = block_len;
         }
+    }
+  else
+    {
+      enclosed_data = TRUE;
     }
 
   IFDBG(1) g_debug ("Layer and mask block size = %" G_GOFFSET_FORMAT, img_a->mask_layer_len);
@@ -1343,37 +1372,58 @@ read_layer_block (PSDimage      *img_a,
         }
       else
         {
+          guint64 adjusted_block_len;
+
           if (img_a->ibm_pc_format)
-            block_len = GUINT32_FROM_BE (block_len);
+            {
+              block_len = GUINT64_FROM_BE (block_len);
+              IFDBG(1) g_debug ("IBM PC format data detected");
+            }
 
           IFDBG(1) g_debug ("Layer info size = %" G_GOFFSET_FORMAT, block_len);
           /* To make computations easier add the size of block_len */
           block_len += block_len_size;
 
+          /* Actual block size is a multiple of 2 */
+          adjusted_block_len = (block_len + 1) / 2 * 2;
+
           if (block_len > block_len_size)
             {
+              goffset cur_ofs;
+
               lyr_a = read_layer_info (img_a, input, error);
 
               if (error && *error)
                 return NULL;
 
-              if (img_a->mask_layer_start + block_len != PSD_TELL(input))
+              cur_ofs = PSD_TELL(input);
+              if (img_a->mask_layer_start + block_len != cur_ofs && ! img_a->merged_image_only)
                 {
                   g_debug ("Unexpected offset after reading layer info: %" G_GOFFSET_FORMAT
                           " instead of %" G_GOFFSET_FORMAT,
-                          PSD_TELL(input), img_a->mask_layer_start + block_len);
+                          cur_ofs, img_a->mask_layer_start + block_len);
+                }
+              if (img_a->mask_layer_start + adjusted_block_len != cur_ofs)
+                {
                   /* Correct the offset. */
-                  if (! psd_seek (input, img_a->mask_layer_start + block_len,
+                  if (! psd_seek (input, img_a->mask_layer_start + adjusted_block_len,
                                   G_SEEK_SET, error))
                     return NULL;
                 }
+            }
+          if (block_len > total_len)
+            {
+              IFDBG(1) g_debug ("Unexpectedly block_len %" G_GSIZE_FORMAT
+                                " is larger than total_len %" G_GSIZE_FORMAT,
+                                block_len, total_len);
+              block_len = total_len;
             }
           total_len -= block_len;
         }
       IFDBG(3) g_debug ("Offset: %" G_GOFFSET_FORMAT ", remaining len: %" G_GSIZE_FORMAT,
                         PSD_TELL(input), total_len);
 
-      if (total_len >= 4)
+      if (total_len >= 4 && ! enclosed_data)
         {
           /* Global layer mask info */
           if (psd_read (input, &block_len, 4, error) == 4)
@@ -1555,7 +1605,7 @@ create_gimp_image (PSDimage *img_a,
         break;
 
       case 16:
-        if (img_a->color_mode == PSD_CMYK)
+        if (img_a->color_mode == PSD_CMYK || img_a->color_mode == PSD_LAB)
           precision = GIMP_PRECISION_FLOAT_NON_LINEAR;
         else
           precision = GIMP_PRECISION_U16_NON_LINEAR;
@@ -1595,8 +1645,9 @@ add_color_map (GimpImage *image,
     {
       if (img_a->color_mode != PSD_DUOTONE)
         {
-          gimp_image_set_colormap (image, img_a->color_map,
-                                   img_a->color_map_entries);
+          gimp_palette_set_colormap (gimp_image_get_palette (image),
+                                     babl_format ("R'G'B' u8"),
+                                     img_a->color_map, img_a->color_map_len);
         }
       else
         {
@@ -1713,11 +1764,17 @@ psd_convert_lab_to_srgb (PSDimage *img_a,
                          gboolean  alpha)
 {
   const Babl *fish;
+  const Babl *base_format = NULL;
+
+  if (img_a->bps == 8)
+    base_format = babl_format (alpha ? "CIE Lab alpha u8" : "CIE Lab u8");
+  else
+    base_format = babl_format (alpha ? "CIE Lab alpha u16" : "CIE Lab u16");
 
   if (alpha)
-    fish = babl_fish ("CIE Lab alpha u8", "R'G'B'A float");
+    fish = babl_fish (base_format, "R'G'B'A float");
   else
-    fish = babl_fish ("CIE Lab u8", "R'G'B' float");
+    fish = babl_fish (base_format, "R'G'B' float");
 
   babl_process (fish, src, dst, width * height);
 
@@ -1786,6 +1843,185 @@ free_lyr_chn (PSDchannel **lyr_chn, gint channel_count)
   g_free (lyr_chn);
 }
 
+static void
+check_duplicate_clipping_group (PSDlayer     **lyr_a,
+                                gint16         num_layers,
+                                ClippingInfo  *clipping_info)
+{
+  /* Check whether there is a Photoshop group containing the same layers as
+   * the new GIMP clipping group that we intend to add. If that is the case
+   * there is no reason to add an extra clipping group.
+   * Example image: see layers 55-52 and 40-37 */
+
+  /* 1. There should be a PS group just above where our group_index is */
+  if (clipping_info->group_index < num_layers-1 &&
+      (lyr_a[clipping_info->group_index+1]->group_type == 1 ||
+       lyr_a[clipping_info->group_index+1]->group_type == 2))
+    {
+      /* 2. The PS group should end right below where our last_index is */
+      if (clipping_info->last_index > 0 &&
+          lyr_a[clipping_info->last_index-1]->group_type == 3)
+        {
+          IFDBG(3) g_debug ("\tClipping group is a duplicate, removing extra group from %d to %d",
+                     clipping_info->last_index, clipping_info->group_index);
+          lyr_a[clipping_info->group_index]->clipping_group_type = 0;
+          lyr_a[clipping_info->last_index]->clipping_group_type = 0;
+        }
+    }
+}
+
+static void
+mark_clipping_groups (PSDimage  *img_a,
+                      PSDlayer **lyr_a)
+{
+  ClippingInfo  parent_info = {-1, -1};
+  GArray       *clipping_group_stack;
+  gboolean      use_clipping_group;
+  gint          lidx;
+
+  IFDBG(3) g_debug ("Pre process layers to find and mark clipping groups");
+
+  clipping_group_stack = g_array_new (FALSE, FALSE, sizeof (ClippingInfo));
+  g_array_append_val (clipping_group_stack, parent_info);
+
+  use_clipping_group = FALSE;
+
+  for (lidx = img_a->num_layers-1; lidx >= 0; --lidx)
+    {
+      lyr_a[lidx]->unsupported_features = img_a->unsupported_features;
+
+      if (lyr_a[lidx]->clipping == 1)
+        {
+          /* Photoshop handles layers with clipping differently than GIMP does.
+           * To correctly show these layers we need to make a new group
+           * starting with the first non-clipping layer and including all
+           * the clipping layers above it.
+           */
+          if (use_clipping_group)
+            {
+              /* continuation of the clipping group */
+              IFDBG(4) g_debug ("[%d] clipping continues", lidx);
+            }
+          else
+            {
+              /* top of the clipping group */
+              lyr_a[lidx]->clipping_group_type = 2;
+              use_clipping_group = TRUE;
+              parent_info.group_index = lidx;
+              parent_info.last_index = lidx;
+              IFDBG(3) g_debug ("[%d] clipping START", lidx);
+            }
+          if (lyr_a[lidx]->group_type == 1 || lyr_a[lidx]->group_type == 2)
+            {
+              /* We are going into a group, add parent_info for clipping */
+              g_array_append_val (clipping_group_stack, parent_info);
+              use_clipping_group = FALSE;
+              IFDBG(4) g_debug ("\tDescending into a group");
+              parent_info.last_index = -1;
+            }
+          else if (lyr_a[lidx]->group_type == 3)
+            {
+              /* bottom of group should never be reached here! */
+              g_critical ("Unexpected group end marker, should not happen!");
+            }
+        }
+      else
+        {
+          if (use_clipping_group)
+            {
+              /* bottom of the clipping group, unless this is a group,
+               * in which case we need to find the group start marker. */
+              parent_info.last_index = lidx;
+              use_clipping_group = FALSE;
+              if (lyr_a[lidx]->group_type == 1 || lyr_a[lidx]->group_type == 2)
+                {
+                  /* We are going into a group, add parent_info for clipping */
+                  g_array_append_val (clipping_group_stack, parent_info);
+                  IFDBG(3) g_debug ("[%d] Descending into a group at the bottom of a clipping group",
+                                    lidx);
+                }
+              else
+                {
+                  lyr_a[lidx]->clipping_group_type = 1; /* start clipping group */
+                  IFDBG(3) g_debug ("[%d] Clipping group END: Add group from here to layer %d",
+                                    lidx, parent_info.group_index);
+                  check_duplicate_clipping_group (lyr_a, img_a->num_layers, &parent_info);
+                }
+              parent_info.group_index = -1;
+              parent_info.last_index = -1;
+            }
+          else
+            {
+              /* continuation of normal (non clipping) layers */
+              lyr_a[lidx]->clipping_group_type = 0;
+
+              if (lyr_a[lidx]->group_type == 3)
+                {
+                  /* bottom of group: go back in the stack one level */
+                  if (clipping_group_stack->len)
+                    {
+                      parent_info = g_array_index (clipping_group_stack, ClippingInfo,
+                                                  clipping_group_stack->len - 1);
+                      g_array_remove_index (clipping_group_stack,
+                                            clipping_group_stack->len - 1);
+                      if (parent_info.group_index > -1)
+                        {
+                          /* Test if we were in a group that was the start of a
+                           * clipping group, but is itself not clipping!
+                           * (example image layers 96-27) */
+                          if (lyr_a[parent_info.last_index]->clipping == 0)
+                            {
+                              /* found the bottom of the clipping group */
+                              lyr_a[lidx]->clipping_group_type = 1; /* start clipping group */
+                              parent_info.last_index = lidx;
+                              use_clipping_group = FALSE;
+                              IFDBG(3) g_debug ("[%d] Clipping group END: Add group from here to layer %d",
+                                                lidx, parent_info.group_index);
+                              check_duplicate_clipping_group (lyr_a, img_a->num_layers,
+                                                              &parent_info);
+                              parent_info.group_index = -1;
+                              parent_info.last_index  = -1;
+                            }
+                          else
+                            {
+                              IFDBG(4) g_debug ("[%d] No clipping group ending, going level up", lidx);
+                              use_clipping_group = TRUE;
+                            }
+                        }
+                      else
+                        {
+                          IFDBG(4) g_debug ("[%d] No clipping group ending, going level up", lidx);
+                        }
+                    }
+                  else
+                    {
+                      g_critical ("Unmatched group layer start marker at layer %d.", lidx);
+                      parent_info.group_index = -1;
+                      parent_info.last_index  = -1;
+                    }
+                }
+              else
+                {
+                  IFDBG(4) g_debug ("[%d] No clipping", lidx);
+                  if (lyr_a[lidx]->group_type == 1 || lyr_a[lidx]->group_type == 2)
+                    {
+                      if (clipping_group_stack->len)
+                        {
+                          IFDBG(4) g_debug ("\tDescending into a group");
+                          /* We are going into a group, add parent_info for clipping */
+                          g_array_append_val (clipping_group_stack, parent_info);
+                          parent_info.group_index = -1;
+                          parent_info.last_index = -1;
+                          use_clipping_group = FALSE;
+                        }
+                    }
+                }
+            }
+        }
+    }
+  g_array_free (clipping_group_stack, FALSE);
+}
+
 static gint
 add_layers (GimpImage     *image,
             PSDimage      *img_a,
@@ -1796,7 +2032,6 @@ add_layers (GimpImage     *image,
   PSDchannel          **lyr_chn;
   GArray               *parent_group_stack;
   GimpLayer            *parent_group = NULL;
-  GimpLayer            *clipping_group = NULL;
   guint16               alpha_chn;
   guint16               user_mask_chn;
   guint16               layer_channels, base_channels;
@@ -1815,12 +2050,10 @@ add_layers (GimpImage     *image,
   GList                *selected_layers = NULL;
   gint                  lidx;                  /* Layer index */
   gint                  cidx;                  /* Channel index */
-  gint                  gidx;                  /* Clipping group start index */
   gboolean              alpha;
   gboolean              user_mask;
   gboolean              empty;
   gboolean              empty_mask;
-  gboolean              use_clipping_group;
   GeglBuffer           *buffer;
   GimpImageType         image_type;
   LayerModeInfo         mode_info;
@@ -1841,72 +2074,7 @@ add_layers (GimpImage     *image,
       return -1;
     }
 
-  IFDBG(3) g_debug ("Pre process layers...");
-  use_clipping_group = FALSE;
-  gidx = -1;
-  for (lidx = 0; lidx < img_a->num_layers; ++lidx)
-    {
-      lyr_a[lidx]->unsupported_features = img_a->unsupported_features;
-
-      if (lyr_a[lidx]->clipping == 1)
-        {
-          /* Photoshop handles layers with clipping differently than GIMP does.
-           * To correctly show these layers we need to make a new group
-           * starting with the first non-clipping layer and including all
-           * the clipping layers above it.
-           */
-          if (lidx > 0)
-            {
-              if (lyr_a[lidx]->group_type != 0)
-                {
-                  /* Ignoring group layers with clipping set for now. */
-                  IFDBG(3) g_debug ("Group Layer with clipping: [%d] %s",
-                                    lidx, lyr_a[lidx]->name);
-                  use_clipping_group = FALSE;
-                  gidx = -1;
-                }
-              else if (gidx == -1)
-                {
-                  use_clipping_group = TRUE;
-
-                  /* Looking at the results we should ignore layer groups */
-                  if (lyr_a[lidx-1]->group_type == 0)
-                    gidx = lidx - 1;
-                  else
-                    gidx = lidx;
-
-                  lyr_a[gidx]->clipping_group_type = 1; /* start clipping group */
-                  IFDBG(3) g_debug ("Layer: %s - start of clipping group", lyr_a[gidx]->name);
-                }
-              else if (lidx + 1 == img_a->num_layers && use_clipping_group)
-                {
-                  /* end clipping group at the top of the layer stack */
-                  lyr_a[lidx]->clipping_group_type = 2; /* end clipping group */
-                  IFDBG(3) g_debug ("Layer: %s - end of clipping group", lyr_a[lidx]->name);
-
-                  use_clipping_group = FALSE;
-                  gidx = -1;
-                }
-              else
-                {
-                  lyr_a[lidx]->clipping_group_type = 0;
-                }
-            }
-        }
-      else if (use_clipping_group)
-        {
-          /* end clipping group */
-          lyr_a[lidx-1]->clipping_group_type = 2;
-          IFDBG(3) g_debug ("Layer: %s - end of clipping group", lyr_a[lidx-1]->name);
-
-          use_clipping_group = FALSE;
-          gidx = -1;
-        }
-      else
-        {
-          lyr_a[lidx]->clipping_group_type = 0;
-        }
-    }
+  mark_clipping_groups (img_a, lyr_a);
 
   /* set the root of the group hierarchy */
   parent_group_stack = g_array_new (FALSE, FALSE, sizeof (GimpLayer *));
@@ -1916,294 +2084,343 @@ add_layers (GimpImage     *image,
     {
       IFDBG(2) g_debug ("Process Layer No %d (%s).", lidx, lyr_a[lidx]->name);
 
-      if (lyr_a[lidx]->drop)
-        {
-          IFDBG(2) g_debug ("Drop layer %d", lidx);
+      /* Empty layer */
+      if (lyr_a[lidx]->bottom - lyr_a[lidx]->top == 0
+          || lyr_a[lidx]->right - lyr_a[lidx]->left == 0)
+          empty = TRUE;
+      else
+          empty = FALSE;
 
-          /* Step past layer data */
-          for (cidx = 0; cidx < lyr_a[lidx]->num_channels; ++cidx)
+      /* Empty mask */
+      if (lyr_a[lidx]->layer_mask.bottom - lyr_a[lidx]->layer_mask.top == 0
+          || lyr_a[lidx]->layer_mask.right - lyr_a[lidx]->layer_mask.left == 0)
+          empty_mask = TRUE;
+      else
+          empty_mask = FALSE;
+
+      IFDBG(3) g_debug ("Empty mask %d, size %d %d", empty_mask,
+                        lyr_a[lidx]->layer_mask.bottom - lyr_a[lidx]->layer_mask.top,
+                        lyr_a[lidx]->layer_mask.right - lyr_a[lidx]->layer_mask.left);
+
+      /* Load layer channel data */
+      IFDBG(2) g_debug ("Number of channels: %d", lyr_a[lidx]->num_channels);
+      /* Create pointer array for the channel records */
+      lyr_chn = g_new0 (PSDchannel *, lyr_a[lidx]->num_channels);
+      for (cidx = 0; cidx < lyr_a[lidx]->num_channels; ++cidx)
+        {
+          guint16 comp_mode = PSD_COMP_RAW;
+
+          /* Allocate channel record */
+          lyr_chn[cidx] = g_malloc (sizeof (PSDchannel) );
+
+          lyr_chn[cidx]->id = lyr_a[lidx]->chn_info[cidx].channel_id;
+          lyr_chn[cidx]->rows = lyr_a[lidx]->bottom - lyr_a[lidx]->top;
+          lyr_chn[cidx]->columns = lyr_a[lidx]->right - lyr_a[lidx]->left;
+          lyr_chn[cidx]->data = NULL;
+
+          if (lyr_chn[cidx]->id == PSD_CHANNEL_EXTRA_MASK)
             {
               if (! psd_seek (input, lyr_a[lidx]->chn_info[cidx].data_len,
                               G_SEEK_CUR, error))
                 {
                   psd_set_error (error);
+                  free_lyr_chn (lyr_chn, lyr_a[lidx]->num_channels);
                   return -1;
+                }
+
+              continue;
+            }
+          else if (lyr_chn[cidx]->id == PSD_CHANNEL_MASK)
+            {
+              /* Works around a bug in panotools psd files where the layer mask
+                 size is given as 0 but data exists. Set mask size to layer size.
+              */
+              if (empty_mask && lyr_a[lidx]->chn_info[cidx].data_len - 2 > 0)
+                {
+                  empty_mask = FALSE;
+                  if (lyr_a[lidx]->layer_mask.top == lyr_a[lidx]->layer_mask.bottom)
+                    {
+                      lyr_a[lidx]->layer_mask.top = lyr_a[lidx]->top;
+                      lyr_a[lidx]->layer_mask.bottom = lyr_a[lidx]->bottom;
+                    }
+                  if (lyr_a[lidx]->layer_mask.right == lyr_a[lidx]->layer_mask.left)
+                    {
+                      lyr_a[lidx]->layer_mask.right = lyr_a[lidx]->right;
+                      lyr_a[lidx]->layer_mask.left = lyr_a[lidx]->left;
+                    }
+                }
+              lyr_chn[cidx]->rows = (lyr_a[lidx]->layer_mask.bottom -
+                                    lyr_a[lidx]->layer_mask.top);
+              lyr_chn[cidx]->columns = (lyr_a[lidx]->layer_mask.right -
+                                        lyr_a[lidx]->layer_mask.left);
+            }
+
+          IFDBG(3) g_debug ("Channel id %d, %dx%d",
+                            lyr_chn[cidx]->id,
+                            lyr_chn[cidx]->columns,
+                            lyr_chn[cidx]->rows);
+
+          /* Only read channel data if there is any channel
+           * data. Note that the channel data can contain a
+           * compression method but no actual data.
+           */
+          if (lyr_a[lidx]->chn_info[cidx].data_len >= COMP_MODE_SIZE)
+            {
+              if (psd_read (input, &comp_mode, COMP_MODE_SIZE, error) < COMP_MODE_SIZE)
+                {
+                  psd_set_error (error);
+                  free_lyr_chn (lyr_chn, lyr_a[lidx]->num_channels);
+                  return -1;
+                }
+
+              if (! img_a->ibm_pc_format)
+                comp_mode = GUINT16_FROM_BE (comp_mode);
+              else
+                comp_mode = GUINT16_FROM_LE (comp_mode);
+              IFDBG(3) g_debug ("Compression mode: %d", comp_mode);
+            }
+          if (lyr_a[lidx]->chn_info[cidx].data_len > COMP_MODE_SIZE)
+            {
+              switch (comp_mode)
+                {
+                  case PSD_COMP_RAW:        /* Planar raw data */
+                    IFDBG(3) g_debug ("Raw data length: %" G_GSIZE_FORMAT,
+                                      lyr_a[lidx]->chn_info[cidx].data_len - 2);
+                    if (read_channel_data (lyr_chn[cidx], img_a->bps,
+                                           PSD_COMP_RAW, NULL, input, 0,
+                                           error) < 1)
+                      {
+                        psd_set_error (error);
+                        free_lyr_chn (lyr_chn, lyr_a[lidx]->num_channels);
+                        return -1;
+                      }
+                    break;
+
+                  case PSD_COMP_RLE:        /* Packbits */
+                    if (! read_RLE_channel (img_a, lyr_chn[cidx],
+                                            lyr_a[lidx]->chn_info[cidx].data_len,
+                                            input, error))
+                      {
+                        psd_set_error (error);
+                        free_lyr_chn (lyr_chn, lyr_a[lidx]->num_channels);
+                        return -1;
+                      }
+                    break;
+
+                  case PSD_COMP_ZIP:                 /* ? */
+                  case PSD_COMP_ZIP_PRED:
+                    if (read_channel_data (lyr_chn[cidx], img_a->bps,
+                                           comp_mode, NULL, input,
+                                           lyr_a[lidx]->chn_info[cidx].data_len - 2,
+                                           error) < 1)
+                      {
+                        psd_set_error (error);
+                        free_lyr_chn (lyr_chn, lyr_a[lidx]->num_channels);
+                        return -1;
+                      }
+                    break;
+
+                  default:
+                    g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                                 _("Unsupported compression mode: %d"), comp_mode);
+                    free_lyr_chn (lyr_chn, lyr_a[lidx]->num_channels);
+                    return -1;
+                    break;
                 }
             }
         }
+
+      /* Draw layer */
+
+      alpha = FALSE;
+      alpha_chn = -1;
+      user_mask = FALSE;
+      user_mask_chn = -1;
+      layer_channels = 0;
+      l_x = 0;
+      l_y = 0;
+      l_w = img_a->columns;
+      l_h = img_a->rows;
+      if (parent_group_stack->len > 0)
+        parent_group = g_array_index (parent_group_stack, GimpLayer *,
+                                      parent_group_stack->len - 1);
       else
+        parent_group = NULL; /* root */
+
+      if (img_a->color_mode == PSD_CMYK)
+        base_channels = 4;
+      else if (img_a->color_mode == PSD_RGB || img_a->color_mode == PSD_LAB)
+        base_channels = 3;
+      else
+        base_channels = 1;
+
+      IFDBG(3) g_debug ("Re-hash channel indices");
+      for (cidx = 0; cidx < lyr_a[lidx]->num_channels; ++cidx)
         {
-          /* Empty layer */
-          if (lyr_a[lidx]->bottom - lyr_a[lidx]->top == 0
-              || lyr_a[lidx]->right - lyr_a[lidx]->left == 0)
-              empty = TRUE;
-          else
-              empty = FALSE;
-
-          /* Empty mask */
-          if (lyr_a[lidx]->layer_mask.bottom - lyr_a[lidx]->layer_mask.top == 0
-              || lyr_a[lidx]->layer_mask.right - lyr_a[lidx]->layer_mask.left == 0)
-              empty_mask = TRUE;
-          else
-              empty_mask = FALSE;
-
-          IFDBG(3) g_debug ("Empty mask %d, size %d %d", empty_mask,
-                            lyr_a[lidx]->layer_mask.bottom - lyr_a[lidx]->layer_mask.top,
-                            lyr_a[lidx]->layer_mask.right - lyr_a[lidx]->layer_mask.left);
-
-          /* Load layer channel data */
-          IFDBG(2) g_debug ("Number of channels: %d", lyr_a[lidx]->num_channels);
-          /* Create pointer array for the channel records */
-          lyr_chn = g_new0 (PSDchannel *, lyr_a[lidx]->num_channels);
-          for (cidx = 0; cidx < lyr_a[lidx]->num_channels; ++cidx)
+          IFDBG(3) g_debug ("Channel: %d - id: %d", cidx, lyr_chn[cidx]->id);
+          if (lyr_chn[cidx]->id == PSD_CHANNEL_MASK ||
+              lyr_chn[cidx]->id == PSD_CHANNEL_EXTRA_MASK)
             {
-              guint16 comp_mode = PSD_COMP_RAW;
-
-              /* Allocate channel record */
-              lyr_chn[cidx] = g_malloc (sizeof (PSDchannel) );
-
-              lyr_chn[cidx]->id = lyr_a[lidx]->chn_info[cidx].channel_id;
-              lyr_chn[cidx]->rows = lyr_a[lidx]->bottom - lyr_a[lidx]->top;
-              lyr_chn[cidx]->columns = lyr_a[lidx]->right - lyr_a[lidx]->left;
-              lyr_chn[cidx]->data = NULL;
-
-              if (lyr_chn[cidx]->id == PSD_CHANNEL_EXTRA_MASK)
+              /* According to the specs the extra mask (which they call
+               * real user supplied layer mask) is used "when both a user
+               * mask and a vector mask are present".
+               * I haven't seen an example that has the extra mask, so not
+               * sure which of the masks would appear first.
+               * For now assuming that the extra mask will be first. */
+              if (! user_mask)
                 {
-                  if (! psd_seek (input, lyr_a[lidx]->chn_info[cidx].data_len,
-                                  G_SEEK_CUR, error))
-                    {
-                      psd_set_error (error);
-                      free_lyr_chn (lyr_chn, lyr_a[lidx]->num_channels);
-                      return -1;
-                    }
-
-                  continue;
+                  user_mask = TRUE;
+                  user_mask_chn = cidx;
                 }
-              else if (lyr_chn[cidx]->id == PSD_CHANNEL_MASK)
+              else
                 {
-                  /* Works around a bug in panotools psd files where the layer mask
-                     size is given as 0 but data exists. Set mask size to layer size.
-                  */
-                  if (empty_mask && lyr_a[lidx]->chn_info[cidx].data_len - 2 > 0)
-                    {
-                      empty_mask = FALSE;
-                      if (lyr_a[lidx]->layer_mask.top == lyr_a[lidx]->layer_mask.bottom)
-                        {
-                          lyr_a[lidx]->layer_mask.top = lyr_a[lidx]->top;
-                          lyr_a[lidx]->layer_mask.bottom = lyr_a[lidx]->bottom;
-                        }
-                      if (lyr_a[lidx]->layer_mask.right == lyr_a[lidx]->layer_mask.left)
-                        {
-                          lyr_a[lidx]->layer_mask.right = lyr_a[lidx]->right;
-                          lyr_a[lidx]->layer_mask.left = lyr_a[lidx]->left;
-                        }
-                    }
-                  lyr_chn[cidx]->rows = (lyr_a[lidx]->layer_mask.bottom -
-                                        lyr_a[lidx]->layer_mask.top);
-                  lyr_chn[cidx]->columns = (lyr_a[lidx]->layer_mask.right -
-                                           lyr_a[lidx]->layer_mask.left);
+                  /* Not using this mask, make sure it gets freed. */
+                  g_free (lyr_chn[cidx]->data);
                 }
+            }
+          else if (lyr_chn[cidx]->id == PSD_CHANNEL_ALPHA)
+            {
+              alpha = TRUE;
+              alpha_chn = cidx;
+            }
+          else if (lyr_chn[cidx]->data)
+            {
+              if (layer_channels < base_channels)
+                {
+                  channel_idx[layer_channels] = cidx;   /* Assumes in sane order */
+                  layer_channels++;                     /* RGB, Lab, CMYK etc.   */
+                }
+              else
+                {
+                  /* channel_idx[base_channels] is reserved for alpha channel,
+                   * but this layer apparently has extra channels.
+                   * From the one example I have (see #8411) it looks like
+                   * that channel is the same as the alpha channel. */
+                  IFDBG(2) g_debug ("This layer has an extra channel (id: %d)", lyr_chn[cidx]->id);
+                  if (layer_channels == base_channels)
+                    {
+                      /* Issue: 11131: More than one extra channel is possible.
+                       * First extra channel: skip alpha channel */
+                      channel_idx[layer_channels+1] = cidx;
+                      layer_channels += 2;
+                    }
+                  else
+                    {
+                      channel_idx[layer_channels] = cidx;
+                      layer_channels++;
+                    }
+                }
+            }
+          else
+            {
+              IFDBG(4) g_debug ("Channel %d (id: %d) has no data", cidx, lyr_chn[cidx]->id);
+            }
+        }
 
-              IFDBG(3) g_debug ("Channel id %d, %dx%d",
-                                lyr_chn[cidx]->id,
-                                lyr_chn[cidx]->columns,
-                                lyr_chn[cidx]->rows);
+      if (alpha)
+        {
+          if (layer_channels <= base_channels)
+            {
+              channel_idx[layer_channels] = alpha_chn;
+              layer_channels++;
+            }
+          else
+            {
+              channel_idx[base_channels] = alpha_chn;
+            }
+          base_channels++;
+        }
+      else if (layer_channels > base_channels)
+        {
+          IFDBG(3) g_debug ("No alpha channel, but we have extra channels!");
+          /* We have a gap for the non existent alpha channel.
+           * Just move the last extra channel there (untested, we don't have examples). */
+          channel_idx[base_channels] = channel_idx[layer_channels-1];
+          layer_channels--;
+        }
 
-              /* Only read channel data if there is any channel
-               * data. Note that the channel data can contain a
-               * compression method but no actual data.
+      IFDBG(4) g_debug ("Create the layer (group type: %d, clipping group type: %d)",
+                        lyr_a[lidx]->group_type, lyr_a[lidx]->clipping_group_type);
+
+      /* Create the layer */
+
+      /* Handle clipping groups first if present, since they don't have
+       * actual layer data attached to them. Except if we end with a
+       * group, since that group needs to be completed first. */
+      if (lyr_a[lidx]->clipping_group_type == 1)
+        {
+          /* Add a new clipping group */
+          IFDBG(2) g_debug ("[%d] Create placeholder clipping group layer", lidx);
+          parent_group = add_clipping_group (image, parent_group);
+          g_array_append_val (parent_group_stack, parent_group);
+        }
+      else if (lyr_a[lidx]->clipping_group_type == 2 &&
+               lyr_a[lidx]->group_type != 1 &&
+               lyr_a[lidx]->group_type != 2)
+        {
+          /* End of clipping group */
+          if (parent_group_stack->len)
+            {
+              parent_group = g_array_index (parent_group_stack, GimpLayer *,
+                                            parent_group_stack->len - 1);
+              IFDBG(2) g_debug ("[%d] End clipping group layer.", lidx);
+              g_array_remove_index (parent_group_stack,
+                                    parent_group_stack->len - 1);
+            }
+          else
+            {
+              IFDBG(1) g_debug ("WARNING: Unmatched group layer start marker.");
+              layer = NULL;
+            }
+        }
+
+      if (lyr_a[lidx]->group_type != 0)
+        {
+          if (lyr_a[lidx]->group_type == 3)
+            {
+              /* the </Layer group> marker layers are used to
+               * assemble the layer structure in a single pass
                */
-              if (lyr_a[lidx]->chn_info[cidx].data_len >= COMP_MODE_SIZE)
-                {
-                  if (psd_read (input, &comp_mode, COMP_MODE_SIZE, error) < COMP_MODE_SIZE)
-                    {
-                      psd_set_error (error);
-                      free_lyr_chn (lyr_chn, lyr_a[lidx]->num_channels);
-                      return -1;
-                    }
-
-                  if (! img_a->ibm_pc_format)
-                    comp_mode = GUINT16_FROM_BE (comp_mode);
-                  else
-                    comp_mode = GUINT16_FROM_LE (comp_mode);
-                  IFDBG(3) g_debug ("Compression mode: %d", comp_mode);
-                }
-              if (lyr_a[lidx]->chn_info[cidx].data_len > COMP_MODE_SIZE)
-                {
-                  switch (comp_mode)
-                    {
-                      case PSD_COMP_RAW:        /* Planar raw data */
-                        IFDBG(3) g_debug ("Raw data length: %" G_GSIZE_FORMAT,
-                                          lyr_a[lidx]->chn_info[cidx].data_len - 2);
-                        if (read_channel_data (lyr_chn[cidx], img_a->bps,
-                                               PSD_COMP_RAW, NULL, input, 0,
-                                               error) < 1)
-                          {
-                            psd_set_error (error);
-                            free_lyr_chn (lyr_chn, lyr_a[lidx]->num_channels);
-                            return -1;
-                          }
-                        break;
-
-                      case PSD_COMP_RLE:        /* Packbits */
-                        if (! read_RLE_channel (img_a, lyr_chn[cidx],
-                                                lyr_a[lidx]->chn_info[cidx].data_len,
-                                                input, error))
-                          {
-                            psd_set_error (error);
-                            free_lyr_chn (lyr_chn, lyr_a[lidx]->num_channels);
-                            return -1;
-                          }
-                        break;
-
-                      case PSD_COMP_ZIP:                 /* ? */
-                      case PSD_COMP_ZIP_PRED:
-                        if (read_channel_data (lyr_chn[cidx], img_a->bps,
-                                               comp_mode, NULL, input,
-                                               lyr_a[lidx]->chn_info[cidx].data_len - 2,
-                                               error) < 1)
-                          {
-                            psd_set_error (error);
-                            free_lyr_chn (lyr_chn, lyr_a[lidx]->num_channels);
-                            return -1;
-                          }
-                        break;
-
-                      default:
-                        g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
-                                    _("Unsupported compression mode: %d"), comp_mode);
-                        free_lyr_chn (lyr_chn, lyr_a[lidx]->num_channels);
-                        return -1;
-                        break;
-                    }
-                }
+              IFDBG(2) g_debug ("Create placeholder group layer");
+              layer = GIMP_LAYER (gimp_group_layer_new (image, NULL));
+              /* add this group layer as the new parent */
+              g_array_append_val (parent_group_stack, layer);
             }
-
-          /* Draw layer */
-
-          alpha = FALSE;
-          alpha_chn = -1;
-          user_mask = FALSE;
-          user_mask_chn = -1;
-          layer_channels = 0;
-          l_x = 0;
-          l_y = 0;
-          l_w = img_a->columns;
-          l_h = img_a->rows;
-          if (parent_group_stack->len > 0)
-            parent_group = g_array_index (parent_group_stack, GimpLayer *,
-                                          parent_group_stack->len - 1);
-          else
-            parent_group = NULL; /* root */
-
-          if (img_a->color_mode == PSD_CMYK)
-            base_channels = 4;
-          else if (img_a->color_mode == PSD_RGB || img_a->color_mode == PSD_LAB)
-            base_channels = 3;
-          else
-            base_channels = 1;
-
-          IFDBG(3) g_debug ("Re-hash channel indices");
-          for (cidx = 0; cidx < lyr_a[lidx]->num_channels; ++cidx)
+          else /* group-type == 1 || group_type == 2 */
             {
-              IFDBG(3) g_debug ("Channel: %d - id: %d", cidx, lyr_chn[cidx]->id);
-              if (lyr_chn[cidx]->id == PSD_CHANNEL_MASK ||
-                  lyr_chn[cidx]->id == PSD_CHANNEL_EXTRA_MASK)
+              if (parent_group_stack->len)
                 {
-                  /* According to the specs the extra mask (which they call
-                   * real user supplied layer mask) is used "when both a user
-                   * mask and a vector mask are present".
-                   * I haven't seen an example that has the extra mask, so not
-                   * sure which of the masks would appear first.
-                   * For now assuming that the extra mask will be first. */
-                  if (! user_mask)
-                    {
-                      user_mask = TRUE;
-                      user_mask_chn = cidx;
-                    }
-                  else
-                    {
-                      /* Not using this mask, make sure it gets freed. */
-                      g_free (lyr_chn[cidx]->data);
-                    }
-                }
-              else if (lyr_chn[cidx]->id == PSD_CHANNEL_ALPHA)
-                {
-                  alpha = TRUE;
-                  alpha_chn = cidx;
-                }
-              else if (lyr_chn[cidx]->data)
-                {
-                  if (layer_channels < base_channels)
-                    {
-                      channel_idx[layer_channels] = cidx;   /* Assumes in sane order */
-                      layer_channels++;                     /* RGB, Lab, CMYK etc.   */
-                    }
-                  else
-                    {
-                      /* channel_idx[base_channels] is reserved for alpha channel,
-                       * but this layer apparently has extra channels.
-                       * From the one example I have (see #8411) it looks like
-                       * that channel is the same as the alpha channel. */
-                      IFDBG(2) g_debug ("This layer has an extra channel (id: %d)", lyr_chn[cidx]->id);
-                      channel_idx[layer_channels+1] = cidx;   /* Assumes in sane order */
-                      layer_channels += 2;                    /* RGB, Lab, CMYK etc.   */
-                    }
-                }
-              else
-                {
-                  IFDBG(4) g_debug ("Channel %d (id: %d) has no data", cidx, lyr_chn[cidx]->id);
-                }
-            }
-
-          if (alpha)
-            {
-              if (layer_channels <= base_channels)
-                {
-                  channel_idx[layer_channels] = alpha_chn;
-                  layer_channels++;
-                }
-              else
-                {
-                  channel_idx[base_channels] = alpha_chn;
-                }
-              base_channels++;
-            }
-
-          IFDBG(4) g_debug ("Create the layer (group type: %d, clipping group type: %d)",
-                            lyr_a[lidx]->group_type, lyr_a[lidx]->clipping_group_type);
-
-          /* Create the layer */
-          if (lyr_a[lidx]->group_type != 0)
-            {
-              if (lyr_a[lidx]->group_type == 3)
-                {
-                  /* the </Layer group> marker layers are used to
-                   * assemble the layer structure in a single pass
+                  layer = g_array_index (parent_group_stack, GimpLayer *,
+                                         parent_group_stack->len - 1);
+                  IFDBG(2) g_debug ("End group layer id %d.", gimp_item_get_id (GIMP_ITEM (layer)));
+                  /* since the layers are stored in reverse, the group
+                   * layer start marker actually means we're done with
+                   * that layer group
                    */
-                  IFDBG(2) g_debug ("Create placeholder group layer");
-                  layer = gimp_layer_group_new (image);
-                  /* add this group layer as the new parent */
-                  g_array_append_val (parent_group_stack, layer);
+                  g_array_remove_index (parent_group_stack,
+                                        parent_group_stack->len - 1);
+
+                  gimp_drawable_get_offsets (GIMP_DRAWABLE (layer), &l_x, &l_y);
+
+                  l_w = gimp_drawable_get_width  (GIMP_DRAWABLE (layer));
+                  l_h = gimp_drawable_get_height (GIMP_DRAWABLE (layer));
                 }
-              else /* group-type == 1 || group_type == 2 */
+              else
                 {
+                  IFDBG(1) g_debug ("WARNING: Unmatched group layer start marker.");
+                  layer = NULL;
+                }
+              if (lyr_a[lidx]->clipping_group_type == 2)
+                {
+                  /* This group is also the top of a clipping group, which we
+                   * now need to finish. */
                   if (parent_group_stack->len)
                     {
-                      layer = g_array_index (parent_group_stack, GimpLayer *,
-                                             parent_group_stack->len - 1);
-                      IFDBG(2) g_debug ("End group layer id %d.", gimp_item_get_id (GIMP_ITEM (layer)));
-                      /* since the layers are stored in reverse, the group
-                       * layer start marker actually means we're done with
-                       * that layer group
-                       */
+                      parent_group = g_array_index (parent_group_stack, GimpLayer *,
+                                                    parent_group_stack->len - 1);
+                      IFDBG(2) g_debug ("[%d] End clipping group layer.", lidx);
                       g_array_remove_index (parent_group_stack,
                                             parent_group_stack->len - 1);
-
-                      gimp_drawable_get_offsets (GIMP_DRAWABLE (layer), &l_x, &l_y);
-
-                      l_w = gimp_drawable_get_width  (GIMP_DRAWABLE (layer));
-                      l_h = gimp_drawable_get_height (GIMP_DRAWABLE (layer));
                     }
                   else
                     {
@@ -2212,330 +2429,321 @@ add_layers (GimpImage     *image,
                     }
                 }
             }
+        }
+      else
+        {
+          if (empty)
+            {
+              IFDBG(2) g_debug ("Create blank layer");
+            }
           else
             {
-              if (lyr_a[lidx]->clipping_group_type == 1)
+              IFDBG(2) g_debug ("Create normal layer");
+              l_x = lyr_a[lidx]->left;
+              l_y = lyr_a[lidx]->top;
+              l_w = lyr_a[lidx]->right - lyr_a[lidx]->left;
+              l_h = lyr_a[lidx]->bottom - lyr_a[lidx]->top;
+
+              if (l_h <= 0)
                 {
-                  clipping_group = add_clipping_group (image, parent_group);
+                  /* For fill layers this can be -1 apparently;
+                     e.g. test file CT_SkillTest_v1.psd
+                     Mark as empty and set height to 1.
+                   */
+                  empty = TRUE;
+                  l_h = 1;
                 }
-
-              if (empty)
+              if (l_w <= 0)
                 {
-                  IFDBG(2) g_debug ("Create blank layer");
+                  g_warning ("Unexpected layer width: %d", l_w);
+                  empty = TRUE;
+                  l_w = 1;
                 }
-              else
-                {
-                  IFDBG(2) g_debug ("Create normal layer");
-                  l_x = lyr_a[lidx]->left;
-                  l_y = lyr_a[lidx]->top;
-                  l_w = lyr_a[lidx]->right - lyr_a[lidx]->left;
-                  l_h = lyr_a[lidx]->bottom - lyr_a[lidx]->top;
-
-                  if (l_h <= 0)
-                    {
-                      /* For fill layers this can be -1 apparently;
-                         e.g. test file CT_SkillTest_v1.psd
-                         Mark as empty and set height to 1.
-                       */
-                      empty = TRUE;
-                      l_h = 1;
-                    }
-                  if (l_w <= 0)
-                    {
-                      g_warning ("Unexpected layer width: %d", l_w);
-                      empty = TRUE;
-                      l_w = 1;
-                    }
-                }
-
-              image_type = get_gimp_image_type (img_a->base_type, TRUE);
-              IFDBG(3) g_debug ("Layer type %d", image_type);
-
-              layer = gimp_layer_new (image, lyr_a[lidx]->name,
-                                      l_w, l_h, image_type,
-                                      100, GIMP_LAYER_MODE_NORMAL);
             }
 
-          if (layer != NULL)
+          image_type = get_gimp_image_type (img_a->base_type, TRUE);
+          IFDBG(3) g_debug ("Layer type %d", image_type);
+
+          layer = gimp_layer_new (image, lyr_a[lidx]->name,
+                                  l_w, l_h, image_type,
+                                  100, GIMP_LAYER_MODE_NORMAL);
+        }
+
+      if (layer != NULL)
+        {
+          /* Set the layer name.  Note that we do this even for group-end
+           * markers, to avoid having the default group name collide with
+           * subsequent layers; the real group name is set by the group
+           * start marker.
+           */
+          if (lyr_a[lidx]->name)
+            gimp_item_set_name (GIMP_ITEM (layer), lyr_a[lidx]->name);
+
+          /* Set the layer properties (skip this for layer group end
+           * markers; we set their properties when processing the start
+           * marker.)
+           */
+          if (lyr_a[lidx]->group_type != 3)
             {
-              /* Set the layer name.  Note that we do this even for group-end
-               * markers, to avoid having the default group name collide with
-               * subsequent layers; the real group name is set by the group
-               * start marker.
-               */
-              if (lyr_a[lidx]->name)
-                gimp_item_set_name (GIMP_ITEM (layer), lyr_a[lidx]->name);
+              /* Mode */
+              psd_to_gimp_blend_mode (lyr_a[lidx], &mode_info);
+              gimp_layer_set_mode (layer, mode_info.mode);
+              gimp_layer_set_blend_space (layer, mode_info.blend_space);
+              gimp_layer_set_composite_space (layer, mode_info.composite_space);
+              gimp_layer_set_composite_mode (layer, mode_info.composite_mode);
 
-              /* Set the layer properties (skip this for layer group end
-               * markers; we set their properties when processing the start
-               * marker.)
-               */
-              if (lyr_a[lidx]->group_type != 3)
-                {
-                  /* Mode */
-                  psd_to_gimp_blend_mode (lyr_a[lidx], &mode_info);
-                  gimp_layer_set_mode (layer, mode_info.mode);
-                  gimp_layer_set_blend_space (layer, mode_info.blend_space);
-                  gimp_layer_set_composite_space (layer, mode_info.composite_space);
-                  gimp_layer_set_composite_mode (layer, mode_info.composite_mode);
+              /* Opacity */
+              gimp_layer_set_opacity (layer,
+                                      lyr_a[lidx]->opacity * 100.0 / 255.0);
 
-                  /* Opacity */
-                  gimp_layer_set_opacity (layer,
-                                          lyr_a[lidx]->opacity * 100.0 / 255.0);
-
-                  /* Flags */
-                  gimp_layer_set_lock_alpha  (layer, lyr_a[lidx]->layer_flags.trans_prot);
-                  gimp_item_set_visible (GIMP_ITEM (layer), lyr_a[lidx]->layer_flags.visible);
+              /* Flags */
+              gimp_layer_set_lock_alpha  (layer, lyr_a[lidx]->layer_flags.trans_prot);
+              gimp_item_set_visible (GIMP_ITEM (layer), lyr_a[lidx]->layer_flags.visible);
 #if 0
-                  /* according to the spec, the 'irrelevant' flag indicates
-                   * that the layer's "pixel data is irrelevant to the
-                   * appearance of the document".  what this seems to mean is
-                   * not that the layer doesn't contribute to the image, but
-                   * rather that its appearance can be entirely derived from
-                   * sources other than the pixel data, such as vector data.
-                   * in particular, this doesn't mean that the layer is
-                   * invisible. since we only support raster layers atm, we can
-                   * just ignore this flag.
-                   */
-                  if (lyr_a[lidx]->layer_flags.irrelevant &&
-                      lyr_a[lidx]->group_type == 0)
-                    {
-                      gimp_item_set_visible (GIMP_ITEM (layer), FALSE);
-                    }
+              /* according to the spec, the 'irrelevant' flag indicates
+               * that the layer's "pixel data is irrelevant to the
+               * appearance of the document".  what this seems to mean is
+               * not that the layer doesn't contribute to the image, but
+               * rather that its appearance can be entirely derived from
+               * sources other than the pixel data, such as vector data.
+               * in particular, this doesn't mean that the layer is
+               * invisible. since we only support raster layers atm, we can
+               * just ignore this flag.
+               */
+              if (lyr_a[lidx]->layer_flags.irrelevant &&
+                  lyr_a[lidx]->group_type == 0)
+                {
+                  gimp_item_set_visible (GIMP_ITEM (layer), FALSE);
+                }
 #endif
 
-                  /* Position */
-                  if (l_x != 0 || l_y != 0)
-                    gimp_layer_set_offsets (layer, l_x, l_y);
+              /* Position */
+              if (l_x != 0 || l_y != 0)
+                gimp_layer_set_offsets (layer, l_x, l_y);
 
-                  /* Color tag */
-                  gimp_item_set_color_tag (GIMP_ITEM (layer),
-                                           psd_to_gimp_layer_color_tag (lyr_a[lidx]->color_tag[0]));
+              /* Color tag */
+              gimp_item_set_color_tag (GIMP_ITEM (layer),
+                                       psd_to_gimp_layer_color_tag (lyr_a[lidx]->color_tag[0]));
 
-                  /* Tattoo */
-                  if (lyr_a[lidx]->id)
-                    gimp_item_set_tattoo (GIMP_ITEM (layer), lyr_a[lidx]->id);
+              /* Tattoo */
+              if (lyr_a[lidx]->id)
+                gimp_item_set_tattoo (GIMP_ITEM (layer), lyr_a[lidx]->id);
 
-                  /* For layer groups, expand or collapse the group */
-                  if (lyr_a[lidx]->group_type != 0)
-                    {
-                      gimp_item_set_expanded (GIMP_ITEM (layer),
-                                              lyr_a[lidx]->group_type == 1);
-                    }
-                }
-
-              /* Remember the selected layers:
-               * - Layer Selection ID(s) (0x042D) are prioritary;
-               * - Layer state information (0x0400) is used instead
-               *   otherwise.
-               */
-              if (img_a->layer_selection)
+              /* For layer groups, expand or collapse the group */
+              if (lyr_a[lidx]->group_type != 0)
                 {
-                  if (g_list_find (img_a->layer_selection, GINT_TO_POINTER (lyr_a[lidx]->id)) != NULL)
-                    {
-                      selected_layers = g_list_prepend (selected_layers, layer);
-                    }
+                  gimp_item_set_expanded (GIMP_ITEM (layer),
+                                          lyr_a[lidx]->group_type == 1);
                 }
-              else if (lidx == img_a->layer_state)
+            }
+
+          /* Remember the selected layers:
+           * - Layer Selection ID(s) (0x042D) are prioritary;
+           * - Layer state information (0x0400) is used instead
+           *   otherwise.
+           */
+          if (img_a->layer_selection)
+            {
+              if (g_list_find (img_a->layer_selection, GINT_TO_POINTER (lyr_a[lidx]->id)) != NULL)
                 {
                   selected_layers = g_list_prepend (selected_layers, layer);
                 }
+            }
+          else if (lidx == img_a->layer_state)
+            {
+              selected_layers = g_list_prepend (selected_layers, layer);
+            }
 
-              /* Set the layer data */
-              if (lyr_a[lidx]->group_type == 0)
+          /* Set the layer data */
+          if (lyr_a[lidx]->group_type == 0)
+            {
+              IFDBG(3) g_debug ("Draw layer");
+
+              if (empty)
                 {
-                  IFDBG(3) g_debug ("Draw layer");
+                  gimp_drawable_fill (GIMP_DRAWABLE (layer), GIMP_FILL_TRANSPARENT);
+                }
+              else
+                {
+                  GeglBufferIterator *iter;
 
-                  if (empty)
+                  bps = img_a->bps / 8;
+                  if (bps == 0)
+                    bps++;
+
+                  buffer = gimp_drawable_get_buffer (GIMP_DRAWABLE (layer));
+
+                  iter = gegl_buffer_iterator_new (
+                    buffer, NULL, 0, get_layer_format (img_a, alpha),
+                    GEGL_ACCESS_WRITE, GEGL_ABYSS_NONE, 1);
+
+                  while (gegl_buffer_iterator_next (iter))
                     {
-                      gimp_drawable_fill (GIMP_DRAWABLE (layer), GIMP_FILL_TRANSPARENT);
-                    }
-                  else
-                    {
-                      GeglBufferIterator *iter;
+                      const GeglRectangle *roi      = &iter->items[0].roi;
+                      guint8              *dst0     = iter->items[0].data;
+                      gint                 src_step = bps;
+                      gint                 dst_step = bps * base_channels;
 
-                      bps = img_a->bps / 8;
-                      if (bps == 0)
-                        bps++;
-
-                      buffer = gimp_drawable_get_buffer (GIMP_DRAWABLE (layer));
-
-                      iter = gegl_buffer_iterator_new (
-                        buffer, NULL, 0, get_layer_format (img_a, alpha),
-                        GEGL_ACCESS_WRITE, GEGL_ABYSS_NONE, 1);
-
-                      while (gegl_buffer_iterator_next (iter))
+                      if (img_a->color_mode == PSD_CMYK || img_a->color_mode == PSD_LAB)
                         {
-                          const GeglRectangle *roi      = &iter->items[0].roi;
-                          guint8              *dst0     = iter->items[0].data;
-                          gint                 src_step = bps;
-                          gint                 dst_step = bps * base_channels;
+                          dst0 = gegl_scratch_alloc (base_channels * bps *
+                                                     iter->length);
+                        }
 
-                          if (img_a->color_mode == PSD_CMYK || img_a->color_mode == PSD_LAB)
+                      for (cidx = 0; cidx < base_channels; ++cidx)
+                        {
+                          gint b;
+
+                          if (roi->x == 0 && roi->y == 0)
+                            IFDBG(3) g_debug ("Start channel %d", channel_idx[cidx]);
+
+                          for (b = 0; b < bps; ++b)
                             {
-                              dst0 = gegl_scratch_alloc (base_channels * bps *
-                                                         iter->length);
-                            }
+                              guint8 *dst;
+                              gint    y;
 
-                          for (cidx = 0; cidx < base_channels; ++cidx)
-                            {
-                              gint b;
+                              dst = &dst0[cidx * bps + b];
 
-                              if (roi->x == 0 && roi->y == 0)
-                                IFDBG(3) g_debug ("Start channel %d", channel_idx[cidx]);
-
-                              for (b = 0; b < bps; ++b)
+                              for (y = 0; y < roi->height; y++)
                                 {
-                                  guint8 *dst;
-                                  gint    y;
+                                  const guint8 *src;
+                                  gint          x;
 
-                                  dst = &dst0[cidx * bps + b];
+                                  src = (const guint8 *)
+                                    &lyr_chn[channel_idx[cidx]]->data[
+                                      ((roi->y + y) * l_w +
+                                        roi->x)      * bps +
+                                      b];
 
-                                  for (y = 0; y < roi->height; y++)
+                                  for (x = 0; x < roi->width; ++x)
                                     {
-                                      const guint8 *src;
-                                      gint          x;
+                                      *dst = *src;
 
-                                      src = (const guint8 *)
-                                        &lyr_chn[channel_idx[cidx]]->data[
-                                          ((roi->y + y) * l_w +
-                                           roi->x)      * bps +
-                                          b];
-
-                                      for (x = 0; x < roi->width; ++x)
-                                        {
-                                          *dst = *src;
-
-                                          src += src_step;
-                                          dst += dst_step;
-                                        }
+                                      src += src_step;
+                                      dst += dst_step;
                                     }
                                 }
                             }
-
-                          if (img_a->color_mode == PSD_CMYK)
-                            {
-                              psd_convert_cmyk_to_srgb (
-                                img_a,
-                                iter->items[0].data, dst0,
-                                roi->width, roi->height,
-                                alpha, error);
-
-                              gegl_scratch_free (dst0);
-                            }
-                          else if (img_a->color_mode == PSD_LAB)
-                            {
-                              psd_convert_lab_to_srgb (
-                                img_a,
-                                iter->items[0].data, dst0,
-                                roi->width, roi->height,
-                                alpha);
-
-                              gegl_scratch_free (dst0);
-                            }
                         }
 
-                      for (cidx = 0; cidx < layer_channels; ++cidx)
-                        g_free (lyr_chn[channel_idx[cidx]]->data);
+                      if (img_a->color_mode == PSD_CMYK)
+                        {
+                          psd_convert_cmyk_to_srgb (
+                            img_a,
+                            iter->items[0].data, dst0,
+                            roi->width, roi->height,
+                            alpha, error);
 
-                      g_object_unref (buffer);
+                          gegl_scratch_free (dst0);
+                        }
+                      else if (img_a->color_mode == PSD_LAB)
+                        {
+                          psd_convert_lab_to_srgb (
+                            img_a,
+                            iter->items[0].data, dst0,
+                            roi->width, roi->height,
+                            alpha);
+
+                          gegl_scratch_free (dst0);
+                        }
                     }
-                }
 
-              /* Layer mask */
-              if (user_mask && lyr_a[lidx]->group_type != 3)
+                  for (cidx = 0; cidx < layer_channels; ++cidx)
+                    g_free (lyr_chn[channel_idx[cidx]]->data);
+
+                  g_object_unref (buffer);
+                }
+            }
+
+          /* Layer mask */
+          if (user_mask && lyr_a[lidx]->group_type != 3)
+            {
+              if (empty_mask)
                 {
-                  if (empty_mask)
+                  IFDBG(3) g_debug ("Create empty mask");
+                  if (lyr_a[lidx]->layer_mask.def_color == 255)
+                    mask = gimp_layer_create_mask (layer,
+                                                   GIMP_ADD_MASK_WHITE);
+                  else
+                    mask = gimp_layer_create_mask (layer,
+                                                   GIMP_ADD_MASK_BLACK);
+                  gimp_layer_add_mask (layer, mask);
+                  gimp_layer_set_apply_mask (layer,
+                                             ! lyr_a[lidx]->layer_mask.mask_flags.disabled);
+                }
+              else
+                {
+                  GeglRectangle mask_rect;
+
+                  /* Load layer mask data */
+                  lm_x = lyr_a[lidx]->layer_mask.left - l_x;
+                  lm_y = lyr_a[lidx]->layer_mask.top - l_y;
+                  lm_w = lyr_a[lidx]->layer_mask.right - lyr_a[lidx]->layer_mask.left;
+                  lm_h = lyr_a[lidx]->layer_mask.bottom - lyr_a[lidx]->layer_mask.top;
+                  IFDBG(3) g_debug ("Mask channel index %d", user_mask_chn);
+                  IFDBG(3) g_debug ("Original Mask %d %d %d %d", lm_x, lm_y, lm_w, lm_h);
+                  /* Crop mask at layer boundary, and draw layer mask data,
+                   * if any
+                   */
+                  if (gegl_rectangle_intersect (
+                        &mask_rect,
+                        GEGL_RECTANGLE (0, 0, l_w, l_h),
+                        GEGL_RECTANGLE (lm_x, lm_y, lm_w, lm_h)))
                     {
-                      IFDBG(3) g_debug ("Create empty mask");
+                      IFDBG(3) g_debug ("Layer %d %d %d %d", l_x, l_y, l_w, l_h);
+                      IFDBG(3) g_debug ("Mask %d %d %d %d",
+                                        mask_rect.x,     mask_rect.y,
+                                        mask_rect.width, mask_rect.height);
+
                       if (lyr_a[lidx]->layer_mask.def_color == 255)
                         mask = gimp_layer_create_mask (layer,
                                                        GIMP_ADD_MASK_WHITE);
                       else
                         mask = gimp_layer_create_mask (layer,
                                                        GIMP_ADD_MASK_BLACK);
+
+                      bps = img_a->bps / 8;
+                      if (bps == 0)
+                        bps++;
+
+                      IFDBG(3) g_debug ("New layer mask %d", gimp_item_get_id (GIMP_ITEM (mask)));
                       gimp_layer_add_mask (layer, mask);
+                      buffer = gimp_drawable_get_buffer (GIMP_DRAWABLE (mask));
+                      gegl_buffer_set (buffer,
+                                        &mask_rect,
+                                        0, get_mask_format (img_a),
+                                        lyr_chn[user_mask_chn]->data + (
+                                          (mask_rect.y - lm_y)  * lm_w +
+                                          (mask_rect.x - lm_x)) * bps,
+                                        lm_w * bps);
+                      g_object_unref (buffer);
                       gimp_layer_set_apply_mask (layer,
                                                  ! lyr_a[lidx]->layer_mask.mask_flags.disabled);
                     }
-                  else
-                    {
-                      GeglRectangle mask_rect;
-
-                      /* Load layer mask data */
-                      lm_x = lyr_a[lidx]->layer_mask.left - l_x;
-                      lm_y = lyr_a[lidx]->layer_mask.top - l_y;
-                      lm_w = lyr_a[lidx]->layer_mask.right - lyr_a[lidx]->layer_mask.left;
-                      lm_h = lyr_a[lidx]->layer_mask.bottom - lyr_a[lidx]->layer_mask.top;
-                      IFDBG(3) g_debug ("Mask channel index %d", user_mask_chn);
-                      IFDBG(3) g_debug ("Original Mask %d %d %d %d", lm_x, lm_y, lm_w, lm_h);
-                      /* Crop mask at layer boundary, and draw layer mask data,
-                       * if any
-                       */
-                      if (gegl_rectangle_intersect (
-                            &mask_rect,
-                            GEGL_RECTANGLE (0, 0, l_w, l_h),
-                            GEGL_RECTANGLE (lm_x, lm_y, lm_w, lm_h)))
-                        {
-                          IFDBG(3) g_debug ("Layer %d %d %d %d", l_x, l_y, l_w, l_h);
-                          IFDBG(3) g_debug ("Mask %d %d %d %d",
-                                            mask_rect.x,     mask_rect.y,
-                                            mask_rect.width, mask_rect.height);
-
-                          if (lyr_a[lidx]->layer_mask.def_color == 255)
-                            mask = gimp_layer_create_mask (layer,
-                                                           GIMP_ADD_MASK_WHITE);
-                          else
-                            mask = gimp_layer_create_mask (layer,
-                                                           GIMP_ADD_MASK_BLACK);
-
-                          bps = img_a->bps / 8;
-                          if (bps == 0)
-                            bps++;
-
-                          IFDBG(3) g_debug ("New layer mask %d", gimp_item_get_id (GIMP_ITEM (mask)));
-                          gimp_layer_add_mask (layer, mask);
-                          buffer = gimp_drawable_get_buffer (GIMP_DRAWABLE (mask));
-                          gegl_buffer_set (buffer,
-                                           &mask_rect,
-                                           0, get_mask_format (img_a),
-                                           lyr_chn[user_mask_chn]->data + (
-                                             (mask_rect.y - lm_y)  * lm_w +
-                                             (mask_rect.x - lm_x)) * bps,
-                                           lm_w * bps);
-                          g_object_unref (buffer);
-                          gimp_layer_set_apply_mask (layer,
-                                                     ! lyr_a[lidx]->layer_mask.mask_flags.disabled);
-                        }
-                      g_free (lyr_chn[user_mask_chn]->data);
-                    }
+                  g_free (lyr_chn[user_mask_chn]->data);
                 }
-
-                /* Insert the layer */
-                if (lyr_a[lidx]->group_type == 0 || /* normal layer */
-                    lyr_a[lidx]->group_type == 3    /* group layer end marker */)
-                  {
-                    if (clipping_group)
-                      {
-                        gimp_image_insert_layer (image, layer, clipping_group, 0);
-
-                        if (lyr_a[lidx]->clipping_group_type == 2)
-                          {
-                            /* End of our clipping group. */
-                            clipping_group = NULL;
-                          }
-                      }
-                    else
-                      {
-                        gimp_image_insert_layer (image, layer, parent_group, 0);
-                      }
-                  }
             }
 
-          free_lyr_chn (lyr_chn, lyr_a[lidx]->num_channels);
+            /* Add legacy layer styles if applicable.
+             * TODO: When we can load modern layer styles, only load these if
+             * the file doesn't have modern layer style data. */
+            if (lyr_a[lidx]->layer_styles->count > 0)
+              add_legacy_layer_effects (layer, lyr_a[lidx],
+                                        img_a->ibm_pc_format);
+
+            /* Insert the layer */
+            if (lyr_a[lidx]->group_type == 0 || /* normal layer */
+                lyr_a[lidx]->group_type == 3    /* group layer end marker */)
+              {
+                gimp_image_insert_layer (image, layer, parent_group, 0);
+              }
         }
+
+      free_lyr_chn (lyr_chn, lyr_a[lidx]->num_channels);
+
       g_free (lyr_a[lidx]->chn_info);
       g_free (lyr_a[lidx]->name);
+      g_free (lyr_a[lidx]->layer_styles);
       g_free (lyr_a[lidx]);
     }
   g_free (lyr_a);
@@ -2546,6 +2754,40 @@ add_layers (GimpImage     *image,
   g_list_free (img_a->layer_selection);
 
   return 0;
+}
+
+static void
+add_legacy_layer_effects (GimpLayer *layer,
+                          PSDlayer  *lyr_a,
+                          gboolean   ibm_pc_format)
+{
+  const Babl *format = gimp_drawable_get_format (GIMP_DRAWABLE (layer));
+  const Babl *space  = babl_format_get_space (format);
+
+  if (lyr_a->layer_styles->count == 7 &&
+      lyr_a->layer_styles->sofi.enabled == 1)
+    {
+      PSDLayerStyleSolidFill  sofi;
+      GimpLayerMode           mode;
+      GimpDrawableFilter     *filter;
+      GeglColor              *color = gegl_color_new ("none");
+
+      sofi = lyr_a->layer_styles->sofi;
+
+      convert_legacy_psd_color (color, sofi.natcolor, space, ibm_pc_format);
+      convert_psd_mode (sofi.blend, &mode);
+
+      filter = gimp_drawable_append_new_filter (GIMP_DRAWABLE (layer),
+                                                "gegl:color-overlay",
+                                                NULL,
+                                                mode,
+                                                sofi.opacity / 255.0,
+                                                "value", color,
+                                                NULL);
+
+      g_object_unref (filter);
+      g_object_unref (color);
+    }
 }
 
 static gint
@@ -2574,7 +2816,6 @@ add_merged_image (GimpImage     *image,
   gint                  i;
   gboolean              alpha_visible;
   gboolean              alpha_channel = FALSE;
-  gboolean              original_mode_CMYK = FALSE;
   GeglBuffer           *buffer;
   GimpImageType         image_type;
   GeglColor            *alpha_rgb;
@@ -2604,19 +2845,6 @@ add_merged_image (GimpImage     *image,
             total_channels > 4)
     {
       extra_channels = total_channels - 4;
-    }
-
-  if (img_a->merged_image_only &&
-      img_a->color_mode == PSD_CMYK &&
-      img_a->num_layers > 0)
-    {
-      /* In this case there is no conversion. Merged image is RGB. */
-      img_a->color_mode = PSD_RGB;
-      original_mode_CMYK = TRUE;
-      if (! img_a->transparency)
-        {
-          total_channels--;
-        }
     }
 
   if (extra_channels > 0)
@@ -2785,37 +3013,6 @@ add_merged_image (GimpImage     *image,
                                    dst0, pixels,
                                    img_a->columns, img_a->rows,
                                    img_a->transparency || alpha_channel);
-          g_free (pixels);
-          pixels = dst0;
-        }
-      else if (original_mode_CMYK && img_a->transparency)
-        {
-          gint    irow;
-          guchar *dst0, *dst;
-          guchar *data;
-
-          dst0 = g_malloc (base_channels * layer_size * sizeof(guchar));
-          dst  = dst0;
-          data = pixels;
-
-          /* CMYKA layers: 5 channels but merged image is RGBA
-           * with RGB in the first 3 layers and A in 5th layer.
-           * Move A to 4th layer. */
-          for (irow = 0; irow < img_a->rows; irow++)
-            {
-              gint icol;
-
-              for (icol = 0; icol < img_a->columns; icol++)
-                {
-                  dst[0] = data[0];
-                  dst[1] = data[1];
-                  dst[2] = data[2];
-                  dst[3] = data[4];
-
-                  dst  += 4;
-                  data += 5;
-                }
-            }
           g_free (pixels);
           pixels = dst0;
         }
@@ -2997,9 +3194,8 @@ add_clipping_group (GimpImage  *image,
    * composition mode in a different manner than PS. */
   IFDBG(2) g_debug ("Creating a layer group to handle PS transparency clipping correctly.");
 
-  clipping_group = gimp_layer_group_new (image);
+  clipping_group = GIMP_LAYER (gimp_group_layer_new (image, "Group added by GIMP"));
 
-  gimp_item_set_name (GIMP_ITEM (clipping_group), "Group added by GIMP");
   gimp_layer_set_blend_space (clipping_group, GIMP_LAYER_COLOR_SPACE_RGB_PERCEPTUAL);
   gimp_layer_set_composite_space (clipping_group, GIMP_LAYER_COLOR_SPACE_RGB_PERCEPTUAL);
   gimp_layer_set_composite_mode (clipping_group, GIMP_LAYER_COMPOSITE_UNION);
@@ -3035,6 +3231,26 @@ get_psd_color_mode_name (PSDColorMode mode)
   err_name = g_strdup_printf ("UNKNOWN (%d)", mode);
 
   return err_name;
+}
+
+static void
+convert_legacy_psd_color (GeglColor  *color,
+                          guint16    *psd_color,
+                          const Babl *space,
+                          gboolean    ibm_pc_format)
+{
+  guint16 pixel[4];
+
+  for (gint i = 0; i < 4; i++)
+    {
+      pixel[i] = ibm_pc_format ? psd_color[i + 1] :
+                                 GUINT16_TO_BE (psd_color[i + 1]);
+    }
+
+  /* This is not specified in the documentation, but based on sample files,
+   * the color is assumed to be in the drawable's color space. */
+  gegl_color_set_pixel (color, babl_format_with_space ("R'G'B' u16", space),
+                        pixel);
 }
 
 static void
@@ -3428,7 +3644,8 @@ get_layer_format (PSDimage *img_a,
           break;
 
         case 16:
-          format = babl_format (img_a->color_mode == PSD_CMYK ? "R'G'B' float" : "R'G'B' u16");
+          format = babl_format ((img_a->color_mode == PSD_CMYK || img_a->color_mode == PSD_LAB) ?
+                                "R'G'B' float" : "R'G'B' u16");
           break;
 
         case 8:
@@ -3451,7 +3668,8 @@ get_layer_format (PSDimage *img_a,
           break;
 
         case 16:
-          format = babl_format (img_a->color_mode == PSD_CMYK ? "R'G'B'A float" : "R'G'B'A u16");
+          format = babl_format ((img_a->color_mode == PSD_CMYK || img_a->color_mode == PSD_LAB) ?
+                                "R'G'B'A float" : "R'G'B'A u16");
           break;
 
         case 8:
@@ -3621,11 +3839,11 @@ load_dialog (const gchar *title,
       if (unsupported_features->adjustment_layer)
         ADD_UNSUPPORTED_MESSAGE (message,
                                  "Adjustment layers are not yet "
-                                 "supported and will be dropped.");
+                                 "supported and will show up as empty layers.");
       if (unsupported_features->psd_metadata)
         ADD_UNSUPPORTED_MESSAGE (message,
-                                 "Metadata non-raster layers are "
-                                 "not yet supported and will be dropped.");
+                                 "Metadata non-raster layers are not yet "
+                                 "supported and will show up as empty layers.");
       if (unsupported_features->fill_layer)
         ADD_UNSUPPORTED_MESSAGE (message,
                                  "Fill layers are partially "
@@ -3639,7 +3857,7 @@ load_dialog (const gchar *title,
       if (unsupported_features->linked_layer)
         ADD_UNSUPPORTED_MESSAGE (message,
                                  "Linked layers are not yet "
-                                 "supported and will be dropped.");
+                                 "supported and will show up as empty layers.");
       if (unsupported_features->vector_mask)
         ADD_UNSUPPORTED_MESSAGE (message,
                                  "Vector masks are partially "
@@ -3648,20 +3866,20 @@ load_dialog (const gchar *title,
       if (unsupported_features->stroke)
         ADD_UNSUPPORTED_MESSAGE (message,
                                  "Vector strokes are not yet "
-                                 "supported and will be dropped.");
+                                 "supported and will show up as empty layers.");
       if (unsupported_features->layer_effect)
         ADD_UNSUPPORTED_MESSAGE (message,
                                  "Layer effects are not yet "
-                                 "supported and will be dropped.");
+                                 "supported and will show up as empty layers.");
       if (unsupported_features->smart_object)
         ADD_UNSUPPORTED_MESSAGE (message,
                                  "Smart objects are not yet "
-                                 "supported and will be dropped.");
+                                 "supported and will show up as empty layers.");
       if (unsupported_features->layer_comp)
         ADD_UNSUPPORTED_MESSAGE (message,
                                  /* Translators: short for layer compositions */
                                  "Layer comps are not yet "
-                                 "supported and will be dropped.");
+                                 "supported and will show up as empty layers.");
 #undef ADD_UNSUPPORTED_MESSAGE
 
       scrolled_window = gtk_scrolled_window_new (NULL, NULL);
@@ -3677,6 +3895,7 @@ load_dialog (const gchar *title,
       gtk_label_set_markup (GTK_LABEL (label), message);
       gtk_label_set_justify (GTK_LABEL (label), GTK_JUSTIFY_LEFT);
       gtk_label_set_line_wrap (GTK_LABEL (label), TRUE);
+      gtk_label_set_selectable (GTK_LABEL (label), TRUE);
       gtk_label_set_yalign (GTK_LABEL (label), 0.0);
       gtk_container_add (GTK_CONTAINER (scrolled_window), label);
       gtk_widget_show (label);

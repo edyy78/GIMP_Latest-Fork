@@ -183,6 +183,7 @@ G_BEGIN_DECLS
 #define GIMP_ICON_LOCK                      "gimp-lock"
 #define GIMP_ICON_LOCK_ALPHA                "gimp-lock-alpha"
 #define GIMP_ICON_LOCK_CONTENT              "gimp-lock-content"
+#define GIMP_ICON_LOCK_PATH                 "gimp-lock-path"
 #define GIMP_ICON_LOCK_POSITION             "gimp-lock-position"
 #define GIMP_ICON_LOCK_VISIBILITY           "gimp-lock-visibility"
 #define GIMP_ICON_LOCK_MULTI                "gimp-lock-multi"
@@ -210,8 +211,7 @@ G_BEGIN_DECLS
 #define GIMP_ICON_EDIT_REDO                 "edit-redo"
 #define GIMP_ICON_EDIT_UNDO                 "edit-undo"
 
-/* TODO: Replace with final layer effect icon */
-#define GIMP_ICON_EFFECT                    "gimp-display-filter"
+#define GIMP_ICON_EFFECT                    "gimp-effects"
 
 #define GIMP_ICON_EVEN_HORIZONTAL_GAP       "gimp-even-horizontal-gap"
 #define GIMP_ICON_EVEN_VERTICAL_GAP         "gimp-even-vertical-gap"
@@ -413,6 +413,8 @@ G_BEGIN_DECLS
 
 #define GIMP_ICON_VIEW_REFRESH              "view-refresh"
 #define GIMP_ICON_VIEW_FULLSCREEN           "view-fullscreen"
+#define GIMP_ICON_VIEW_SHRINK_WRAP          "view-shrink-wrap"
+#define GIMP_ICON_VIEW_ZOOM_FILL            "view-zoom-fill"
 
 #define GIMP_ICON_WILBER                    "gimp-wilber"
 #define GIMP_ICON_WILBER_EEK                "gimp-wilber-eek"

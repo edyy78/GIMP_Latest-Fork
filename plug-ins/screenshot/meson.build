@@ -39,11 +39,12 @@ if platform_windows
 endif
 
 screenshot = executable('screenshot',
-  plugin_sources,
-  dependencies: [
-    libgimpui_dep,
-    x11, xmu, xext, xfixes,
-  ],
-  install: true,
-  install_dir: gimpplugindir / 'plug-ins' / plugin_name,
-)
+                        plugin_sources,
+                        dependencies: [
+                          libgimpui_dep,
+                          x11, xmu, xext, xfixes,
+                        ],
+                        win_subsystem: 'windows',
+                        install: true,
+                        install_dir: gimpplugindir / 'plug-ins' / plugin_name)
+plugin_executables += [screenshot.full_path()]

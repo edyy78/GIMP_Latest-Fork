@@ -3,9 +3,9 @@
 
 ; Generally speaking, prefix is "gimp-get"
 
-
+; since 3.0rc2 get-color-configuration is private to libgimp
 ; The serialized color configuration is a string
-(assert '(string? (car (gimp-get-color-configuration))))
+; (assert '(string? (car (gimp-get-color-configuration))))
 
 ; The default comment on images is a string
 (assert '(string? (car (gimp-get-default-comment))))
@@ -16,8 +16,7 @@
 
 ; The list of open images is a vector of integer ID
 ; At test time, we don't know how many
-(assert '(number? (car (gimp-get-images))))
-(assert '(vector? (cadr (gimp-get-images))))
+(assert '(vector? (car (gimp-get-images))))
 
 ; The list of modules to not be loaded is a list of strings
 ; Not double wrapped in a list, usually ("")

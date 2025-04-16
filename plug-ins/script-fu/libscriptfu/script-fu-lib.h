@@ -18,16 +18,24 @@
 #ifndef __SCRIPT_FU_LIB_H__
 #define __SCRIPT_FU_LIB_H__
 
+gboolean     script_fu_report_progress           (void);
+
 gboolean     script_fu_extension_is_busy         (void);
 
 GList *      script_fu_search_path               (void);
+gchar *      script_fu_sys_init_directory        (void);
+gchar *      script_fu_user_init_directory       (void);
+gchar *      script_fu_get_init_subdirectory     (GFile *dir);
+gboolean     script_fu_is_init_directory         (GFile *dir);
+
 void         script_fu_find_and_register_scripts (GimpPlugIn     *plugin,
                                                   GList          *paths);
 
 void         script_fu_set_run_mode              (GimpRunMode     run_mode);
 void         script_fu_init_embedded_interpreter (GList          *paths,
                                                   gboolean        allow_register,
-                                                  GimpRunMode     run_mode);
+                                                  GimpRunMode     run_mode,
+                                                  gboolean        report_progress);
 
 void         script_fu_set_print_flag            (gboolean        should_print);
 void         script_fu_redirect_output_to_gstr   (GString        *output);
@@ -36,6 +44,8 @@ void         script_fu_print_welcome             (void);
 
 gboolean     script_fu_interpret_string          (const gchar     *text);
 const gchar *script_fu_get_success_msg           (void);
+const gchar *script_fu_get_error_msg             (void);
+GError      *script_fu_get_gerror                (void);
 
 void         script_fu_run_read_eval_print_loop  (void);
 

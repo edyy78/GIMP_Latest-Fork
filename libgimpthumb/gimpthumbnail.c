@@ -96,7 +96,33 @@ enum
   PROP_IMAGE_HEIGHT,
   PROP_IMAGE_TYPE,
   PROP_IMAGE_NUM_LAYERS,
+  PROP_IMAGE_NOT_FOUND_ERRNO,
   PROP_THUMB_STATE
+};
+
+
+struct _GimpThumbnail
+{
+  GObject          parent_instance;
+
+  GimpThumbState  image_state;
+  gchar          *image_uri;
+  gchar          *image_filename;
+  gint64          image_filesize;
+  gint64          image_mtime;
+  gint            image_not_found_errno;
+  gint            image_width;
+  gint            image_height;
+  gchar          *image_type;
+  gint            image_num_layers;
+
+  GimpThumbState  thumb_state;
+  GimpThumbSize   thumb_size;
+  gchar          *thumb_filename;
+  gint64          thumb_filesize;
+  gint64          thumb_mtime;
+
+  gchar          *image_mimetype;
 };
 
 
@@ -203,6 +229,14 @@ gimp_thumbnail_class_init (GimpThumbnailClass *klass)
                                                      "The number of layers in the image",
                                                      0, G_MAXINT, 0,
                                                      GIMP_PARAM_READWRITE));
+
+  g_object_class_install_property (object_class,
+                                   PROP_IMAGE_NOT_FOUND_ERRNO,
+                                   g_param_spec_int ("image-not-found-errno", NULL,
+                                                     "Error number if image not found",
+                                                     0, G_MAXINT, 0,
+                                                     GIMP_PARAM_READWRITE));
+
   g_object_class_install_property (object_class,
                                    PROP_THUMB_STATE,
                                    g_param_spec_enum ("thumb-state", NULL,
@@ -215,16 +249,17 @@ gimp_thumbnail_class_init (GimpThumbnailClass *klass)
 static void
 gimp_thumbnail_init (GimpThumbnail *thumbnail)
 {
-  thumbnail->image_state      = GIMP_THUMB_STATE_UNKNOWN;
-  thumbnail->image_uri        = NULL;
-  thumbnail->image_filename   = NULL;
-  thumbnail->image_mtime      = 0;
-  thumbnail->image_filesize   = 0;
-  thumbnail->image_mimetype   = NULL;
-  thumbnail->image_width      = 0;
-  thumbnail->image_height     = 0;
-  thumbnail->image_type       = NULL;
-  thumbnail->image_num_layers = 0;
+  thumbnail->image_state           = GIMP_THUMB_STATE_UNKNOWN;
+  thumbnail->image_uri             = NULL;
+  thumbnail->image_filename        = NULL;
+  thumbnail->image_mtime           = 0;
+  thumbnail->image_filesize        = 0;
+  thumbnail->image_mimetype        = NULL;
+  thumbnail->image_width           = 0;
+  thumbnail->image_height          = 0;
+  thumbnail->image_type            = NULL;
+  thumbnail->image_num_layers      = 0;
+  thumbnail->image_not_found_errno = 0;
 
   thumbnail->thumb_state      = GIMP_THUMB_STATE_UNKNOWN;
   thumbnail->thumb_size       = -1;
@@ -293,6 +328,9 @@ gimp_thumbnail_set_property (GObject      *object,
     case PROP_IMAGE_NUM_LAYERS:
       thumbnail->image_num_layers = g_value_get_int (value);
       break;
+    case PROP_IMAGE_NOT_FOUND_ERRNO:
+      thumbnail->image_not_found_errno = g_value_get_int (value);
+      break;
     case PROP_THUMB_STATE:
       thumbnail->thumb_state = g_value_get_enum (value);
       break;
@@ -340,6 +378,10 @@ gimp_thumbnail_get_property (GObject    *object,
     case PROP_IMAGE_NUM_LAYERS:
       g_value_set_int (value, thumbnail->image_num_layers);
       break;
+    case PROP_IMAGE_NOT_FOUND_ERRNO:
+      g_value_set_int (value, thumbnail->image_not_found_errno);
+      break;
+
     case PROP_THUMB_STATE:
       g_value_set_enum (value, thumbnail->thumb_state);
       break;
@@ -587,9 +629,9 @@ gimp_thumbnail_check_thumb (GimpThumbnail *thumbnail,
 static void
 gimp_thumbnail_update_image (GimpThumbnail *thumbnail)
 {
-  GimpThumbState  state;
-  gint64          mtime    = 0;
-  gint64          filesize = 0;
+  GimpThumbState state;
+  gint64         mtime    = 0;
+  gint64         filesize = 0;
 
   if (! thumbnail->image_uri)
     return;
@@ -746,8 +788,8 @@ static void
 gimp_thumbnail_set_info_from_pixbuf (GimpThumbnail *thumbnail,
                                      GdkPixbuf     *pixbuf)
 {
-  const gchar  *option;
-  gint          num;
+  const gchar *option;
+  gint         num;
 
   g_object_freeze_notify (G_OBJECT (thumbnail));
 
@@ -783,13 +825,13 @@ gimp_thumbnail_save (GimpThumbnail  *thumbnail,
                      const gchar    *software,
                      GError        **error)
 {
-  const gchar  *keys[12];
-  gchar        *values[12];
-  gchar        *basename;
-  gchar        *dirname;
-  gchar        *tmpname;
-  gboolean      success;
-  gint          i = 0;
+  const gchar *keys[12];
+  gchar       *values[12];
+  gchar       *basename;
+  gchar       *dirname;
+  gchar       *tmpname;
+  gboolean     success;
+  gint         i = 0;
 
   keys[i]   = TAG_DESCRIPTION;
   values[i] = g_strdup_printf ("Thumbnail of %s",  thumbnail->image_uri);
@@ -1074,8 +1116,8 @@ gimp_thumbnail_load_thumb (GimpThumbnail  *thumbnail,
  * to the global thumbnail repository.
  *
  * The caller is responsible for setting the image file location, it's
- * filesize, modification time. One way to set this info is to is to
- * call gimp_thumbnail_set_uri() followed by gimp_thumbnail_peek_image().
+ * filesize, modification time. One way to set this info is to call
+ * gimp_thumbnail_set_uri() followed by gimp_thumbnail_peek_image().
  * Since this won't work for remote images, it is left to the user of
  * gimp_thumbnail_save_thumb() to do this or to set the information
  * using the @thumbnail object properties.
@@ -1084,7 +1126,7 @@ gimp_thumbnail_load_thumb (GimpThumbnail  *thumbnail,
  * set in order to be stored with the preview image.
  *
  * Returns: %TRUE if a thumbnail was successfully written,
- *               %FALSE otherwise
+ *          %FALSE otherwise
  **/
 gboolean
 gimp_thumbnail_save_thumb (GimpThumbnail  *thumbnail,

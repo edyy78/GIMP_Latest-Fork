@@ -86,7 +86,6 @@ static GimpProcedure  * retinex_create_procedure (GimpPlugIn           *plug_in,
 static GimpValueArray * retinex_run              (GimpProcedure        *procedure,
                                                   GimpRunMode           run_mode,
                                                   GimpImage            *image,
-                                                  gint                  n_drawables,
                                                   GimpDrawable        **drawables,
                                                   GimpProcedureConfig  *config,
                                                   gpointer              run_data);
@@ -195,30 +194,33 @@ retinex_create_procedure (GimpPlugIn  *plug_in,
                                       "Fabien Pelisson",
                                       "2003");
 
-      GIMP_PROC_ARG_INT (procedure, "scale",
-                         _("Scal_e"),
-                         _("Biggest scale value"),
-                         MIN_GAUSSIAN_SCALE, MAX_GAUSSIAN_SCALE, 240,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "scale",
+                                       _("Scal_e"),
+                                       _("Biggest scale value"),
+                                       MIN_GAUSSIAN_SCALE, MAX_GAUSSIAN_SCALE, 240,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "nscales",
-                         _("Scale _division"),
-                         _("Number of scales"),
-                         0, MAX_RETINEX_SCALES, 3,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "nscales",
+                                       _("Scale _division"),
+                                       _("Number of scales"),
+                                       0, MAX_RETINEX_SCALES, 3,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "scales-mode",
-                         _("Le_vel"),
-                         _("Retinex distribution through scales "
-                           "{ Uniform (0), Low (1), High (2) }"),
-                         RETINEX_UNIFORM, RETINEX_HIGH, RETINEX_UNIFORM,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_choice_argument (procedure, "scales-mode",
+                                          _("Le_vel"),
+                                          _("Retinex distribution through scales"),
+                                          gimp_choice_new_with_values ("uniform", filter_uniform,  _("Uniform"), NULL,
+                                                                       "low",     filter_low,      _("Low"),     NULL,
+                                                                       "high",    filter_high,     _("High"),    NULL,
+                                                                       NULL),
+                                          "uniform",
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "cvar",
-                            _("Dy_namic"),
-                            _("Variance value"),
-                            0, 4, 1.2,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "cvar",
+                                          _("Dy_namic"),
+                                          _("Variance value"),
+                                          0, 4, 1.2,
+                                          G_PARAM_READWRITE);
     }
 
   return procedure;
@@ -228,7 +230,6 @@ static GimpValueArray *
 retinex_run (GimpProcedure        *procedure,
              GimpRunMode           run_mode,
              GimpImage            *image,
-             gint                  n_drawables,
              GimpDrawable        **drawables,
              GimpProcedureConfig  *config,
              gpointer              run_data)
@@ -238,7 +239,7 @@ retinex_run (GimpProcedure        *procedure,
 
   gegl_init (NULL, NULL);
 
-  if (n_drawables != 1)
+  if (gimp_core_object_array_get_length ((GObject **) drawables) != 1)
     {
       GError *error = NULL;
 
@@ -296,7 +297,6 @@ retinex_dialog (GimpProcedure *procedure,
   GtkWidget    *preview;
   GtkWidget    *combo;
   GtkWidget    *scale;
-  GtkListStore *store;
   gboolean      run;
 
   gimp_ui_init (PLUG_IN_BINARY);
@@ -305,26 +305,14 @@ retinex_dialog (GimpProcedure *procedure,
                                       GIMP_PROCEDURE_CONFIG (config),
                                       _("Retinex Image Enhancement"));
 
-  gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
-                                            GTK_RESPONSE_OK,
-                                            GTK_RESPONSE_CANCEL,
-                                           -1);
-
-  gimp_window_set_transient (GTK_WINDOW (dialog));
-
   preview = gimp_zoom_preview_new_from_drawable (drawable);
   gtk_box_pack_start (GTK_BOX (gtk_dialog_get_content_area (GTK_DIALOG (dialog))),
                       preview, TRUE, TRUE, 0);
   gtk_widget_set_margin_bottom (preview, 12);
   gtk_widget_show (preview);
 
-  store = gimp_int_store_new (_("Uniform"), filter_uniform,
-                              _("Low"),     filter_low,
-                              _("High"),    filter_high,
-                              NULL);
-  combo = gimp_procedure_dialog_get_int_combo (GIMP_PROCEDURE_DIALOG (dialog),
-                                               "scales-mode",
-                                               GIMP_INT_STORE (store));
+  combo = gimp_procedure_dialog_get_widget (GIMP_PROCEDURE_DIALOG (dialog),
+                                            "scales-mode", G_TYPE_NONE);
   gtk_widget_set_margin_bottom (combo, 12);
 
   scale = gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
@@ -647,11 +635,12 @@ MSRCR (GObject *config,
   gdouble       cvar;
 
   g_object_get (config,
-                "scales-mode", &scales_mode,
-                "scale",       &config_scale,
-                "nscales",     &nscales,
-                "cvar",        &cvar,
+                "scale",   &config_scale,
+                "nscales", &nscales,
+                "cvar",    &cvar,
                 NULL);
+  scales_mode = gimp_procedure_config_get_choice_id (GIMP_PROCEDURE_CONFIG (config),
+                                                     "scales-mode");
 
   if (!preview_mode)
     {

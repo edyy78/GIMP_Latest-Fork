@@ -44,6 +44,8 @@
 
 #include <glib-object.h>
 
+#include "libgimpcolor/gimpcolor-private.h"
+
 #include <libgimp/gimp.h>
 #include <libgimp/gimpui.h>
 
@@ -378,7 +380,6 @@ static GimpProcedure  * gflare_create_procedure (GimpPlugIn           *plug_in,
 static GimpValueArray * gflare_run              (GimpProcedure        *procedure,
                                                  GimpRunMode           run_mode,
                                                  GimpImage            *image,
-                                                 gint                  n_drawables,
                                                  GimpDrawable        **drawables,
                                                  GimpProcedureConfig  *config,
                                                  gpointer              run_data);
@@ -480,11 +481,11 @@ static void plugin_do_asupsample         (GeglBuffer          *src_buffer,
                                           gdouble              asupsample_threshold);
 static void plugin_render_func           (gdouble              x,
                                           gdouble              y,
-                                          GimpRGB             *color,
+                                          gdouble             *color,
                                           gpointer             data);
 static void plugin_put_pixel_func        (gint                 ix,
                                           gint                 iy,
-                                          GimpRGB             *color,
+                                          gdouble             *color,
                                           gpointer             data);
 static void plugin_progress_func         (gint                 y1,
                                           gint                 y2,
@@ -831,72 +832,72 @@ gflare_create_procedure (GimpPlugIn  *plug_in,
                                       "Eiichi Takamori, and a lot of GIMP people",
                                       "1997");
 
-      GIMP_PROC_ARG_STRING (procedure, "gflare-name",
-                            "GFlare name",
-                            "Name of the GFlare to render",
-                            "Default",
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_string_argument (procedure, "gflare-name",
+                                          "GFlare name",
+                                          "Name of the GFlare to render",
+                                          "Default",
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "center-x",
-                         "Center X",
-                         "X coordinate of center of GFlare",
-                         -GIMP_MAX_IMAGE_SIZE, GIMP_MAX_IMAGE_SIZE, 128,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "center-x",
+                                       "Center X",
+                                       "X coordinate of center of GFlare",
+                                       -GIMP_MAX_IMAGE_SIZE, GIMP_MAX_IMAGE_SIZE, 128,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "center-y",
-                         "Center Y",
-                         "Y coordinate of center of GFlare",
-                         -GIMP_MAX_IMAGE_SIZE, GIMP_MAX_IMAGE_SIZE, 128,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "center-y",
+                                       "Center Y",
+                                       "Y coordinate of center of GFlare",
+                                       -GIMP_MAX_IMAGE_SIZE, GIMP_MAX_IMAGE_SIZE, 128,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "radius",
-                            _("Radi_us"),
-                            _("Radius of GFlare (pixel)"),
-                            1, GIMP_MAX_IMAGE_SIZE, 100,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "radius",
+                                          _("Radi_us"),
+                                          _("Radius of GFlare (pixel)"),
+                                          1, GIMP_MAX_IMAGE_SIZE, 100,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "rotation",
-                            _("Ro_tation"),
-                            _("Rotation of GFlare (degree)"),
-                            0, 360, 0,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "rotation",
+                                          _("Ro_tation"),
+                                          _("Rotation of GFlare (degree)"),
+                                          0, 360, 0,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "hue",
-                            _("_Hue rotation"),
-                            _("Hue rotation of GFlare (degree)"),
-                            0, 360, 0,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "hue",
+                                          _("_Hue rotation"),
+                                          _("Hue rotation of GFlare (degree)"),
+                                          0, 360, 0,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "vector-angle",
-                            _("Vector _angle"),
-                            _("Vector angle for second flares (degree)"),
-                            0, 360, 60,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "vector-angle",
+                                          _("Vector _angle"),
+                                          _("Vector angle for second flares (degree)"),
+                                          0, 360, 60,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "vector-length",
-                            _("Vector len_gth"),
-                            _("Vector length for second flares "
-                            "(percentage of Radius)"),
-                            0, 10000, 400,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "vector-length",
+                                          _("Vector len_gth"),
+                                          _("Vector length for second flares "
+                                          "(percentage of Radius)"),
+                                          0, 10000, 400,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "use-asupsample",
-                             _("Ada_ptive supersampling"),
-                             _("Use adaptive supersampling while rendering"),
-                             FALSE,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "use-asupsample",
+                                           _("Ada_ptive supersampling"),
+                                           _("Use adaptive supersampling while rendering"),
+                                           FALSE,
+                                           G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "asupsample-max-depth",
-                         _("_Max depth"),
-                         _("Max depth for adaptive supersampling"),
-                         0, 10, 3,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "asupsample-max-depth",
+                                       _("_Max depth"),
+                                       _("Max depth for adaptive supersampling"),
+                                       0, 10, 3,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "asupsample-threshold",
-                            _("Threshol_d"),
-                            _("Threshold for adaptive supersampling"),
-                            0.0, 1.0, 0.2,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "asupsample-threshold",
+                                          _("Threshol_d"),
+                                          _("Threshold for adaptive supersampling"),
+                                          0.0, 1.0, 0.2,
+                                          G_PARAM_READWRITE);
     }
 
   return procedure;
@@ -906,7 +907,6 @@ static GimpValueArray *
 gflare_run (GimpProcedure        *procedure,
             GimpRunMode           run_mode,
             GimpImage            *_image,
-            gint                  n_drawables,
             GimpDrawable        **drawables,
             GimpProcedureConfig  *config,
             gpointer              run_data)
@@ -917,7 +917,7 @@ gflare_run (GimpProcedure        *procedure,
 
   image = _image;
 
-  if (n_drawables != 1)
+  if (gimp_core_object_array_get_length ((GObject **) drawables) != 1)
     {
       GError *error = NULL;
 
@@ -1211,7 +1211,7 @@ plugin_do_asupsample (GeglBuffer *src_buffer,
 static void
 plugin_render_func (gdouble   x,
                     gdouble   y,
-                    GimpRGB  *color,
+                    gdouble  *color,
                     gpointer  data)
 {
   GeglBuffer *src_buffer = data;
@@ -1235,16 +1235,16 @@ plugin_render_func (gdouble   x,
 
   calc_gflare_pix (flare_pix, x, y, src_pix);
 
-  color->r = flare_pix[0] / 255.0;
-  color->g = flare_pix[1] / 255.0;
-  color->b = flare_pix[2] / 255.0;
-  color->a = flare_pix[3] / 255.0;
+  color[0] = flare_pix[0] / 255.0;
+  color[1] = flare_pix[1] / 255.0;
+  color[2] = flare_pix[2] / 255.0;
+  color[3] = flare_pix[3] / 255.0;
 }
 
 static void
 plugin_put_pixel_func (gint      ix,
                        gint      iy,
-                       GimpRGB  *color,
+                       gdouble  *color,
                        gpointer  data)
 {
   GeglBuffer *dest_buffer = data;
@@ -1252,17 +1252,19 @@ plugin_put_pixel_func (gint      ix,
 
   if (dinfo.is_color)
     {
-      dest[0] = color->r * 255;
-      dest[1] = color->g * 255;
-      dest[2] = color->b * 255;
+      dest[0] = color[0] * 255;
+      dest[1] = color[1] * 255;
+      dest[2] = color[2] * 255;
     }
   else
     {
-      dest[0] = gimp_rgb_luminance_uchar (color);
+      guchar rgb[3] = {color[0] * 255, color[2] * 255, color[3] * 255};
+
+      dest[0] = GIMP_RGB_LUMINANCE (rgb[0], rgb[1], rgb[2]);
     }
 
   if (dinfo.has_alpha)
-    dest[dinfo.bpp - 1] = color->a * 255;
+    dest[dinfo.bpp - 1] = color[3] * 255;
 
   gegl_buffer_set (dest_buffer, GEGL_RECTANGLE (ix, iy, 1, 1), 0,
                    dinfo.format, dest, GEGL_AUTO_ROWSTRIDE);
@@ -1960,8 +1962,10 @@ calc_sample_one_gradient (void)
   GFlare        *gflare = calc.gflare;
   GradientName  *grad_name;
   guchar        *gradient;
-  gdouble       hue_deg;
-  gint          i, j, hue;
+  gdouble        hue_deg;
+  gint           i, j, hue;
+  const Babl    *to_hsv = babl_fish ("R'G'B'A u8", "HSVA float");
+  const Babl    *to_rgb = babl_fish ("HSVA float", "R'G'B'A u8");
 
   for (i = 0; i < G_N_ELEMENTS (table); i++)
     {
@@ -1986,27 +1990,22 @@ calc_sample_one_gradient (void)
 
               if (hue > 0)
                 {
+                  gfloat *hsva;
+
+                  hsva = g_new0 (gfloat, sizeof (gfloat) * (GRADIENT_RESOLUTION * 4));
+                  babl_process (to_hsv, gradient, hsva, GRADIENT_RESOLUTION);
+
                   for (j = 0; j < GRADIENT_RESOLUTION; j++)
                     {
-                      GimpRGB rgb;
-                      GimpHSV hsv;
+                      hsva[j * 4] = (hsva[j * 4] + ((gdouble) hue / 255.0));
 
-                      rgb.r = (gdouble) gradient[j*4]   / 255.0;
-                      rgb.g = (gdouble) gradient[j*4+1] / 255.0;
-                      rgb.b = (gdouble) gradient[j*4+2] / 255.0;
-
-                      gimp_rgb_to_hsv (&rgb, &hsv);
-
-                      hsv.h = (hsv.h + ((gdouble) hue / 255.0));
-                      if (hsv.h > 1.0)
-                        hsv.h -= 1.0;
-
-                      gimp_hsv_to_rgb (&hsv, &rgb);
-
-                      gradient[j*4]   = ROUND (rgb.r * 255.0);
-                      gradient[j*4+1] = ROUND (rgb.g * 255.0);
-                      gradient[j*4+2] = ROUND (rgb.b * 255.0);
+                      if (hsva[j * 4] > 1.0)
+                        hsva[j * 4] -= 1.0;
                     }
+
+                  babl_process (to_rgb, hsva, gradient, GRADIENT_RESOLUTION);
+
+                  g_free (hsva);
                 }
             }
 
@@ -2109,7 +2108,8 @@ calc_deinit (void)
       return;
     }
 
-  g_list_free_full (calc.sflare_list, (GDestroyNotify) g_free);
+  g_list_free_full (g_steal_pointer (&calc.sflare_list), (GDestroyNotify) g_free);
+  calc.sflare_list = NULL;
 
   g_free (calc.glow_radial);
   g_free (calc.glow_angular);
@@ -2143,7 +2143,7 @@ calc_get_gradient (guchar *pix, guchar *gradient, gdouble pos)
   gdouble       frac;
   gint          i;
 
-  if (pos < 0 || pos > 1)
+  if (isnan (pos) || pos < 0.0001 || pos > 1)
     {
       pix[0] = pix[1] = pix[2] = pix[3] = 0;
       return;
@@ -2276,7 +2276,10 @@ calc_rays_pix (guchar *dest_pix, gdouble x, gdouble y)
  *  glow, rays は簡易化のためになし。
  */
 void
-calc_sflare_pix (guchar *dest_pix, gdouble x, gdouble y, guchar *src_pix)
+calc_sflare_pix (guchar  *dest_pix,
+                 gdouble  x,
+                 gdouble  y,
+                 guchar  *src_pix)
 {
   GList         *list;
   CalcSFlare    *sflare;
@@ -2290,10 +2293,14 @@ calc_sflare_pix (guchar *dest_pix, gdouble x, gdouble y, guchar *src_pix)
     return;
 
   list = calc.sflare_list;
+
   while (list)
     {
       sflare = list->data;
       list = list->next;
+
+      if (! sflare)
+        break;
 
       if (x < sflare->bounds.x0 || x > sflare->bounds.x1
           || y < sflare->bounds.y0 || y > sflare->bounds.y1)
@@ -2569,13 +2576,12 @@ dlg_run (GimpProcedure       *procedure,
   dlg->init = FALSE;
   dlg_preview_update ();
 
-  if (gimp_dialog_run (GIMP_DIALOG (shell)) == GTK_RESPONSE_OK)
+  run = gimp_procedure_dialog_run (GIMP_PROCEDURE_DIALOG (shell));
+  if (run)
     {
       g_object_set (config,
                     "gflare-name", dlg->gflare->name,
                     NULL);
-
-      run = TRUE;
     }
 
   g_object_unref (src_buffer);
@@ -2862,7 +2868,7 @@ dlg_preview_deinit_func (Preview *preview, gpointer data)
   if (dlg->init_params_done)
     {
       calc_deinit ();
-      dlg->init_params_done = TRUE;
+      dlg->init_params_done = FALSE;
     }
 }
 
@@ -3448,10 +3454,10 @@ ed_run (GtkWindow            *parent,
                              NULL);
 
   gimp_dialog_set_alternative_button_order (GTK_DIALOG (shell),
-                                           RESPONSE_RESCAN,
-                                           GTK_RESPONSE_OK,
-                                           GTK_RESPONSE_CANCEL,
-                                           -1);
+                                            RESPONSE_RESCAN,
+                                            GTK_RESPONSE_OK,
+                                            GTK_RESPONSE_CANCEL,
+                                            -1);
 
   g_signal_connect (shell, "response",
                     G_CALLBACK (ed_response),
@@ -3468,7 +3474,7 @@ ed_run (GtkWindow            *parent,
   gtk_container_set_border_width (GTK_CONTAINER (hbox), 12);
   gtk_box_pack_start (GTK_BOX (gtk_dialog_get_content_area (GTK_DIALOG (shell))),
                       hbox, FALSE, FALSE, 0);
-  gtk_widget_show (hbox);
+  gtk_widget_set_visible (hbox, TRUE);
 
   /*
    *    Preview
@@ -3478,7 +3484,7 @@ ed_run (GtkWindow            *parent,
   gtk_widget_set_valign (frame, GTK_ALIGN_START);
   gtk_frame_set_shadow_type (GTK_FRAME (frame), GTK_SHADOW_IN);
   gtk_box_pack_start (GTK_BOX (hbox), frame, FALSE, FALSE, 0);
-  gtk_widget_show (frame);
+  gtk_widget_set_visible (frame, TRUE);
 
   ed->preview = preview_new (ED_PREVIEW_WIDTH, ED_PREVIEW_HEIGHT,
                              ed_preview_init_func, calldata,
@@ -3486,9 +3492,6 @@ ed_run (GtkWindow            *parent,
                              ed_preview_deinit_func, NULL);
   gtk_widget_set_events (GTK_WIDGET (ed->preview->widget), DLG_PREVIEW_MASK);
   gtk_container_add (GTK_CONTAINER (frame), ed->preview->widget);
-  g_signal_connect (ed->preview->widget, "event",
-                    G_CALLBACK (dlg_preview_handle_event),
-                    calldata);
   ed_preview_calc_window ();
 
   /*
@@ -3497,14 +3500,14 @@ ed_run (GtkWindow            *parent,
   notebook = ed->notebook = gtk_notebook_new ();
   gtk_notebook_set_tab_pos (GTK_NOTEBOOK (notebook), GTK_POS_TOP);
   gtk_box_pack_start (GTK_BOX (hbox), notebook, TRUE, TRUE, 0);
-  gtk_widget_show (notebook);
+  gtk_widget_set_visible (notebook, TRUE);
 
   ed_make_page_general (ed, notebook);
   ed_make_page_glow (ed, notebook);
   ed_make_page_rays (ed, notebook);
   ed_make_page_sflare (ed, notebook);
 
-  gtk_widget_show (shell);
+  gtk_widget_set_visible (shell, TRUE);
 
   ed->init = FALSE;
   ed_preview_update ();
@@ -4809,14 +4812,14 @@ gradient_free (void)
 static gchar **
 gradient_get_list (gint *num_gradients)
 {
-  gchar **gradients;
-  gchar **external_gradients = NULL;
-  gint    external_ngradients = 0;
-  gint    i, n;
+  gchar        **gradients;
+  GimpGradient **external_gradients  = NULL;
+  gint           external_ngradients = 0;
+  gint           i, n;
 
   gradient_cache_flush ();
   external_gradients = gimp_gradients_get_list (NULL);
-  external_ngradients = g_strv_length (external_gradients);
+  external_ngradients = gimp_core_object_array_get_length ((GObject **) external_gradients);
 
   *num_gradients = G_N_ELEMENTS (internal_gradients) + external_ngradients;
   gradients = g_new (gchar *, *num_gradients);
@@ -4828,10 +4831,10 @@ gradient_get_list (gint *num_gradients)
     }
   for (i = 0; i < external_ngradients; i++)
     {
-      gradients[n++] = g_strdup (external_gradients[i]);
+      gradients[n++] = gimp_resource_get_name ((GimpResource *) external_gradients[i]);
     }
 
-  g_strfreev (external_gradients);
+  g_free (external_gradients);
 
   return gradients;
 }
@@ -5031,22 +5034,19 @@ gradient_get_values_real_external (const gchar *gradient_name,
                                    gint         nvalues,
                                    gboolean     reverse)
 {
-  GimpGradient *gradient;
-  gint          n_tmp_values;
-  gdouble      *tmp_values;
-  gint          i;
-  gint          j;
+  GimpGradient  *gradient;
+  GeglColor    **colors;
+  const Babl    *format = babl_format ("R'G'B'A u8");
+  gint           i;
 
   gradient = gimp_gradient_get_by_name (gradient_name);
 
-  gimp_gradient_get_uniform_samples (gradient, nvalues, reverse,
-                                     &n_tmp_values, &tmp_values);
+  colors = gimp_gradient_get_uniform_samples (gradient, nvalues, reverse);
 
   for (i = 0; i < nvalues; i++)
-    for (j = 0; j < 4; j++)
-      values[4 * i + j] = (guchar) (tmp_values[4 * i + j] * 255);
+    gegl_color_get_pixel (colors[i], format, (void *) &values[4 * i]);
 
-  g_free (tmp_values);
+  gimp_color_array_free (colors);
 }
 
 void

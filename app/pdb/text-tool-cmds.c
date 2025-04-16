@@ -150,7 +150,7 @@ register_text_tool_procs (GimpPDB *pdb)
   /*
    * gimp-text-font
    */
-  procedure = gimp_procedure_new (text_font_invoker);
+  procedure = gimp_procedure_new (text_font_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-text-font");
   gimp_procedure_set_static_help (procedure,
@@ -216,6 +216,8 @@ register_text_tool_procs (GimpPDB *pdb)
                                                      "font",
                                                      "The font",
                                                      FALSE,
+                                                     NULL,
+                                                     FALSE,
                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    gimp_param_spec_layer ("text-layer",
@@ -229,7 +231,7 @@ register_text_tool_procs (GimpPDB *pdb)
   /*
    * gimp-text-get-extents-font
    */
-  procedure = gimp_procedure_new (text_get_extents_font_invoker);
+  procedure = gimp_procedure_new (text_get_extents_font_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-text-get-extents-font");
   gimp_procedure_set_static_help (procedure,
@@ -259,6 +261,8 @@ register_text_tool_procs (GimpPDB *pdb)
                                gimp_param_spec_font ("font",
                                                      "font",
                                                      "The name of the font",
+                                                     FALSE,
+                                                     NULL,
                                                      FALSE,
                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,

@@ -36,6 +36,7 @@
 
 #include "config.h"
 
+#include <math.h>
 #include <string.h>
 #include <errno.h>
 
@@ -50,7 +51,7 @@
 
 
 #define LOAD_PROC      "file-fits-load"
-#define SAVE_PROC      "file-fits-save"
+#define EXPORT_PROC    "file-fits-export"
 #define PLUG_IN_BINARY "file-fits"
 #define PLUG_IN_ROLE   "gimp-file-fits"
 
@@ -94,12 +95,11 @@ static GimpValueArray * fits_load             (GimpProcedure         *procedure,
                                                GimpMetadataLoadFlags *flags,
                                                GimpProcedureConfig   *config,
                                                gpointer               run_data);
-static GimpValueArray * fits_save             (GimpProcedure         *procedure,
+static GimpValueArray * fits_export           (GimpProcedure         *procedure,
                                                GimpRunMode            run_mode,
                                                GimpImage             *image,
-                                               gint                   n_drawables,
-                                               GimpDrawable         **drawables,
                                                GFile                 *file,
+                                               GimpExportOptions     *options,
                                                GimpMetadata          *metadata,
                                                GimpProcedureConfig   *config,
                                                gpointer               run_data);
@@ -108,12 +108,12 @@ static GimpImage      * load_image            (GFile                 *file,
                                                GObject               *config,
                                                GimpRunMode            run_mode,
                                                GError               **error);
-static gint             save_image            (GFile                 *file,
+static gint             export_image          (GFile                 *file,
                                                GimpImage             *image,
                                                GimpDrawable          *drawable,
                                                GError               **error);
 
-static gint             save_fits             (GFile                 *file,
+static gint             export_fits           (GFile                 *file,
                                                GimpImage             *image,
                                                GimpDrawable          *drawable);
 
@@ -159,7 +159,7 @@ fits_query_procedures (GimpPlugIn *plug_in)
   GList *list = NULL;
 
   list = g_list_append (list, g_strdup (LOAD_PROC));
-  list = g_list_append (list, g_strdup (SAVE_PROC));
+  list = g_list_append (list, g_strdup (EXPORT_PROC));
 
   return list;
 }
@@ -197,23 +197,20 @@ fits_create_procedure (GimpPlugIn  *plug_in,
       gimp_file_procedure_set_magics (GIMP_FILE_PROCEDURE (procedure),
                                       "0,string,SIMPLE");
 
-      GIMP_PROC_AUX_ARG_INT (procedure, "replace",
-                             _("Replacement for undefined pixels"),
-                             _("Replacement for undefined pixels"),
-                             0, 255, 0,
-                             G_PARAM_READWRITE);
-
-      GIMP_PROC_AUX_ARG_INT (procedure, "use-data-min-max",
-                             _("Pixel value scaling"),
-                             _("Use DATAMIN/DATAMAX-scaling if possible"),
-                             0, 1, 0,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_choice_aux_argument (procedure, "replace",
+                                              _("Re_placement for undefined pixels"),
+                                              _("Replacement for undefined pixels"),
+                                              gimp_choice_new_with_values ("black",  0,   _("Black"), NULL,
+                                                                           "white",  255, _("White"), NULL,
+                                                                           NULL),
+                                              "black",
+                                              G_PARAM_READWRITE);
     }
-  else if (! strcmp (name, SAVE_PROC))
+  else if (! strcmp (name, EXPORT_PROC))
     {
-      procedure = gimp_save_procedure_new (plug_in, name,
-                                           GIMP_PDB_PROC_TYPE_PLUGIN,
-                                           FALSE, fits_save, NULL, NULL);
+      procedure = gimp_export_procedure_new (plug_in, name,
+                                             GIMP_PDB_PROC_TYPE_PLUGIN,
+                                             FALSE, fits_export, NULL, NULL);
 
       gimp_procedure_set_image_types (procedure, "RGB, GRAY, INDEXED");
 
@@ -235,6 +232,12 @@ fits_create_procedure (GimpPlugIn  *plug_in,
                                           "image/x-fits");
       gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
                                           "fit,fits");
+
+      gimp_export_procedure_set_capabilities (GIMP_EXPORT_PROCEDURE (procedure),
+                                              GIMP_EXPORT_CAN_HANDLE_RGB  |
+                                              GIMP_EXPORT_CAN_HANDLE_GRAY |
+                                              GIMP_EXPORT_CAN_HANDLE_INDEXED,
+                                              NULL, NULL, NULL);
     }
 
   return procedure;
@@ -280,73 +283,46 @@ fits_load (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
-fits_save (GimpProcedure        *procedure,
-           GimpRunMode           run_mode,
-           GimpImage            *image,
-           gint                  n_drawables,
-           GimpDrawable        **drawables,
-           GFile                *file,
-           GimpMetadata         *metadata,
-           GimpProcedureConfig  *config,
-           gpointer              run_data)
+fits_export (GimpProcedure        *procedure,
+             GimpRunMode           run_mode,
+             GimpImage            *image,
+             GFile                *file,
+             GimpExportOptions    *options,
+             GimpMetadata         *metadata,
+             GimpProcedureConfig  *config,
+             gpointer              run_data)
 {
   GimpImage          *duplicate_image;
-  GimpItem          **flipped_drawables;
+  GimpDrawable      **flipped_drawables;
   GimpPDBStatusType   status = GIMP_PDB_SUCCESS;
-  GimpExportReturn    export = GIMP_EXPORT_CANCEL;
+  GimpExportReturn    export = GIMP_EXPORT_IGNORE;
+  GList             *drawables;
   GError             *error  = NULL;
 
   gegl_init (NULL, NULL);
 
-  switch (run_mode)
-    {
-    case GIMP_RUN_INTERACTIVE:
-    case GIMP_RUN_WITH_LAST_VALS:
-      gimp_ui_init (PLUG_IN_BINARY);
+  if (run_mode == GIMP_RUN_INTERACTIVE)
+    gimp_ui_init (PLUG_IN_BINARY);
 
-      export = gimp_export_image (&image, &n_drawables, &drawables, "FITS",
-                                  GIMP_EXPORT_CAN_HANDLE_RGB  |
-                                  GIMP_EXPORT_CAN_HANDLE_GRAY |
-                                  GIMP_EXPORT_CAN_HANDLE_INDEXED);
+  export = gimp_export_options_get_image (options, &image);
 
-      if (export == GIMP_EXPORT_CANCEL)
-        return gimp_procedure_new_return_values (procedure,
-                                                 GIMP_PDB_CANCEL,
-                                                 NULL);
-      break;
-
-    default:
-      break;
-    }
-
-  if (n_drawables != 1)
-    {
-      g_set_error (&error, G_FILE_ERROR, 0,
-                   _("FITS format does not support multiple layers."));
-
-      return gimp_procedure_new_return_values (procedure,
-                                               GIMP_PDB_CALLING_ERROR,
-                                               error);
-    }
+  drawables = gimp_image_list_layers (image);
 
   /* Flip image vertical since FITS writes from bottom to top */
   duplicate_image = gimp_image_duplicate (image);
   gimp_image_flip (duplicate_image, GIMP_ORIENTATION_VERTICAL);
-  flipped_drawables =
-    gimp_image_get_selected_drawables (duplicate_image, &n_drawables);
+  flipped_drawables = gimp_image_get_selected_drawables (duplicate_image);
 
-  if (! save_image (file, image, GIMP_DRAWABLE (flipped_drawables[0]), &error))
+  if (! export_image (file, image, flipped_drawables[0], &error))
     status = GIMP_PDB_EXECUTION_ERROR;
 
   gimp_image_delete (duplicate_image);
   g_free (flipped_drawables);
 
   if (export == GIMP_EXPORT_EXPORT)
-    {
-      gimp_image_delete (image);
-      g_free (drawables);
-    }
+    gimp_image_delete (image);
 
+  g_list_free (drawables);
   return gimp_procedure_new_return_values (procedure, status, error);
 }
 
@@ -380,12 +356,9 @@ load_image (GFile        *file,
   gint               channels    = 1;
   gint               replace;
   gdouble            replace_val = 0;
-  gboolean           use_datamin;
 
-  g_object_get (config,
-                "replace",          &replace,
-                "use-data-min-max", &use_datamin,
-                NULL);
+  replace = gimp_procedure_config_get_choice_id (GIMP_PROCEDURE_CONFIG (config),
+                                                 "replace");
 
   fp = g_fopen (g_file_peek_path (file), "rb");
 
@@ -432,15 +405,15 @@ load_image (GFile        *file,
       fits_get_img_param (ifp, 3, &hdu.bitpix, &hdu.naxis, hdu.naxisn,
                           &status);
 
-      width  = hdu.naxisn[0];
-      height = hdu.naxisn[1];
-
       /* Skip if invalid dimensions; possibly header data */
       if (hdu.naxis < 2)
         {
           count++;
           continue;
         }
+
+      width  = hdu.naxisn[0];
+      height = hdu.naxisn[1];
 
       type = babl_type ("double");
       switch (hdu.bitpix)
@@ -621,12 +594,6 @@ load_image (GFile        *file,
       count++;
     }
 
-  /* As there might be different sized layers,
-   * we need to resize the canvas afterwards */
-  gimp_image_resize_to_layers (image);
-
-  fits_close_file (ifp, &status);
-
   if (! image)
     {
       g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
@@ -635,14 +602,20 @@ load_image (GFile        *file,
       return NULL;
     }
 
+  /* As there might be different sized layers,
+   * we need to resize the canvas afterwards */
+  gimp_image_resize_to_layers (image);
+
+  fits_close_file (ifp, &status);
+
   return image;
 }
 
 static gint
-save_image (GFile         *file,
-            GimpImage     *image,
-            GimpDrawable  *drawable,
-            GError       **error)
+export_image (GFile         *file,
+              GimpImage     *image,
+              GimpDrawable  *drawable,
+              GError       **error)
 {
   GimpImageType  drawable_type;
   gint           retval;
@@ -675,7 +648,7 @@ save_image (GFile         *file,
 
 
 
-  retval = save_fits (file, image, drawable);
+  retval = export_fits (file, image, drawable);
 
   return retval;
 }
@@ -707,11 +680,11 @@ create_new_image (GFile              *file,
   return image;
 }
 
-/* Save direct colors (GRAY, GRAYA, RGB, RGBA) */
+/* Export direct colors (GRAY, GRAYA, RGB, RGBA) */
 static gint
-save_fits (GFile        *file,
-           GimpImage    *image,
-           GimpDrawable *drawable)
+export_fits (GFile        *file,
+             GimpImage    *image,
+             GimpDrawable *drawable)
 {
   fitsfile      *fptr;
   gint           status = 0;
@@ -1011,10 +984,9 @@ static gboolean
 load_dialog (GimpProcedure *procedure,
              GObject       *config)
 {
-  GtkWidget    *dialog;
-  GtkListStore *store;
-  GtkWidget    *frame;
-  gboolean      run;
+  GtkWidget *dialog;
+  GtkWidget *frame;
+  gboolean   run;
 
   gimp_ui_init (PLUG_IN_BINARY);
 
@@ -1022,22 +994,8 @@ load_dialog (GimpProcedure *procedure,
                                       GIMP_PROCEDURE_CONFIG (config),
                                       _("Open FITS File"));
 
-  gimp_window_set_transient (GTK_WINDOW (dialog));
-
-  store = gimp_int_store_new (_("Black"), 0,
-                              _("White"), 255,
-                              NULL);
-  frame = gimp_procedure_dialog_get_int_radio (GIMP_PROCEDURE_DIALOG (dialog),
-                                               "replace",
-                                               GIMP_INT_STORE (store));
-  gtk_widget_set_margin_bottom (frame, 12);
-
-  store = gimp_int_store_new (_("Automatic"),          0,
-                              _("By DATAMIN/DATAMAX"), 1,
-                              NULL);
-  frame = gimp_procedure_dialog_get_int_radio (GIMP_PROCEDURE_DIALOG (dialog),
-                                               "use-data-min-max",
-                                               GIMP_INT_STORE (store));
+  frame = gimp_procedure_dialog_get_widget (GIMP_PROCEDURE_DIALOG (dialog),
+                                            "replace", GIMP_TYPE_INT_RADIO_FRAME);
   gtk_widget_set_margin_bottom (frame, 12);
 
   gimp_procedure_dialog_fill (GIMP_PROCEDURE_DIALOG (dialog),

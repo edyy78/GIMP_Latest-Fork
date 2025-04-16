@@ -43,7 +43,7 @@
 #include "gimppickable.h"
 #include "gimpscanconvert.h"
 
-#include "vectors/gimpvectors.h"
+#include "vectors/gimppath.h"
 
 #include "gimp-intl.h"
 
@@ -177,25 +177,25 @@ gimp_drawable_fill_boundary (GimpDrawable       *drawable,
 }
 
 gboolean
-gimp_drawable_fill_vectors (GimpDrawable     *drawable,
-                            GimpFillOptions  *options,
-                            GimpVectors      *vectors,
-                            gboolean          push_undo,
-                            GError          **error)
+gimp_drawable_fill_path (GimpDrawable     *drawable,
+                         GimpFillOptions  *options,
+                         GimpPath         *vectors,
+                         gboolean          push_undo,
+                         GError          **error)
 {
   const GimpBezierDesc *bezier;
 
   g_return_val_if_fail (GIMP_IS_DRAWABLE (drawable), FALSE);
   g_return_val_if_fail (gimp_item_is_attached (GIMP_ITEM (drawable)), FALSE);
   g_return_val_if_fail (GIMP_IS_FILL_OPTIONS (options), FALSE);
-  g_return_val_if_fail (GIMP_IS_VECTORS (vectors), FALSE);
+  g_return_val_if_fail (GIMP_IS_PATH (vectors), FALSE);
   g_return_val_if_fail (gimp_fill_options_get_style (options) !=
                         GIMP_FILL_STYLE_PATTERN ||
                         gimp_context_get_pattern (GIMP_CONTEXT (options)) != NULL,
                         FALSE);
   g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
 
-  bezier = gimp_vectors_get_bezier (vectors);
+  bezier = gimp_path_get_bezier (vectors);
 
   if (bezier && bezier->num_data > 4)
     {

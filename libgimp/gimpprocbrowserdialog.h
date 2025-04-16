@@ -31,44 +31,9 @@ G_BEGIN_DECLS
 /* For information look into the C source or the html documentation */
 
 
-#define GIMP_TYPE_PROC_BROWSER_DIALOG            (gimp_proc_browser_dialog_get_type ())
-#define GIMP_PROC_BROWSER_DIALOG(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_PROC_BROWSER_DIALOG, GimpProcBrowserDialog))
-#define GIMP_PROC_BROWSER_DIALOG_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_PROC_BROWSER_DIALOG, GimpProcBrowserDialogClass))
-#define GIMP_IS_PROC_BROWSER_DIALOG(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_PROC_BROWSER_DIALOG))
-#define GIMP_IS_PROC_BROWSER_DIALOG_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_PROC_BROWSER_DIALOG))
-#define GIMP_PROC_BROWSER_DIALOG_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_PROC_BROWSER_DIALOG, GimpProcBrowserDialogClass))
+#define GIMP_TYPE_PROC_BROWSER_DIALOG (gimp_proc_browser_dialog_get_type ())
+G_DECLARE_FINAL_TYPE (GimpProcBrowserDialog, gimp_proc_browser_dialog, GIMP, PROC_BROWSER_DIALOG, GimpDialog)
 
-
-typedef struct _GimpProcBrowserDialogPrivate GimpProcBrowserDialogPrivate;
-typedef struct _GimpProcBrowserDialogClass   GimpProcBrowserDialogClass;
-
-struct _GimpProcBrowserDialog
-{
-  GimpDialog                    parent_instance;
-
-  GimpProcBrowserDialogPrivate *priv;
-};
-
-struct _GimpProcBrowserDialogClass
-{
-  GimpDialogClass  parent_class;
-
-  void (* selection_changed) (GimpProcBrowserDialog *dialog);
-  void (* row_activated)     (GimpProcBrowserDialog *dialog);
-
-  /* Padding for future expansion */
-  void (* _gimp_reserved1) (void);
-  void (* _gimp_reserved2) (void);
-  void (* _gimp_reserved3) (void);
-  void (* _gimp_reserved4) (void);
-  void (* _gimp_reserved5) (void);
-  void (* _gimp_reserved6) (void);
-  void (* _gimp_reserved7) (void);
-  void (* _gimp_reserved8) (void);
-};
-
-
-GType       gimp_proc_browser_dialog_get_type     (void) G_GNUC_CONST;
 
 GtkWidget * gimp_proc_browser_dialog_new          (const gchar  *title,
                                                    const gchar  *role,

@@ -58,8 +58,9 @@
 
 
 #define MAX_ZOOM_FACTOR 8
-#define ZOOMED(x) (_zoom_factor * (x))
-#define GET_REAL_COORD(x) ((x) / _zoom_factor)
+#define MIN_ZOOM_FACTOR -6
+#define ZOOMED(x) (_zoom_ratio * (x))
+#define GET_REAL_COORD(x) ((x) / _zoom_ratio)
 
 
 GType                   imap_get_type         (void) G_GNUC_CONST;
@@ -73,7 +74,6 @@ static GimpProcedure  * imap_create_procedure (GimpPlugIn           *plug_in,
 static GimpValueArray * imap_run              (GimpProcedure        *procedure,
                                                GimpRunMode           run_mode,
                                                GimpImage            *image,
-                                               gint                  n_drawables,
                                                GimpDrawable        **drawables,
                                                GimpProcedureConfig  *config,
                                                gpointer              run_data);
@@ -115,6 +115,7 @@ static Selection_t *_selection;
 static StatusBar_t *_statusbar;
 static ObjectList_t *_shapes;
 static gint         _zoom_factor = 1;
+static gfloat       _zoom_ratio  = 1;
 static gboolean (*_button_press_func)(GtkWidget*, GdkEventButton*, gpointer);
 static gpointer _button_press_param;
 
@@ -237,7 +238,6 @@ static GimpValueArray *
 imap_run (GimpProcedure        *procedure,
           GimpRunMode           run_mode,
           GimpImage            *image,
-          gint                  n_drawables,
           GimpDrawable        **drawables,
           GimpProcedureConfig  *config,
           gpointer              run_data)
@@ -256,7 +256,7 @@ imap_run (GimpProcedure        *procedure,
 
   imap->builder = gtk_builder_new_from_resource ("/org/gimp/imagemap/imap-menu.ui");
 
-  if (n_drawables != 1)
+  if (gimp_core_object_array_get_length ((GObject **) drawables) != 1)
     {
       GError *error = NULL;
 
@@ -398,7 +398,7 @@ zoom_in (gpointer data)
 static gint
 zoom_out (gpointer data)
 {
-   if (_zoom_factor > 1)
+   if (_zoom_factor > MIN_ZOOM_FACTOR)
      {
        set_zoom (_zoom_factor - 1);
        menu_set_zoom (data, _zoom_factor);
@@ -407,13 +407,19 @@ zoom_out (gpointer data)
 }
 
 void
-set_zoom(gint zoom_factor)
+set_zoom (gint zoom_factor)
 {
-   set_busy_cursor();
-   _zoom_factor = zoom_factor;
-   preview_zoom(_preview, zoom_factor);
-   statusbar_set_zoom(_statusbar, zoom_factor);
-   remove_busy_cursor();
+  set_busy_cursor();
+  _zoom_factor = zoom_factor;
+
+  if (zoom_factor > 0)
+    _zoom_ratio = zoom_factor;
+  else
+    _zoom_ratio = 1.0f / ((zoom_factor - 2.0f) * -1.0f);
+
+  preview_zoom (_preview, _zoom_ratio);
+  statusbar_set_zoom (_statusbar, zoom_factor);
+  remove_busy_cursor ();
 }
 
 gint
@@ -1479,7 +1485,7 @@ dialog (GimpImap *imap)
   gtk_window_set_resizable (GTK_WINDOW (imap->dlg), TRUE);
 
   main_set_title (NULL);
-  gimp_help_connect (imap->dlg, gimp_standard_help_func, PLUG_IN_PROC, NULL, NULL);
+  gimp_help_connect (imap->dlg, NULL, gimp_standard_help_func, PLUG_IN_PROC, NULL, NULL);
 
   gtk_window_set_position (GTK_WINDOW (imap->dlg), GTK_WIN_POS_MOUSE);
 

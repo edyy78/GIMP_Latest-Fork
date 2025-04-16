@@ -78,10 +78,10 @@ gimp_brush_new (const gchar *name)
  *
  * Returns the brush with the given name.
  *
- * Search and return an existing brush with the name in argument, or
- * nothing if no brush has this name.
+ * Return an existing brush having the given name. Returns %NULL when
+ * no brush exists of that name.
  *
- * Returns: (transfer none): The brush.
+ * Returns: (nullable) (transfer none): The brush.
  *
  * Since: 3.0
  **/
@@ -494,8 +494,8 @@ gimp_brush_get_radius (GimpBrush *brush,
  *
  * Sets the radius of a generated brush.
  *
- * Sets the radius for a generated brush. Clamps radius to [0.0,
- * 32767.0]. Returns the clamped value. Returns an error when brush is
+ * Sets the radius for a generated brush. Clamps radius to [0.1,
+ * 4000.0]. Returns the clamped value. Returns an error when brush is
  * non-parametric or not editable.
  *
  * Returns: TRUE on success.
@@ -631,7 +631,7 @@ gimp_brush_set_spikes (GimpBrush *brush,
  * Gets the hardness of a generated brush.
  *
  * Gets the hardness of a generated brush. The hardness of a brush is
- * the amount its intensity fades at the outside edge, as a float
+ * the amount its intensity fades at the outside edge, as a double
  * between 0.0 and 1.0. Returns an error when called for a
  * non-parametric brush.
  *
@@ -723,7 +723,7 @@ gimp_brush_set_hardness (GimpBrush *brush,
  * Gets the aspect ratio of a generated brush.
  *
  * Gets the aspect ratio of a generated brush. Returns an error when
- * called for a non-parametric brush. The aspect ratio is a float
+ * called for a non-parametric brush. The aspect ratio is a double
  * between 0.0 and 1000.0.
  *
  * Returns: TRUE on success.

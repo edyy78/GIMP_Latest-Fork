@@ -29,7 +29,9 @@
 #include "dialogs-types.h"
 
 #include "config/gimpcoreconfig.h"
+#include "config/gimpguiconfig.h"
 
+#include "widgets/gimphelp-ids.h"
 #include "widgets/gimpwidgets-utils.h"
 
 #include "about.h"
@@ -61,6 +63,7 @@ typedef struct
 
   GtkWidget      *anim_area;
   PangoLayout    *layout;
+  gboolean        use_animation;
 
   gint            n_authors;
   gint            shuffle[G_N_ELEMENTS (authors) - 1];  /* NULL terminated */
@@ -73,7 +76,10 @@ typedef struct
   gboolean        visible;
 } GimpAboutDialog;
 
-
+#ifdef G_OS_WIN32
+static void        about_dialog_realize       (GtkWidget       *widget,
+                                               GimpAboutDialog *dialog);
+#endif
 static void        about_dialog_map           (GtkWidget       *widget,
                                                GimpAboutDialog *dialog);
 static void        about_dialog_unmap         (GtkWidget       *widget,
@@ -89,10 +95,10 @@ static gboolean    about_dialog_anim_draw     (GtkWidget       *widget,
 static void        about_dialog_reshuffle     (GimpAboutDialog *dialog);
 static gboolean    about_dialog_timer         (gpointer         data);
 
-#ifdef GIMP_UNSTABLE
+#ifndef GIMP_RELEASE
 static void        about_dialog_add_unstable_message
                                               (GtkWidget       *vbox);
-#endif /* GIMP_UNSTABLE */
+#endif /* ! GIMP_RELEASE */
 
 static void        about_dialog_last_release_changed
                                               (GimpCoreConfig   *config,
@@ -120,6 +126,16 @@ about_dialog_create (Gimp           *gimp,
       dialog.gimp      = gimp;
       dialog.n_authors = G_N_ELEMENTS (authors) - 1;
       dialog.config    = config;
+
+      /* For some people, animated contents may be distracting, or even
+       * disturbing. "Vestibular motion disorders" are an example of
+       * such discomfort. This is why most platforms have a "reduce
+       * animations" option in accessibility settings.
+       * When it's set, we just won't display the fancy animated authors
+       * list. This is redundant anyway as the full list is available in
+       * the Credits tab.
+       */
+      dialog.use_animation = gimp_widget_animation_enabled ();
 
       pixbuf = about_dialog_load_logo ();
 
@@ -166,7 +182,11 @@ about_dialog_create (Gimp           *gimp,
       g_signal_connect (widget, "response",
                         G_CALLBACK (gtk_widget_destroy),
                         NULL);
-
+#ifdef G_OS_WIN32
+      g_signal_connect (widget, "realize",
+                        G_CALLBACK (about_dialog_realize),
+                        &dialog);
+#endif
       g_signal_connect (widget, "map",
                         G_CALLBACK (about_dialog_map),
                         &dialog);
@@ -180,11 +200,15 @@ about_dialog_create (Gimp           *gimp,
 
       if (GTK_IS_BOX (children->data))
         {
-          about_dialog_add_animation (children->data, &dialog);
-#ifdef GIMP_UNSTABLE
+          if (dialog.use_animation)
+            about_dialog_add_animation (children->data, &dialog);
+#ifndef GIMP_RELEASE
           about_dialog_add_unstable_message (children->data);
-#endif /* GIMP_UNSTABLE */
-          about_dialog_add_update (&dialog, config);
+#endif /* ! GIMP_RELEASE */
+#ifdef CHECK_UPDATE
+          if (gimp_version_check_update ())
+            about_dialog_add_update (&dialog, config);
+#endif
         }
       else
         g_warning ("%s: ooops, no box in this container?", G_STRLOC);
@@ -192,11 +216,30 @@ about_dialog_create (Gimp           *gimp,
       g_list_free (children);
     }
 
+  if (GIMP_GUI_CONFIG (config)->show_help_button)
+    {
+      gimp_help_connect (dialog.dialog, NULL, gimp_standard_help_func,
+                         GIMP_HELP_ABOUT_DIALOG, NULL, NULL);
+
+      gtk_dialog_add_buttons (GTK_DIALOG (dialog.dialog),
+                              _("_Help"), GTK_RESPONSE_HELP,
+                              NULL);
+    }
+
   gtk_style_context_add_class (gtk_widget_get_style_context (dialog.dialog),
                                "gimp-about-dialog");
 
   return dialog.dialog;
 }
+
+#ifdef G_OS_WIN32
+static void
+about_dialog_realize (GtkWidget *widget,
+                      GimpAboutDialog *dialog)
+{
+  gimp_window_set_title_bar_theme (dialog->gimp, widget);
+}
+#endif
 
 static void
 about_dialog_map (GtkWidget       *widget,
@@ -215,10 +258,6 @@ about_dialog_map (GtkWidget       *widget,
 
       dialog->timer = g_timeout_add (800, about_dialog_timer, dialog);
     }
-
-#ifdef G_OS_WIN32
-  gimp_window_set_title_bar_theme (dialog->gimp, widget, FALSE);
-#endif
 }
 
 static void
@@ -671,8 +710,8 @@ decorate_text (GimpAboutDialog *dialog,
 static gboolean
 about_dialog_timer (gpointer data)
 {
-  GimpAboutDialog *dialog  = data;
-  gint             timeout = 0;
+  GimpAboutDialog *dialog        = data;
+  gint             timeout       = 0;
 
   if (dialog->animstep == 0)
     {
@@ -685,7 +724,7 @@ about_dialog_timer (gpointer data)
         case 0:
           dialog->timer = g_timeout_add (30, about_dialog_timer, dialog);
           dialog->state += 1;
-          return FALSE;
+          return G_SOURCE_REMOVE;
 
         case 1:
           text = insert_spacers (_("GIMP is brought to you by"));
@@ -727,8 +766,7 @@ about_dialog_timer (gpointer data)
     }
   else if (dialog->animstep < 33)
     {
-      decorate_text (dialog, 1,
-                     1.0 - ((gfloat) (dialog->animstep - 17)) / 15.0);
+      decorate_text (dialog, 1, 1.0 - ((gfloat) (dialog->animstep - 17)) / 15.0);
     }
   else if (dialog->animstep == 33)
     {
@@ -749,14 +787,14 @@ about_dialog_timer (gpointer data)
   if (timeout > 0)
     {
       dialog->timer = g_timeout_add (timeout, about_dialog_timer, dialog);
-      return FALSE;
+      return G_SOURCE_REMOVE;
     }
 
   /* else keep the current timeout */
-  return TRUE;
+  return G_SOURCE_CONTINUE;
 }
 
-#ifdef GIMP_UNSTABLE
+#ifndef GIMP_RELEASE
 
 static void
 about_dialog_add_unstable_message (GtkWidget *vbox)
@@ -764,7 +802,7 @@ about_dialog_add_unstable_message (GtkWidget *vbox)
   GtkWidget *label;
   gchar     *text;
 
-  text = g_strdup_printf (_("This is an unstable development release\n"
+  text = g_strdup_printf (_("This is a development build\n"
                             "commit %s"), GIMP_GIT_VERSION_ABBREV);
   label = gtk_label_new (text);
   g_free (text);
@@ -779,7 +817,7 @@ about_dialog_add_unstable_message (GtkWidget *vbox)
   gtk_widget_show (label);
 }
 
-#endif /* GIMP_UNSTABLE */
+#endif /* ! GIMP_RELEASE */
 
 static void
 about_dialog_last_release_changed (GimpCoreConfig   *config,

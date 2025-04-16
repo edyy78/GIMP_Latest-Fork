@@ -37,10 +37,13 @@
 #include "gimpchannel.h"
 #include "gimpcontext.h"
 #include "gimpdrawable-fill.h"
+#include "gimpdrawable-filters.h"
+#include "gimpdrawablefilter.h"
 #include "gimpgrouplayer.h"
 #include "gimpimage.h"
 #include "gimpimage-color-profile.h"
 #include "gimpimage-colormap.h"
+#include "gimpimage-metadata.h"
 #include "gimpimage-new.h"
 #include "gimpimage-undo.h"
 #include "gimplayer.h"
@@ -64,9 +67,20 @@ gimp_image_new_get_last_template (Gimp      *gimp,
 
   if (image)
     {
+      const gchar *comment;
+
+      comment = gimp_template_get_comment (gimp->config->default_image);
+
       gimp_config_sync (G_OBJECT (gimp->config->default_image),
                         G_OBJECT (template), 0);
       gimp_template_set_from_image (template, image);
+
+      /* Do not pass around the comment from the current active comment. Only
+       * pass comments stored in actual templates. This can be even considered
+       * as data leak otherwise (creating 2 images in a row and not realizing
+       * the second will have the metadata comment from the first). See #11384.
+       */
+      g_object_set (template, "comment", comment, NULL);
     }
   else
     {
@@ -86,6 +100,26 @@ gimp_image_new_set_last_template (Gimp         *gimp,
 
   gimp_config_sync (G_OBJECT (template),
                     G_OBJECT (gimp->image_new_last_template), 0);
+}
+
+void
+gimp_image_new_add_creation_metadata (GimpImage *image)
+{
+  GimpMetadata *metadata;
+
+  metadata = gimp_image_get_metadata (image);
+  if (! metadata)
+    {
+      g_critical ("Metadata not found. Should not happen!");
+    }
+  else
+    {
+      GDateTime *datetime;
+
+      datetime = g_date_time_new_now_local ();
+      gimp_metadata_set_creation_date (metadata, datetime);
+      g_date_time_unref (datetime);
+    }
 }
 
 GimpImage *
@@ -169,6 +203,8 @@ gimp_image_new_from_template (Gimp         *gimp,
 
   gimp_image_add_layer (image, layer, NULL, 0, FALSE);
 
+  gimp_image_new_add_creation_metadata (image);
+
   gimp_image_undo_enable (image);
   gimp_image_clean_all (image);
 
@@ -189,6 +225,7 @@ gimp_image_new_from_drawable (Gimp         *gimp,
   gdouble            xres;
   gdouble            yres;
   GimpColorProfile  *profile;
+  GimpContainer     *filters;
 
   g_return_val_if_fail (GIMP_IS_GIMP (gimp), NULL);
   g_return_val_if_fail (GIMP_IS_DRAWABLE (drawable), NULL);
@@ -239,7 +276,39 @@ gimp_image_new_from_drawable (Gimp         *gimp,
   if (gimp_layer_can_lock_alpha (new_layer))
     gimp_layer_set_lock_alpha (new_layer, FALSE, FALSE);
 
+  filters = gimp_drawable_get_filters (GIMP_DRAWABLE (drawable));
+  if (gimp_container_get_n_children (filters) > 0)
+    {
+      GList *filter_list;
+
+      for (filter_list = GIMP_LIST (filters)->queue->tail;
+           filter_list;
+           filter_list = g_list_previous (filter_list))
+        {
+          if (GIMP_IS_DRAWABLE_FILTER (filter_list->data))
+            {
+              GimpDrawableFilter *old_filter = filter_list->data;
+              GimpDrawableFilter *filter;
+
+              filter =
+                gimp_drawable_filter_duplicate (GIMP_DRAWABLE (new_layer),
+                                                old_filter);
+
+              if (filter != NULL)
+                {
+                  gimp_drawable_filter_apply (filter, NULL);
+                  gimp_drawable_filter_commit (filter, TRUE, NULL, FALSE);
+
+                  gimp_drawable_filter_layer_mask_freeze (filter);
+                  g_object_unref (filter);
+                }
+            }
+        }
+    }
+
   gimp_image_add_layer (new_image, new_layer, NULL, 0, TRUE);
+
+  gimp_image_new_add_creation_metadata (new_image);
 
   gimp_image_undo_enable (new_image);
 
@@ -328,10 +397,11 @@ gimp_image_new_copy_drawables (GimpImage *image,
     {
       if (g_list_find (copied_drawables, iter->data))
         {
-          GimpLayer *new_layer;
-          GType      new_type;
-          gboolean   is_group;
-          gboolean   is_tagged;
+          GimpLayer     *new_layer;
+          GimpContainer *filters;
+          GType          new_type;
+          gboolean       is_group;
+          gboolean       is_tagged;
 
           if (GIMP_IS_LAYER (iter->data))
             new_type = G_TYPE_FROM_INSTANCE (iter->data);
@@ -374,6 +444,33 @@ gimp_image_new_copy_drawables (GimpImage *image,
 
           if (gimp_layer_can_lock_alpha (new_layer))
             gimp_layer_set_lock_alpha (new_layer, FALSE, FALSE);
+
+          filters = gimp_drawable_get_filters (GIMP_DRAWABLE (iter->data));
+          if (gimp_container_get_n_children (filters) > 0)
+            {
+              GList *filter_list;
+
+              for (filter_list = GIMP_LIST (filters)->queue->tail; filter_list;
+                   filter_list = g_list_previous (filter_list))
+                {
+                  if (GIMP_IS_DRAWABLE_FILTER (filter_list->data))
+                    {
+                      GimpDrawableFilter *old_filter = filter_list->data;
+                      GimpDrawableFilter *filter;
+
+                      filter = gimp_drawable_filter_duplicate (GIMP_DRAWABLE (new_layer), old_filter);
+
+                      if (filter != NULL)
+                        {
+                          gimp_drawable_filter_apply (filter, NULL);
+                          gimp_drawable_filter_commit (filter, TRUE, NULL, FALSE);
+
+                          gimp_drawable_filter_layer_mask_freeze (filter);
+                          g_object_unref (filter);
+                        }
+                    }
+                }
+            }
 
           gimp_image_add_layer (new_image, new_layer, new_parent, index++, TRUE);
 
@@ -462,6 +559,9 @@ gimp_image_new_from_drawables (Gimp     *gimp,
     }
 
   gimp_image_new_copy_drawables (image, drawables, new_image, tag_copies, NULL, NULL, NULL, NULL);
+
+  gimp_image_new_add_creation_metadata (new_image);
+
   gimp_image_undo_enable (new_image);
 
   return new_image;
@@ -507,6 +607,8 @@ gimp_image_new_from_component (Gimp            *gimp,
                          g_strdup_printf (_("%s Channel Copy"), desc));
 
   gimp_image_add_layer (new_image, layer, NULL, 0, TRUE);
+
+  gimp_image_new_add_creation_metadata (new_image);
 
   gimp_image_undo_enable (new_image);
 
@@ -556,6 +658,8 @@ gimp_image_new_from_buffer (Gimp       *gimp,
                                       gimp_image_get_default_new_layer_mode (image));
 
   gimp_image_add_layer (image, layer, NULL, 0, TRUE);
+
+  gimp_image_new_add_creation_metadata (image);
 
   gimp_image_undo_enable (image);
 
@@ -617,6 +721,8 @@ gimp_image_new_from_pixbuf (Gimp        *gimp,
                                       gimp_image_get_default_new_layer_mode (new_image));
 
   gimp_image_add_layer (new_image, layer, NULL, 0, TRUE);
+
+  gimp_image_new_add_creation_metadata (new_image);
 
   gimp_image_undo_enable (new_image);
 

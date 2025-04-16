@@ -69,7 +69,6 @@ struct _Gimp
   guint                   busy_idle_id;
 
   GList                  *user_units;
-  gint                    n_user_units;
 
   GimpParasiteList       *parasites;
 
@@ -89,6 +88,7 @@ struct _Gimp
   guint32                 next_sample_point_id;
   GimpIdTable            *image_table;
   GimpIdTable            *item_table;
+  GimpIdTable            *drawable_filter_table;
 
   GimpContainer          *displays;
   gint                    next_display_id;

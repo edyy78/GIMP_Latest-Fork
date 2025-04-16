@@ -57,7 +57,6 @@ static GimpProcedure  * guillotine_create_procedure (GimpPlugIn           *plug_
 static GimpValueArray * guillotine_run              (GimpProcedure        *procedure,
                                                      GimpRunMode           run_mode,
                                                      GimpImage            *image,
-                                                     gint                  n_drawables,
                                                      GimpDrawable        **drawables,
                                                      GimpProcedureConfig  *config,
                                                      gpointer              run_data);
@@ -125,17 +124,11 @@ guillotine_create_procedure (GimpPlugIn  *plug_in,
                                       "Adam D. Moss (adam@foxbox.org)",
                                       "1998");
 
-      GIMP_PROC_VAL_INT (procedure, "image-count",
-                         "Number of images created",
-                         "Number of images created",
-                         0, G_MAXINT, 0,
-                         G_PARAM_READWRITE);
-
-      GIMP_PROC_VAL_OBJECT_ARRAY (procedure, "images",
-                                  "Output images",
-                                  "Output images",
-                                  GIMP_TYPE_IMAGE,
-                                  G_PARAM_READWRITE);
+      gimp_procedure_add_core_object_array_return_value (procedure, "images",
+                                                         "Output images",
+                                                         "Output images",
+                                                         GIMP_TYPE_IMAGE,
+                                                         G_PARAM_READWRITE);
     }
 
   return procedure;
@@ -145,7 +138,6 @@ static GimpValueArray *
 guillotine_run (GimpProcedure        *procedure,
                 GimpRunMode           run_mode,
                 GimpImage            *image,
-                gint                  n_drawables,
                 GimpDrawable        **drawables,
                 GimpProcedureConfig  *config,
                 gpointer              run_data)
@@ -168,19 +160,18 @@ guillotine_run (GimpProcedure        *procedure,
       image_list = guillotine (image, run_mode == GIMP_RUN_INTERACTIVE);
 
       num_images = g_list_length (image_list);
-      images     = g_new (GimpImage *, num_images);
+      images     = g_new0 (GimpImage *, num_images + 1);
 
       for (list = image_list, i = 0;
            list;
            list = g_list_next (list), i++)
         {
-          images[i] = g_object_ref (list->data);
+          images[i] = list->data;
         }
 
       g_list_free (image_list);
 
-      GIMP_VALUES_SET_INT           (return_vals, 1, num_images);
-      GIMP_VALUES_TAKE_OBJECT_ARRAY (return_vals, 2, GIMP_TYPE_IMAGE, images, num_images);
+      GIMP_VALUES_TAKE_CORE_OBJECT_ARRAY (return_vals, 1, images);
 
       if (run_mode == GIMP_RUN_INTERACTIVE)
         gimp_displays_flush ();

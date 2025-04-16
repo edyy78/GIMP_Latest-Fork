@@ -132,8 +132,8 @@ gimp_gradient_class_init (GimpGradientClass *klass)
   fish_linear_rgb_to_srgb = babl_fish (babl_format ("RGB double"),
                                        babl_format ("R'G'B' double"));
   fish_srgb_to_cie_lab    = babl_fish (babl_format ("R'G'B' double"),
-                                       babl_format ("CIE Lab double"));
-  fish_cie_lab_to_srgb    = babl_fish (babl_format ("CIE Lab double"),
+                                       babl_format ("CIE Lab float"));
+  fish_cie_lab_to_srgb    = babl_fish (babl_format ("CIE Lab float"),
                                        babl_format ("R'G'B' double"));
 }
 
@@ -456,8 +456,8 @@ gimp_gradient_get_extension (GimpData *data)
  * @blend_color_space: color space to use for blending RGB segments
  * @color:             returns a newly allocated color
  *
- * If you are iterating over an gradient, you should pass the the
- * return value from the last call for @seg.
+ * If you are iterating over an gradient, you should pass the return
+ * value from the last call for @seg.
  *
  * Returns: the gradient segment the color is from
  **/
@@ -552,6 +552,7 @@ gimp_gradient_get_color_at (GimpGradient                 *gradient,
 
   if (seg->color == GIMP_GRADIENT_SEGMENT_RGB)
     {
+      gfloat  float_components[3];
       gdouble left_components[3];
       gdouble right_components[3];
       gdouble ret_components[3];
@@ -559,8 +560,13 @@ gimp_gradient_get_color_at (GimpGradient                 *gradient,
       switch (blend_color_space)
         {
         case GIMP_GRADIENT_BLEND_CIE_LAB:
-          gegl_color_get_pixel (left_color, babl_format ("CIE Lab double"), left_components);
-          gegl_color_get_pixel (right_color, babl_format ("CIE Lab double"), right_components);
+          gegl_color_get_pixel (left_color, babl_format ("CIE Lab float"), float_components);
+          for (gint i = 0; i < 3; i++)
+            left_components[i] = float_components[i];
+
+          gegl_color_get_pixel (right_color, babl_format ("CIE Lab float"), float_components);
+          for (gint i = 0; i < 3; i++)
+            right_components[i] = float_components[i];
           break;
 
         case GIMP_GRADIENT_BLEND_RGB_LINEAR:
@@ -582,7 +588,9 @@ gimp_gradient_get_color_at (GimpGradient                 *gradient,
       switch (blend_color_space)
         {
         case GIMP_GRADIENT_BLEND_CIE_LAB:
-          gegl_color_set_pixel (*color, babl_format ("CIE Lab double"), ret_components);
+          for (gint i = 0; i < 3; i++)
+            float_components[i] = (gfloat) ret_components[i];
+          gegl_color_set_pixel (*color, babl_format ("CIE Lab float"), float_components);
           break;
 
         case GIMP_GRADIENT_BLEND_RGB_LINEAR:
@@ -596,11 +604,11 @@ gimp_gradient_get_color_at (GimpGradient                 *gradient,
     }
   else
     {
-      gdouble left_hsv[3];
-      gdouble right_hsv[3];
+      gfloat left_hsv[3];
+      gfloat right_hsv[3];
 
-      gegl_color_get_pixel (left_color, babl_format ("HSV double"), left_hsv);
-      gegl_color_get_pixel (right_color, babl_format ("HSV double"), right_hsv);
+      gegl_color_get_pixel (left_color, babl_format ("HSV float"), left_hsv);
+      gegl_color_get_pixel (right_color, babl_format ("HSV float"), right_hsv);
 
       left_hsv[1] = left_hsv[1] + (right_hsv[1] - left_hsv[1]) * factor;
       left_hsv[2] = left_hsv[2] + (right_hsv[2] - left_hsv[2]) * factor;
@@ -641,7 +649,7 @@ gimp_gradient_get_color_at (GimpGradient                 *gradient,
           break;
         }
 
-      gegl_color_set_pixel (*color, babl_format ("HSV double"), left_hsv);
+      gegl_color_set_pixel (*color, babl_format ("HSV float"), left_hsv);
     }
 
   /* Calculate alpha */

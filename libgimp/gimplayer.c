@@ -25,8 +25,6 @@
 #include "gimp.h"
 
 
-static GimpLayer * gimp_layer_real_copy (GimpLayer *layer);
-
 
 G_DEFINE_TYPE (GimpLayer, gimp_layer, GIMP_TYPE_DRAWABLE)
 
@@ -36,7 +34,6 @@ G_DEFINE_TYPE (GimpLayer, gimp_layer, GIMP_TYPE_DRAWABLE)
 static void
 gimp_layer_class_init (GimpLayerClass *klass)
 {
-  klass->copy = gimp_layer_real_copy;
 }
 
 static void
@@ -71,72 +68,6 @@ gimp_layer_get_by_id (gint32 layer_id)
     return (GimpLayer *) item;
 
   return NULL;
-}
-
-/**
- * gimp_layer_new:
- * @image:            The image to which to add the layer.
- * @name: (nullable): The layer name.
- * @width:            The layer width.
- * @height:           The layer height.
- * @type:             The layer type.
- * @opacity:          The layer opacity.
- * @mode:             The layer combination mode.
- *
- * Create a new layer.
- *
- * This procedure creates a new layer with the specified @width, @height, and
- * @type. If @name is %NULL, a default layer name will be used.
- * @opacity and @mode are also supplied parameters.
- *
- * The new layer still needs to be added to the image, as this is not automatic.
- * Add the new layer with the [method@Image.insert_layer] method.
- *
- * Other attributes such as layer mask modes, and offsets should be set with
- * explicit procedure calls.
- *
- * Returns: (transfer none): The newly created layer.
- *          The object belongs to libgimp and you should not free it.
- *
- * Since: 3.0
- */
-GimpLayer *
-gimp_layer_new (GimpImage     *image,
-                const gchar   *name,
-                gint           width,
-                gint           height,
-                GimpImageType  type,
-                gdouble        opacity,
-                GimpLayerMode  mode)
-{
-  return _gimp_layer_new (image,
-                          width,
-                          height,
-                          type,
-                          name,
-                          opacity,
-                          mode);
-}
-
-/**
- * gimp_layer_copy:
- * @layer: The layer to copy.
- *
- * Copy a layer.
- *
- * This procedure copies the specified layer and returns the copy. The
- * newly copied layer is for use within the original layer's image. It
- * should not be subsequently added to any other image.
- *
- * Returns: (transfer none): The newly copied layer.
- *          The object belongs to libgimp and you should not free it.
- *
- * Since: 3.0
- */
-GimpLayer *
-gimp_layer_copy (GimpLayer *layer)
-{
-  return GIMP_LAYER_GET_CLASS (layer)->copy (layer);
 }
 
 /**
@@ -301,13 +232,4 @@ gimp_layer_new_from_surface (GimpImage            *image,
     gimp_progress_update (progress_end);
 
   return layer;
-}
-
-
-/*  private functions  */
-
-static GimpLayer *
-gimp_layer_real_copy (GimpLayer *layer)
-{
-  return _gimp_layer_copy (layer, FALSE);
 }

@@ -21,11 +21,14 @@
 
 #include "stamp-pdbgen.h"
 
+#include <cairo.h>
 #include <string.h>
 
 #include <gegl.h>
 
 #include <gdk-pixbuf/gdk-pixbuf.h>
+
+#include "libgimpcolor/gimpcolor.h"
 
 #include "libgimpbase/gimpbase.h"
 
@@ -94,8 +97,8 @@ palette_get_by_name_invoker (GimpProcedure         *procedure,
       palette = GIMP_PALETTE (gimp_pdb_get_resource (gimp, GIMP_TYPE_PALETTE, name,
                                                      GIMP_PDB_DATA_ACCESS_READ, error));
 
-      if (! palette)
-        success = FALSE;
+      /* Ignore "not found" error, just return NULL. */
+      g_clear_error (error);
     }
 
   return_vals = gimp_procedure_get_return_values (procedure, success,
@@ -321,7 +324,7 @@ palette_delete_entry_invoker (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
-palette_entry_get_color_invoker (GimpProcedure         *procedure,
+palette_get_entry_color_invoker (GimpProcedure         *procedure,
                                  Gimp                  *gimp,
                                  GimpContext           *context,
                                  GimpProgress          *progress,
@@ -357,7 +360,7 @@ palette_entry_get_color_invoker (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
-palette_entry_set_color_invoker (GimpProcedure         *procedure,
+palette_set_entry_color_invoker (GimpProcedure         *procedure,
                                  Gimp                  *gimp,
                                  GimpContext           *context,
                                  GimpProgress          *progress,
@@ -386,7 +389,7 @@ palette_entry_set_color_invoker (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
-palette_entry_get_name_invoker (GimpProcedure         *procedure,
+palette_get_entry_name_invoker (GimpProcedure         *procedure,
                                 Gimp                  *gimp,
                                 GimpContext           *context,
                                 GimpProgress          *progress,
@@ -422,7 +425,7 @@ palette_entry_get_name_invoker (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
-palette_entry_set_name_invoker (GimpProcedure         *procedure,
+palette_set_entry_name_invoker (GimpProcedure         *procedure,
                                 Gimp                  *gimp,
                                 GimpContext           *context,
                                 GimpProgress          *progress,
@@ -450,6 +453,88 @@ palette_entry_set_name_invoker (GimpProcedure         *procedure,
                                            error ? *error : NULL);
 }
 
+static GimpValueArray *
+palette_get_bytes_invoker (GimpProcedure         *procedure,
+                           Gimp                  *gimp,
+                           GimpContext           *context,
+                           GimpProgress          *progress,
+                           const GimpValueArray  *args,
+                           GError               **error)
+{
+  gboolean success = TRUE;
+  GimpValueArray *return_vals;
+  GimpPalette *palette;
+  const Babl *format;
+  GBytes *colormap = NULL;
+  gint num_colors = 0;
+
+  palette = g_value_get_object (gimp_value_array_index (args, 0));
+  format = g_value_get_boxed (gimp_value_array_index (args, 1));
+
+  if (success)
+    {
+      guchar *colormap_data;
+      gint    bpp = babl_format_get_bytes_per_pixel (format);
+
+      colormap_data = gimp_palette_get_colormap (palette, format, &num_colors);
+      colormap = g_bytes_new_take (colormap_data, bpp * num_colors);
+    }
+
+  return_vals = gimp_procedure_get_return_values (procedure, success,
+                                                  error ? *error : NULL);
+
+  if (success)
+    {
+      g_value_take_boxed (gimp_value_array_index (return_vals, 1), colormap);
+      g_value_set_int (gimp_value_array_index (return_vals, 2), num_colors);
+    }
+
+  return return_vals;
+}
+
+static GimpValueArray *
+palette_set_bytes_invoker (GimpProcedure         *procedure,
+                           Gimp                  *gimp,
+                           GimpContext           *context,
+                           GimpProgress          *progress,
+                           const GimpValueArray  *args,
+                           GError               **error)
+{
+  gboolean success = TRUE;
+  GimpPalette *palette;
+  const Babl *format;
+  GBytes *colormap;
+
+  palette = g_value_get_object (gimp_value_array_index (args, 0));
+  format = g_value_get_boxed (gimp_value_array_index (args, 1));
+  colormap = g_value_get_boxed (gimp_value_array_index (args, 2));
+
+  if (success)
+    {
+      gint bpp;
+
+      bpp = babl_format_get_bytes_per_pixel (format);
+
+      if (g_bytes_get_size (colormap) % bpp == 0)
+        {
+          const guchar *data;
+          gsize         n_bytes;
+          gint          n_colors;
+
+          data     = g_bytes_get_data (colormap, &n_bytes),
+          n_colors = n_bytes / bpp;
+          gimp_palette_set_colormap (palette, format, (guchar *) data, n_colors, TRUE);
+        }
+      else
+        {
+          success = FALSE;
+        }
+    }
+
+  return gimp_procedure_get_return_values (procedure, success,
+                                           error ? *error : NULL);
+}
+
 void
 register_palette_procs (GimpPDB *pdb)
 {
@@ -458,7 +543,7 @@ register_palette_procs (GimpPDB *pdb)
   /*
    * gimp-palette-new
    */
-  procedure = gimp_procedure_new (palette_new_invoker);
+  procedure = gimp_procedure_new (palette_new_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-palette-new");
   gimp_procedure_set_static_help (procedure,
@@ -481,6 +566,8 @@ register_palette_procs (GimpPDB *pdb)
                                                             "palette",
                                                             "The palette",
                                                             FALSE,
+                                                            NULL,
+                                                            FALSE,
                                                             GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
@@ -488,12 +575,12 @@ register_palette_procs (GimpPDB *pdb)
   /*
    * gimp-palette-get-by-name
    */
-  procedure = gimp_procedure_new (palette_get_by_name_invoker);
+  procedure = gimp_procedure_new (palette_get_by_name_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-palette-get-by-name");
   gimp_procedure_set_static_help (procedure,
                                   "Returns the palette with the given name.",
-                                  "Returns the palette with the given name.",
+                                  "Returns an existing palette having the given name. Returns %NULL when no palette exists of that name.",
                                   NULL);
   gimp_procedure_set_static_attribution (procedure,
                                          "Michael Natterer <mitch@gimp.org>",
@@ -510,6 +597,8 @@ register_palette_procs (GimpPDB *pdb)
                                    gimp_param_spec_palette ("palette",
                                                             "palette",
                                                             "The palette",
+                                                            TRUE,
+                                                            NULL,
                                                             FALSE,
                                                             GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
@@ -518,7 +607,7 @@ register_palette_procs (GimpPDB *pdb)
   /*
    * gimp-palette-get-color-count
    */
-  procedure = gimp_procedure_new (palette_get_color_count_invoker);
+  procedure = gimp_procedure_new (palette_get_color_count_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-palette-get-color-count");
   gimp_procedure_set_static_help (procedure,
@@ -534,6 +623,8 @@ register_palette_procs (GimpPDB *pdb)
                                                         "palette",
                                                         "The palette",
                                                         FALSE,
+                                                        NULL,
+                                                        FALSE,
                                                         GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    g_param_spec_int ("num-colors",
@@ -547,7 +638,7 @@ register_palette_procs (GimpPDB *pdb)
   /*
    * gimp-palette-get-colors
    */
-  procedure = gimp_procedure_new (palette_get_colors_invoker);
+  procedure = gimp_procedure_new (palette_get_colors_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-palette-get-colors");
   gimp_procedure_set_static_help (procedure,
@@ -563,6 +654,8 @@ register_palette_procs (GimpPDB *pdb)
                                                         "palette",
                                                         "The palette",
                                                         FALSE,
+                                                        NULL,
+                                                        FALSE,
                                                         GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    g_param_spec_boxed ("colors",
@@ -576,7 +669,7 @@ register_palette_procs (GimpPDB *pdb)
   /*
    * gimp-palette-get-columns
    */
-  procedure = gimp_procedure_new (palette_get_columns_invoker);
+  procedure = gimp_procedure_new (palette_get_columns_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-palette-get-columns");
   gimp_procedure_set_static_help (procedure,
@@ -592,6 +685,8 @@ register_palette_procs (GimpPDB *pdb)
                                                         "palette",
                                                         "The palette",
                                                         FALSE,
+                                                        NULL,
+                                                        FALSE,
                                                         GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    g_param_spec_int ("num-columns",
@@ -605,7 +700,7 @@ register_palette_procs (GimpPDB *pdb)
   /*
    * gimp-palette-set-columns
    */
-  procedure = gimp_procedure_new (palette_set_columns_invoker);
+  procedure = gimp_procedure_new (palette_set_columns_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-palette-set-columns");
   gimp_procedure_set_static_help (procedure,
@@ -621,6 +716,8 @@ register_palette_procs (GimpPDB *pdb)
                                                         "palette",
                                                         "The palette",
                                                         FALSE,
+                                                        NULL,
+                                                        FALSE,
                                                         GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_int ("columns",
@@ -634,7 +731,7 @@ register_palette_procs (GimpPDB *pdb)
   /*
    * gimp-palette-add-entry
    */
-  procedure = gimp_procedure_new (palette_add_entry_invoker);
+  procedure = gimp_procedure_new (palette_add_entry_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-palette-add-entry");
   gimp_procedure_set_static_help (procedure,
@@ -650,6 +747,8 @@ register_palette_procs (GimpPDB *pdb)
                                                         "palette",
                                                         "The palette",
                                                         FALSE,
+                                                        NULL,
+                                                        FALSE,
                                                         GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                gimp_param_spec_string ("entry-name",
@@ -659,9 +758,10 @@ register_palette_procs (GimpPDB *pdb)
                                                        NULL,
                                                        GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gegl_param_spec_color ("color",
+                               gimp_param_spec_color ("color",
                                                       "color",
                                                       "The color for the added entry.",
+                                                      FALSE,
                                                       NULL,
                                                       GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
@@ -676,7 +776,7 @@ register_palette_procs (GimpPDB *pdb)
   /*
    * gimp-palette-delete-entry
    */
-  procedure = gimp_procedure_new (palette_delete_entry_invoker);
+  procedure = gimp_procedure_new (palette_delete_entry_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-palette-delete-entry");
   gimp_procedure_set_static_help (procedure,
@@ -693,6 +793,8 @@ register_palette_procs (GimpPDB *pdb)
                                                         "palette",
                                                         "The palette",
                                                         FALSE,
+                                                        NULL,
+                                                        FALSE,
                                                         GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_int ("entry-num",
@@ -704,11 +806,11 @@ register_palette_procs (GimpPDB *pdb)
   g_object_unref (procedure);
 
   /*
-   * gimp-palette-entry-get-color
+   * gimp-palette-get-entry-color
    */
-  procedure = gimp_procedure_new (palette_entry_get_color_invoker);
+  procedure = gimp_procedure_new (palette_get_entry_color_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-palette-entry-get-color");
+                               "gimp-palette-get-entry-color");
   gimp_procedure_set_static_help (procedure,
                                   "Gets the color of an entry in the palette.",
                                   "Returns the color of the entry at the given zero-based index into the palette. Returns %NULL when the index is out of range.",
@@ -722,6 +824,8 @@ register_palette_procs (GimpPDB *pdb)
                                                         "palette",
                                                         "The palette",
                                                         FALSE,
+                                                        NULL,
+                                                        FALSE,
                                                         GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_int ("entry-num",
@@ -730,20 +834,21 @@ register_palette_procs (GimpPDB *pdb)
                                                  G_MININT32, G_MAXINT32, 0,
                                                  GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gegl_param_spec_color ("color",
+                                   gimp_param_spec_color ("color",
                                                           "color",
                                                           "The color at the index.",
+                                                          FALSE,
                                                           NULL,
                                                           GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
-   * gimp-palette-entry-set-color
+   * gimp-palette-set-entry-color
    */
-  procedure = gimp_procedure_new (palette_entry_set_color_invoker);
+  procedure = gimp_procedure_new (palette_set_entry_color_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-palette-entry-set-color");
+                               "gimp-palette-set-entry-color");
   gimp_procedure_set_static_help (procedure,
                                   "Sets the color of an entry in the palette.",
                                   "Sets the color of the entry at the zero-based index into the palette. Returns an error when the index is out of range. Returns an error when the palette is not editable.",
@@ -757,6 +862,8 @@ register_palette_procs (GimpPDB *pdb)
                                                         "palette",
                                                         "The palette",
                                                         FALSE,
+                                                        NULL,
+                                                        FALSE,
                                                         GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_int ("entry-num",
@@ -765,20 +872,21 @@ register_palette_procs (GimpPDB *pdb)
                                                  G_MININT32, G_MAXINT32, 0,
                                                  GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gegl_param_spec_color ("color",
+                               gimp_param_spec_color ("color",
                                                       "color",
                                                       "The new color",
+                                                      FALSE,
                                                       NULL,
                                                       GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
-   * gimp-palette-entry-get-name
+   * gimp-palette-get-entry-name
    */
-  procedure = gimp_procedure_new (palette_entry_get_name_invoker);
+  procedure = gimp_procedure_new (palette_get_entry_name_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-palette-entry-get-name");
+                               "gimp-palette-get-entry-name");
   gimp_procedure_set_static_help (procedure,
                                   "Gets the name of an entry in the palette.",
                                   "Gets the name of the entry at the zero-based index into the palette. Returns an error when the index is out of range.",
@@ -791,6 +899,8 @@ register_palette_procs (GimpPDB *pdb)
                                gimp_param_spec_palette ("palette",
                                                         "palette",
                                                         "The palette",
+                                                        FALSE,
+                                                        NULL,
                                                         FALSE,
                                                         GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
@@ -810,11 +920,11 @@ register_palette_procs (GimpPDB *pdb)
   g_object_unref (procedure);
 
   /*
-   * gimp-palette-entry-set-name
+   * gimp-palette-set-entry-name
    */
-  procedure = gimp_procedure_new (palette_entry_set_name_invoker);
+  procedure = gimp_procedure_new (palette_set_entry_name_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-palette-entry-set-name");
+                               "gimp-palette-set-entry-name");
   gimp_procedure_set_static_help (procedure,
                                   "Sets the name of an entry in the palette.",
                                   "Sets the name of the entry at the zero-based index into the palette. Returns an error if the index is out or range. Returns an error if the palette is not editable.",
@@ -827,6 +937,8 @@ register_palette_procs (GimpPDB *pdb)
                                gimp_param_spec_palette ("palette",
                                                         "palette",
                                                         "The palette",
+                                                        FALSE,
+                                                        NULL,
                                                         FALSE,
                                                         GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
@@ -842,6 +954,92 @@ register_palette_procs (GimpPDB *pdb)
                                                        FALSE, TRUE, FALSE,
                                                        NULL,
                                                        GIMP_PARAM_READWRITE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
+   * gimp-palette-get-bytes
+   */
+  procedure = gimp_procedure_new (palette_get_bytes_invoker, TRUE);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-palette-get-bytes");
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns the palette's colormap",
+                                  "This procedure returns a palette's colormap as a bytes array with all colors converted to a given Babl @format.\n"
+                                  "The byte-size of the returned colormap depends on the number of colors and on the bytes-per-pixel size of @format. E.g. that the following equality is ensured:\n"
+                                  "\n"
+                                  "```C\n"
+                                  "g_bytes_get_size (colormap) == num_colors * babl_format_get_bytes_per_pixel (format)\n"
+                                  "```",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Jehan",
+                                         "Jehan",
+                                         "2024");
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_palette ("palette",
+                                                        "palette",
+                                                        "The palette",
+                                                        FALSE,
+                                                        NULL,
+                                                        FALSE,
+                                                        GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_boxed ("format",
+                                                   "format",
+                                                   "The desired color format",
+                                                   GIMP_TYPE_BABL_FORMAT,
+                                                   GIMP_PARAM_READWRITE));
+  gimp_procedure_add_return_value (procedure,
+                                   g_param_spec_boxed ("colormap",
+                                                       "colormap",
+                                                       "The image's colormap.",
+                                                       G_TYPE_BYTES,
+                                                       GIMP_PARAM_READWRITE));
+  gimp_procedure_add_return_value (procedure,
+                                   g_param_spec_int ("num-colors",
+                                                     "num colors",
+                                                     "The number of colors in the palette",
+                                                     G_MININT32, G_MAXINT32, 0,
+                                                     GIMP_PARAM_READWRITE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
+   * gimp-palette-set-bytes
+   */
+  procedure = gimp_procedure_new (palette_set_bytes_invoker, TRUE);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-palette-set-bytes");
+  gimp_procedure_set_static_help (procedure,
+                                  "Sets the entries in the image's colormap.",
+                                  "This procedure sets the entries in the specified palette in one go. The number of entries depens on the size of @colormap and the bytes-per-pixel size of @format.\n"
+                                  "The procedure will fail if the size of @colormap is not an exact multiple of the number of bytes per pixel of @format.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Jehan",
+                                         "Jehan",
+                                         "2024");
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_palette ("palette",
+                                                        "palette",
+                                                        "The palette",
+                                                        FALSE,
+                                                        NULL,
+                                                        FALSE,
+                                                        GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_boxed ("format",
+                                                   "format",
+                                                   "The desired color format",
+                                                   GIMP_TYPE_BABL_FORMAT,
+                                                   GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_boxed ("colormap",
+                                                   "colormap",
+                                                   "The new colormap values",
+                                                   G_TYPE_BYTES,
+                                                   GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 }

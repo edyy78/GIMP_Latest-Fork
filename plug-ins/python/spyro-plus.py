@@ -383,7 +383,7 @@ class SelectionToPath:
         config.set_property('image', self.image)
         result = proc.run(config)
 
-        self.path = self.image.list_vectors()[0]
+        self.path = self.image.get_paths()[0]
         self.stroke_ids = self.path.get_strokes()
 
         # A path may contain several strokes. If so lets throw away a stroke that
@@ -395,7 +395,7 @@ class SelectionToPath:
 
             for stroke in range(len(self.stroke_ids)):
                 stroke_id = self.stroke_ids[stroke]
-                vectors_stroke_type, control_points, closed = self.path.stroke_get_points(stroke_id)
+                path_stroke_type, control_points, closed = self.path.stroke_get_points(stroke_id)
                 if control_points == frame_strokes:
                     del self.stroke_ids[stroke]
                     break
@@ -480,10 +480,15 @@ class SelectionShape(Shape):
         return x + dist * cos(perpendicular), y + dist * sin(perpendicular)
 
 
-shapes = [
-    CircleShape(), RackShape(), FrameShape(), SelectionShape(),
-    PolygonShape(), SineShape(), BumpShape()
-]
+shapes = {
+    "circle":        CircleShape(),
+    "rack":          RackShape(),
+    "frame":         FrameShape(),
+    "selection":     SelectionShape(),
+    "polygon-star":  PolygonShape(),
+    "sine":          SineShape(),
+    "bumps":         BumpShape()
+}
 
 
 ### Tools
@@ -493,26 +498,41 @@ def get_gradient_samples(num_samples):
     gradient = Gimp.context_get_gradient()
     reverse_mode = Gimp.context_get_gradient_reverse()
     repeat_mode = Gimp.context_get_gradient_repeat_mode()
+    color_samples = []
 
     if repeat_mode == Gimp.RepeatMode.TRIANGULAR:
+        color_samples2 = []
         # Get two uniform samples, which are reversed from each other, and connect them.
 
         sample_count = num_samples/2 + 1
-        success, color_samples  = gradient.get_uniform_samples(sample_count, reverse_mode)
+        gegl_color_samples = gradient.get_uniform_samples(sample_count, reverse_mode)
 
-        del color_samples[-4:]   # Delete last color because it will appear in the next sample
+        # Don't copy over the last color because it will appear in the next sample
+        for i in range(len(gegl_color_samples) - 1):
+            rgba = gegl_color_samples[i].get_rgba()
+            for channel in rgba:
+                color_samples.append(channel)
 
         # If num_samples is odd, lets get an extra sample this time.
         if num_samples % 2 == 1:
             sample_count += 1
 
-        success, color_samples2 = gradient.get_uniform_samples(sample_count, 1 - reverse_mode)
+        gegl_color_samples2 = gradient.get_uniform_samples(sample_count, 1 - reverse_mode)
 
-        del color_samples2[-4:]  # Delete last color because it will appear in the very first sample
+        # Don't copy over the last color because it will appear in the very first sample
+        for i in range(len(gegl_color_samples2) - 1):
+            rgba = gegl_color_samples2[i].get_rgba()
+            for channel in rgba:
+                color_samples2.append(channel)
 
+        color_samples.extend(color_samples2)
         color_samples = tuple(color_samples)
     else:
-        success, color_samples = gradient.get_uniform_samples(num_samples, reverse_mode)
+        gegl_color_samples = gradient.get_uniform_samples(num_samples, reverse_mode)
+        for sample in gegl_color_samples:
+            rgba = sample.get_rgba()
+            for channel in rgba:
+                color_samples.append(channel)
 
     return color_samples
 
@@ -559,9 +579,9 @@ class AbstractStrokeTool():
             control_points += [i, k] * 3
 
         # Create path
-        path = Gimp.Vectors.new(layer.get_image(), 'temp_path')
-        layer.get_image().insert_vectors(path, None, 0)
-        sid = path.stroke_new_from_points(Gimp.VectorsStrokeType.BEZIER,
+        path = Gimp.Path.new(layer.get_image(), 'temp_path')
+        layer.get_image().insert_path(path, None, 0)
+        sid = path.stroke_new_from_points(Gimp.PathStrokeType.BEZIER,
                                           control_points, False)
 
         # Draw it.
@@ -575,7 +595,7 @@ class AbstractStrokeTool():
         Gimp.context_pop()
 
         # Get rid of the path.
-        layer.get_image().remove_vectors(path)
+        layer.get_image().remove_path(path)
 
 
 # Drawing tool that should be quick, for purposes of previewing the pattern.
@@ -637,8 +657,8 @@ class SaveToPathTool():
         We dont add this to the list of tools. """
 
     def __init__(self, img):
-        self.path = Gimp.Vectors.new(img, path_name)
-        img.insert_vectors(self.path, None, 0)
+        self.path = Gimp.Path.new(img, path_name)
+        img.insert_path(self.path, None, 0)
 
     def draw(self, layer, strokes, color=None):
         # We need to multiply every point by 3, because we are creating a path,
@@ -647,20 +667,22 @@ class SaveToPathTool():
         for i, k in zip(strokes[0::2], strokes[1::2]):
             control_points += [i, k] * 3
 
-        self.path.stroke_new_from_points(Gimp.VectorsStrokeType.BEZIER,
+        self.path.stroke_new_from_points(Gimp.PathStrokeType.BEZIER,
                                          control_points, False)
 
 
-tools = [
-    PreviewTool(),
-    StrokePaintTool(_("PaintBrush"), "gimp-paintbrush"),
-    PencilTool(), AirBrushTool(), StrokeTool(),
-    StrokePaintTool(_("Ink"), 'gimp-ink'),
-    StrokePaintTool(_("MyPaintBrush"), 'gimp-mybrush')
+tools = {
+    "preview":       PreviewTool(),
+    "paintbrush":    StrokePaintTool(_("PaintBrush"), "gimp-paintbrush"),
+    "penciltool":    PencilTool(),
+    "airbrush":      AirBrushTool(),
+    "stroke":        StrokeTool(),
+    "ink":           StrokePaintTool(_("Ink"), 'gimp-ink'),
+    "mypaintbrush":  StrokePaintTool(_("MyPaintBrush"), 'gimp-mybrush')
     # Clone does not work properly when an image is not set.  When that happens, drawing fails, and
     # I am unable to catch the error. This causes the plugin to crash, and subsequent problems with undo.
     # StrokePaintTool("Clone", 'gimp-clone', False)
-]
+}
 
 
 class PatternParameters:
@@ -671,7 +693,7 @@ class PatternParameters:
     """
     def __init__(self):
         if not hasattr(self, 'curve_type'):
-            self.curve_type = 0
+            self.curve_type = "spyrograph"
 
         # Pattern
         if not hasattr(self, 'pattern_notation'):
@@ -710,7 +732,7 @@ class PatternParameters:
 
         # Shape
         if not hasattr(self, 'shape_index'):
-            self.shape_index = 0  # Index in the shapes array
+            self.shape_index = "circle"  # Index in the shapes array
         if not hasattr(self, 'sides'):
             self.sides = 5
         if not hasattr(self, 'morph'):
@@ -725,7 +747,7 @@ class PatternParameters:
 
         # Drawing style
         if not hasattr(self, 'tool_index'):
-            self.tool_index = 0   # Index in the tools array.
+            self.tool_index = "preview"   # Index in the tools array.
         if not hasattr(self, 'long_gradient'):
             self.long_gradient = False
 
@@ -1029,7 +1051,12 @@ class LissaCurveType:
         return False
 
 
-curve_types = [SpyroCurveType(), EpitrochoidCurvetype(), SineCurveType(), LissaCurveType()]
+curve_types = {
+  "spyrograph":   SpyroCurveType(),
+  "epitrochoid": EpitrochoidCurvetype(),
+  "sine":         SineCurveType(),
+  "lissajous":    LissaCurveType()
+}
 
 # Drawing engine. Also implements drawing incrementally.
 # We don't draw the entire stroke, because it could take several seconds,
@@ -1434,10 +1461,14 @@ class SpyroWindow():
             myscale.spin.set_width_chars(6)
             return adj, myscale
 
-        def set_combo_in_table(txt_list, table, row, callback):
+        def set_combo_in_table(txt_list, is_dictionary, table, row, callback):
             combo = Gtk.ComboBoxText.new()
-            for txt in txt_list:
-                combo.append_text(txt)
+            if (is_dictionary == False):
+                for txt in txt_list:
+                    combo.append_text(_(txt))
+            else:
+                for key in txt_list:
+                    combo.append (key, _(txt_list[key].name))
 
             combo.set_halign(Gtk.Align.FILL)
             table.attach(combo, 1, row, 1, 1)
@@ -1455,14 +1486,14 @@ class SpyroWindow():
             row = 0
             label_in_table(_("Curve Type"), table, row,
                            _("An Epitrochoid pattern is when the moving gear is on the outside of the fixed gear."))
-            self.curve_type_combo = set_combo_in_table([ct.name for ct in curve_types], table, row,
+            self.curve_type_combo = set_combo_in_table(curve_types, True, table, row,
                                                        self.curve_type_changed)
 
             row += 1
             label_in_table(_("Tool"), table, row,
                            _("The tool with which to draw the pattern. "
                              "The Preview tool just draws quickly."))
-            self.tool_combo = set_combo_in_table([tool.name for tool in tools], table, row,
+            self.tool_combo = set_combo_in_table(tools, True, table, row,
                                                  self.tool_combo_changed)
 
             self.long_gradient_checkbox = Gtk.CheckButton(label=_("Long Gradient"))
@@ -1545,12 +1576,12 @@ class SpyroWindow():
 
             row = 0
             label_in_table(_("Fixed Gear Teeth"), kit_table, row, fixed_gear_tooltip)
-            self.kit_outer_teeth_combo = set_combo_in_table([str(t) for t in ring_teeth], kit_table, row,
+            self.kit_outer_teeth_combo = set_combo_in_table([str(t) for t in ring_teeth], False, kit_table, row,
                                                             self.kit_outer_teeth_combo_changed)
 
             row += 1
             label_in_table(_("Moving Gear Teeth"), kit_table, row, moving_gear_tooltip)
-            self.kit_inner_teeth_combo = set_combo_in_table([str(t) for t in wheel_teeth], kit_table, row,
+            self.kit_inner_teeth_combo = set_combo_in_table([str(t) for t in wheel_teeth], False, kit_table, row,
                                                             self.kit_inner_teeth_combo_changed)
 
             row += 1
@@ -1667,7 +1698,7 @@ class SpyroWindow():
                              "Frame hugs the boundaries of the rectangular selection, "
                              "use hole=100 in Gear notation to touch boundary. "
                              "Selection will hug boundaries of current selection - try something non-rectangular."))
-            self.shape_combo = set_combo_in_table([shape.name for shape in shapes], table, row,
+            self.shape_combo = set_combo_in_table(shapes, True, table, row,
                                                   self.shape_combo_changed)
 
             row += 1
@@ -1733,7 +1764,7 @@ class SpyroWindow():
             row = 0
             label_in_table(_("Save"), table, row,
                            _("Choose whether to save as new layer, redraw on last active layer, or save to path"))
-            self.save_option_combo = set_combo_in_table(save_options, table, row,
+            self.save_option_combo = set_combo_in_table(save_options, False, table, row,
                                                         self.save_option_changed)
             self.save_option_combo.show()
 
@@ -1855,7 +1886,7 @@ class SpyroWindow():
         shelf_parameters(self.p)
 
         if self.p.save_option == SAVE_AS_NEW_LAYER:
-            if self.spyro_layer in self.img.list_layers():
+            if self.spyro_layer in self.img.get_layers():
                 self.img.active_layer = self.spyro_layer
 
             # If we are in the middle of incremental draw, we want to complete it, and only then to exit.
@@ -1876,7 +1907,7 @@ class SpyroWindow():
             # If there is an incremental drawing taking place, lets stop it.
             self.clear_idle_task()
 
-            if self.spyro_layer in self.img.list_layers():
+            if self.spyro_layer in self.img.get_layers():
                 self.img.remove_layer(self.spyro_layer)
                 self.img.active_layer = self.active_layer
 
@@ -1910,7 +1941,7 @@ class SpyroWindow():
 
         # We want to delete the temporary layer, but as a precaution, lets ask first,
         # maybe it was already deleted by the user.
-        if self.spyro_layer in self.img.list_layers():
+        if self.spyro_layer in self.img.get_layers():
             self.img.remove_layer(self.spyro_layer)
             Gimp.displays_flush()
 
@@ -1918,7 +1949,7 @@ class SpyroWindow():
 
     def update_view(self):
         """ Update the UI to reflect the values in the Pattern Parameters. """
-        self.curve_type_combo.set_active(self.p.curve_type)
+        self.curve_type_combo.set_active_id(self.p.curve_type)
         self.curve_type_side_effects()
 
         self.pattern_notebook.set_current_page(pattern_notation_page[self.p.pattern_notation])
@@ -1941,7 +1972,7 @@ class SpyroWindow():
         self.doughnut.set_width(self.p.doughnut_width)
         self.petals_changed_side_effects()
 
-        self.shape_combo.set_active(self.p.shape_index)
+        self.shape_combo.set_active_id(self.p.shape_index)
         self.shape_combo_side_effects()
         self.sides_adj.set_value(self.p.sides)
         self.morph_adj.set_value(self.p.morph)
@@ -1949,7 +1980,7 @@ class SpyroWindow():
         self.shape_rotation_adj.set_value(self.p.shape_rotation)
 
         self.margin_adj.set_value(self.p.margin_pixels)
-        self.tool_combo.set_active(self.p.tool_index)
+        self.tool_combo.set_active_id(self.p.tool_index)
         self.long_gradient_checkbox.set_active(self.p.long_gradient)
         self.save_option_combo.set_active(self.p.save_option)
 
@@ -1987,7 +2018,7 @@ class SpyroWindow():
             self.doughnut_width_myscale.set_sensitive(False)
 
     def curve_type_changed(self, val):
-        self.p.curve_type = val.get_active()
+        self.p.curve_type = val.get_active_id()
         self.curve_type_side_effects()
         self.redraw()
 
@@ -2086,7 +2117,7 @@ class SpyroWindow():
         self.equal_w_h_checkbox.set_sensitive(shapes[self.p.shape_index].can_equal_w_h())
 
     def shape_combo_changed(self, val):
-        self.p.shape_index = val.get_active()
+        self.p.shape_index = val.get_active_id()
         self.shape_combo_side_effects()
         self.redraw()
 
@@ -2116,7 +2147,7 @@ class SpyroWindow():
         self.long_gradient_checkbox.set_sensitive(tools[self.p.tool_index].can_color)
 
     def tool_combo_changed(self, val):
-        self.p.tool_index = val.get_active()
+        self.p.tool_index = val.get_active_id()
         self.tool_changed_side_effects()
         self.redraw()
 
@@ -2204,80 +2235,6 @@ class SpyroWindow():
 
 
 class SpyrogimpPlusPlugin(Gimp.PlugIn):
-
-    ## Parameters ##
-    __gproperties__ = {
-        "curve-type" : (int,
-                        _("The curve type { Spyrograph (0), Epitrochoid (1), Sine (2), Lissajous(3) }"),
-                        _("The curve type { Spyrograph (0), Epitrochoid (1), Sine (2), Lissajous(3) }"),
-                        0, 3, 0,
-                        GObject.ParamFlags.READWRITE),
-        "shape": (int,
-                  _("Shape of fixed gear"),
-                  _("Shape of fixed gear"),
-                  0, GLib.MAXINT, 0,
-                  GObject.ParamFlags.READWRITE),
-        "sides": (int,
-                  _("Number of sides of fixed gear (3 or greater). Only used by some shapes."),
-                  _("Number of sides of fixed gear (3 or greater). Only used by some shapes."),
-                  3, GLib.MAXINT, 3,
-                  GObject.ParamFlags.READWRITE),
-        "morph": (float,
-                  _("Morph shape of fixed gear, between 0 and 1. Only used by some shapes."),
-                  _("Morph shape of fixed gear, between 0 and 1. Only used by some shapes."),
-                  0.0, 1.0, 0.0,
-                  GObject.ParamFlags.READWRITE),
-        "fixed-teeth": (int,
-                        _("Number of teeth for fixed gear"),
-                        _("Number of teeth for fixed gear"),
-                        0, GLib.MAXINT, 96,
-                        GObject.ParamFlags.READWRITE),
-        "moving-teeth": (int,
-                         _("Number of teeth for moving gear"),
-                         _("Number of teeth for moving gear"),
-                         0, GLib.MAXINT, 36,
-                         GObject.ParamFlags.READWRITE),
-        "hole-percent": (float,
-                         _("Location of hole in moving gear in percent, where 100 means that "
-                         "the hole is at the edge of the gear, and 0 means the hole is at the center"),
-                         _("Location of hole in moving gear in percent, where 100 means that "
-                         "the hole is at the edge of the gear, and 0 means the hole is at the center"),
-                         0.0, 100.0, 100.0,
-                         GObject.ParamFlags.READWRITE),
-        "margin": (int,
-                   _("Margin from selection, in pixels"),
-                   _("Margin from selection, in pixels"),
-                   0, GLib.MAXINT, 0,
-                   GObject.ParamFlags.READWRITE),
-        "equal-w-h": (bool,
-                      _("Make height and width equal"),
-                      _("Make height and width equal"),
-                      False,
-                      GObject.ParamFlags.READWRITE),
-        "pattern-rotation": (float,
-                             _("Pattern rotation, in degrees"),
-                             _("Pattern rotation, in degrees"),
-                             -360.0, 360.0, 0.0,
-                             GObject.ParamFlags.READWRITE),
-        "shape-rotation": (float,
-                           _("Shape rotation of fixed gear, in degrees"),
-                           _("Shape rotation of fixed gear, in degrees"),
-                           -360.0, 360.0, 0.0,
-                           GObject.ParamFlags.READWRITE),
-        "tool": (int,
-                 _("Tool to use for drawing the pattern."),
-                 _("Tool to use for drawing the pattern."),
-                 0, GLib.MAXINT, 1,
-                 GObject.ParamFlags.READWRITE),
-        "long-gradient" : (bool,
-                           _("Whether to apply a long gradient to match the length of the pattern. "
-                           "Only applicable to some of the tools."),
-                           _("Whether to apply a long gradient to match the length of the pattern. "
-                           "Only applicable to some of the tools."),
-                           False,
-                           GObject.ParamFlags.READWRITE),
-    }
-
     ## GimpPlugIn virtual methods ##
     def do_set_i18n(self, procname):
         return True, 'gimp30-python', None
@@ -2302,24 +2259,72 @@ class SpyrogimpPlusPlugin(Gimp.PlugIn):
                                       "2018")
             procedure.add_menu_path ("<Image>/Filters/Render/")
 
-            procedure.add_argument_from_property(self, "curve-type")
-            procedure.add_argument_from_property(self, "shape")
-            procedure.add_argument_from_property(self, "sides")
-            procedure.add_argument_from_property(self, "morph")
-            procedure.add_argument_from_property(self, "fixed-teeth")
-            procedure.add_argument_from_property(self, "moving-teeth")
-            procedure.add_argument_from_property(self, "hole_percent")
-            procedure.add_argument_from_property(self, "margin")
-            procedure.add_argument_from_property(self, "equal-w-h")
-            procedure.add_argument_from_property(self, "pattern-rotation")
-            procedure.add_argument_from_property(self, "shape-rotation")
-            procedure.add_argument_from_property(self, "tool")
-            procedure.add_argument_from_property(self, "long-gradient")
+            curve_choice = Gimp.Choice.new()
+            curve_choice.add("spyrograph", 0, _("Spyrograph"), "")
+            curve_choice.add("epitrochoid", 1, _("Epitrochoid"), "")
+            curve_choice.add("sine", 2, _("Sine"), "")
+            curve_choice.add("lissajous", 3, _("Lissajous"), "")
+            procedure.add_choice_argument ("curve-type", _("Curve Type"), _("Curve Type"),
+                                           curve_choice, "spyrograph", GObject.ParamFlags.READWRITE)
+            shape_choice = Gimp.Choice.new()
+            shape_choice.add("circle", 0, _("Circle"), "")
+            shape_choice.add("rack", 1, _("rack"), "")
+            shape_choice.add("frame", 2, _("frame"), "")
+            shape_choice.add("selection", 3, _("Selection"), "")
+            shape_choice.add("polygon-star", 4, _("Polygon-Star"), "")
+            shape_choice.add("sine", 5, _("Sine"), "")
+            shape_choice.add("bumps", 6, _("Bumps"), "")
+            procedure.add_choice_argument ("shape", _("Shape"), _("Shape"),
+                                           shape_choice, "circle", GObject.ParamFlags.READWRITE)
+            procedure.add_int_argument ("sides", _("Si_des"),
+                                        _("Number of sides of fixed gear (3 or greater). Only used by some shapes."),
+                                        3, GLib.MAXINT, 3, GObject.ParamFlags.READWRITE)
+            procedure.add_double_argument ("morph", _("_Morph"),
+                                           _("Morph shape of fixed gear, between 0 and 1. Only used by some shapes."),
+                                           0.0, 1.0, 0.0, GObject.ParamFlags.READWRITE)
+            procedure.add_int_argument ("fixed-teeth", _("Fi_xed Gear Teeth"),
+                                        _("Number of teeth for fixed gear."),
+                                        0, GLib.MAXINT, 96, GObject.ParamFlags.READWRITE)
+            procedure.add_int_argument ("moving-teeth", _("Mo_ving Gear Teeth"),
+                                        _("Number of teeth for fixed gear."),
+                                        0, GLib.MAXINT, 36, GObject.ParamFlags.READWRITE)
+            procedure.add_double_argument ("hole_percent", _("_Hole Radius (%)"),
+                                           _("Location of hole in moving gear in percent, where 100 means that "
+                                             "the hole is at the edge of the gear, and 0 means the hole is at the center"),
+                                           0.0, 100.0, 100.0, GObject.ParamFlags.READWRITE)
+            procedure.add_int_argument ("margin", _("Margin (_px)"),
+                                        _("Margin from selection, in pixels"),
+                                        0, GLib.MAXINT, 0, GObject.ParamFlags.READWRITE)
+            procedure.add_boolean_argument ("equal-w-h", _("Make width and height equal"),
+                                            _("Make width and height equal"),
+                                            False, GObject.ParamFlags.READWRITE)
+            procedure.add_double_argument ("pattern-rotation", _("_Rotation"),
+                                           _("Pattern rotation, in degrees"),
+                                           -360.0, 360.0, 0.0, GObject.ParamFlags.READWRITE)
+            procedure.add_double_argument ("shape-rotation", _("_Rotation"),
+                                           _("Shape rotation of fixed gear, in degrees"),
+                                           -360.0, 360.0, 0.0, GObject.ParamFlags.READWRITE)
+            tool_choice = Gimp.Choice.new()
+            tool_choice.add("preview", 0, _("Preview"), "")
+            tool_choice.add("paintbrush", 1, _("PaintBrush"), "")
+            tool_choice.add("pencil", 2, _("Pencil"), "")
+            tool_choice.add("airbrush", 3, _("AirBrush"), "")
+            tool_choice.add("stroke", 4, _("Stroke"), "")
+            tool_choice.add("ink", 5, _("Ink"), "")
+            tool_choice.add("mypaintbrush", 6, _("MyPaintBrush"), "")
+            #TODO: Add Clone option once it's fixed
+            procedure.add_choice_argument ("tool", _("Tool"), _("Tool"),
+                                           tool_choice, "preview", GObject.ParamFlags.READWRITE)
+            procedure.add_boolean_argument ("long-gradient",
+                                            _("Long _Gradient"),
+                                            _("Whether to apply a long gradient to match the length of the pattern. "
+                                              "Only applicable to some of the tools."),
+                                            False, GObject.ParamFlags.READWRITE)
 
         return procedure
 
     # Implementation of plugin.
-    def plug_in_spyrogimp(self, procedure, run_mode, image, n_layers, layers, config, data):
+    def plug_in_spyrogimp(self, procedure, run_mode, image, layers, config, data):
         curve_type=config.get_property('curve-type')
         shape=config.get_property('shape')
         sides=config.get_property('sides')

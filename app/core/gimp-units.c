@@ -46,126 +46,30 @@
  *  or the GTokenType they would have expected but didn't get.
  */
 
-static GTokenType gimp_unitrc_unit_info_deserialize (GScanner *scanner,
-                                                     Gimp     *gimp);
+static GTokenType   gimp_unitrc_unit_info_deserialize (GScanner *scanner,
+                                                       Gimp     *gimp);
+
+static GimpUnit   * gimp_units_get_user_unit          (gint      unit_id);
 
 
 static Gimp *the_unit_gimp = NULL;
 
 
-static gint
-gimp_units_get_number_of_units (void)
-{
-  return _gimp_unit_get_number_of_units (the_unit_gimp);
-}
-
-static gint
-gimp_units_get_number_of_built_in_units (void)
-{
-  return GIMP_UNIT_END;
-}
-
-static GimpUnit
-gimp_units_unit_new (gchar   *identifier,
-                     gdouble  factor,
-                     gint     digits,
-                     gchar   *symbol,
-                     gchar   *abbreviation,
-                     gchar   *singular,
-                     gchar   *plural)
-{
-  return _gimp_unit_new (the_unit_gimp,
-                         identifier,
-                         factor,
-                         digits,
-                         symbol,
-                         abbreviation,
-                         singular,
-                         plural);
-}
-
-static gboolean
-gimp_units_unit_get_deletion_flag (GimpUnit unit)
-{
-  return _gimp_unit_get_deletion_flag (the_unit_gimp, unit);
-}
-
-static void
-gimp_units_unit_set_deletion_flag (GimpUnit unit,
-                                   gboolean deletion_flag)
-{
-  _gimp_unit_set_deletion_flag (the_unit_gimp, unit, deletion_flag);
-}
-
-static gdouble
-gimp_units_unit_get_factor (GimpUnit unit)
-{
-  return _gimp_unit_get_factor (the_unit_gimp, unit);
-}
-
-static gint
-gimp_units_unit_get_digits (GimpUnit unit)
-{
-  return _gimp_unit_get_digits (the_unit_gimp, unit);
-}
-
-static const gchar *
-gimp_units_unit_get_identifier (GimpUnit unit)
-{
-  return _gimp_unit_get_identifier (the_unit_gimp, unit);
-}
-
-static const gchar *
-gimp_units_unit_get_symbol (GimpUnit unit)
-{
-  return _gimp_unit_get_symbol (the_unit_gimp, unit);
-}
-
-static const gchar *
-gimp_units_unit_get_abbreviation (GimpUnit unit)
-{
-  return _gimp_unit_get_abbreviation (the_unit_gimp, unit);
-}
-
-static const gchar *
-gimp_units_unit_get_singular (GimpUnit unit)
-{
-  return _gimp_unit_get_singular (the_unit_gimp, unit);
-}
-
-static const gchar *
-gimp_units_unit_get_plural (GimpUnit unit)
-{
-  return _gimp_unit_get_plural (the_unit_gimp, unit);
-}
-
 void
 gimp_units_init (Gimp *gimp)
 {
-  GimpUnitVtable vtable;
+  GimpUnitVtable vtable = { 0 };
 
   g_return_if_fail (GIMP_IS_GIMP (gimp));
   g_return_if_fail (the_unit_gimp == NULL);
 
   the_unit_gimp = gimp;
 
-  vtable.unit_get_number_of_units          = gimp_units_get_number_of_units;
-  vtable.unit_get_number_of_built_in_units = gimp_units_get_number_of_built_in_units;
-  vtable.unit_new               = gimp_units_unit_new;
-  vtable.unit_get_deletion_flag = gimp_units_unit_get_deletion_flag;
-  vtable.unit_set_deletion_flag = gimp_units_unit_set_deletion_flag;
-  vtable.unit_get_factor        = gimp_units_unit_get_factor;
-  vtable.unit_get_digits        = gimp_units_unit_get_digits;
-  vtable.unit_get_identifier    = gimp_units_unit_get_identifier;
-  vtable.unit_get_symbol        = gimp_units_unit_get_symbol;
-  vtable.unit_get_abbreviation  = gimp_units_unit_get_abbreviation;
-  vtable.unit_get_singular      = gimp_units_unit_get_singular;
-  vtable.unit_get_plural        = gimp_units_unit_get_plural;
+  vtable.get_user_unit = gimp_units_get_user_unit;
 
   gimp_base_init (&vtable);
 
-  gimp->user_units   = NULL;
-  gimp->n_user_units = 0;
+  gimp->user_units = NULL;
 }
 
 void
@@ -173,7 +77,10 @@ gimp_units_exit (Gimp *gimp)
 {
   g_return_if_fail (GIMP_IS_GIMP (gimp));
 
-  gimp_user_units_free (gimp);
+  gimp_base_exit ();
+
+  g_list_free_full (gimp->user_units, g_object_unref);
+  gimp->user_units = NULL;
 }
 
 
@@ -186,8 +93,8 @@ enum
   UNIT_DIGITS,
   UNIT_SYMBOL,
   UNIT_ABBREV,
-  UNIT_SINGULAR,
-  UNIT_PLURAL
+  UNIT_SINGULAR, /* Obsoleted in GIMP 3.0. */
+  UNIT_PLURAL    /* Obsoleted in GIMP 3.0. */
 };
 
 void
@@ -292,7 +199,7 @@ gimp_unitrc_save (Gimp *gimp)
 {
   GimpConfigWriter *writer;
   GFile            *file;
-  gint              i;
+  GList            *iter;
   GError           *error = NULL;
 
   g_return_if_fail (GIMP_IS_GIMP (gimp));
@@ -319,49 +226,38 @@ gimp_unitrc_save (Gimp *gimp)
   if (!writer)
     return;
 
-  /*  save user defined units  */
-  for (i = _gimp_unit_get_number_of_built_in_units (gimp);
-       i < _gimp_unit_get_number_of_units (gimp);
-       i++)
+  for (iter = gimp->user_units; iter; iter = iter->next)
     {
-      if (_gimp_unit_get_deletion_flag (gimp, i) == FALSE)
+      GimpUnit *unit = iter->data;
+
+      if (gimp_unit_get_deletion_flag (unit) == FALSE)
         {
           gchar buf[G_ASCII_DTOSTR_BUF_SIZE];
 
           gimp_config_writer_open (writer, "unit-info");
           gimp_config_writer_string (writer,
-                                     _gimp_unit_get_identifier (gimp, i));
+                                     gimp_unit_get_name (unit));
 
           gimp_config_writer_open (writer, "factor");
           gimp_config_writer_print (writer,
                                     g_ascii_dtostr (buf, sizeof (buf),
-                                                    _gimp_unit_get_factor (gimp, i)),
+                                                    gimp_unit_get_factor (unit)),
                                     -1);
           gimp_config_writer_close (writer);
 
           gimp_config_writer_open (writer, "digits");
           gimp_config_writer_printf (writer,
-                                     "%d", _gimp_unit_get_digits (gimp, i));
+                                     "%d", gimp_unit_get_digits (unit));
           gimp_config_writer_close (writer);
 
           gimp_config_writer_open (writer, "symbol");
           gimp_config_writer_string (writer,
-                                     _gimp_unit_get_symbol (gimp, i));
+                                     gimp_unit_get_symbol (unit));
           gimp_config_writer_close (writer);
 
           gimp_config_writer_open (writer, "abbreviation");
           gimp_config_writer_string (writer,
-                                     _gimp_unit_get_abbreviation (gimp, i));
-          gimp_config_writer_close (writer);
-
-          gimp_config_writer_open (writer, "singular");
-          gimp_config_writer_string (writer,
-                                     _gimp_unit_get_singular (gimp, i));
-          gimp_config_writer_close (writer);
-
-          gimp_config_writer_open (writer, "plural");
-          gimp_config_writer_string (writer,
-                                     _gimp_unit_get_plural (gimp, i));
+                                     gimp_unit_get_abbreviation (unit));
           gimp_config_writer_close (writer);
 
           gimp_config_writer_close (writer);
@@ -382,7 +278,7 @@ static GTokenType
 gimp_unitrc_unit_info_deserialize (GScanner *scanner,
                                    Gimp     *gimp)
 {
-  gchar      *identifier   = NULL;
+  gchar      *name         = NULL;
   gdouble     factor       = 1.0;
   gint        digits       = 2.0;
   gchar      *symbol       = NULL;
@@ -391,7 +287,7 @@ gimp_unitrc_unit_info_deserialize (GScanner *scanner,
   gchar      *plural       = NULL;
   GTokenType  token;
 
-  if (! gimp_scanner_parse_string (scanner, &identifier))
+  if (! gimp_scanner_parse_string (scanner, &name))
     return G_TOKEN_STRING;
 
   token = G_TOKEN_LEFT_PAREN;
@@ -411,7 +307,7 @@ gimp_unitrc_unit_info_deserialize (GScanner *scanner,
             {
             case UNIT_FACTOR:
               token = G_TOKEN_FLOAT;
-              if (! gimp_scanner_parse_float (scanner, &factor))
+              if (! gimp_scanner_parse_double (scanner, &factor))
                 goto cleanup;
               break;
 
@@ -434,6 +330,11 @@ gimp_unitrc_unit_info_deserialize (GScanner *scanner,
               break;
 
             case UNIT_SINGULAR:
+              /* UNIT_SINGULAR and UNIT_PLURAL are deprecated. We still
+               * support reading them if they exist to stay backward
+               * compatible with older unitrc, in which case, we use
+               * UNIT_PLURAL on behalf of the name.
+               */
               token = G_TOKEN_STRING;
               if (! gimp_scanner_parse_string (scanner, &singular))
                 goto cleanup;
@@ -466,23 +367,39 @@ gimp_unitrc_unit_info_deserialize (GScanner *scanner,
 
       if (g_scanner_peek_next_token (scanner) == token)
         {
-          GimpUnit unit = _gimp_unit_new (gimp,
-                                          identifier, factor, digits,
-                                          symbol, abbreviation,
-                                          singular, plural);
+          GimpUnit *unit = _gimp_unit_new (gimp,
+                                           plural && strlen (plural) > 0 ? plural : name,
+                                           factor, digits, symbol, abbreviation);
 
           /*  make the unit definition persistent  */
-          _gimp_unit_set_deletion_flag (gimp, unit, FALSE);
+          gimp_unit_set_deletion_flag (unit, FALSE);
         }
     }
 
  cleanup:
 
-  g_free (identifier);
+  g_free (name);
   g_free (symbol);
   g_free (abbreviation);
   g_free (singular);
   g_free (plural);
 
   return token;
+}
+
+/**
+ * gimp_units_get_user_unit:
+ * @unit_id:
+ *
+ * This function will return the user-created GimpUnit with ID @unit_id.
+ */
+static GimpUnit *
+gimp_units_get_user_unit (gint unit_id)
+{
+  g_return_val_if_fail (the_unit_gimp != NULL, NULL);
+  g_return_val_if_fail (unit_id >= GIMP_UNIT_END && unit_id != GIMP_UNIT_PERCENT, NULL);
+
+  unit_id -= GIMP_UNIT_END;
+
+  return g_list_nth_data (the_unit_gimp->user_units, unit_id);
 }

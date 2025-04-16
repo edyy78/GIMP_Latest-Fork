@@ -40,6 +40,7 @@
 
 #define __GIMP_ENV_C__
 #include "gimpenv.h"
+#include "gimpenv-private.h"
 #include "gimpversion.h"
 #include "gimpreloc.h"
 
@@ -99,8 +100,9 @@ const guint gimp_micro_version = GIMP_MICRO_VERSION;
  * @plug_in: must be %TRUE if this function is called from a plug-in
  *
  * You don't need to care about this function. It is being called for
- * you automatically (by means of the MAIN() macro that every plug-in
- * runs). Calling it again will cause a fatal error.
+ * you automatically (by means of the [func@Gimp.MAIN] macro that every
+ * C plug-in runs or directly with [func@Gimp.main] in binding). Calling
+ * it again will cause a fatal error.
  *
  * Since: 2.4
  */
@@ -924,9 +926,8 @@ gimp_plug_in_directory_file (const gchar *first_element,
  * and *@path is replaced with a pointer to a new string with the
  * run-time prefix spliced in.
  *
- * On Linux, it does the same thing, but only if BinReloc support is enabled.
- * On other Unices, it does nothing because those platforms don't have a
- * way to find out where our binary is.
+ * On Linux and other Unices, it does the same thing, but only if BinReloc
+ * support is enabled, and only if we are not running GIMP in-build directory.
  */
 static void
 gimp_path_runtime_fix (gchar **path)
@@ -963,10 +964,15 @@ gimp_path_runtime_fix (gchar **path)
       *path = g_build_filename (gimp_installation_directory (), *path, NULL);
       g_free (p);
     }
-#else
+#elif defined (ENABLE_RELOCATABLE_RESOURCES)
   gchar *p;
 
-  if (strncmp (*path, PREFIX G_DIR_SEPARATOR_S,
+  /* XXX: I could actually test any of the other GIMP_TESTING_* environment
+   * variables. The goal is only to check if we are running GIMP from within the
+   * build directory. In such case, no substitution should happen.
+   */
+  if (! g_getenv ("GIMP_TESTING_PLUGINDIRS") &&
+      strncmp (*path, PREFIX G_DIR_SEPARATOR_S,
                strlen (PREFIX G_DIR_SEPARATOR_S)) == 0)
     {
       /* This is a compile-time entry. Replace the path with the

@@ -186,7 +186,6 @@ static GimpProcedure  * colorize_create_procedure (GimpPlugIn           *plug_in
 static GimpValueArray * colorize_run              (GimpProcedure        *procedure,
                                                    GimpRunMode           run_mode,
                                                    GimpImage            *image,
-                                                   gint                  n_drawables,
                                                    GimpDrawable        **drawables,
                                                    GimpProcedureConfig  *config,
                                                    gpointer              run_data);
@@ -285,7 +284,7 @@ colorize_create_procedure (GimpPlugIn  *plug_in,
         "This plug-in colorizes the contents of the specified (gray) layer"
         " with the help of a  sample (color) layer."
         " It analyzes all colors in the sample layer."
-        " The sample colors are sorted by brightness (== intentisty) and amount"
+        " The sample colors are sorted by brightness (== intensity) and amount"
         " and stored in a sample colortable (where brightness is the index)"
         " The pixels of the destination layer are remapped with the help of the"
         " sample colortable. If use_subcolors is TRUE, the remapping process uses"
@@ -336,70 +335,70 @@ colorize_create_procedure (GimpPlugIn  *plug_in,
                                       "hof@hotbot.com",
                                       "02/2000");
 
-      GIMP_PROC_ARG_DRAWABLE (procedure, "sample-drawable",
-                              _("Sample drawable"),
-                              _("Sample drawable (should be of Type RGB or RGBA)"),
-                              TRUE,
-                              G_PARAM_READWRITE);
+      gimp_procedure_add_drawable_argument (procedure, "sample-drawable",
+                                            _("Sample drawable"),
+                                            _("Sample drawable (should be of Type RGB or RGBA)"),
+                                            TRUE,
+                                            G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "hold-inten",
-                             _("Hold _intensity"),
-                             _("Hold brightness intensity levels"),
-                             TRUE,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "hold-inten",
+                                           _("Hold _intensity"),
+                                           _("Hold brightness intensity levels"),
+                                           TRUE,
+                                           G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "orig-inten",
-                             _("Original i_ntensity"),
-                             _("TRUE: hold brightness of original intensity "
-                               "levels, "
-                               "FALSE: Hold Intensity of input levels"),
-                             TRUE,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "orig-inten",
+                                           _("Original i_ntensity"),
+                                           _("TRUE: hold brightness of original intensity "
+                                             "levels, "
+                                             "FALSE: Hold Intensity of input levels"),
+                                           TRUE,
+                                           G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "rnd-subcolors",
-                             _("Us_e subcolors"),
-                             _("TRUE: Use all subcolors of same intensity, "
-                               "FALSE: Use only one color per intensity"),
-                             FALSE,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "rnd-subcolors",
+                                           _("Us_e subcolors"),
+                                           _("TRUE: Use all subcolors of same intensity, "
+                                             "FALSE: Use only one color per intensity"),
+                                           FALSE,
+                                           G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "guess-missing",
-                             _("Smooth sam_ples"),
-                             _("TRUE: guess samplecolors for the missing "
-                               "intensity values, "
-                               "FALSE: use only colors found in the sample"),
-                             TRUE,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "guess-missing",
+                                           _("Smooth sam_ples"),
+                                           _("TRUE: guess samplecolors for the missing "
+                                             "intensity values, "
+                                             "FALSE: use only colors found in the sample"),
+                                           TRUE,
+                                           G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "in-low",
-                         _("_Low"),
-                         _("Intensity of lowest input"),
-                         0, 254, 0,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "in-low",
+                                       _("_Low"),
+                                       _("Intensity of lowest input"),
+                                       0, 254, 0,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "in-high",
-                         _("_High"),
-                         _("Intensity of highest input"),
-                         1, 255, 255,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "in-high",
+                                       _("_High"),
+                                       _("Intensity of highest input"),
+                                       1, 255, 255,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "gamma",
-                            _("Ga_mma"),
-                            _("Gamma adjustment factor, 1.0 is linear"),
-                            0.1, 10.0, 1.0,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "gamma",
+                                          _("Ga_mma"),
+                                          _("Gamma adjustment factor, 1.0 is linear"),
+                                          0.1, 10.0, 1.0,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "out-low",
-                         _("Lo_w"),
-                         _("Lowest sample color intensity"),
-                         0, 254, 0,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "out-low",
+                                       _("Lo_w"),
+                                       _("Lowest sample color intensity"),
+                                       0, 254, 0,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "out-high",
-                         _("Hi_gh"),
-                         _("Highest sample color intensity"),
-                         1, 255, 255,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "out-high",
+                                       _("Hi_gh"),
+                                       _("Highest sample color intensity"),
+                                       1, 255, 255,
+                                       G_PARAM_READWRITE);
     }
 
   return procedure;
@@ -409,7 +408,6 @@ static GimpValueArray *
 colorize_run (GimpProcedure        *procedure,
               GimpRunMode           run_mode,
               GimpImage            *image,
-              gint                  n_drawables,
               GimpDrawable        **drawables,
               GimpProcedureConfig  *config,
               gpointer              run_data)
@@ -419,7 +417,7 @@ colorize_run (GimpProcedure        *procedure,
 
   gegl_init (NULL, NULL);
 
-  if (n_drawables != 1)
+  if (gimp_core_object_array_get_length ((GObject **) drawables) != 1)
     {
       GError *error = NULL;
 
@@ -665,7 +663,6 @@ smp_adj_lvl_in_min_upd_callback (GObject          *config,
   g_object_get (config,
                 "in-low", &value,
                 NULL);
-  value = CLAMP (value, 0, 254);
 
   if (value != g_values.lvl_in_min)
     {
@@ -690,7 +687,6 @@ smp_text_gamma_upd_callback (GObject          *config,
   g_object_get (config,
                 "gamma", &value,
                 NULL);
-  value = CLAMP (value, 0.1, 10.0);
 
   if (value != g_values.lvl_in_gamma)
     {
@@ -736,7 +732,6 @@ smp_adj_lvl_out_min_upd_callback (GObject          *config,
   g_object_get (config,
                 "out-low", &value,
                 NULL);
-  value = CLAMP (value, 0, 254);
 
   if (value != g_values.lvl_out_min)
     {
@@ -1069,9 +1064,13 @@ levels_update (gint update)
                   "in-low", g_values.lvl_in_min,
                   NULL);
   if (update & GAMMA)
-    g_object_set (g_di.config,
-                  "gamma", g_values.lvl_in_gamma,
-                  NULL);
+    {
+      g_values.lvl_in_gamma = CLAMP (g_values.lvl_in_gamma, 0.1, 10.0);
+
+      g_object_set (g_di.config,
+                    "gamma", g_values.lvl_in_gamma,
+                    NULL);
+    }
   if (update & HIGH_INPUT)
     g_object_set (g_di.config,
                   "in-high", g_values.lvl_in_max,
@@ -1179,9 +1178,14 @@ level_in_events (GtkWidget *widget,
       switch (g_di.active_slider)
         {
         case 0:  /*  low input  */
-          g_values.lvl_in_min = ((double) x / (double) DA_WIDTH) * 255.0;
-          g_values.lvl_in_min = CLAMP (g_values.lvl_in_min,
-                                       0, g_values.lvl_in_max);
+          {
+            gint lvl_in_max = (g_values.lvl_in_max < 255) ?
+                               g_values.lvl_in_max : 254;
+
+            g_values.lvl_in_min = ((double) x / (double) DA_WIDTH) * 255.0;
+            g_values.lvl_in_min = CLAMP (g_values.lvl_in_min,
+                                         0, lvl_in_max);
+          }
           break;
 
         case 1:  /*  gamma  */
@@ -1195,6 +1199,7 @@ level_in_events (GtkWidget *widget,
           /*  round the gamma value to the nearest 1/100th  */
           g_values.lvl_in_gamma =
             floor (g_values.lvl_in_gamma * 100 + 0.5) / 100.0;
+          g_values.lvl_in_gamma = CLAMP (g_values.lvl_in_gamma, 0.1, 10.0);
           break;
 
         case 2:  /*  high input  */
@@ -1318,9 +1323,14 @@ level_out_events (GtkWidget *widget,
       switch (g_di.active_slider)
         {
         case 3:  /*  low output  */
-          g_values.lvl_out_min = ((double) x / (double) DA_WIDTH) * 255.0;
-          g_values.lvl_out_min = CLAMP (g_values.lvl_out_min,
-                                        0, g_values.lvl_out_max);
+          {
+            gint lvl_out_max = (g_values.lvl_out_max < 255) ?
+                                g_values.lvl_out_max : 254;
+
+            g_values.lvl_out_min = ((double) x / (double) DA_WIDTH) * 255.0;
+            g_values.lvl_out_min = CLAMP (g_values.lvl_out_min,
+                                          0, lvl_out_max);
+          }
           break;
 
         case 4:  /*  high output  */
@@ -1381,6 +1391,7 @@ smp_dialog (GimpProcedure       *procedure,
   GtkWidget     *grid;
   GtkWidget     *check_button;
   GtkWidget     *label;
+  GtkWidget     *spin_button;
   GtkWidget     *combo;
   gint           ty;
   gboolean       run;
@@ -1576,10 +1587,9 @@ smp_dialog (GimpProcedure       *procedure,
   g_signal_connect (g_di.in_lvl_drawarea, "event",
                     G_CALLBACK (level_in_events),
                     NULL);
-  /* TODO: Fix crash when editing inputs with this enabled */
-  /* g_signal_connect (g_di.in_lvl_drawarea, "draw",
-                       G_CALLBACK (level_in_draw),
-                       NULL); */
+  g_signal_connect (g_di.in_lvl_drawarea, "draw",
+                    G_CALLBACK (level_in_draw),
+                    NULL);
 
   gtk_widget_show (vbox2);
   gtk_widget_show (frame);
@@ -1627,8 +1637,11 @@ smp_dialog (GimpProcedure       *procedure,
                                    FALSE);
   gimp_procedure_dialog_get_widget (GIMP_PROCEDURE_DIALOG (dialog), "in-low",
                                     GIMP_TYPE_SPIN_BUTTON);
-  gimp_procedure_dialog_get_widget (GIMP_PROCEDURE_DIALOG (dialog), "gamma",
-                                    GIMP_TYPE_SPIN_BUTTON);
+
+  spin_button = gimp_procedure_dialog_get_widget (GIMP_PROCEDURE_DIALOG (dialog), "gamma",
+                                                  GIMP_TYPE_SPIN_BUTTON);
+  gtk_spin_button_set_increments (GTK_SPIN_BUTTON (spin_button), 0.02, 0.2);
+
   gimp_procedure_dialog_get_widget (GIMP_PROCEDURE_DIALOG (dialog), "in-high",
                                     GIMP_TYPE_SPIN_BUTTON);
 
@@ -2005,9 +2018,7 @@ calculate_level_transfers (void)
       /*  determine input intensity  */
       inten = (double) i / 255.0;
       if (g_values.lvl_in_gamma != 0.0)
-        {
-          inten = pow (inten, (1.0 / g_values.lvl_in_gamma));
-        }
+        inten = pow (inten, (1.0 / g_values.lvl_in_gamma));
       inten = (double) (inten * (in_max - in_min) + in_min);
       inten = CLAMP (inten, 0.0, 255.0);
       g_lvl_trans_tab[i] = (guchar) (inten + 0.5);
@@ -2394,36 +2405,34 @@ fill_missing_colors (void)
 static void
 get_gradient (gint mode)
 {
-  GimpGradient *gradient;
-
-  gint     n_f_samples;
-  gdouble *f_samples;
-  gdouble *f_samp;        /* float samples */
-  gint     lum;
+  GimpGradient  *gradient;
+  GeglColor    **colors;
+  const Babl    *format_dst = babl_format ("RGB u8");
+  guchar        *g_sample_color_tab_p;
+  gint           lum;
 
   free_colors ();
 
   gradient = gimp_context_get_gradient ();
 
-  gimp_gradient_get_uniform_samples (gradient, 256 /* n_samples */,
-                                     mode == SMP_INV_GRADIENT,
-                                     &n_f_samples, &f_samples);
+  colors = gimp_gradient_get_uniform_samples (gradient, 256 /* n_samples */,
+                                              mode == SMP_INV_GRADIENT);
 
+  g_return_if_fail (gimp_color_array_get_length (colors) == 256);
+
+  g_sample_color_tab_p = g_sample_color_tab;
   for (lum = 0; lum < 256; lum++)
     {
-      f_samp = &f_samples[lum * 4];
+      gegl_color_get_pixel (colors[lum], format_dst, g_sample_color_tab_p);
 
-      g_sample_color_tab[3 * lum + 0] = f_samp[0] * 255;
-      g_sample_color_tab[3 * lum + 1] = f_samp[1] * 255;
-      g_sample_color_tab[3 * lum + 2] = f_samp[2] * 255;
-
-      g_lum_tab[lum].col_ptr =
-        new_samp_color (&g_sample_color_tab[3 * lum]);
+      g_lum_tab[lum].col_ptr     = new_samp_color (g_sample_color_tab_p);
       g_lum_tab[lum].from_sample = TRUE;
       g_lum_tab[lum].all_samples = 1;
+
+      g_sample_color_tab_p += 3;
     }
 
-  g_free (f_samples);
+  gimp_color_array_free (colors);
 }
 
 static void

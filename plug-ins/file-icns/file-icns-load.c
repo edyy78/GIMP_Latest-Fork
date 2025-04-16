@@ -54,6 +54,7 @@ void           icns_slurp        (guchar       *dest,
 
 gboolean       icns_decompress   (guchar       *dest,
                                   IconType     *icontype,
+                                  gint          n_channels,
                                   IcnsResource *image,
                                   IcnsResource *mask);
 
@@ -181,7 +182,7 @@ icns_load (IcnsResource *icns,
 
       if ((icns = resource_find (resources, iconTypes[i].type, nResources)))
         {
-          if (! iconTypes[i].isModern)
+          if (! iconTypes[i].isModern && iconTypes[i].mask)
             mask = resource_find (resources, iconTypes[i].mask, nResources);
 
           icns_attach_image (image, &iconTypes[i], icns, mask, iconTypes[i].isModern);
@@ -223,6 +224,8 @@ icns_slurp (guchar       *dest,
             dest[out * 4]     = bit;
             dest[out * 4 + 1] = bit;
             dest[out * 4 + 2] = bit;
+            if (! mask)
+              dest[out * 4 + 3] = 255;
           }
         break;
       case 4:
@@ -283,6 +286,7 @@ icns_slurp (guchar       *dest,
 gboolean
 icns_decompress (guchar       *dest,
                  IconType     *icontype,
+                 gint          n_channels,
                  IcnsResource *image,
                  IcnsResource *mask)
 {
@@ -291,7 +295,6 @@ icns_decompress (guchar       *dest,
   guint  out;
   guchar run;
   guchar val;
-  gint   n_channels = 3;
 
   max = icontype->width * icontype->height;
   memset (dest, 255, max * 4);
@@ -320,7 +323,7 @@ icns_decompress (guchar       *dest,
 
               for (run -= 125; run > 0; run--)
                 {
-                  if (out >= max)
+                  if (out > max)
                     {
                       g_message ("Corrupt icon? compressed run overflows output size.");
                       return FALSE;
@@ -338,7 +341,7 @@ icns_decompress (guchar       *dest,
                       g_message ("Corrupt icon: uncompressed run overflows input size.");
                       return FALSE;
                     }
-                  if (out >= max)
+                  if (out > max)
                     {
                       g_message ("Corrupt icon: uncompressed run overflows output size.");
                       return FALSE;
@@ -349,15 +352,31 @@ icns_decompress (guchar       *dest,
         }
     }
 
-    if (mask)
-      {
-        gchar typestring[5];
-        fourcc_get_string (mask->type, typestring);
+  /* If we have four channels, this is compressed ARGB data and
+     we need to rotate the channels */
+  if (n_channels == 4)
+    {
+      gint pixel_max = max * 4;
 
-        for (out = 0; out < max; out++)
-          dest[out * 4 + 3] = mask->data[mask->cursor++];
-      }
-    return TRUE;
+      for (gint i = 0; i < pixel_max; i += 4)
+        {
+          guchar alpha = dest[i];
+
+          for (gint j = 0; j < 3; j++)
+            dest[i + j] = dest[i + j + 1];
+
+          dest[i + 3] = alpha;
+        }
+    }
+  else if (mask)
+    {
+      gchar typestring[5];
+      fourcc_get_string (mask->type, typestring);
+
+      for (out = 0; out < max; out++)
+        dest[out * 4 + 3] = mask->data[mask->cursor++];
+    }
+  return TRUE;
 }
 
 void
@@ -398,7 +417,6 @@ icns_attach_image (GimpImage    *image,
       GimpValueArray *return_vals    = NULL;
       GimpLayer     **layers;
       GimpLayer      *new_layer;
-      gint            n_layers;
       gchar          *temp_file_type = NULL;
       gchar          *procedure_name = NULL;
 
@@ -419,6 +437,12 @@ icns_attach_image (GimpImage    *image,
         {
           temp_file_type = "jp2";
           procedure_name = "file-jp2-load";
+        }
+      /* ARGB (compressed */
+      else if (! strncmp (image_type, "ARGB", 4))
+        {
+          icns->cursor += 4;
+          icns_decompress (dest, icontype, 4, icns, FALSE);
         }
 
       if (temp_file_type && procedure_name)
@@ -452,12 +476,24 @@ icns_attach_image (GimpImage    *image,
         {
           temp_image = g_value_get_object (gimp_value_array_index (return_vals, 1));
 
-          layers = gimp_image_get_layers (temp_image, &n_layers);
+          layers = gimp_image_get_layers (temp_image);
           new_layer = gimp_layer_new_from_drawable (GIMP_DRAWABLE (layers[0]), image);
           gimp_item_set_name (GIMP_ITEM (new_layer), layer_name);
           gimp_image_insert_layer (image, new_layer, NULL, 0);
 
           layer_loaded = TRUE;
+
+          /* Use the first color profile we encounter */
+          if (! gimp_image_get_color_profile (image) &&
+              gimp_image_get_color_profile (temp_image))
+            {
+              GimpColorProfile *profile;
+
+              profile = gimp_image_get_color_profile (temp_image);
+              gimp_image_set_color_profile (image, profile);
+
+              g_object_unref (profile);
+            }
 
           g_file_delete (temp_file, NULL, NULL);
           g_object_unref (temp_file);
@@ -470,7 +506,7 @@ icns_attach_image (GimpImage    *image,
       if (icontype->bits != 32 || expected_size == icns->size)
         icns_slurp (dest, icontype, icns, mask);
       else
-        icns_decompress (dest, icontype, icns, mask);
+        icns_decompress (dest, icontype, 3, icns, mask);
     }
 
   if (! layer_loaded)
@@ -622,7 +658,7 @@ icns_load_thumbnail_image (GFile   *file,
     {
       icns = resource_find (resources, iconTypes[match].type, nResources);
 
-      if (! iconTypes[match].isModern)
+      if (! iconTypes[match].isModern && iconTypes[i].mask)
         mask = resource_find (resources, iconTypes[match].mask, nResources);
 
       icns_attach_image (image, &iconTypes[match], icns, mask, iconTypes[match].isModern);

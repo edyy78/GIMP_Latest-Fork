@@ -48,6 +48,12 @@
 #include "core/gimpsettings.h"
 #include "core/gimptoolinfo.h"
 
+#include "widgets/gimpaction.h"
+#include "widgets/gimpactiongroup.h"
+#include "widgets/gimphelp-ids.h"
+#include "widgets/gimpstringaction.h"
+#include "widgets/gimpuimanager.h"
+
 #include "tools/gimpoperationtool.h"
 #include "tools/tool_manager.h"
 
@@ -64,6 +70,7 @@ static gint64   gimp_gegl_procedure_get_memsize         (GimpObject     *object,
 static gchar  * gimp_gegl_procedure_get_description     (GimpViewable   *viewable,
                                                          gchar         **tooltip);
 
+static const gchar * gimp_gegl_procedure_get_help_id    (GimpProcedure  *procedure);
 static const gchar * gimp_gegl_procedure_get_menu_label (GimpProcedure  *procedure);
 static gboolean      gimp_gegl_procedure_get_sensitive  (GimpProcedure  *procedure,
                                                          GimpObject     *object,
@@ -103,6 +110,7 @@ gimp_gegl_procedure_class_init (GimpGeglProcedureClass *klass)
   viewable_class->default_icon_name = "gimp-gegl";
   viewable_class->get_description   = gimp_gegl_procedure_get_description;
 
+  proc_class->get_help_id           = gimp_gegl_procedure_get_help_id;
   proc_class->get_menu_label        = gimp_gegl_procedure_get_menu_label;
   proc_class->get_sensitive         = gimp_gegl_procedure_get_sensitive;
   proc_class->execute               = gimp_gegl_procedure_execute;
@@ -151,6 +159,41 @@ gimp_gegl_procedure_get_description (GimpViewable  *viewable,
     *tooltip = g_strdup (gimp_procedure_get_blurb (procedure));
 
   return g_strdup (gimp_procedure_get_label (procedure));
+}
+
+static const gchar *
+gimp_gegl_procedure_get_help_id (GimpProcedure *procedure)
+{
+  GimpGeglProcedure *proc = GIMP_GEGL_PROCEDURE (procedure);
+  GList             *managers;
+  GimpActionGroup   *group;
+  const gchar       *help_id = NULL;
+
+  managers = gimp_ui_managers_from_name ("<Image>");
+  group    = gimp_ui_manager_get_action_group (managers->data, "filters");
+
+  if (procedure->help_id)
+    {
+      return procedure->help_id;
+    }
+  else if (group)
+    {
+      GList *actions;
+      GList *iter;
+
+      actions = gimp_action_group_list_actions (group);
+      for (iter = actions; iter; iter = iter->next)
+        if (GIMP_IS_STRING_ACTION (iter->data) &&
+            g_strcmp0 (GIMP_STRING_ACTION (iter->data)->value, proc->operation) == 0)
+          {
+            help_id = gimp_action_get_help_id (iter->data);
+            break;
+          }
+
+      g_list_free (actions);
+    }
+
+  return help_id == NULL ? GIMP_HELP_TOOL_GEGL : help_id;
 }
 
 static const gchar *
@@ -210,10 +253,11 @@ gimp_gegl_procedure_execute (GimpProcedure   *procedure,
   GObject   **drawables;
   GObject    *config;
 
-  image       = g_value_get_object          (gimp_value_array_index (args, 1));
-  n_drawables = g_value_get_int             (gimp_value_array_index (args, 2));
-  drawables   = gimp_value_get_object_array (gimp_value_array_index (args, 3));
-  config      = g_value_get_object          (gimp_value_array_index (args, 4));
+  image       = g_value_get_object (gimp_value_array_index (args, 1));
+  drawables   = g_value_get_boxed  (gimp_value_array_index (args, 2));
+  config      = g_value_get_object (gimp_value_array_index (args, 3));
+
+  n_drawables = gimp_core_object_array_get_length ((GObject **) drawables);
 
   if (n_drawables == 1)
     {
@@ -254,7 +298,7 @@ gimp_gegl_procedure_execute_async (GimpProcedure  *procedure,
   const gchar       *tool_name;
 
   run_mode = g_value_get_enum   (gimp_value_array_index (args, 0));
-  settings = g_value_get_object (gimp_value_array_index (args, 4));
+  settings = g_value_get_object (gimp_value_array_index (args, 3));
 
   if (! settings &&
       (run_mode != GIMP_RUN_INTERACTIVE ||
@@ -265,7 +309,7 @@ gimp_gegl_procedure_execute_async (GimpProcedure  *procedure,
       GType          config_type;
       GimpContainer *container;
 
-      config_type = G_VALUE_TYPE (gimp_value_array_index (args, 4));
+      config_type = G_VALUE_TYPE (gimp_value_array_index (args, 3));
 
       container = gimp_operation_config_get_container (gimp, config_type,
                                                        (GCompareFunc)
@@ -292,7 +336,7 @@ gimp_gegl_procedure_execute_async (GimpProcedure  *procedure,
         {
           GimpValueArray *return_vals;
 
-          g_value_set_object (gimp_value_array_index (args, 4), settings);
+          g_value_set_object (gimp_value_array_index (args, 3), settings);
           return_vals = gimp_procedure_execute (procedure, gimp, context, progress,
                                                 args, NULL);
           gimp_value_array_unref (return_vals);
@@ -376,6 +420,11 @@ gimp_gegl_procedure_execute_async (GimpProcedure  *procedure,
                                              gimp_procedure_get_help_id (procedure));
         }
 
+      /* For custom GIMP operations, we need to set the existing filter to edit
+       * before initializing so it doesn't create a separate filter. */
+      if (gegl_procedure->filter)
+        GIMP_FILTER_TOOL (active_tool)->existing_filter = gegl_procedure->filter;
+
       tool_manager_initialize_active (gimp, display);
 
       /* For GIMP-specific GEGL operations, we need to copy over the
@@ -384,7 +433,6 @@ gimp_gegl_procedure_execute_async (GimpProcedure  *procedure,
         {
           GeglNode *node;
 
-          GIMP_FILTER_TOOL (active_tool)->existing_filter = gegl_procedure->filter;
           gimp_filter_set_active (GIMP_FILTER (gegl_procedure->filter), FALSE);
 
           node = gimp_drawable_filter_get_operation (gegl_procedure->filter);
@@ -457,7 +505,7 @@ gimp_gegl_procedure_execute_async (GimpProcedure  *procedure,
 
 GimpProcedure *
 gimp_gegl_procedure_new (Gimp               *gimp,
-                         GimpDrawableFilter *filter,
+                         GimpDrawableFilter *filter_to_edit,
                          GimpRunMode         default_run_mode,
                          GimpObject         *default_settings,
                          const gchar        *operation,
@@ -483,7 +531,7 @@ gimp_gegl_procedure_new (Gimp               *gimp,
 
   gegl_procedure = GIMP_GEGL_PROCEDURE (procedure);
 
-  gegl_procedure->filter           = filter;
+  gegl_procedure->filter           = filter_to_edit;
   gegl_procedure->operation        = g_strdup (operation);
   gegl_procedure->default_run_mode = default_run_mode;
   gegl_procedure->menu_label       = g_strdup (menu_label);
@@ -514,17 +562,11 @@ gimp_gegl_procedure_new (Gimp               *gimp,
                                                       FALSE,
                                                       GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               g_param_spec_int ("num-drawables",
-                                                 "N drawables",
-                                                 "The number of drawables",
-                                                 0, G_MAXINT32, 0,
-                                                 GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_object_array ("drawables",
-                                                             "Drawables",
-                                                             "Input drawables",
-                                                             GIMP_TYPE_DRAWABLE,
-                                                             GIMP_PARAM_READWRITE));
+                               gimp_param_spec_core_object_array ("drawables",
+                                                                  "Drawables",
+                                                                  "Input drawables",
+                                                                  GIMP_TYPE_DRAWABLE,
+                                                                  GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_object ("settings",
                                                     "Settings",
@@ -533,4 +575,12 @@ gimp_gegl_procedure_new (Gimp               *gimp,
                                                     GIMP_PARAM_READWRITE));
 
   return procedure;
+}
+
+gboolean
+gimp_gegl_procedure_is_editing_filter (GimpGeglProcedure *procedure)
+{
+  g_return_val_if_fail (GIMP_IS_GEGL_PROCEDURE (procedure), FALSE);
+
+  return (procedure->filter != NULL);
 }

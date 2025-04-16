@@ -51,5 +51,4 @@ GimpContainer * gimp_filter_stack_new       (GType            filter_type);
 
 GeglNode *      gimp_filter_stack_get_graph (GimpFilterStack *stack);
 
-
 #endif  /*  __GIMP_FILTER_STACK_H__  */

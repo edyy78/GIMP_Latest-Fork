@@ -32,7 +32,6 @@
 #include "gimpconfigtypes.h"
 
 #include "gimpconfigwriter.h"
-#include "gimpconfig-array.h"
 #include "gimpconfig-iface.h"
 #include "gimpconfig-params.h"
 #include "gimpconfig-path.h"
@@ -49,9 +48,10 @@
  **/
 
 
-static gboolean  gimp_config_serialize_rgb (const GValue *value,
-                                            GString      *str,
-                                            gboolean      has_alpha);
+static gboolean gimp_config_serialize_strv  (const GValue *value,
+                                             GString      *str);
+static gboolean gimp_config_serialize_array (const GValue *value,
+                                             GString      *str);
 
 
 /**
@@ -187,7 +187,8 @@ gimp_config_serialize_property (GimpConfig       *config,
   if (! (param_spec->flags & GIMP_CONFIG_PARAM_SERIALIZE))
     return FALSE;
 
-  if (param_spec->flags & GIMP_CONFIG_PARAM_IGNORE)
+  if (param_spec->flags & GIMP_CONFIG_PARAM_IGNORE ||
+      param_spec->flags & GIMP_PARAM_DONT_SERIALIZE)
     return TRUE;
 
   g_value_init (&value, param_spec->value_type);
@@ -375,6 +376,20 @@ gimp_config_serialize_property (GimpConfig       *config,
           if (free_color)
             g_object_unref (color);
         }
+      else if (GIMP_VALUE_HOLDS_UNIT (&value))
+        {
+          GimpUnit *unit = g_value_get_object (&value);
+
+          gimp_config_writer_open (writer, param_spec->name);
+
+          if (unit)
+            gimp_config_writer_printf (writer, "%s", gimp_unit_get_name (unit));
+          else
+            gimp_config_writer_printf (writer, "%s", "NULL");
+
+          success = TRUE;
+          gimp_config_writer_close (writer);
+        }
       else if (G_VALUE_HOLDS_OBJECT (&value) &&
                G_VALUE_TYPE (&value) != G_TYPE_FILE)
         {
@@ -415,20 +430,7 @@ gimp_config_serialize_property (GimpConfig       *config,
         {
           GString *str = g_string_new (NULL);
 
-          if (GIMP_VALUE_HOLDS_RGB (&value))
-            {
-              gboolean has_alpha = gimp_param_spec_rgb_has_alpha (param_spec);
-
-              success = gimp_config_serialize_rgb (&value, str, has_alpha);
-            }
-          else if (G_VALUE_TYPE (&value) == G_TYPE_STRV)
-            {
-              success = gimp_config_serialize_strv (&value, str);
-            }
-          else
-            {
-              success = gimp_config_serialize_value (&value, str, TRUE);
-            }
+          success = gimp_config_serialize_value (&value, str, TRUE);
 
           if (success)
             {
@@ -507,6 +509,17 @@ gimp_config_serialize_value (const GValue *value,
                              GString      *str,
                              gboolean      escaped)
 {
+  if (G_VALUE_TYPE (value) == G_TYPE_STRV)
+    {
+      return gimp_config_serialize_strv (value, str);
+    }
+
+  if (GIMP_VALUE_HOLDS_INT32_ARRAY (value) ||
+      GIMP_VALUE_HOLDS_DOUBLE_ARRAY (value))
+    {
+      return gimp_config_serialize_array (value, str);
+    }
+
   if (G_VALUE_HOLDS_BOOLEAN (value))
     {
       gboolean bool;
@@ -563,11 +576,6 @@ gimp_config_serialize_value (const GValue *value,
       g_ascii_dtostr (buf, sizeof (buf), v_double);
       g_string_append (str, buf);
       return TRUE;
-    }
-
-  if (GIMP_VALUE_HOLDS_RGB (value))
-    {
-      return gimp_config_serialize_rgb (value, str, TRUE);
     }
 
   if (GIMP_VALUE_HOLDS_MATRIX2 (value))
@@ -634,7 +642,7 @@ gimp_config_serialize_value (const GValue *value,
 
       if (file)
         {
-          gchar *path     = g_file_get_path (file);
+          gchar *path     = g_file_get_uri (file);
           gchar *unexpand = NULL;
 
           if (path)
@@ -681,38 +689,103 @@ gimp_config_serialize_value (const GValue *value,
   return FALSE;
 }
 
+
+/* Private functions */
+
+/**
+ * gimp_config_serialize_strv:
+ * @value: source #GValue holding a #GStrv
+ * @str:   destination string
+ *
+ * Appends a string repr of the #GStrv value of #GValue to @str.
+ * Repr is an integer literal greater than or equal to zero,
+ * followed by a possibly empty sequence
+ * of quoted and escaped string literals.
+ *
+ * Returns: %TRUE always
+ *
+ * Since: 3.0
+ **/
 static gboolean
-gimp_config_serialize_rgb (const GValue *value,
-                           GString      *str,
-                           gboolean      has_alpha)
+gimp_config_serialize_strv (const GValue *value,
+                            GString      *str)
 {
-  GimpRGB *rgb;
+  GStrv gstrv;
 
-  rgb = g_value_get_boxed (value);
+  gstrv = g_value_get_boxed (value);
 
-  if (rgb)
+  if (gstrv)
     {
-      gchar buf[4][G_ASCII_DTOSTR_BUF_SIZE];
+      gint length = g_strv_length (gstrv);
 
-      g_ascii_dtostr (buf[0], G_ASCII_DTOSTR_BUF_SIZE, rgb->r);
-      g_ascii_dtostr (buf[1], G_ASCII_DTOSTR_BUF_SIZE, rgb->g);
-      g_ascii_dtostr (buf[2], G_ASCII_DTOSTR_BUF_SIZE, rgb->b);
+      /* Write length */
+      g_string_append_printf (str, "%d", length);
 
-      if (has_alpha)
+      for (gint i = 0; i < length; i++)
         {
-          g_ascii_dtostr (buf[3], G_ASCII_DTOSTR_BUF_SIZE, rgb->a);
-
-          g_string_append_printf (str, "(color-rgba %s %s %s %s)",
-                                  buf[0], buf[1], buf[2], buf[3]);
+          g_string_append (str, " "); /* separator */
+          gimp_config_string_append_escaped (str, gstrv[i]);
         }
-      else
-        {
-          g_string_append_printf (str, "(color-rgb %s %s %s)",
-                                  buf[0], buf[1], buf[2]);
-        }
-
-      return TRUE;
+    }
+  else
+    {
+      /* GValue has NULL value. Not quite the same as an empty GStrv.
+       * But handle it quietly as an empty GStrv: write a length of zero.
+       */
+      g_string_append (str, "0");
     }
 
-  return FALSE;
+  return TRUE;
+}
+
+static gboolean
+gimp_config_serialize_array (const GValue *value,
+                             GString      *str)
+{
+  GimpArray *array;
+
+  g_return_val_if_fail (GIMP_VALUE_HOLDS_INT32_ARRAY (value) ||
+                        GIMP_VALUE_HOLDS_DOUBLE_ARRAY (value), FALSE);
+
+  array = g_value_get_boxed (value);
+
+  if (array)
+    {
+      gint32 *values = (gint32 *) array->data;
+      gint    length;
+
+      if (GIMP_VALUE_HOLDS_INT32_ARRAY (value))
+        length = array->length / sizeof (gint32);
+      else
+        length = array->length / sizeof (gdouble);
+
+      /* Write length */
+      g_string_append_printf (str, "%d", length);
+
+      for (gint i = 0; i < length; i++)
+        {
+          gchar *num_str;
+
+          if (GIMP_VALUE_HOLDS_INT32_ARRAY (value))
+            {
+              num_str = g_strdup_printf (" %d", values[i]);
+            }
+          else
+            {
+              gchar buf[G_ASCII_DTOSTR_BUF_SIZE];
+
+              g_ascii_dtostr (buf, sizeof (buf), ((gdouble *) values)[i]);
+              num_str = g_strdup_printf (" %s", buf);
+            }
+
+          g_string_append (str, num_str);
+          g_free (num_str);
+        }
+    }
+  else
+    {
+      g_string_append (str, "0");
+    }
+
+  return TRUE;
 }

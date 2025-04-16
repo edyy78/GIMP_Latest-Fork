@@ -127,7 +127,7 @@ help_create_procedure (GimpPlugIn  *plug_in,
   if (! strcmp (name, GIMP_HELP_EXT_PROC))
     {
       procedure = gimp_procedure_new (plug_in, name,
-                                      GIMP_PDB_PROC_TYPE_EXTENSION,
+                                      GIMP_PDB_PROC_TYPE_PERSISTENT,
                                       help_run, NULL, NULL);
 
       gimp_procedure_set_attribution (procedure,
@@ -137,15 +137,15 @@ help_create_procedure (GimpPlugIn  *plug_in,
                                       "Sven Neumann, Michael Natterer & Henrik Brix Andersen",
                                       "1999-2008");
 
-      GIMP_PROC_ARG_STRV (procedure, "domain-names",
-                          "Domain Names",
-                          "Domain names",
-                          G_PARAM_READWRITE);
+      gimp_procedure_add_string_array_argument (procedure, "domain-names",
+                                                "Domain Names",
+                                                "Domain names",
+                                                G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_STRV (procedure, "domain-uris",
-                          "Domain URIs",
-                          "Domain URIs",
-                          G_PARAM_READWRITE);
+      gimp_procedure_add_string_array_argument (procedure, "domain-uris",
+                                                "Domain URIs",
+                                                "Domain URIs",
+                                                G_PARAM_READWRITE);
     }
 
   return procedure;
@@ -179,8 +179,8 @@ help_run (GimpProcedure        *procedure,
 
       help_temp_proc_install (plug_in);
 
-      gimp_procedure_extension_ready (procedure);
-      gimp_plug_in_extension_enable (plug_in);
+      gimp_procedure_persistent_ready (procedure);
+      gimp_plug_in_persistent_enable (plug_in);
 
       g_main_loop_run (main_loop);
 
@@ -210,25 +210,25 @@ help_temp_proc_install (GimpPlugIn *plug_in)
                                   "Henrik Brix Andersen",
                                   "1999-2008");
 
-  GIMP_PROC_ARG_STRING (procedure, "help-proc",
-                        "The procedure of the browser to use",
-                        "The procedure of the browser to use",
-                        NULL,
-                        G_PARAM_READWRITE);
+  gimp_procedure_add_string_argument (procedure, "help-proc",
+                                      "The procedure of the browser to use",
+                                      "The procedure of the browser to use",
+                                      NULL,
+                                      G_PARAM_READWRITE);
 
-  GIMP_PROC_ARG_STRING (procedure, "help-domain",
-                        "Help domain to use",
-                        "Help domain to use",
-                        NULL,
-                        G_PARAM_READWRITE);
+  gimp_procedure_add_string_argument (procedure, "help-domain",
+                                      "Help domain to use",
+                                      "Help domain to use",
+                                      NULL,
+                                      G_PARAM_READWRITE);
 
-  GIMP_PROC_ARG_STRING (procedure, "help-locales",
-                        "Language to use",
-                        "Language to use",
-                        NULL,
-                        G_PARAM_READWRITE);
+  gimp_procedure_add_string_argument (procedure, "help-locales",
+                                      "Language to use",
+                                      "Language to use",
+                                      NULL,
+                                      G_PARAM_READWRITE);
 
-  GIMP_PROC_ARG_STRING (procedure, "help-id",
+  gimp_procedure_add_string_argument (procedure, "help-id",
                         "Help ID to open",
                         "Help ID to open",
                         NULL,

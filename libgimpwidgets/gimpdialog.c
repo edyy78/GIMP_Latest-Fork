@@ -63,16 +63,16 @@ enum
 };
 
 
-struct _GimpDialogPrivate
+typedef struct _GimpDialogPrivate
 {
   GimpHelpFunc  help_func;
   gchar        *help_id;
   GtkWidget    *help_button;
 
   GBytes       *window_handle;
-};
+} GimpDialogPrivate;
 
-#define GET_PRIVATE(obj) (((GimpDialog *) (obj))->priv)
+#define GET_PRIVATE(obj) ((GimpDialogPrivate *) (gimp_dialog_get_instance_private (GIMP_DIALOG (obj))))
 
 
 static void       gimp_dialog_constructed         (GObject      *object);
@@ -167,14 +167,12 @@ gimp_dialog_class_init (GimpDialogClass *klass)
 static void
 gimp_dialog_init (GimpDialog *dialog)
 {
-  dialog->priv = gimp_dialog_get_instance_private (dialog);
-
   g_signal_connect (dialog, "response",
                     G_CALLBACK (gimp_dialog_response),
                     NULL);
 
 #ifdef G_OS_WIN32
-  g_signal_connect (GTK_WIDGET (dialog), "map",
+  g_signal_connect (GTK_WIDGET (dialog), "realize",
                     G_CALLBACK (gimp_dialog_set_title_bar_theme),
                     NULL);
 #endif
@@ -188,7 +186,7 @@ gimp_dialog_constructed (GObject *object)
   G_OBJECT_CLASS (parent_class)->constructed (object);
 
   if (private->help_func)
-    gimp_help_connect (GTK_WIDGET (object),
+    gimp_help_connect (GTK_WIDGET (object), NULL,
                        private->help_func, private->help_id,
                        object, NULL);
 
@@ -205,13 +203,16 @@ gimp_dialog_constructed (GObject *object)
 static void
 gimp_dialog_dispose (GObject *object)
 {
-  GdkDisplay *display = NULL;
+  GdkDisplay        *display = NULL;
+  GimpDialogPrivate *private = GET_PRIVATE (object);
 
   if (g_main_depth () == 0)
     {
       display = gtk_widget_get_display (GTK_WIDGET (object));
       g_object_ref (display);
     }
+
+  gimp_widget_free_native_handle (GTK_WIDGET (object), &private->window_handle);
 
   G_OBJECT_CLASS (parent_class)->dispose (object);
 
@@ -755,7 +756,7 @@ gimp_dialog_set_alternative_button_order_from_array (GimpDialog *dialog,
 GBytes *
 gimp_dialog_get_native_handle (GimpDialog *dialog)
 {
-  return dialog->priv->window_handle;
+  return GET_PRIVATE (dialog)->window_handle;
 }
 
 /**
@@ -806,11 +807,6 @@ gimp_dialog_set_title_bar_theme (GtkWidget *dialog)
       DwmSetWindowAttribute (hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE,
                              &use_dark_mode, sizeof (use_dark_mode));
       UpdateWindow (hwnd);
-      ShowWindow (hwnd, 5);
-
-      /* Toggle the window's visibility so the title bar change appears */
-      gdk_window_hide (window);
-      gdk_window_show (window);
     }
 }
 #endif

@@ -35,6 +35,7 @@
 #include "core/gimpviewable.h"
 #include "core/gimp-utils.h"
 
+#include "gimpaction.h"
 #include "gimpcellrendererbutton.h"
 #include "gimpcellrendererviewable.h"
 #include "gimpcontainertreestore.h"

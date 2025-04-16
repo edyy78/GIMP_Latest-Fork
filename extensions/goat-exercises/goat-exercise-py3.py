@@ -43,19 +43,19 @@ class Goat (Gimp.PlugIn):
         procedure.set_image_types("*")
         procedure.set_sensitivity_mask (Gimp.ProcedureSensitivityMask.DRAWABLE)
 
-        procedure.set_menu_label(_("Exercise a goat and a python"))
+        procedure.set_menu_label(_("Plug-In Example in _Python 3"))
         procedure.set_icon_name(GimpUi.ICON_GEGL)
-        procedure.add_menu_path('<Image>/Filters/Development/Goat exercises/')
+        procedure.add_menu_path('<Image>/Filters/Development/Plug-In Examples/')
 
-        procedure.set_documentation(_("Exercise a goat in the Python 3 language"),
-                                    _("Takes a goat for a walk in Python 3"),
+        procedure.set_documentation(_("Plug-in example in Python 3"),
+                                    _("Plug-in example in Python 3"),
                                     name)
         procedure.set_attribution("Jehan", "Jehan", "2019")
 
         return procedure
 
-    def run(self, procedure, run_mode, image, n_drawables, drawables, config, run_data):
-        if n_drawables != 1:
+    def run(self, procedure, run_mode, image, drawables, config, run_data):
+        if len(drawables) != 1:
             msg = _("Procedure '{}' only works with one drawable.").format(procedure.get_name())
             error = GLib.Error.new_literal(Gimp.PlugIn.error_quark(), msg, 0)
             return procedure.new_return_values(Gimp.PDBStatusType.CALLING_ERROR, error)
@@ -71,7 +71,7 @@ class Goat (Gimp.PlugIn):
             GimpUi.init("goat-exercise-py3.py")
 
             dialog = GimpUi.Dialog(use_header_bar=True,
-                                   title=_("Exercise a goat (Python 3)"),
+                                   title=_("Plug-In Example in Python 3"),
                                    role="goat-exercise-Python3")
 
             dialog.add_button(_("_Cancel"), Gtk.ResponseType.CANCEL)

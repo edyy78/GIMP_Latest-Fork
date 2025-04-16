@@ -26,7 +26,6 @@
 
 #include "gimppixbuf.h"
 #include "gimpplugin-private.h"
-#include "gimpprocedure-private.h"
 
 
 enum
@@ -157,10 +156,9 @@ gimp_image_get_by_id (gint32 image_id)
 {
   if (image_id > 0)
     {
-      GimpPlugIn    *plug_in   = gimp_get_plug_in ();
-      GimpProcedure *procedure = _gimp_plug_in_get_procedure (plug_in);
+      GimpPlugIn *plug_in = gimp_get_plug_in ();
 
-      return _gimp_procedure_get_image (procedure, image_id);
+      return _gimp_plug_in_get_image (plug_in, image_id);
     }
 
   return NULL;
@@ -186,7 +184,7 @@ gimp_image_is_valid (GimpImage *image)
 }
 
 /**
- * gimp_list_images:
+ * gimp_list_images: (skip)
  *
  * Returns the list of images currently open.
  *
@@ -203,13 +201,12 @@ GList *
 gimp_list_images (void)
 {
   GimpImage **images;
-  gint        num_images;
   GList      *list = NULL;
   gint        i;
 
-  images = gimp_get_images (&num_images);
+  images = gimp_get_images ();
 
-  for (i = 0; i < num_images; i++)
+  for (i = 0; images[i] != NULL; i++)
     list = g_list_prepend (list, images[i]);
 
   g_free (images);
@@ -218,7 +215,7 @@ gimp_list_images (void)
 }
 
 /**
- * gimp_image_list_layers:
+ * gimp_image_list_layers: (skip)
  * @image: The image.
  *
  * Returns the list of layers contained in the specified image.
@@ -237,13 +234,12 @@ GList *
 gimp_image_list_layers (GimpImage *image)
 {
   GimpLayer **layers;
-  gint        num_layers;
   GList      *list = NULL;
   gint        i;
 
-  layers = gimp_image_get_layers (image, &num_layers);
+  layers = gimp_image_get_layers (image);
 
-  for (i = 0; i < num_layers; i++)
+  for (i = 0; layers[i] != NULL; i++)
     list = g_list_prepend (list, layers[i]);
 
   g_free (layers);
@@ -252,7 +248,7 @@ gimp_image_list_layers (GimpImage *image)
 }
 
 /**
- * gimp_image_list_selected_layers:
+ * gimp_image_list_selected_layers: (skip)
  * @image: The image.
  *
  * Returns the list of layers selected in the specified image.
@@ -271,13 +267,12 @@ GList *
 gimp_image_list_selected_layers (GimpImage *image)
 {
   GimpLayer **layers;
-  gint        num_layers;
   GList      *list = NULL;
   gint        i;
 
-  layers = gimp_image_get_selected_layers (image, &num_layers);
+  layers = gimp_image_get_selected_layers (image);
 
-  for (i = 0; i < num_layers; i++)
+  for (i = 0; layers[i] != NULL; i++)
     list = g_list_prepend (list, layers[i]);
 
   g_free (layers);
@@ -308,12 +303,11 @@ gimp_image_take_selected_layers (GimpImage *image,
   gboolean    success;
   gint        i;
 
-  sel_layers = g_new0 (GimpLayer *, g_list_length (layers));
+  sel_layers = g_new0 (GimpLayer *, g_list_length (layers) + 1);
   for (list = layers, i = 0; list; list = list->next, i++)
     sel_layers[i] = list->data;
 
-  success = gimp_image_set_selected_layers (image, g_list_length (layers),
-                                            (const GimpLayer **) sel_layers);
+  success = gimp_image_set_selected_layers (image, (const GimpLayer **) sel_layers);
   g_list_free (layers);
   g_free (sel_layers);
 
@@ -321,7 +315,7 @@ gimp_image_take_selected_layers (GimpImage *image,
 }
 
 /**
- * gimp_image_list_selected_channels:
+ * gimp_image_list_selected_channels: (skip)
  * @image: The image.
  *
  * Returns the list of channels selected in the specified image.
@@ -340,14 +334,13 @@ GList *
 gimp_image_list_selected_channels (GimpImage *image)
 {
   GimpChannel **channels;
-  gint          num_channels;
   GList        *list = NULL;
   gint          i;
 
-  channels = gimp_image_get_selected_channels (image, &num_channels);
+  channels = gimp_image_get_selected_channels (image);
 
-  for (i = 0; i < num_channels; i++)
-    list = g_list_prepend (list, channels[i]);
+  for (i = 0; channels[i] != NULL; i++)
+    list = g_list_prepend (list, (gpointer) channels[i]);
 
   g_free (channels);
 
@@ -377,19 +370,18 @@ gimp_image_take_selected_channels (GimpImage *image,
   gboolean      success;
   gint          i;
 
-  sel_channels = g_new0 (GimpChannel *, g_list_length (channels));
+  sel_channels = g_new0 (GimpChannel *, g_list_length (channels) + 1);
   for (list = channels, i = 0; list; list = list->next, i++)
     sel_channels[i] = list->data;
 
-  success = gimp_image_set_selected_channels (image, g_list_length (channels),
-                                              (const GimpChannel **) sel_channels);
+  success = gimp_image_set_selected_channels (image, (const GimpChannel **) sel_channels);
   g_list_free (channels);
 
   return success;
 }
 
 /**
- * gimp_image_list_selected_vectors:
+ * gimp_image_list_selected_paths: (skip)
  * @image: The image.
  *
  * Returns the list of paths selected in the specified image.
@@ -397,7 +389,7 @@ gimp_image_take_selected_channels (GimpImage *image,
  * This procedure returns the list of paths selected in the specified
  * image.
  *
- * Returns: (element-type GimpVectors) (transfer container):
+ * Returns: (element-type GimpPath) (transfer container):
  *          The list of selected paths in the image.
  *          The returned list must be freed with g_list_free().
  *          Path elements belong to libgimp and must not be freed.
@@ -405,27 +397,26 @@ gimp_image_take_selected_channels (GimpImage *image,
  * Since: 3.0
  **/
 GList *
-gimp_image_list_selected_vectors (GimpImage *image)
+gimp_image_list_selected_paths (GimpImage *image)
 {
-  GimpVectors **vectors;
-  gint          num_vectors;
-  GList        *list = NULL;
-  gint          i;
+  GimpPath **paths;
+  GList     *list = NULL;
+  gint       i;
 
-  vectors = gimp_image_get_selected_vectors (image, &num_vectors);
+  paths = gimp_image_get_selected_paths (image);
 
-  for (i = 0; i < num_vectors; i++)
-    list = g_list_prepend (list, vectors[i]);
+  for (i = 0; paths[i] != NULL; i++)
+    list = g_list_prepend (list, (gpointer) paths[i]);
 
-  g_free (vectors);
+  g_free (paths);
 
   return g_list_reverse (list);
 }
 
 /**
- * gimp_image_take_selected_vectors:
+ * gimp_image_take_selected_paths:
  * @image: The image.
- * @vectors: (transfer container) (element-type GimpVectors): The list of paths to select.
+ * @paths: (transfer container) (element-type GimpPath): The list of paths to select.
  *
  * The paths are set as the selected paths in the image. Any previous
  * selected paths are unselected.
@@ -435,27 +426,27 @@ gimp_image_list_selected_vectors (GimpImage *image)
  * Since: 3.0
  **/
 gboolean
-gimp_image_take_selected_vectors (GimpImage *image,
-                                  GList     *vectors)
+gimp_image_take_selected_paths (GimpImage *image,
+                                GList     *paths)
 {
-  GimpVectors **sel_vectors;
-  GList        *list;
-  gboolean      success;
-  gint          i;
+  GimpPath **sel_paths;
+  GList     *list;
+  gboolean   success;
+  gint       i;
 
-  sel_vectors = g_new0 (GimpVectors *, g_list_length (vectors));
-  for (list = vectors, i = 0; list; list = list->next, i++)
-    sel_vectors[i] = list->data;
+  sel_paths = g_new0 (GimpPath *, g_list_length (paths) + 1);
+  for (list = paths, i = 0; list; list = list->next, i++)
+    sel_paths[i] = list->data;
 
-  success = gimp_image_set_selected_vectors (image, g_list_length (vectors),
-                                             (const GimpVectors **) sel_vectors);
-  g_list_free (vectors);
+  success = gimp_image_set_selected_paths (image, (const GimpPath **) sel_paths);
+  g_list_free (paths);
+  g_free (sel_paths);
 
   return success;
 }
 
 /**
- * gimp_image_list_channels:
+ * gimp_image_list_channels: (skip)
  * @image: The image.
  *
  * Returns the list of channels contained in the specified image.
@@ -477,14 +468,13 @@ GList *
 gimp_image_list_channels (GimpImage *image)
 {
   GimpChannel **channels;
-  gint          num_channels;
   GList        *list = NULL;
   gint          i;
 
-  channels = gimp_image_get_channels (image, &num_channels);
+  channels = gimp_image_get_channels (image);
 
-  for (i = 0; i < num_channels; i++)
-    list = g_list_prepend (list, channels[i]);
+  for (i = 0; channels[i] != NULL; i++)
+    list = g_list_prepend (list, (gpointer) channels[i]);
 
   g_free (channels);
 
@@ -492,41 +482,40 @@ gimp_image_list_channels (GimpImage *image)
 }
 
 /**
- * gimp_image_list_vectors:
+ * gimp_image_list_paths: (skip)
  * @image: The image.
  *
- * Returns the list of vectors contained in the specified image.
+ * Returns the list of paths contained in the specified image.
  *
- * This procedure returns the list of vectors contained in the
+ * This procedure returns the list of paths contained in the
  * specified image.
  *
- * Returns: (element-type GimpVectors) (transfer container):
- *          The list of vectors contained in the image.
- *          The returned value must be freed with g_list_free(). Vectors
+ * Returns: (element-type GimpPath) (transfer container):
+ *          The list of paths contained in the image.
+ *          The returned value must be freed with g_list_free(). Path
  *          elements belong to libgimp and must not be freed.
  *
  * Since: 3.0
  **/
 GList *
-gimp_image_list_vectors (GimpImage *image)
+gimp_image_list_paths (GimpImage *image)
 {
-  GimpVectors **vectors;
-  gint          num_vectors;
-  GList        *list = NULL;
-  gint          i;
+  GimpPath **paths;
+  GList     *list = NULL;
+  gint       i;
 
-  vectors = gimp_image_get_vectors (image, &num_vectors);
+  paths = gimp_image_get_paths (image);
 
-  for (i = 0; i < num_vectors; i++)
-    list = g_list_prepend (list, vectors[i]);
+  for (i = 0; paths[i] != NULL; i++)
+    list = g_list_prepend (list, (gpointer) paths[i]);
 
-  g_free (vectors);
+  g_free (paths);
 
   return g_list_reverse (list);
 }
 
 /**
- * gimp_image_list_selected_drawables:
+ * gimp_image_list_selected_drawables: (skip)
  * @image: The image.
  *
  * Returns the list of drawables selected in the specified image.
@@ -548,83 +537,18 @@ gimp_image_list_vectors (GimpImage *image)
 GList *
 gimp_image_list_selected_drawables (GimpImage *image)
 {
-  GimpItem **drawables;
-  gint       num_drawables;
-  GList     *list = NULL;
-  gint       i;
+  GimpDrawable **drawables;
+  GList         *list = NULL;
+  gint           i;
 
-  drawables = gimp_image_get_selected_drawables (image, &num_drawables);
+  drawables = gimp_image_get_selected_drawables (image);
 
-  for (i = 0; i < num_drawables; i++)
+  for (i = 0; drawables[i] != NULL; i++)
     list = g_list_prepend (list, drawables[i]);
 
   g_free (drawables);
 
   return g_list_reverse (list);
-}
-
-/**
- * gimp_image_get_colormap:
- * @image:      The image.
- * @colormap_len: (out) (optional): The size (in bytes) of the returned colormap
- * @num_colors: (out) (optional): Returns the number of colors in the colormap array.
- *
- * Returns the image's colormap
- *
- * This procedure returns an actual pointer to the image's colormap, as
- * well as the number of colors contained in the colormap. If the image
- * is not of base type INDEXED, this pointer will be NULL.
- *
- * Returns: (array length=colormap_len): The image's colormap.
- */
-guchar *
-gimp_image_get_colormap (GimpImage *image,
-                         gint      *colormap_len,
-                         gint      *num_colors)
-{
-  GBytes *bytes;
-  gsize   num_bytes;
-  guchar *cmap;
-
-  bytes = _gimp_image_get_colormap (image);
-  cmap = g_bytes_unref_to_data (bytes, &num_bytes);
-
-  if (colormap_len)
-    *colormap_len = num_bytes;
-  if (num_colors)
-    *num_colors = num_bytes / 3;
-
-  return cmap;
-}
-
-/**
- * gimp_image_set_colormap:
- * @image:      The image.
- * @colormap: (array): The new colormap values.
- * @num_colors: Number of colors in the colormap array.
- *
- * Sets the entries in the image's colormap.
- *
- * This procedure sets the entries in the specified image's colormap.
- * The number of colors is specified by the "num_colors" parameter
- * and corresponds to the number of INT8 triples that must be contained
- * in the "cmap" array.
- *
- * Returns: TRUE on success.
- */
-gboolean
-gimp_image_set_colormap (GimpImage    *image,
-                         const guchar *colormap,
-                         gint          num_colors)
-{
-  GBytes *bytes;
-  gboolean ret;
-
-  bytes = g_bytes_new_static (colormap, num_colors * 3);
-  ret = _gimp_image_set_colormap (image, bytes);
-  g_bytes_unref (bytes);
-
-  return ret;
 }
 
 /**

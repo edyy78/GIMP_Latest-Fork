@@ -40,17 +40,18 @@ def make_gradient(palette, num_segments, num_colors):
 
     # split one segment into desired count
     # index is zero-based
-    gradient.segment_range_split_uniform( 0, 0, num_segments)
+    gradient.segment_range_split_uniform(0, 0, num_segments)
 
-    for color_number in range(0,num_segments):
+    palette_colors = palette.get_colors()
+    for color_number in range(0, num_segments):
         if color_number == num_colors - 1:
             color_number_next = 0
         else:
             color_number_next = color_number + 1
-        _, color_left = palette.entry_get_color(color_number)
-        _, color_right = palette.entry_get_color(color_number_next)
-        gradient.segment_set_left_color( color_number, color_left, 100.0)
-        gradient.segment_set_right_color(color_number, color_right, 100.0)
+        color_left = palette_colors[color_number]
+        color_right = palette_colors[color_number_next]
+        gradient.segment_set_left_color(color_number, color_left)
+        gradient.segment_set_right_color(color_number, color_right)
 
     # Side effects on the context. Probably not what most would expect.
     Gimp.context_set_gradient(gradient)
@@ -65,6 +66,7 @@ def run(procedure, config, data):
         dialog = GimpUi.ProcedureDialog(procedure=procedure, config=config)
 
         # Add palette button
+        config.set_property("palette", None)
         dialog.fill (["palette"])
 
         if not dialog.run():
@@ -111,43 +113,6 @@ def run(procedure, config, data):
     return retval
 
 class PaletteToGradient (Gimp.PlugIn):
-    ## Parameter: run mode ##
-    @GObject.Property(type=Gimp.RunMode,
-                      default=Gimp.RunMode.NONINTERACTIVE,
-                      nick="Run mode", blurb="The run mode")
-    def run_mode(self):
-        '''The run mode (unused)'''
-        return self.runmode
-
-    @run_mode.setter
-    def run_mode(self, runmode):
-        self.runmode = runmode
-
-    ## Parameter: palette ##
-    @GObject.Property(type=Gimp.Palette,
-                      default=None,
-                      nick= _("_Palette"))
-    def palette(self):
-        '''Palette or None for the currently selected palette'''
-        return self.palette
-
-    @palette.setter
-    def palette(self, palette):
-        self.palette = palette
-
-    ## Properties: return values ##
-    @GObject.Property(type=Gimp.Gradient,
-                      default="",
-                      nick=_("The newly created gradient"),
-                      blurb=_("The newly created gradient"))
-    def new_gradient(self):
-        """Read-write integer property."""
-        return self.new_gradient
-
-    @new_gradient.setter
-    def new_gradient(self, new_gradient):
-        self.new_gradient = new_gradient
-
     ## GimpPlugIn virtual methods ##
     def do_set_i18n(self, procname):
         return True, 'gimp30-python', None
@@ -176,12 +141,18 @@ class PaletteToGradient (Gimp.PlugIn):
         if procedure is not None:
             procedure.set_attribution("Carol Spears, reproduced from previous work by Adrian Likins and Jeff Trefftz",
                                       "Carol Spears", "2006")
-            # We don't build a GParamSpec ourselves because passing it
-            # around is apparently broken in Python. Hence this trick.
-            # See pygobject#227
-            procedure.add_argument_from_property(self, "run-mode")
-            procedure.add_argument_from_property(self, "palette")
-            procedure.add_return_value_from_property(self, "new-gradient")
+
+            procedure.add_enum_argument ("run-mode", _("Run mode"),
+                                         _("The run mode"), Gimp.RunMode,
+                                         Gimp.RunMode.NONINTERACTIVE,
+                                         GObject.ParamFlags.READWRITE)
+            procedure.add_palette_argument ("palette", _("_Palette"),
+                                            _("Palette"), True,
+                                            None, True, # Default to context.
+                                            GObject.ParamFlags.READWRITE)
+            procedure.add_gradient_return_value ("new-gradient", _("The newly created gradient"),
+                                                 _("The newly created gradient"),
+                                                 GObject.ParamFlags.READWRITE)
 
             procedure.add_menu_path ('<Palettes>/Palettes Menu')
 

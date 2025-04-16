@@ -52,8 +52,8 @@ GimpLayerMode                 gimp_context_get_paint_mode                 (void)
 gboolean                      gimp_context_set_paint_mode                 (GimpLayerMode                  paint_mode);
 gdouble                       gimp_context_get_line_width                 (void);
 gboolean                      gimp_context_set_line_width                 (gdouble                        line_width);
-GimpUnit                      gimp_context_get_line_width_unit            (void);
-gboolean                      gimp_context_set_line_width_unit            (GimpUnit                       line_width_unit);
+GimpUnit*                     gimp_context_get_line_width_unit            (void);
+gboolean                      gimp_context_set_line_width_unit            (GimpUnit                      *line_width_unit);
 GimpCapStyle                  gimp_context_get_line_cap_style             (void);
 gboolean                      gimp_context_set_line_cap_style             (GimpCapStyle                   cap_style);
 GimpJoinStyle                 gimp_context_get_line_join_style            (void);
@@ -62,9 +62,9 @@ gdouble                       gimp_context_get_line_miter_limit           (void)
 gboolean                      gimp_context_set_line_miter_limit           (gdouble                        miter_limit);
 gdouble                       gimp_context_get_line_dash_offset           (void);
 gboolean                      gimp_context_set_line_dash_offset           (gdouble                        dash_offset);
-gboolean                      gimp_context_get_line_dash_pattern          (gint                          *num_dashes,
+gboolean                      gimp_context_get_line_dash_pattern          (gsize                         *num_dashes,
                                                                            gdouble                      **dashes);
-gboolean                      gimp_context_set_line_dash_pattern          (gint                           num_dashes,
+gboolean                      gimp_context_set_line_dash_pattern          (gsize                          num_dashes,
                                                                            const gdouble                 *dashes);
 GimpBrush*                    gimp_context_get_brush                      (void);
 gboolean                      gimp_context_set_brush                      (GimpBrush                     *brush);
@@ -83,10 +83,12 @@ gboolean                      gimp_context_set_brush_hardness             (gdoub
 gboolean                      gimp_context_set_brush_default_hardness     (void);
 gdouble                       gimp_context_get_brush_force                (void);
 gboolean                      gimp_context_set_brush_force                (gdouble                        force);
-gchar*                        gimp_context_get_dynamics                   (void);
-gboolean                      gimp_context_set_dynamics                   (const gchar                   *name);
+gchar*                        gimp_context_get_dynamics_name              (void);
+gboolean                      gimp_context_set_dynamics_name              (const gchar                   *name);
 gboolean                      gimp_context_are_dynamics_enabled           (void);
 gboolean                      gimp_context_enable_dynamics                (gboolean                       enable);
+gboolean                      gimp_context_get_emulate_brush_dynamics     (void);
+gboolean                      gimp_context_set_emulate_brush_dynamics     (gboolean                       emulate_dynamics);
 gchar*                        gimp_context_get_mypaint_brush              (void);
 gboolean                      gimp_context_set_mypaint_brush              (const gchar                   *name);
 GimpPattern*                  gimp_context_get_pattern                    (void);

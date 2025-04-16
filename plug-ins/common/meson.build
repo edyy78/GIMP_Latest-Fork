@@ -1,4 +1,3 @@
-
 common_plugins_list = [
   { 'name': 'align-layers', },
   { 'name': 'animation-optimize', },
@@ -34,7 +33,7 @@ common_plugins_list = [
   { 'name': 'file-gif-load',
     'deps': [ gtk3, gegl, gdk_pixbuf, cairo, ],
   },
-  { 'name': 'file-gif-save', },
+  { 'name': 'file-gif-export', },
   { 'name': 'file-gih', },
   { 'name': 'file-glob',
     'deps': [ gtk3, gegl, gdk_pixbuf, cairo,  ],
@@ -124,7 +123,7 @@ if libmng.found()
 endif
 
 if cairopdf.found()
-  common_plugins_list += { 'name': 'file-pdf-save',
+  common_plugins_list += { 'name': 'file-pdf-export',
     'deps': [ gtk3, gegl, gdk_pixbuf, poppler, cairo, cairopdf ],
   }
 endif
@@ -170,6 +169,10 @@ elif have_ilbm
     'name': 'file-iff',
     'deps': [ gtk3, gegl, ],
   }
+endif
+
+if platform_windows
+  common_plugins_list += { 'name': 'file-lnk', }
 endif
 
 if not platform_windows
@@ -220,31 +223,31 @@ foreach plugin : common_plugins_list
   endif
 
   plugin_exe = executable(plugin_name,
-    plugin_sources,
-    include_directories: [ rootInclude, ],
-    link_with : [
-      libgimp,
-      libgimpbase,
-      libgimpcolor,
-      libgimpconfig,
-      libgimpmath,
-      libgimpui,
-      libgimpwidgets,
-    ],
-    dependencies: [ plugin_deps, math ],
-    c_args: plugin_cflags,
-    install: true,
-    install_dir: gimpplugindir / 'plug-ins' / plugin_name,
-  )
+                          plugin_sources,
+                          include_directories: [ rootInclude, ],
+                          link_with : [
+                            libgimp,
+                            libgimpbase,
+                            libgimpcolor,
+                            libgimpconfig,
+                            libgimpmath,
+                            libgimpui,
+                            libgimpwidgets,
+                          ],
+                          dependencies: [ plugin_deps, math ],
+                          c_args: plugin_cflags,
+                          win_subsystem: 'windows',
+                          install: true,
+                          install_dir: gimpplugindir / 'plug-ins' / plugin_name)
 
   # Ugly trick to copy executables into subfolders so that we can run GIMP from
   # the build directory without installing it.
   custom_target('test-' + plugin_name,
-    input: [ plugin_exe ],
-    output: [ plugin_name + '.dummy' ],
-    command: [ python, meson.project_source_root() / '.gitlab/cp-plug-in-subfolder.py',
-               plugin_exe, meson.current_build_dir() / 'test-plug-ins' / plugin_name,
-               '@OUTPUT@' ],
-    build_by_default: true,
-  )
+                input: [ plugin_exe ],
+                output: [ plugin_name + '.dummy' ],
+                command: [ python, meson.project_source_root() / '.gitlab/cp-plug-in-subfolder.py',
+                           plugin_exe, meson.current_build_dir() / 'test-plug-ins' / plugin_name,
+                           '@OUTPUT@' ],
+                build_by_default: true)
+  plugin_executables += [meson.current_build_dir() / 'test-plug-ins' / plugin_name / fs.name(plugin_exe.full_path())]
 endforeach

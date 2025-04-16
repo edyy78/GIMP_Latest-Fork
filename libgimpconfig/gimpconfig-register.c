@@ -142,6 +142,11 @@ gimp_config_class_init (GObjectClass  *klass,
       if (copy)
         {
           g_object_class_install_property (klass, i + 1, copy);
+          /* If the original param spec was floating, this would unref
+           * it. Otherwise (e.g. it's a spec taken from another object),
+           * nothing happens.
+           */
+          g_param_spec_sink (pspec);
         }
       else
         {
@@ -169,6 +174,8 @@ gimp_config_class_init (GObjectClass  *klass,
                        g_type_name (G_TYPE_FROM_INSTANCE (pspec)), pspec->name, type_name);
         }
     }
+
+  g_free (pspecs);
 }
 
 static void

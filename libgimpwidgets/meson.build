@@ -42,6 +42,7 @@ libgimpwidgets_sources_introspectable = files(
   'gimpcolorprofilecombobox.c',
   'gimpcolorprofilestore.c',
   'gimpcolorprofileview.c',
+  'gimpcolorscale.c',
   'gimpcolorscaleentry.c',
   'gimpcolorselection.c',
   'gimpcolorselector.c',
@@ -50,7 +51,7 @@ libgimpwidgets_sources_introspectable = files(
   'gimpenumlabel.c',
   'gimpenumstore.c',
   'gimpenumwidgets.c',
-  'gimpfileentry.c',
+  'gimpfilechooser.c',
   'gimpframe.c',
   'gimphelpui.c',
   'gimphintbox.c',
@@ -91,11 +92,11 @@ libgimpwidgets_sources_introspectable = files(
 
 libgimpwidgets_sources = [
   libgimpwidgets_sources_introspectable,
-  'gimpcolorscale.c',
   'gimpcolorscales.c',
   'gimpcolorselect.c',
   'gimpcontroller.c',
   'gimpeevl.c',
+  'gimpfileentry.c',
   'gimpwidgets-private.c',
 
   'gimpwidgetsenums.c',
@@ -125,6 +126,7 @@ libgimpwidgets_headers_introspectable = files(
   'gimpcolorprofilecombobox.h',
   'gimpcolorprofilestore.h',
   'gimpcolorprofileview.h',
+  'gimpcolorscale.h',
   'gimpcolorscaleentry.h',
   'gimpcolorselection.h',
   'gimpcolorselector.h',
@@ -133,7 +135,7 @@ libgimpwidgets_headers_introspectable = files(
   'gimpenumlabel.h',
   'gimpenumstore.h',
   'gimpenumwidgets.h',
-  'gimpfileentry.h',
+  'gimpfilechooser.h',
   'gimpframe.h',
   'gimphelpui.h',
   'gimphintbox.h',
@@ -176,7 +178,6 @@ libgimpwidgets_headers_introspectable = files(
 
 libgimpwidgets_headers = [
   libgimpwidgets_headers_introspectable,
-  'gimpcolorscale.h',
   'gimpcolorscales.h',
   'gimpcolorselect.h',
   'gimpcontroller.h',
@@ -197,7 +198,6 @@ elif platform_windows
   ]
 else
   libgimpwidgets_sources += [
-    'gimppickbutton-default.c',
     'gimppickbutton-kwin.c',
     'gimppickbutton-xdg.c',
   ]

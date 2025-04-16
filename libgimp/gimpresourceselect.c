@@ -19,6 +19,7 @@
 #include "config.h"
 
 #include "gimp.h"
+#include "gimpresourceselect-private.h"
 
 typedef struct
 {
@@ -113,10 +114,11 @@ static void
 create_callback_PDB_procedure_params (GimpProcedure *procedure,
                                       GType          resource_type)
 {
-  GIMP_PROC_ARG_RESOURCE (procedure, "resource",
-                          "Resource",
-                          "The resource",
-                          G_PARAM_READWRITE);
+  gimp_procedure_add_resource_argument (procedure, "resource",
+                                        "Resource", "The resource",
+                                        TRUE,
+                                        NULL, /* no default*/
+                                        G_PARAM_READWRITE);
 
   /* Create args for the extra, superfluous args that core is passing.*/
   if (g_type_is_a (resource_type, GIMP_TYPE_FONT))
@@ -125,98 +127,73 @@ create_callback_PDB_procedure_params (GimpProcedure *procedure,
     }
   else if (g_type_is_a (resource_type, GIMP_TYPE_GRADIENT))
     {
-      GIMP_PROC_ARG_INT (procedure, "gradient-width",
-                         "Gradient width",
-                         "The gradient width",
-                         0, G_MAXINT, 0,
-                         G_PARAM_READWRITE);
-
-      GIMP_PROC_ARG_FLOAT_ARRAY (procedure, "gradient-data",
-                                 "Gradient data",
-                                 "The gradient data",
-                                 G_PARAM_READWRITE);
+      gimp_procedure_add_double_array_argument (procedure, "gradient-data",
+                                                "Gradient data",
+                                                "The gradient data",
+                                                G_PARAM_READWRITE);
     }
   else if (g_type_is_a (resource_type, GIMP_TYPE_BRUSH))
     {
-      GIMP_PROC_ARG_DOUBLE (procedure, "opacity",
-                            "Opacity",
-                            NULL,
-                            0.0, 100.0, 100.0,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "mask-width",
+                                       "Brush width",
+                                       NULL,
+                                       0, 10000, 0,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "spacing",
-                         "Spacing",
-                         NULL,
-                         -1, 1000, 20,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "mask-height",
+                                       "Brush height",
+                                       NULL,
+                                       0, 10000, 0,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_ENUM (procedure, "paint-mode",
-                          "Paint mode",
-                          NULL,
-                          GIMP_TYPE_LAYER_MODE,
-                          GIMP_LAYER_MODE_NORMAL,
-                          G_PARAM_READWRITE);
-
-      GIMP_PROC_ARG_INT (procedure, "mask-width",
-                         "Brush width",
-                         NULL,
-                         0, 10000, 0,
-                         G_PARAM_READWRITE);
-
-      GIMP_PROC_ARG_INT (procedure, "mask-height",
-                         "Brush height",
-                         NULL,
-                         0, 10000, 0,
-                         G_PARAM_READWRITE);
-
-      GIMP_PROC_ARG_BYTES (procedure, "mask-data",
-                           "Mask data",
-                           "The brush mask data",
-                           G_PARAM_READWRITE);
+      gimp_procedure_add_bytes_argument (procedure, "mask-data",
+                                         "Mask data",
+                                         "The brush mask data",
+                                         G_PARAM_READWRITE);
     }
   else if (g_type_is_a (resource_type, GIMP_TYPE_PALETTE))
     {
-      GIMP_PROC_ARG_INT (procedure, "num-colors",
-                         "Num colors",
-                         "Number of colors",
-                         0, G_MAXINT, 0,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "num-colors",
+                                       "Num colors",
+                                       "Number of colors",
+                                       0, G_MAXINT, 0,
+                                       G_PARAM_READWRITE);
     }
   else if (g_type_is_a (resource_type, GIMP_TYPE_PATTERN))
     {
-      GIMP_PROC_ARG_INT (procedure, "mask-width",
-                         "Mask width",
-                         "Pattern width",
-                         0, 10000, 0,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "mask-width",
+                                       "Mask width",
+                                       "Pattern width",
+                                       0, 10000, 0,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "mask-height",
-                         "Mask height",
-                         "Pattern height",
-                         0, 10000, 0,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "mask-height",
+                                       "Mask height",
+                                       "Pattern height",
+                                       0, 10000, 0,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "mask-bpp",
-                         "Mask bpp",
-                         "Pattern bytes per pixel",
-                         0, 10000, 0,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "mask-bpp",
+                                       "Mask bpp",
+                                       "Pattern bytes per pixel",
+                                       0, 10000, 0,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BYTES (procedure, "mask-data",
-                           "Mask data",
-                           "The pattern mask data",
-                           G_PARAM_READWRITE);
+      gimp_procedure_add_bytes_argument (procedure, "mask-data",
+                                         "Mask data",
+                                         "The pattern mask data",
+                                         G_PARAM_READWRITE);
     }
   else
     {
       g_warning ("%s: unhandled resource type", G_STRFUNC);
     }
 
-  GIMP_PROC_ARG_BOOLEAN (procedure, "closing",
-                         "Closing",
-                         "If the dialog was closing",
-                         FALSE,
-                         G_PARAM_READWRITE);
+  gimp_procedure_add_boolean_argument (procedure, "closing",
+                                       "Closing",
+                                       "If the dialog was closing",
+                                       FALSE,
+                                       G_PARAM_READWRITE);
 }
 
 /* Open (create) a remote chooser dialog of resource.
@@ -275,6 +252,9 @@ popup_remote_chooser (const gchar   *title,
  *
  * A proxy to a remote dialog in core, which knows the installed resources.
  *
+ * Note: this function is private and must not be used in plug-ins or
+ * considered part of the API.
+ *
  * Returns: (transfer none): the name of a temporary PDB procedure. The
  *          string belongs to the resource selection dialog and will be
  *          freed automatically when the dialog is closed.
@@ -322,7 +302,7 @@ gimp_resource_select_new (const gchar                 *title,
   if (popup_remote_chooser (title, parent_handle, resource, gimp_procedure_get_name (procedure), resource_type))
     {
       /* Allow callbacks to be watched */
-      gimp_plug_in_extension_enable (plug_in);
+      gimp_plug_in_persistent_enable (plug_in);
 
       return gimp_procedure_get_name (procedure);
     }
@@ -340,6 +320,9 @@ gimp_resource_select_new (const gchar                 *title,
  * @resource:      a [class@Resource] of type @resource_type.
  *
  * Set currently selected resource in remote chooser.
+ *
+ * Note: this function is private and must not be used in plug-ins or
+ * considered part of the API.
  */
 void
 gimp_resource_select_set (const gchar  *callback_name,

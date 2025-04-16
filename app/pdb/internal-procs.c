@@ -30,7 +30,7 @@
 #include "internal-procs.h"
 
 
-/* 784 procedures registered total */
+/* 718 procedures registered total */
 
 void
 internal_procs_init (GimpPDB *pdb)
@@ -48,6 +48,7 @@ internal_procs_init (GimpPDB *pdb)
   register_drawable_procs (pdb);
   register_drawable_color_procs (pdb);
   register_drawable_edit_procs (pdb);
+  register_drawable_filter_procs (pdb);
   register_drawable_select_procs (pdb);
   register_dynamics_procs (pdb);
   register_edit_procs (pdb);
@@ -61,8 +62,10 @@ internal_procs_init (GimpPDB *pdb)
   register_gradient_procs (pdb);
   register_gradient_select_procs (pdb);
   register_gradients_procs (pdb);
+  register_group_layer_procs (pdb);
   register_help_procs (pdb);
   register_image_procs (pdb);
+  register_image_autocrop_procs (pdb);
   register_image_color_profile_procs (pdb);
   register_image_convert_procs (pdb);
   register_image_grid_procs (pdb);
@@ -79,17 +82,16 @@ internal_procs_init (GimpPDB *pdb)
   register_palette_procs (pdb);
   register_palette_select_procs (pdb);
   register_palettes_procs (pdb);
+  register_path_procs (pdb);
   register_pattern_procs (pdb);
   register_pattern_select_procs (pdb);
   register_patterns_procs (pdb);
   register_pdb_procs (pdb);
   register_plug_in_procs (pdb);
-  register_plug_in_compat_procs (pdb);
   register_progress_procs (pdb);
   register_resource_procs (pdb);
   register_selection_procs (pdb);
   register_text_layer_procs (pdb);
   register_text_tool_procs (pdb);
   register_unit_procs (pdb);
-  register_vectors_procs (pdb);
 }

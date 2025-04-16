@@ -30,11 +30,11 @@
                         dest-x
                         dest-y)
   (gimp-image-select-rectangle img CHANNEL-OP-REPLACE x1 y1 width height)
-  (gimp-edit-copy 1 (vector drawable))
+  (gimp-edit-copy (vector drawable))
   (let* (
-         (pasted (gimp-edit-paste drawable FALSE))
-         (num-pasted (car pasted))
-         (floating-sel (aref (cadr pasted) (- num-pasted 1)))
+         (pasted (car (gimp-edit-paste drawable FALSE)))
+         (num-pasted (vector-length pasted))
+         (floating-sel (vector-ref pasted (- num-pasted 1)))
         )
    (gimp-layer-set-offsets floating-sel dest-x dest-y)
    (gimp-floating-sel-anchor floating-sel)
@@ -50,8 +50,8 @@
   (let* ((tile-size (+ (* 2 ribbon-width) (* 2 ribbon-spacing)))
          (darkness (* 255 (/ (- 100 shadow-darkness) 100)))
          (img (car (gimp-image-new tile-size tile-size RGB)))
-         (drawable (car (gimp-layer-new img tile-size tile-size RGB-IMAGE
-                                        "Weave tile" 100 LAYER-MODE-NORMAL))))
+         (drawable (car (gimp-layer-new img "Weave tile" tile-size tile-size RGB-IMAGE
+                                        100 LAYER-MODE-NORMAL))))
 
     (gimp-image-undo-disable img)
     (gimp-image-insert-layer img drawable 0 0)
@@ -152,7 +152,7 @@
                                   shadow-depth))
          (tile-img (car tile))
          (tile-layer (cadr tile))
-          (weaving (plug-in-tile RUN-NONINTERACTIVE tile-img 1 (vector tile-layer) width height TRUE)))
+          (weaving (plug-in-tile #:run-mode RUN-NONINTERACTIVE #:image tile-img #:drawables (vector tile-layer) #:new-width width #:new-height height #:new-image TRUE)))
     (gimp-image-delete tile-img)
     weaving))
 
@@ -174,8 +174,8 @@
                           r3-height)
   (let* ((tile-size (+ (* 2 ribbon-width) (* 2 ribbon-spacing)))
          (img (car (gimp-image-new tile-size tile-size RGB)))
-         (drawable (car (gimp-layer-new img tile-size tile-size RGB-IMAGE
-                                        "Mask" 100 LAYER-MODE-NORMAL))))
+         (drawable (car (gimp-layer-new img "Mask" tile-size tile-size RGB-IMAGE
+                                        100 LAYER-MODE-NORMAL))))
     (gimp-image-undo-disable img)
     (gimp-image-insert-layer img drawable 0 0)
 
@@ -218,8 +218,12 @@
                                  r3-x1 r3-y1 r3-width r3-height))
          (tile-img (car tile))
          (tile-layer (cadr tile))
-         (mask (plug-in-tile RUN-NONINTERACTIVE tile-img 1 (vector tile-layer) final-width final-height
-                             TRUE)))
+         (mask (plug-in-tile #:run-mode   RUN-NONINTERACTIVE
+                             #:image      tile-img
+                             #:drawables  (vector tile-layer)
+                             #:new-width  final-width
+                             #:new-height final-height
+                             #:new-image  TRUE)))
     (gimp-image-delete tile-img)
     mask))
 
@@ -277,19 +281,21 @@
                               length
                               density
                               orientation)
-  (let* ((drawable (car (gimp-layer-new img width height RGBA-IMAGE
-                                        "Threads" 100 LAYER-MODE-NORMAL)))
+  (let* ((drawable (car (gimp-layer-new img "Threads" width height RGBA-IMAGE
+                                        100 LAYER-MODE-NORMAL)))
          (dense (/ density 100.0)))
     (gimp-image-insert-layer img drawable 0 -1)
     (gimp-context-set-background '(255 255 255))
     (gimp-drawable-edit-fill drawable FILL-BACKGROUND)
-    (plug-in-noisify RUN-NONINTERACTIVE img drawable FALSE dense dense dense dense)
-    (plug-in-c-astretch RUN-NONINTERACTIVE img drawable)
+    (gimp-drawable-merge-new-filter drawable "gegl:noise-rgb" 0 LAYER-MODE-REPLACE 1.0
+                                    "independent" FALSE "red" dense "alpha" dense
+                                    "correlated" FALSE "seed" (msrg-rand) "linear" TRUE)
+    (gimp-drawable-merge-new-filter drawable "gegl:stretch-contrast" 0 LAYER-MODE-REPLACE 1.0 "keep-colors" FALSE)
     (cond ((eq? orientation 'horizontal)
-           (plug-in-gauss-rle RUN-NONINTERACTIVE img drawable length TRUE FALSE))
+           (gimp-drawable-merge-new-filter drawable "gegl:gaussian-blur" 0 LAYER-MODE-REPLACE 1.0 "std-dev-x" (* 0.32 length) "std-dev-y" 0.0 "filter" "auto"))
           ((eq? orientation 'vertical)
-           (plug-in-gauss-rle RUN-NONINTERACTIVE img drawable length FALSE TRUE)))
-    (plug-in-c-astretch RUN-NONINTERACTIVE img drawable)
+           (gimp-drawable-merge-new-filter drawable "gegl:gaussian-blur" 0 LAYER-MODE-REPLACE 1.0 "std-dev-x" 0.0 "std-dev-y" (* 0.32 length) "filter" "auto")))
+    (gimp-drawable-merge-new-filter drawable "gegl:stretch-contrast" 0 LAYER-MODE-REPLACE 1.0 "keep-colors" FALSE)
     drawable))
 
 (define (create-complete-weave width
@@ -325,12 +331,12 @@
 
     (gimp-layer-add-mask h-layer h-mask)
     (gimp-selection-all hm-img)
-    (gimp-edit-copy 1 (vector hm-layer))
+    (gimp-edit-copy (vector hm-layer))
     (gimp-image-delete hm-img)
     (let* (
-           (pasted (gimp-edit-paste h-mask FALSE))
-           (num-pasted (car pasted))
-           (floating-sel (aref (cadr pasted) (- num-pasted 1)))
+           (pasted (car (gimp-edit-paste h-mask FALSE)))
+           (num-pasted (vector-length pasted))
+           (floating-sel (vector-ref pasted (- num-pasted 1)))
           )
      (gimp-floating-sel-anchor floating-sel)
     )
@@ -339,12 +345,12 @@
 
     (gimp-layer-add-mask v-layer v-mask)
     (gimp-selection-all vm-img)
-    (gimp-edit-copy 1 (vector vm-layer))
+    (gimp-edit-copy (vector vm-layer))
     (gimp-image-delete vm-img)
     (let* (
-           (pasted (gimp-edit-paste v-mask FALSE))
-           (num-pasted (car pasted))
-           (floating-sel (aref (cadr pasted) (- num-pasted 1)))
+           (pasted (car (gimp-edit-paste v-mask FALSE)))
+           (num-pasted (vector-length pasted))
+           (floating-sel (vector-ref pasted (- num-pasted 1)))
           )
      (gimp-floating-sel-anchor floating-sel)
     )
@@ -360,7 +366,7 @@
 ; The main weave function
 
 (define (script-fu-weave img
-                         drawable
+                         drawables
                          ribbon-width
                          ribbon-spacing
                          shadow-darkness
@@ -372,6 +378,7 @@
   (gimp-image-undo-group-start img)
 
   (let* (
+        (drawable (vector-ref drawables 0))
         (d-img (car (gimp-item-get-image drawable)))
         (d-width (car (gimp-drawable-get-width drawable)))
         (d-height (car (gimp-drawable-get-height drawable)))
@@ -395,12 +402,12 @@
     (gimp-context-set-feather FALSE)
 
     (gimp-selection-all w-img)
-    (gimp-edit-copy 1 (vector w-layer))
+    (gimp-edit-copy (vector w-layer))
     (gimp-image-delete w-img)
     (let* (
-           (pasted (gimp-edit-paste drawable FALSE))
-           (num-pasted (car pasted))
-           (floating-sel (aref (cadr pasted) (- num-pasted 1)))
+           (pasted (car (gimp-edit-paste drawable FALSE)))
+           (num-pasted (vector-length pasted))
+           (floating-sel (vector-ref pasted (- num-pasted 1)))
           )
           (gimp-layer-set-offsets floating-sel
                                   (car d-offsets)
@@ -414,15 +421,14 @@
   (gimp-displays-flush)
 )
 
-(script-fu-register "script-fu-weave"
+(script-fu-register-filter "script-fu-weave"
   _"_Weave..."
   _"Create a new layer filled with a weave effect to be used as an overlay or bump map"
   "Federico Mena Quintero"
   "Federico Mena Quintero"
   "June 1997"
   "RGB* GRAY*"
-  SF-IMAGE       "Image to Weave"    0
-  SF-DRAWABLE    "Drawable to Weave" 0
+  SF-ONE-OR-MORE-DRAWABLE
   SF-ADJUSTMENT _"Ribbon width"     '(30  0 256 1 10 1 1)
   SF-ADJUSTMENT _"Ribbon spacing"   '(10  0 256 1 10 1 1)
   SF-ADJUSTMENT _"Shadow darkness"  '(75  0 100 1 10 1 1)

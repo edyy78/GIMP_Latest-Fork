@@ -39,7 +39,7 @@ enum
   PROP_PREVIEW_SPLIT_POSITION,
   PROP_CONTROLLER,
   PROP_BLENDING_OPTIONS_EXPANDED,
-  PROP_COLOR_OPTIONS_EXPANDED
+  PROP_MERGE_FILTER
 };
 
 
@@ -110,9 +110,11 @@ gimp_filter_options_class_init (GimpFilterOptionsClass *klass)
                             FALSE,
                             GIMP_PARAM_STATIC_STRINGS);
 
-  GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_COLOR_OPTIONS_EXPANDED,
-                            "color-options-expanded",
-                            NULL, NULL,
+  GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_MERGE_FILTER,
+                            "merge-filter",
+                            _("_Merge filter"),
+                            _("If enabled, the filter is immediately merged.\n"
+                              "Otherwise, it becomes an editable non-destructive filter."),
                             FALSE,
                             GIMP_PARAM_STATIC_STRINGS);
 }
@@ -156,8 +158,8 @@ gimp_filter_options_set_property (GObject      *object,
       options->blending_options_expanded = g_value_get_boolean (value);
       break;
 
-    case PROP_COLOR_OPTIONS_EXPANDED:
-      options->color_options_expanded = g_value_get_boolean (value);
+    case PROP_MERGE_FILTER:
+      options->merge_filter = g_value_get_boolean (value);
       break;
 
     default:
@@ -200,8 +202,8 @@ gimp_filter_options_get_property (GObject    *object,
       g_value_set_boolean (value, options->blending_options_expanded);
       break;
 
-    case PROP_COLOR_OPTIONS_EXPANDED:
-      g_value_set_boolean (value, options->color_options_expanded);
+    case PROP_MERGE_FILTER:
+      g_value_set_boolean (value, options->merge_filter);
       break;
 
     default:

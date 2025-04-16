@@ -26,7 +26,7 @@ G_BEGIN_DECLS
 
 /* Increment every time the protocol changes
  */
-#define GIMP_PROTOCOL_VERSION  0x0111
+#define GIMP_PROTOCOL_VERSION  0x0115
 
 
 enum
@@ -54,58 +54,66 @@ typedef enum
   GP_PARAM_DEF_TYPE_ENUM,
   GP_PARAM_DEF_TYPE_CHOICE,
   GP_PARAM_DEF_TYPE_BOOLEAN,
-  GP_PARAM_DEF_TYPE_FLOAT,
+  GP_PARAM_DEF_TYPE_DOUBLE,
   GP_PARAM_DEF_TYPE_STRING,
-  GP_PARAM_DEF_TYPE_COLOR,
   GP_PARAM_DEF_TYPE_GEGL_COLOR,
   GP_PARAM_DEF_TYPE_ID,
-  GP_PARAM_DEF_TYPE_ID_ARRAY
+  GP_PARAM_DEF_TYPE_ID_ARRAY,
+  GP_PARAM_DEF_TYPE_EXPORT_OPTIONS,
+  GP_PARAM_DEF_TYPE_RESOURCE,
+  GP_PARAM_DEF_TYPE_FILE
 } GPParamDefType;
 
 typedef enum
 {
   GP_PARAM_TYPE_INT,
-  GP_PARAM_TYPE_FLOAT,
+  GP_PARAM_TYPE_DOUBLE,
   GP_PARAM_TYPE_STRING,
   GP_PARAM_TYPE_STRV,
   GP_PARAM_TYPE_BYTES,
   GP_PARAM_TYPE_FILE,
-  GP_PARAM_TYPE_COLOR,
+  GP_PARAM_TYPE_BABL_FORMAT,
   GP_PARAM_TYPE_GEGL_COLOR,
   GP_PARAM_TYPE_COLOR_ARRAY,
   GP_PARAM_TYPE_PARASITE,
   GP_PARAM_TYPE_ARRAY,
   GP_PARAM_TYPE_ID_ARRAY,
-  GP_PARAM_TYPE_PARAM_DEF
+  GP_PARAM_TYPE_EXPORT_OPTIONS,
+  GP_PARAM_TYPE_PARAM_DEF,
+  GP_PARAM_TYPE_VALUE_ARRAY,
 } GPParamType;
 
 
-typedef struct _GPConfig            GPConfig;
-typedef struct _GPTileReq           GPTileReq;
-typedef struct _GPTileAck           GPTileAck;
-typedef struct _GPTileData          GPTileData;
-typedef struct _GPParamDef          GPParamDef;
-typedef struct _GPParamDefInt       GPParamDefInt;
-typedef struct _GPParamDefUnit      GPParamDefUnit;
-typedef struct _GPParamDefEnum      GPParamDefEnum;
-typedef struct _GPParamDefBoolean   GPParamDefBoolean;
-typedef struct _GPParamDefFloat     GPParamDefFloat;
-typedef struct _GPParamDefString    GPParamDefString;
-typedef struct _GPParamDefChoice    GPParamDefChoice;
-typedef struct _GPParamStrv         GPParamStrv;
-typedef struct _GPParamDefColor     GPParamDefColor;
-typedef struct _GPParamDefGeglColor GPParamDefGeglColor;
-typedef struct _GPParamDefID        GPParamDefID;
-typedef struct _GPParamDefIDArray   GPParamDefIDArray;
-typedef struct _GPParam             GPParam;
-typedef struct _GPParamArray        GPParamArray;
-typedef struct _GPParamIDArray      GPParamIDArray;
-typedef struct _GPParamColor        GPParamColor;
-typedef struct _GPParamColorArray   GPParamColorArray;
-typedef struct _GPProcRun           GPProcRun;
-typedef struct _GPProcReturn        GPProcReturn;
-typedef struct _GPProcInstall       GPProcInstall;
-typedef struct _GPProcUninstall     GPProcUninstall;
+typedef struct _GPConfig                 GPConfig;
+typedef struct _GPTileReq                GPTileReq;
+typedef struct _GPTileAck                GPTileAck;
+typedef struct _GPTileData               GPTileData;
+typedef struct _GPParamDef               GPParamDef;
+typedef struct _GPParamDefInt            GPParamDefInt;
+typedef struct _GPParamDefUnit           GPParamDefUnit;
+typedef struct _GPParamDefEnum           GPParamDefEnum;
+typedef struct _GPParamDefBoolean        GPParamDefBoolean;
+typedef struct _GPParamDefDouble         GPParamDefDouble;
+typedef struct _GPParamDefString         GPParamDefString;
+typedef struct _GPParamDefChoice         GPParamDefChoice;
+typedef struct _GPParamStrv              GPParamStrv;
+typedef struct _GPParamDefGeglColor      GPParamDefGeglColor;
+typedef struct _GPParamDefID             GPParamDefID;
+typedef struct _GPParamDefIDArray        GPParamDefIDArray;
+typedef struct _GPParamDefResource       GPParamDefResource;
+typedef struct _GPParamDefFile           GPParamDefFile;
+typedef struct _GPParam                  GPParam;
+typedef struct _GPParamArray             GPParamArray;
+typedef struct _GPParamIDArray           GPParamIDArray;
+typedef struct _GPParamFormat            GPParamFormat;
+typedef struct _GPParamColor             GPParamColor;
+typedef struct _GPParamColorArray        GPParamColorArray;
+typedef struct _GPParamExportOptions     GPParamExportOptions;
+typedef struct _GPParamValueArray        GPParamValueArray;
+typedef struct _GPProcRun                GPProcRun;
+typedef struct _GPProcReturn             GPProcReturn;
+typedef struct _GPProcInstall            GPProcInstall;
+typedef struct _GPProcUninstall          GPProcUninstall;
 
 
 struct _GPConfig
@@ -192,7 +200,7 @@ struct _GPParamDefBoolean
   gint32 default_val;
 };
 
-struct _GPParamDefFloat
+struct _GPParamDefDouble
 {
   gdouble min_val;
   gdouble max_val;
@@ -202,12 +210,6 @@ struct _GPParamDefFloat
 struct _GPParamDefString
 {
   gchar *default_val;
-};
-
-struct _GPParamDefColor
-{
-  gint32  has_alpha;
-  GimpRGB default_val;
 };
 
 struct _GPParamDefGeglColor
@@ -232,6 +234,21 @@ struct _GPParamDefChoice
   gchar      *default_val;
 };
 
+struct _GPParamDefResource
+{
+  gint32 none_ok;
+  gint32 default_to_context;
+  gint32 default_resource_id;
+};
+
+struct _GPParamDefFile
+{
+  /* action is a GimpFileChooserAction casted to gint32. */
+  gint32  action;
+  gint32  none_ok;
+  gchar  *default_uri;
+};
+
 struct _GPParamDef
 {
   GPParamDefType  param_def_type;
@@ -244,17 +261,18 @@ struct _GPParamDef
 
   union
   {
-    GPParamDefInt       m_int;
-    GPParamDefUnit      m_unit;
-    GPParamDefEnum      m_enum;
-    GPParamDefBoolean   m_boolean;
-    GPParamDefFloat     m_float;
-    GPParamDefString    m_string;
-    GPParamDefColor     m_color;
-    GPParamDefGeglColor m_gegl_color;
-    GPParamDefID        m_id;
-    GPParamDefIDArray   m_id_array;
-    GPParamDefChoice    m_choice;
+    GPParamDefInt              m_int;
+    GPParamDefUnit             m_unit;
+    GPParamDefEnum             m_enum;
+    GPParamDefBoolean          m_boolean;
+    GPParamDefDouble           m_double;
+    GPParamDefString           m_string;
+    GPParamDefGeglColor        m_gegl_color;
+    GPParamDefID               m_id;
+    GPParamDefIDArray          m_id_array;
+    GPParamDefChoice           m_choice;
+    GPParamDefResource         m_resource;
+    GPParamDefFile             m_file;
   } meta;
 };
 
@@ -271,21 +289,40 @@ struct _GPParamIDArray
   gint32  *data;
 };
 
-struct _GPParamColor
+struct _GPParamFormat
 {
-  guint32  size;
-  guint8   data[40];
-
   /* Transferring a BablFormat with the encoding and the ICC data. */
   gchar   *encoding;
   guint32  profile_size;
   guint8  *profile_data;
 };
 
+struct _GPParamColor
+{
+  guint32       size;
+  guint8        data[40];
+
+  GPParamFormat format;
+};
+
 struct _GPParamColorArray
 {
   guint32       size;
   GPParamColor *colors;
+};
+
+struct _GPParamExportOptions
+{
+  /* XXX: this is an empty shell right now, because there are no export
+   * options yet. The capabilities property doesn't need to be passed
+   * through the wire because it is set by libgimp, not at run call.
+   */
+};
+
+struct _GPParamValueArray
+{
+  guint32  n_values;
+  GPParam *values;
 };
 
 struct _GPParam
@@ -295,18 +332,20 @@ struct _GPParam
 
   union
   {
-    gint32              d_int;
-    gdouble             d_float;
-    gchar              *d_string;
-    gchar             **d_strv;
-    GBytes             *d_bytes;
-    GPParamColor        d_gegl_color;
-    GPParamColorArray   d_color_array;
-    GimpRGB             d_color;
-    GimpParasite        d_parasite;
-    GPParamArray        d_array;
-    GPParamIDArray      d_id_array;
-    GPParamDef          d_param_def;
+    gint32                 d_int;
+    gdouble                d_double;
+    gchar                 *d_string;
+    gchar                **d_strv;
+    GBytes                *d_bytes;
+    GPParamFormat          d_format;
+    GPParamColor           d_gegl_color;
+    GPParamColorArray      d_color_array;
+    GimpParasite           d_parasite;
+    GPParamArray           d_array;
+    GPParamIDArray         d_id_array;
+    GPParamExportOptions   d_export_options;
+    GPParamDef             d_param_def;
+    GPParamValueArray      d_value_array;
   } data;
 };
 

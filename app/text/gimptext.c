@@ -192,7 +192,7 @@ gimp_text_class_init (GimpTextClass *klass)
   GIMP_CONFIG_PROP_UNIT (object_class, PROP_UNIT,
                          "font-size-unit",
                          NULL, NULL,
-                         TRUE, FALSE, GIMP_UNIT_PIXEL,
+                         TRUE, FALSE, gimp_unit_pixel (),
                          GIMP_PARAM_STATIC_STRINGS);
 
   GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_ANTIALIAS,
@@ -236,7 +236,7 @@ gimp_text_class_init (GimpTextClass *klass)
   GIMP_CONFIG_PROP_COLOR (object_class, PROP_COLOR,
                           "color",
                           NULL, NULL,
-                          black,
+                          FALSE, black,
                           GIMP_PARAM_STATIC_STRINGS);
 
   GIMP_CONFIG_PROP_ENUM (object_class, PROP_OUTLINE,
@@ -299,7 +299,7 @@ gimp_text_class_init (GimpTextClass *klass)
   GIMP_CONFIG_PROP_UNIT (object_class, PROP_BOX_UNIT,
                          "box-unit",
                          NULL, NULL,
-                         TRUE, FALSE, GIMP_UNIT_PIXEL,
+                         TRUE, FALSE, gimp_unit_pixel (),
                          GIMP_PARAM_STATIC_STRINGS);
 
   GIMP_CONFIG_PROP_MATRIX2 (object_class, PROP_TRANSFORMATION,
@@ -341,7 +341,7 @@ gimp_text_class_init (GimpTextClass *klass)
                             GIMP_PARAM_STATIC_STRINGS);
    GIMP_CONFIG_PROP_COLOR (object_class, PROP_OUTLINE_FOREGROUND,
                            "outline-foreground", NULL, NULL,
-                           gray,
+                           FALSE, gray,
                            GIMP_PARAM_STATIC_STRINGS);
    GIMP_CONFIG_PROP_DOUBLE (object_class, PROP_OUTLINE_WIDTH,
                             "outline-width", NULL, NULL,
@@ -448,7 +448,7 @@ gimp_text_get_property (GObject      *object,
       g_value_set_double (value, text->font_size);
       break;
     case PROP_UNIT:
-      g_value_set_int (value, text->unit);
+      g_value_set_object (value, text->unit);
       break;
     case PROP_ANTIALIAS:
       g_value_set_boolean (value, text->antialias);
@@ -493,7 +493,7 @@ gimp_text_get_property (GObject      *object,
       g_value_set_double (value, text->box_height);
       break;
     case PROP_BOX_UNIT:
-      g_value_set_int (value, text->box_unit);
+      g_value_set_object (value, text->box_unit);
       break;
     case PROP_TRANSFORMATION:
       g_value_set_boxed (value, &text->transformation);
@@ -585,7 +585,7 @@ gimp_text_set_property (GObject      *object,
       {
         GimpFont *font = g_value_get_object (value);
 
-        if (font != text->font)
+        if (font != text->font && font != NULL)
           g_set_object (&text->font, font);
       }
       break;
@@ -593,7 +593,7 @@ gimp_text_set_property (GObject      *object,
       text->font_size = g_value_get_double (value);
       break;
     case PROP_UNIT:
-      text->unit = g_value_get_int (value);
+      text->unit = g_value_get_object (value);
       break;
     case PROP_ANTIALIAS:
       text->antialias = g_value_get_boolean (value);
@@ -639,7 +639,7 @@ gimp_text_set_property (GObject      *object,
       text->box_height = g_value_get_double (value);
       break;
     case PROP_BOX_UNIT:
-      text->box_unit = g_value_get_int (value);
+      text->box_unit = g_value_get_object (value);
       break;
     case PROP_TRANSFORMATION:
       matrix = g_value_get_boxed (value);
@@ -835,12 +835,19 @@ gimp_text_serialize_property (GimpConfig       *config,
                 {
                   fonts = g_slist_prepend (fonts, (gpointer) font_name);
 
-                  font = GIMP_FONT (gimp_container_search (container,
-                                                           (GimpContainerSearchFunc) gimp_font_match_by_lookup_name,
-                                                           (gpointer) font_name));
+                  if (g_str_has_prefix (altered_font_name, "font"))
+                    font = GIMP_FONT (gimp_container_search (container,
+                                                             (GimpContainerSearchFunc) gimp_font_match_by_lookup_name,
+                                                             (gpointer) font_name));
+                  /* in case the font is an alias its lookupname is that alias and doesn't conform to the format "gimpfont%d"*/
+                  else
+                    font = GIMP_FONT (gimp_container_search (container,
+                                                             (GimpContainerSearchFunc) gimp_font_match_by_lookup_name,
+                                                             (gpointer) altered_font_name));
 
                   gimp_config_writer_open   (writer, "markupfont");
-                  /*lookupname format is "font%d" we keep only the "font%d" (see the above comment)*/
+                  /*lookupname format is "gimpfont%d" we keep only the "font%d",
+                   * and in case the font is an alias, we keep its name (see the above comments)*/
                   gimp_config_writer_string (writer, font_name+4);
 
                   gimp_config_writer_open   (writer, "font");

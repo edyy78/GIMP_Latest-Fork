@@ -70,7 +70,6 @@ static GimpProcedure    * print_create_procedure (GimpPlugIn           *plug_in,
 static GimpValueArray   * print_run              (GimpProcedure        *procedure,
                                                   GimpRunMode           run_mode,
                                                   GimpImage            *image,
-                                                  gint                  n_drawables,
                                                   GimpDrawable        **drawables,
                                                   GimpProcedureConfig  *config,
                                                   gpointer              run_data);
@@ -213,7 +212,6 @@ static GimpValueArray *
 print_run (GimpProcedure        *procedure,
            GimpRunMode           run_mode,
            GimpImage            *image,
-           gint                  n_drawables,
            GimpDrawable        **drawables,
            GimpProcedureConfig  *config,
            gpointer              run_data)
@@ -309,7 +307,7 @@ print_image (GimpImage *image,
 #ifndef EMBED_PAGE_SETUP
   print_operation = operation;
   temp_proc = print_temp_proc_install (image);
-  gimp_plug_in_extension_enable (gimp_get_plug_in ());
+  gimp_plug_in_persistent_enable (gimp_get_plug_in ());
 #endif
 
   if (interactive)
@@ -402,9 +400,13 @@ page_setup (GimpImage *image)
   gimp_plug_in_set_pdb_error_handler (gimp_get_plug_in (),
                                       GIMP_PDB_ERROR_HANDLER_PLUGIN);
 
+  /* Notify the Print plug-in if Page Setup was called from there */
   procedure   = gimp_pdb_lookup_procedure (gimp_get_pdb (), name);
-  return_vals = gimp_procedure_run (procedure, "image", image, NULL);
-  gimp_value_array_unref (return_vals);
+  if (procedure)
+    {
+      return_vals = gimp_procedure_run (procedure, "image", image, NULL);
+      gimp_value_array_unref (return_vals);
+    }
 
   g_free (name);
 
@@ -547,11 +549,11 @@ print_temp_proc_install (GimpImage *image)
                                   "Sven Neumann",
                                   "2008");
 
-  GIMP_PROC_ARG_IMAGE (procedure, "image",
-                       "Image",
-                       "The image to notify about",
-                       FALSE,
-                       G_PARAM_READWRITE);
+  gimp_procedure_add_image_argument (procedure, "image",
+                                     "Image",
+                                     "The image to notify about",
+                                     FALSE,
+                                     G_PARAM_READWRITE);
 
   gimp_plug_in_add_temp_procedure (plug_in, procedure);
   g_object_unref (procedure);

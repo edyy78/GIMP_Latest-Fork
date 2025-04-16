@@ -94,7 +94,14 @@ gimp_config_param_spec_duplicate (GParamSpec *pspec)
     {
       GParamSpecString *spec = G_PARAM_SPEC_STRING (pspec);
 
-      if (GEGL_IS_PARAM_SPEC_FILE_PATH (pspec))
+      if (GIMP_IS_PARAM_SPEC_CHOICE (pspec))
+        {
+          copy = gimp_param_spec_choice (name, nick, blurb,
+                                         g_object_ref (gimp_param_spec_choice_get_choice (pspec)),
+                                         gimp_param_spec_choice_get_default (pspec),
+                                         flags);
+        }
+      else if (GEGL_IS_PARAM_SPEC_FILE_PATH (pspec))
         {
           copy = gimp_param_spec_config_path (name, nick, blurb,
                                               GIMP_CONFIG_PATH_FILE,
@@ -193,17 +200,6 @@ gimp_config_param_spec_duplicate (GParamSpec *pspec)
                                          gspec->ui_step_small,
                                          gspec->ui_step_big);
         }
-      else if (GIMP_IS_PARAM_SPEC_UNIT (pspec))
-        {
-          GimpParamSpecUnit *spec  = GIMP_PARAM_SPEC_UNIT (pspec);
-          GParamSpecInt     *ispec = G_PARAM_SPEC_INT (pspec);
-
-          copy = gimp_param_spec_unit (name, nick, blurb,
-                                       ispec->minimum == GIMP_UNIT_PIXEL,
-                                       spec->allow_percent,
-                                       ispec->default_value,
-                                       flags);
-        }
       else
         {
           copy = g_param_spec_int (name, nick, blurb,
@@ -240,57 +236,20 @@ gimp_config_param_spec_duplicate (GParamSpec *pspec)
                                     flags);
         }
     }
-  else if (GIMP_IS_PARAM_SPEC_CHOICE (pspec))
+  else if (GIMP_IS_PARAM_SPEC_OBJECT (pspec))
     {
-      GimpParamSpecChoice *spec = GIMP_PARAM_SPEC_CHOICE (pspec);
-
-      copy = gimp_param_spec_choice (name, nick, blurb,
-                                     g_object_ref (spec->choice),
-                                     spec->default_value,
-                                     flags);
-    }
-  else if (GIMP_IS_PARAM_SPEC_RGB (pspec))
-    {
-      GimpRGB color;
-
-      gimp_param_spec_rgb_get_default (pspec, &color);
-
-      copy = gimp_param_spec_rgb (name, nick, blurb,
-                                  gimp_param_spec_rgb_has_alpha (pspec),
-                                  &color,
-                                  flags);
-    }
-  /* In some cases, such as some GIR bindings, creating a GimpRGB
-   * argument is impossible (or at least I have not found how, at least
-   * in the Python binding which is doing some weird shortcuts when
-   * handling GValue and param specs. So instead, the parameter appears
-   * as a Boxed param with a GimpRGB value type.
-   */
-  else if (G_IS_PARAM_SPEC_BOXED (pspec) &&
-           G_PARAM_SPEC_VALUE_TYPE (pspec) == GIMP_TYPE_RGB)
-    {
-      GValue  *value;
-      GimpRGB  color;
-
-      value = (GValue *) g_param_spec_get_default_value (pspec);
-      gimp_value_get_rgb (value, &color);
-
-      copy = gimp_param_spec_rgb (name, nick, blurb,
-                                  TRUE, &color, flags);
+      /* GimpParamSpecColor, GimpParamSpecUnit and all GimpParamSpecResource types. */
+      copy = gimp_param_spec_object_duplicate (pspec);
+      copy->flags = flags;
     }
   else if (GEGL_IS_PARAM_SPEC_COLOR (pspec))
     {
       GeglColor *color;
-      GValue     value = G_VALUE_INIT;
 
-      g_value_init (&value, GEGL_TYPE_COLOR);
-      g_param_value_set_default (pspec, &value);
-      color = g_value_dup_object (&value);
-      g_value_unset (&value);
+      color = gegl_param_spec_color_get_default (pspec);
+      color = gegl_color_duplicate (color);
 
-      copy = gegl_param_spec_color (name, nick, blurb,
-                                    /*TRUE,*/
-                                    color, flags);
+      copy = gegl_param_spec_color (name, nick, blurb, color, flags);
       g_clear_object (&color);
     }
   else if (G_IS_PARAM_SPEC_OBJECT (pspec) &&
@@ -300,7 +259,9 @@ gimp_config_param_spec_duplicate (GParamSpec *pspec)
       GeglColor *color;
 
       value = (GValue *) g_param_spec_get_default_value (pspec);
-      color = g_value_dup_object (value);
+      color = g_value_get_object (value);
+      if (color)
+        color = gegl_color_duplicate (color);
 
       copy = gegl_param_spec_color (name, nick, blurb,
                                     /*TRUE,*/
@@ -325,50 +286,42 @@ gimp_config_param_spec_duplicate (GParamSpec *pspec)
           copy = gimp_param_spec_int32_array (name, nick, blurb,
                                               flags);
         }
-      else if (GIMP_IS_PARAM_SPEC_FLOAT_ARRAY (pspec))
+      else if (GIMP_IS_PARAM_SPEC_DOUBLE_ARRAY (pspec))
         {
-          copy = gimp_param_spec_float_array (name, nick, blurb,
-                                              flags);
-        }
-      else if (GIMP_IS_PARAM_SPEC_RGB_ARRAY (pspec))
-        {
-          copy = gimp_param_spec_rgb_array (name, nick, blurb,
-                                            flags);
+          copy = gimp_param_spec_double_array (name, nick, blurb, flags);
         }
     }
-  else if (GIMP_IS_PARAM_SPEC_OBJECT_ARRAY (pspec))
+  else if (GIMP_IS_PARAM_SPEC_CORE_OBJECT_ARRAY (pspec))
     {
-      GimpParamSpecObjectArray *spec = GIMP_PARAM_SPEC_OBJECT_ARRAY (pspec);
-
-      copy = gimp_param_spec_object_array (name, nick, blurb,
-                                           spec->object_type,
-                                           flags);
+      copy = gimp_param_spec_core_object_array (name, nick, blurb,
+                                                gimp_param_spec_core_object_array_get_object_type (pspec),
+                                                flags);
+    }
+  else if (GIMP_IS_PARAM_SPEC_EXPORT_OPTIONS (pspec))
+    {
+      copy = gimp_param_spec_export_options (name, nick, blurb, flags);
     }
   else if (G_IS_PARAM_SPEC_OBJECT (pspec))
     {
       GType        value_type = G_PARAM_SPEC_VALUE_TYPE (pspec);
       const gchar *type_name  = g_type_name (value_type);
 
-      if (value_type == G_TYPE_FILE                   ||
+      if (value_type == G_TYPE_FILE                        ||
           /* These types are not visibile in libgimpconfig so we compare
            * with type names instead.
            */
-          g_strcmp0 (type_name, "GimpImage")     == 0 ||
-          g_strcmp0 (type_name, "GimpDisplay")   == 0 ||
-          g_strcmp0 (type_name, "GimpDrawable")  == 0 ||
-          g_strcmp0 (type_name, "GimpLayer")     == 0 ||
-          g_strcmp0 (type_name, "GimpTextLayer") == 0 ||
-          g_strcmp0 (type_name, "GimpChannel")   == 0 ||
-          g_strcmp0 (type_name, "GimpItem")      == 0 ||
-          g_strcmp0 (type_name, "GimpLayerMask") == 0 ||
-          g_strcmp0 (type_name, "GimpSelection") == 0 ||
-          g_strcmp0 (type_name, "GimpResource")  == 0 ||
-          g_strcmp0 (type_name, "GimpBrush")     == 0 ||
-          g_strcmp0 (type_name, "GimpFont")      == 0 ||
-          g_strcmp0 (type_name, "GimpGradient")  == 0 ||
-          g_strcmp0 (type_name, "GimpPalette")   == 0 ||
-          g_strcmp0 (type_name, "GimpPattern")   == 0 ||
-          g_strcmp0 (type_name, "GimpVectors")   == 0)
+          g_strcmp0 (type_name, "GimpImage")          == 0 ||
+          g_strcmp0 (type_name, "GimpDisplay")        == 0 ||
+          g_strcmp0 (type_name, "GimpDrawable")       == 0 ||
+          g_strcmp0 (type_name, "GimpLayer")          == 0 ||
+          g_strcmp0 (type_name, "GimpGroupLayer")     == 0 ||
+          g_strcmp0 (type_name, "GimpTextLayer")      == 0 ||
+          g_strcmp0 (type_name, "GimpChannel")        == 0 ||
+          g_strcmp0 (type_name, "GimpItem")           == 0 ||
+          g_strcmp0 (type_name, "GimpLayerMask")      == 0 ||
+          g_strcmp0 (type_name, "GimpSelection")      == 0 ||
+          g_strcmp0 (type_name, "GimpPath")           == 0 ||
+          g_strcmp0 (type_name, "GimpDrawableFilter") == 0)
         {
           copy = g_param_spec_object (name, nick, blurb,
                                       value_type,

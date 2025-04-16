@@ -27,10 +27,15 @@
 
 #include "display-types.h"
 
+#include "config/gimpguiconfig.h"
+
 #include "core/gimp.h"
 #include "core/gimp-edit.h"
 #include "core/gimpbuffer.h"
+#include "core/gimpcontainer.h"
 #include "core/gimpdrawable-edit.h"
+#include "core/gimpdrawable-filters.h"
+#include "core/gimpdrawablefilter.h"
 #include "core/gimpfilloptions.h"
 #include "core/gimpimage.h"
 #include "core/gimpimage-new.h"
@@ -38,6 +43,7 @@
 #include "core/gimplayer.h"
 #include "core/gimplayer-new.h"
 #include "core/gimplayermask.h"
+#include "core/gimplist.h"
 #include "core/gimppattern.h"
 #include "core/gimpprogress.h"
 
@@ -46,8 +52,8 @@
 #include "text/gimptext.h"
 #include "text/gimptextlayer.h"
 
-#include "vectors/gimpvectors.h"
-#include "vectors/gimpvectors-import.h"
+#include "vectors/gimppath.h"
+#include "vectors/gimppath-import.h"
 
 #include "widgets/gimpdnd.h"
 
@@ -67,7 +73,7 @@ static void   gimp_display_shell_drop_drawable  (GtkWidget       *widget,
                                                  gint             y,
                                                  GimpViewable    *viewable,
                                                  gpointer         data);
-static void   gimp_display_shell_drop_vectors   (GtkWidget       *widget,
+static void   gimp_display_shell_drop_path      (GtkWidget       *widget,
                                                  gint             x,
                                                  gint             y,
                                                  GimpViewable    *viewable,
@@ -127,8 +133,8 @@ gimp_display_shell_dnd_init (GimpDisplayShell *shell)
   gimp_dnd_viewable_dest_add  (shell->canvas, GIMP_TYPE_CHANNEL,
                                gimp_display_shell_drop_drawable,
                                shell);
-  gimp_dnd_viewable_dest_add  (shell->canvas, GIMP_TYPE_VECTORS,
-                               gimp_display_shell_drop_vectors,
+  gimp_dnd_viewable_dest_add  (shell->canvas, GIMP_TYPE_PATH,
+                               gimp_display_shell_drop_path,
                                shell);
   gimp_dnd_viewable_dest_add  (shell->canvas, GIMP_TYPE_PATTERN,
                                gimp_display_shell_drop_pattern,
@@ -227,7 +233,7 @@ gimp_display_shell_drop_drawable (GtkWidget    *widget,
     {
       image = gimp_image_new_from_drawable (shell->display->gimp,
                                             GIMP_DRAWABLE (viewable));
-      gimp_create_display (shell->display->gimp, image, GIMP_UNIT_PIXEL, 1.0,
+      gimp_create_display (shell->display->gimp, image, gimp_unit_pixel (), 1.0,
                            G_OBJECT (gimp_widget_get_monitor (widget)));
       g_object_unref (image);
 
@@ -243,6 +249,8 @@ gimp_display_shell_drop_drawable (GtkWidget    *widget,
 
   if (new_item)
     {
+      GimpContainer *filters;
+
       GimpLayer *new_layer = GIMP_LAYER (new_item);
 
       gimp_image_undo_group_start (image, GIMP_UNDO_GROUP_EDIT_PASTE,
@@ -250,10 +258,41 @@ gimp_display_shell_drop_drawable (GtkWidget    *widget,
 
       gimp_display_shell_dnd_position_item (shell, image, new_item);
 
+      filters = gimp_drawable_get_filters (GIMP_DRAWABLE (viewable));
+      if (gimp_container_get_n_children (filters) > 0)
+        {
+          GList *filter_list;
+
+          for (filter_list = GIMP_LIST (filters)->queue->tail;
+               filter_list;
+               filter_list = g_list_previous (filter_list))
+            {
+              if (GIMP_IS_DRAWABLE_FILTER (filter_list->data))
+                {
+                  GimpDrawableFilter *old_filter = filter_list->data;
+                  GimpDrawableFilter *filter;
+
+                  filter =
+                    gimp_drawable_filter_duplicate (GIMP_DRAWABLE (new_layer),
+                                                    old_filter);
+
+                  if (filter != NULL)
+                    {
+                      gimp_drawable_filter_apply (filter, NULL);
+                      gimp_drawable_filter_commit (filter, TRUE, NULL, FALSE);
+
+                      gimp_drawable_filter_layer_mask_freeze (filter);
+                      g_object_unref (filter);
+                    }
+                }
+            }
+        }
+
       gimp_item_set_visible (new_item, TRUE, FALSE);
 
       gimp_image_add_layer (image, new_layer,
                             GIMP_IMAGE_ACTIVE_PARENT, -1, TRUE);
+      gimp_drawable_enable_resize_undo (GIMP_DRAWABLE (new_layer));
 
       gimp_image_undo_group_end (image);
 
@@ -262,11 +301,11 @@ gimp_display_shell_drop_drawable (GtkWidget    *widget,
 }
 
 static void
-gimp_display_shell_drop_vectors (GtkWidget    *widget,
-                                 gint          x,
-                                 gint          y,
-                                 GimpViewable *viewable,
-                                 gpointer      data)
+gimp_display_shell_drop_path (GtkWidget    *widget,
+                              gint          x,
+                              gint          y,
+                              GimpViewable *viewable,
+                              gpointer      data)
 {
   GimpDisplayShell *shell = GIMP_DISPLAY_SHELL (data);
   GimpImage        *image = gimp_display_get_image (shell->display);
@@ -285,13 +324,13 @@ gimp_display_shell_drop_vectors (GtkWidget    *widget,
 
   if (new_item)
     {
-      GimpVectors *new_vectors = GIMP_VECTORS (new_item);
+      GimpPath *new_path = GIMP_PATH (new_item);
 
       gimp_image_undo_group_start (image, GIMP_UNDO_GROUP_EDIT_PASTE,
                                    _("Drop New Path"));
 
-      gimp_image_add_vectors (image, new_vectors,
-                              GIMP_IMAGE_ACTIVE_PARENT, -1, TRUE);
+      gimp_image_add_path (image, new_path,
+                           GIMP_IMAGE_ACTIVE_PARENT, -1, TRUE);
 
       gimp_image_undo_group_end (image);
 
@@ -319,11 +358,11 @@ gimp_display_shell_drop_svg (GtkWidget     *widget,
   if (! image)
     return;
 
-  if (! gimp_vectors_import_buffer (image,
-                                    (const gchar *) svg_data, svg_data_len,
-                                    TRUE, FALSE,
-                                    GIMP_IMAGE_ACTIVE_PARENT, -1,
-                                    NULL, &error))
+  if (! gimp_path_import_buffer (image,
+                                 (const gchar *) svg_data, svg_data_len,
+                                 TRUE, FALSE,
+                                 GIMP_IMAGE_ACTIVE_PARENT, -1,
+                                 NULL, &error))
     {
       gimp_message_literal (shell->display->gimp, G_OBJECT (shell->display),
                             GIMP_MESSAGE_ERROR,
@@ -341,9 +380,10 @@ gimp_display_shell_dnd_fill (GimpDisplayShell *shell,
                              GimpFillOptions  *options,
                              const gchar      *undo_desc)
 {
-  GimpImage    *image = gimp_display_get_image (shell->display);
-  GList        *drawables;
-  GList        *iter;
+  GimpImage     *image  = gimp_display_get_image (shell->display);
+  GimpGuiConfig *config = GIMP_GUI_CONFIG (shell->display->gimp->config);
+  GList         *drawables;
+  GList         *iter;
 
   if (shell->display->gimp->busy)
     return;
@@ -372,6 +412,16 @@ gimp_display_shell_dnd_fill (GimpDisplayShell *shell,
           gimp_message_literal (shell->display->gimp, G_OBJECT (shell->display),
                                 GIMP_MESSAGE_ERROR,
                                 _("A selected layer's pixels are locked."));
+          g_list_free (drawables);
+          return;
+        }
+
+      if (! gimp_item_is_visible (GIMP_ITEM (iter->data)) &&
+          ! config->edit_non_visible)
+        {
+          gimp_message_literal (shell->display->gimp, G_OBJECT (shell->display),
+                                GIMP_MESSAGE_ERROR,
+                                _("A selected layer is not visible."));
           g_list_free (drawables);
           return;
         }
@@ -478,7 +528,7 @@ gimp_display_shell_drop_buffer (GtkWidget    *widget,
     {
       image = gimp_image_new_from_buffer (shell->display->gimp,
                                           GIMP_BUFFER (viewable));
-      gimp_create_display (image->gimp, image, GIMP_UNIT_PIXEL, 1.0,
+      gimp_create_display (image->gimp, image, gimp_unit_pixel (), 1.0,
                            G_OBJECT (gimp_widget_get_monitor (widget)));
       g_object_unref (image);
 
@@ -664,7 +714,7 @@ gimp_display_shell_drop_component (GtkWidget       *widget,
     {
       dest_image = gimp_image_new_from_component (image->gimp,
                                                   image, component);
-      gimp_create_display (dest_image->gimp, dest_image, GIMP_UNIT_PIXEL, 1.0,
+      gimp_create_display (dest_image->gimp, dest_image, gimp_unit_pixel (), 1.0,
                            G_OBJECT (gimp_widget_get_monitor (widget)));
       g_object_unref (dest_image);
 
@@ -721,7 +771,7 @@ gimp_display_shell_drop_pixbuf (GtkWidget *widget,
     {
       image = gimp_image_new_from_pixbuf (shell->display->gimp, pixbuf,
                                           _("Dropped Buffer"));
-      gimp_create_display (image->gimp, image, GIMP_UNIT_PIXEL, 1.0,
+      gimp_create_display (image->gimp, image, gimp_unit_pixel (), 1.0,
                            G_OBJECT (gimp_widget_get_monitor (widget)));
       g_object_unref (image);
 

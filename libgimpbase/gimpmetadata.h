@@ -24,12 +24,11 @@
 
 G_BEGIN_DECLS
 
-#define GIMP_TYPE_METADATA            (gimp_metadata_get_type ())
-#define GIMP_METADATA(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_METADATA, GimpMetadata))
-#define GIMP_METADATA_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_METADATA, GimpMetadataClass))
-#define GIMP_IS_METADATA(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_METADATA))
-#define GIMP_IS_METADATA_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_METADATA))
-#define GIMP_METADATA_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_METADATA, GimpMetadataClass))
+#include <gexiv2/gexiv2.h>
+
+
+#define GIMP_TYPE_METADATA (gimp_metadata_get_type ())
+G_DECLARE_FINAL_TYPE (GimpMetadata, gimp_metadata, GIMP, METADATA, GExiv2Metadata)
 
 
 /**
@@ -100,8 +99,6 @@ typedef enum
 } GimpMetadataColorspace;
 
 
-GType          gimp_metadata_get_type            (void) G_GNUC_CONST;
-
 GimpMetadata * gimp_metadata_new                 (void);
 GimpMetadata * gimp_metadata_duplicate           (GimpMetadata           *metadata);
 
@@ -140,11 +137,13 @@ void           gimp_metadata_set_bits_per_sample (GimpMetadata           *metada
 gboolean       gimp_metadata_get_resolution      (GimpMetadata           *metadata,
                                                   gdouble                *xres,
                                                   gdouble                *yres,
-                                                  GimpUnit               *unit);
+                                                  GimpUnit              **unit);
 void           gimp_metadata_set_resolution      (GimpMetadata           *metadata,
                                                   gdouble                 xres,
                                                   gdouble                 yres,
-                                                  GimpUnit                unit);
+                                                  GimpUnit               *unit);
+void           gimp_metadata_set_creation_date   (GimpMetadata           *metadata,
+                                                  GDateTime              *datetime);
 
 GimpMetadataColorspace
                gimp_metadata_get_colorspace      (GimpMetadata           *metadata);

@@ -34,7 +34,7 @@
 
 #define LOAD_PROC      "file-pcx-load"
 #define LOAD_PROC_DCX  "file-dcx-load"
-#define SAVE_PROC      "file-pcx-save"
+#define EXPORT_PROC    "file-pcx-export"
 #define PLUG_IN_BINARY "file-pcx"
 #define PLUG_IN_ROLE   "gimp-file-pcx"
 
@@ -76,12 +76,11 @@ static GimpValueArray * dcx_load             (GimpProcedure         *procedure,
                                               GimpMetadataLoadFlags *flags,
                                               GimpProcedureConfig   *config,
                                               gpointer               run_data);
-static GimpValueArray * pcx_save             (GimpProcedure         *procedure,
+static GimpValueArray * pcx_export           (GimpProcedure         *procedure,
                                               GimpRunMode            run_mode,
                                               GimpImage             *image,
-                                              gint                   n_drawables,
-                                              GimpDrawable         **drawables,
                                               GFile                 *file,
+                                              GimpExportOptions     *options,
                                               GimpMetadata          *metadata,
                                               GimpProcedureConfig   *config,
                                               gpointer               run_data);
@@ -139,7 +138,7 @@ static void             readline             (FILE                  *fp,
                                               guchar                *buf,
                                               gint                   bytes);
 
-static gboolean         save_image           (GFile                 *file,
+static gboolean         export_image         (GFile                 *file,
                                               GimpImage             *image,
                                               GimpDrawable          *drawable,
                                               GError               **error);
@@ -192,7 +191,7 @@ pcx_query_procedures (GimpPlugIn *plug_in)
 
   list = g_list_append (list, g_strdup (LOAD_PROC));
   list = g_list_append (list, g_strdup (LOAD_PROC_DCX));
-  list = g_list_append (list, g_strdup (SAVE_PROC));
+  list = g_list_append (list, g_strdup (EXPORT_PROC));
 
   return list;
 }
@@ -220,12 +219,15 @@ pcx_create_procedure (GimpPlugIn  *plug_in,
                                       "Nick Lamb <njl195@zepler.org.uk>",
                                       "January 1997");
 
-      GIMP_PROC_ARG_INT (procedure, "override-palette",
-                         _("Palette Options"),
-                         _("Use built-in palette (0) or override with "
-                           "black/white (1)"),
-                         0, 1, 0,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_choice_argument (procedure, "override-palette",
+                                          _("_Palette Options"),
+                                          _("Whether to use the built-in palette or "
+                                            "a black and white palette for 1 bit images."),
+                                          gimp_choice_new_with_values ("use-built-in-palette", 0, _("Use PCX image's built-in palette"), NULL,
+                                                                       "use-bw-palette",       1, _("Use black and white palette"),      NULL,
+                                                                       NULL),
+                                          "use-built-in-palette",
+                                          G_PARAM_READWRITE);
 
       gimp_file_procedure_set_mime_types (GIMP_FILE_PROCEDURE (procedure),
                                           "image/x-pcx");
@@ -251,12 +253,15 @@ pcx_create_procedure (GimpPlugIn  *plug_in,
                                       "Alex S.",
                                       "2023");
 
-      GIMP_PROC_ARG_INT (procedure, "override-palette",
-                         _("Palette Options"),
-                         _("Use built-in palette (0) or override with "
-                           "black/white (1)"),
-                         0, 1, 0,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_choice_argument (procedure, "override-palette",
+                                          _("_Palette Options"),
+                                          _("Whether to use the built-in palette or "
+                                            "a black and white palette for 1 bit images."),
+                                          gimp_choice_new_with_values ("use-built-in-palette", 0, _("Use PCX image's built-in palette"), NULL,
+                                                                       "use-bw-palette",       1, _("Use black and white palette"),      NULL,
+                                                                       NULL),
+                                          "use-built-in-palette",
+                                          G_PARAM_READWRITE);
 
       gimp_file_procedure_set_mime_types (GIMP_FILE_PROCEDURE (procedure),
                                           "image/x-dcx");
@@ -265,19 +270,19 @@ pcx_create_procedure (GimpPlugIn  *plug_in,
       gimp_file_procedure_set_magics (GIMP_FILE_PROCEDURE (procedure),
                                       "0,string,\xB1\x68\xDE\x3A");
     }
-  else if (! strcmp (name, SAVE_PROC))
+  else if (! strcmp (name, EXPORT_PROC))
     {
-      procedure = gimp_save_procedure_new (plug_in, name,
-                                           GIMP_PDB_PROC_TYPE_PLUGIN,
-                                           FALSE, pcx_save, NULL, NULL);
+      procedure = gimp_export_procedure_new (plug_in, name,
+                                             GIMP_PDB_PROC_TYPE_PLUGIN,
+                                             FALSE, pcx_export, NULL, NULL);
 
       gimp_procedure_set_image_types (procedure, "INDEXED, RGB, GRAY");
 
       gimp_procedure_set_menu_label (procedure, _("ZSoft PCX image"));
 
       gimp_procedure_set_documentation (procedure,
-                                        "Exports files in ZSoft PCX file format",
-                                        "FIXME: write help for pcx_save",
+                                        _("Exports files in ZSoft PCX file format"),
+                                        "FIXME: write help for pcx_export",
                                         name);
       gimp_procedure_set_attribution (procedure,
                                       "Francisco Bustamante & Nick Lamb",
@@ -288,6 +293,12 @@ pcx_create_procedure (GimpPlugIn  *plug_in,
                                           "image/x-pcx");
       gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
                                           "pcx,pcc");
+
+      gimp_export_procedure_set_capabilities (GIMP_EXPORT_PROCEDURE (procedure),
+                                              GIMP_EXPORT_CAN_HANDLE_RGB  |
+                                              GIMP_EXPORT_CAN_HANDLE_GRAY |
+                                              GIMP_EXPORT_CAN_HANDLE_INDEXED,
+                                              NULL, NULL, NULL);
     }
 
   return procedure;
@@ -356,66 +367,36 @@ dcx_load (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
-pcx_save (GimpProcedure        *procedure,
-          GimpRunMode           run_mode,
-          GimpImage            *image,
-          gint                  n_drawables,
-          GimpDrawable        **drawables,
-          GFile                *file,
-          GimpMetadata         *metadata,
-          GimpProcedureConfig  *config,
-          gpointer              run_data)
+pcx_export (GimpProcedure        *procedure,
+            GimpRunMode           run_mode,
+            GimpImage            *image,
+            GFile                *file,
+            GimpExportOptions    *options,
+            GimpMetadata         *metadata,
+            GimpProcedureConfig  *config,
+            gpointer              run_data)
 {
   GimpPDBStatusType  status = GIMP_PDB_SUCCESS;
-  GimpExportReturn   export = GIMP_EXPORT_CANCEL;
+  GimpExportReturn   export = GIMP_EXPORT_IGNORE;
+  GList             *drawables;
   GError            *error  = NULL;
 
   gegl_init (NULL, NULL);
 
-  switch (run_mode)
-    {
-    case GIMP_RUN_INTERACTIVE:
-    case GIMP_RUN_WITH_LAST_VALS:
-      gimp_ui_init (PLUG_IN_BINARY);
+  export = gimp_export_options_get_image (options, &image);
+  drawables = gimp_image_list_layers (image);
 
-      export = gimp_export_image (&image, &n_drawables, &drawables, "PCX",
-                                  GIMP_EXPORT_CAN_HANDLE_RGB  |
-                                  GIMP_EXPORT_CAN_HANDLE_GRAY |
-                                  GIMP_EXPORT_CAN_HANDLE_INDEXED);
-
-      if (export == GIMP_EXPORT_CANCEL)
-        return gimp_procedure_new_return_values (procedure,
-                                                 GIMP_PDB_CANCEL,
-                                                 NULL);
-      break;
-
-    default:
-      break;
-    }
-
-  if (n_drawables != 1)
-    {
-      g_set_error (&error, G_FILE_ERROR, 0,
-                   _("PCX format does not support multiple layers."));
-
-      return gimp_procedure_new_return_values (procedure,
-                                               GIMP_PDB_CALLING_ERROR,
-                                               error);
-    }
-
-  if (! save_image (file,
-                    image, drawables[0],
-                    &error))
+  if (! export_image (file,
+                      image, drawables->data,
+                      &error))
     {
       status = GIMP_PDB_EXECUTION_ERROR;
     }
 
   if (export == GIMP_EXPORT_EXPORT)
-    {
-      gimp_image_delete (image);
-      g_free (drawables);
-    }
+    gimp_image_delete (image);
 
+  g_list_free (drawables);
   return gimp_procedure_new_return_values (procedure, status, error);
 }
 
@@ -588,7 +569,6 @@ load_multi (GimpProcedure  *procedure,
     {
       GimpLayer **layers;
       GimpLayer  *new_layer;
-      gint        n_layers;
 
       fread (&offset, 1, 4, fd);
 
@@ -610,7 +590,7 @@ load_multi (GimpProcedure  *procedure,
 
       if (temp_image)
         {
-          layers = gimp_image_get_layers (temp_image, &n_layers);
+          layers = gimp_image_get_layers (temp_image);
           new_layer = gimp_layer_new_from_drawable (GIMP_DRAWABLE (layers[0]),
                                                     image);
           gimp_item_set_name (GIMP_ITEM (new_layer),
@@ -764,16 +744,13 @@ load_image (GimpProcedure  *procedure,
 
       if (run_mode == GIMP_RUN_INTERACTIVE)
         {
-          g_object_get (config,
-                        "override-palette", &override_palette,
-                        NULL);
+          override_palette = gimp_procedure_config_get_choice_id (GIMP_PROCEDURE_CONFIG (config),
+                                                                  "override-palette");
+
           /* Only show dialogue once for DCX import */
           if (image_num == 0 && pcx_load_dialog (procedure, config))
-            {
-              g_object_get (config,
-                            "override-palette", &override_palette,
-                            NULL);
-            }
+            override_palette = gimp_procedure_config_get_choice_id (GIMP_PROCEDURE_CONFIG (config),
+                                                                    "override-palette");
         }
       /* Monochrome does not mean necessarily B&W. Therefore we still
        * want to check the header palette, even for just 2 colors.
@@ -799,37 +776,49 @@ load_image (GimpProcedure  *procedure,
                                                 255, 255, 255};
           colormap = bw_colormap;
         }
-      gimp_image_set_colormap (image, colormap, 2);
+      gimp_palette_set_colormap (gimp_image_get_palette (image),
+                                 babl_format ("R'G'B' u8"),
+                                 (guint8 *) colormap, 6);
     }
   else if (pcx_header.bpp == 1 && pcx_header.planes == 2)
     {
       dest = g_new (guchar, ((gsize) width) * height);
       load_sub_8 (fd, width, height, 1, 2, dest, bytesperline);
-      gimp_image_set_colormap (image, pcx_header.colormap, 4);
+      gimp_palette_set_colormap (gimp_image_get_palette (image),
+                                 babl_format ("R'G'B' u8"),
+                                 pcx_header.colormap, 4 * 3);
     }
   else if (pcx_header.bpp == 2 && pcx_header.planes == 1)
     {
       dest = g_new (guchar, ((gsize) width) * height);
       load_sub_8 (fd, width, height, 2, 1, dest, bytesperline);
-      gimp_image_set_colormap (image, pcx_header.colormap, 4);
+      gimp_palette_set_colormap (gimp_image_get_palette (image),
+                                 babl_format ("R'G'B' u8"),
+                                 pcx_header.colormap, 4 * 3);
     }
   else if (pcx_header.bpp == 1 && pcx_header.planes == 3)
     {
       dest = g_new (guchar, ((gsize) width) * height);
       load_sub_8 (fd, width, height, 1, 3, dest, bytesperline);
-      gimp_image_set_colormap (image, pcx_header.colormap, 8);
+      gimp_palette_set_colormap (gimp_image_get_palette (image),
+                                 babl_format ("R'G'B' u8"),
+                                 pcx_header.colormap, 8 * 3);
     }
   else if (pcx_header.bpp == 1 && pcx_header.planes == 4)
     {
       dest = g_new (guchar, ((gsize) width) * height);
       load_4 (fd, width, height, dest, bytesperline);
-      gimp_image_set_colormap (image, pcx_header.colormap, 16);
+      gimp_palette_set_colormap (gimp_image_get_palette (image),
+                                 babl_format ("R'G'B' u8"),
+                                 pcx_header.colormap, 16 * 3);
     }
   else if (pcx_header.bpp == 4 && pcx_header.planes == 1)
     {
       dest = g_new (guchar, ((gsize) width) * height);
       load_sub_8 (fd, width, height, 4, 1, dest, bytesperline);
-      gimp_image_set_colormap (image, pcx_header.colormap, 16);
+      gimp_palette_set_colormap (gimp_image_get_palette (image),
+                                 babl_format ("R'G'B' u8"),
+                                 pcx_header.colormap, 16 * 3);
     }
   else if (pcx_header.bpp == 8 && pcx_header.planes == 1)
     {
@@ -837,7 +826,9 @@ load_image (GimpProcedure  *procedure,
       load_8 (fd, width, height, dest, bytesperline);
       fseek (fd, -768L, SEEK_END);
       fread (cmap, 768, 1, fd);
-      gimp_image_set_colormap (image, cmap, 256);
+      gimp_palette_set_colormap (gimp_image_get_palette (image),
+                                 babl_format ("R'G'B' u8"),
+                                 cmap, 256 * 3);
     }
   else if (pcx_header.bpp == 8 && (pcx_header.planes == 3 || pcx_header.planes == 4))
     {
@@ -866,7 +857,6 @@ pcx_load_dialog (GimpProcedure *procedure,
                  GObject       *config)
 {
   GtkWidget    *dialog;
-  GtkListStore *store;
   gboolean      run;
 
   gimp_ui_init (PLUG_IN_BINARY);
@@ -875,18 +865,8 @@ pcx_load_dialog (GimpProcedure *procedure,
                                       GIMP_PROCEDURE_CONFIG (config),
                                       _("Import from PCX"));
 
-  gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
-                                            GTK_RESPONSE_OK,
-                                            GTK_RESPONSE_CANCEL,
-                                            -1);
-
-  gimp_window_set_transient (GTK_WINDOW (dialog));
-
-  store = gimp_int_store_new (_("Use PCX image's built-in palette"), 0,
-                              _("Use black and white palette"),      1,
-                              NULL);
-  gimp_procedure_dialog_get_int_radio (GIMP_PROCEDURE_DIALOG (dialog),
-                                       "override-palette", GIMP_INT_STORE (store));
+  gimp_procedure_dialog_get_widget (GIMP_PROCEDURE_DIALOG (dialog),
+                                    "override-palette", GIMP_TYPE_INT_RADIO_FRAME);
 
   gimp_procedure_dialog_fill (GIMP_PROCEDURE_DIALOG (dialog),
                               NULL);
@@ -1074,10 +1054,10 @@ readline (FILE   *fp,
 }
 
 static gboolean
-save_image (GFile         *file,
-            GimpImage     *image,
-            GimpDrawable  *drawable,
-            GError       **error)
+export_image (GFile         *file,
+              GimpImage     *image,
+              GimpDrawable  *drawable,
+              GError       **error)
 {
   FILE          *fp;
   GeglBuffer    *buffer;
@@ -1110,7 +1090,8 @@ save_image (GFile         *file,
   switch (drawable_type)
     {
     case GIMP_INDEXED_IMAGE:
-      cmap = gimp_image_get_colormap (image, NULL, &colors);
+      cmap = gimp_palette_get_colormap (gimp_image_get_palette (image),
+                                        babl_format ("R'G'B' u8"), &colors, NULL);
 
       if (colors > 16)
         {

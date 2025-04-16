@@ -2,7 +2,7 @@ plugin_name = 'file-tiff'
 
 plugin_sources = [
   'file-tiff-io.c',
-  'file-tiff-save.c',
+  'file-tiff-export.c',
   'file-tiff.c',
   'file-tiff-load.c',
 ]
@@ -21,13 +21,14 @@ if platform_windows
   )
 endif
 
-executable(plugin_name,
-  plugin_sources,
-  dependencies: [
-    libgimpui_dep,
-    gexiv2,
-    libtiff,
-  ],
-  install: true,
-  install_dir: gimpplugindir / 'plug-ins' / plugin_name,
-)
+plugin_exe = executable(plugin_name,
+                        plugin_sources,
+                        dependencies: [
+                          libgimpui_dep,
+                          gexiv2,
+                          libtiff,
+                        ],
+                        win_subsystem: 'windows',
+                        install: true,
+                        install_dir: gimpplugindir / 'plug-ins' / plugin_name)
+plugin_executables += [plugin_exe.full_path()]

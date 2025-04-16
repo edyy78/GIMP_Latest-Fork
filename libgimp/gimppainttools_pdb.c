@@ -56,20 +56,21 @@
 gboolean
 gimp_airbrush (GimpDrawable  *drawable,
                gdouble        pressure,
-               gint           num_strokes,
+               gsize          num_strokes,
                const gdouble *strokes)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
   gboolean success = TRUE;
 
+  g_return_val_if_fail (num_strokes >= 2, FALSE);
+
   args = gimp_value_array_new_from_types (NULL,
                                           GIMP_TYPE_DRAWABLE, drawable,
                                           G_TYPE_DOUBLE, pressure,
-                                          G_TYPE_INT, num_strokes,
-                                          GIMP_TYPE_FLOAT_ARRAY, NULL,
+                                          GIMP_TYPE_DOUBLE_ARRAY, NULL,
                                           G_TYPE_NONE);
-  gimp_value_set_float_array (gimp_value_array_index (args, 3), strokes, num_strokes);
+  gimp_value_set_double_array (gimp_value_array_index (args, 2), strokes, num_strokes);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
                                                "gimp-airbrush",
@@ -101,19 +102,20 @@ gimp_airbrush (GimpDrawable  *drawable,
  **/
 gboolean
 gimp_airbrush_default (GimpDrawable  *drawable,
-                       gint           num_strokes,
+                       gsize          num_strokes,
                        const gdouble *strokes)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
   gboolean success = TRUE;
 
+  g_return_val_if_fail (num_strokes >= 2, FALSE);
+
   args = gimp_value_array_new_from_types (NULL,
                                           GIMP_TYPE_DRAWABLE, drawable,
-                                          G_TYPE_INT, num_strokes,
-                                          GIMP_TYPE_FLOAT_ARRAY, NULL,
+                                          GIMP_TYPE_DOUBLE_ARRAY, NULL,
                                           G_TYPE_NONE);
-  gimp_value_set_float_array (gimp_value_array_index (args, 2), strokes, num_strokes);
+  gimp_value_set_double_array (gimp_value_array_index (args, 1), strokes, num_strokes);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
                                                "gimp-airbrush-default",
@@ -160,12 +162,14 @@ gimp_clone (GimpDrawable  *drawable,
             GimpCloneType  clone_type,
             gdouble        src_x,
             gdouble        src_y,
-            gint           num_strokes,
+            gsize          num_strokes,
             const gdouble *strokes)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
   gboolean success = TRUE;
+
+  g_return_val_if_fail (num_strokes >= 2, FALSE);
 
   args = gimp_value_array_new_from_types (NULL,
                                           GIMP_TYPE_DRAWABLE, drawable,
@@ -173,10 +177,9 @@ gimp_clone (GimpDrawable  *drawable,
                                           GIMP_TYPE_CLONE_TYPE, clone_type,
                                           G_TYPE_DOUBLE, src_x,
                                           G_TYPE_DOUBLE, src_y,
-                                          G_TYPE_INT, num_strokes,
-                                          GIMP_TYPE_FLOAT_ARRAY, NULL,
+                                          GIMP_TYPE_DOUBLE_ARRAY, NULL,
                                           G_TYPE_NONE);
-  gimp_value_set_float_array (gimp_value_array_index (args, 6), strokes, num_strokes);
+  gimp_value_set_double_array (gimp_value_array_index (args, 5), strokes, num_strokes);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
                                                "gimp-clone",
@@ -209,19 +212,20 @@ gimp_clone (GimpDrawable  *drawable,
  **/
 gboolean
 gimp_clone_default (GimpDrawable  *drawable,
-                    gint           num_strokes,
+                    gsize          num_strokes,
                     const gdouble *strokes)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
   gboolean success = TRUE;
 
+  g_return_val_if_fail (num_strokes >= 2, FALSE);
+
   args = gimp_value_array_new_from_types (NULL,
                                           GIMP_TYPE_DRAWABLE, drawable,
-                                          G_TYPE_INT, num_strokes,
-                                          GIMP_TYPE_FLOAT_ARRAY, NULL,
+                                          GIMP_TYPE_DOUBLE_ARRAY, NULL,
                                           G_TYPE_NONE);
-  gimp_value_set_float_array (gimp_value_array_index (args, 2), strokes, num_strokes);
+  gimp_value_set_double_array (gimp_value_array_index (args, 1), strokes, num_strokes);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
                                                "gimp-clone-default",
@@ -256,21 +260,22 @@ gboolean
 gimp_convolve (GimpDrawable     *drawable,
                gdouble           pressure,
                GimpConvolveType  convolve_type,
-               gint              num_strokes,
+               gsize             num_strokes,
                const gdouble    *strokes)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
   gboolean success = TRUE;
 
+  g_return_val_if_fail (num_strokes >= 2, FALSE);
+
   args = gimp_value_array_new_from_types (NULL,
                                           GIMP_TYPE_DRAWABLE, drawable,
                                           G_TYPE_DOUBLE, pressure,
                                           GIMP_TYPE_CONVOLVE_TYPE, convolve_type,
-                                          G_TYPE_INT, num_strokes,
-                                          GIMP_TYPE_FLOAT_ARRAY, NULL,
+                                          GIMP_TYPE_DOUBLE_ARRAY, NULL,
                                           G_TYPE_NONE);
-  gimp_value_set_float_array (gimp_value_array_index (args, 4), strokes, num_strokes);
+  gimp_value_set_double_array (gimp_value_array_index (args, 3), strokes, num_strokes);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
                                                "gimp-convolve",
@@ -302,19 +307,20 @@ gimp_convolve (GimpDrawable     *drawable,
  **/
 gboolean
 gimp_convolve_default (GimpDrawable  *drawable,
-                       gint           num_strokes,
+                       gsize          num_strokes,
                        const gdouble *strokes)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
   gboolean success = TRUE;
 
+  g_return_val_if_fail (num_strokes >= 2, FALSE);
+
   args = gimp_value_array_new_from_types (NULL,
                                           GIMP_TYPE_DRAWABLE, drawable,
-                                          G_TYPE_INT, num_strokes,
-                                          GIMP_TYPE_FLOAT_ARRAY, NULL,
+                                          GIMP_TYPE_DOUBLE_ARRAY, NULL,
                                           G_TYPE_NONE);
-  gimp_value_set_float_array (gimp_value_array_index (args, 2), strokes, num_strokes);
+  gimp_value_set_double_array (gimp_value_array_index (args, 1), strokes, num_strokes);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
                                                "gimp-convolve-default",
@@ -348,22 +354,23 @@ gimp_dodgeburn (GimpDrawable      *drawable,
                 gdouble            exposure,
                 GimpDodgeBurnType  dodgeburn_type,
                 GimpTransferMode   dodgeburn_mode,
-                gint               num_strokes,
+                gsize              num_strokes,
                 const gdouble     *strokes)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
   gboolean success = TRUE;
 
+  g_return_val_if_fail (num_strokes >= 2, FALSE);
+
   args = gimp_value_array_new_from_types (NULL,
                                           GIMP_TYPE_DRAWABLE, drawable,
                                           G_TYPE_DOUBLE, exposure,
                                           GIMP_TYPE_DODGE_BURN_TYPE, dodgeburn_type,
                                           GIMP_TYPE_TRANSFER_MODE, dodgeburn_mode,
-                                          G_TYPE_INT, num_strokes,
-                                          GIMP_TYPE_FLOAT_ARRAY, NULL,
+                                          GIMP_TYPE_DOUBLE_ARRAY, NULL,
                                           G_TYPE_NONE);
-  gimp_value_set_float_array (gimp_value_array_index (args, 5), strokes, num_strokes);
+  gimp_value_set_double_array (gimp_value_array_index (args, 4), strokes, num_strokes);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
                                                "gimp-dodgeburn",
@@ -394,19 +401,20 @@ gimp_dodgeburn (GimpDrawable      *drawable,
  **/
 gboolean
 gimp_dodgeburn_default (GimpDrawable  *drawable,
-                        gint           num_strokes,
+                        gsize          num_strokes,
                         const gdouble *strokes)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
   gboolean success = TRUE;
 
+  g_return_val_if_fail (num_strokes >= 2, FALSE);
+
   args = gimp_value_array_new_from_types (NULL,
                                           GIMP_TYPE_DRAWABLE, drawable,
-                                          G_TYPE_INT, num_strokes,
-                                          GIMP_TYPE_FLOAT_ARRAY, NULL,
+                                          GIMP_TYPE_DOUBLE_ARRAY, NULL,
                                           G_TYPE_NONE);
-  gimp_value_set_float_array (gimp_value_array_index (args, 2), strokes, num_strokes);
+  gimp_value_set_double_array (gimp_value_array_index (args, 1), strokes, num_strokes);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
                                                "gimp-dodgeburn-default",
@@ -440,7 +448,7 @@ gimp_dodgeburn_default (GimpDrawable  *drawable,
  **/
 gboolean
 gimp_eraser (GimpDrawable             *drawable,
-             gint                      num_strokes,
+             gsize                     num_strokes,
              const gdouble            *strokes,
              GimpBrushApplicationMode  hardness,
              GimpPaintApplicationMode  method)
@@ -449,14 +457,15 @@ gimp_eraser (GimpDrawable             *drawable,
   GimpValueArray *return_vals;
   gboolean success = TRUE;
 
+  g_return_val_if_fail (num_strokes >= 2, FALSE);
+
   args = gimp_value_array_new_from_types (NULL,
                                           GIMP_TYPE_DRAWABLE, drawable,
-                                          G_TYPE_INT, num_strokes,
-                                          GIMP_TYPE_FLOAT_ARRAY, NULL,
+                                          GIMP_TYPE_DOUBLE_ARRAY, NULL,
                                           GIMP_TYPE_BRUSH_APPLICATION_MODE, hardness,
                                           GIMP_TYPE_PAINT_APPLICATION_MODE, method,
                                           G_TYPE_NONE);
-  gimp_value_set_float_array (gimp_value_array_index (args, 2), strokes, num_strokes);
+  gimp_value_set_double_array (gimp_value_array_index (args, 1), strokes, num_strokes);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
                                                "gimp-eraser",
@@ -488,19 +497,20 @@ gimp_eraser (GimpDrawable             *drawable,
  **/
 gboolean
 gimp_eraser_default (GimpDrawable  *drawable,
-                     gint           num_strokes,
+                     gsize          num_strokes,
                      const gdouble *strokes)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
   gboolean success = TRUE;
 
+  g_return_val_if_fail (num_strokes >= 2, FALSE);
+
   args = gimp_value_array_new_from_types (NULL,
                                           GIMP_TYPE_DRAWABLE, drawable,
-                                          G_TYPE_INT, num_strokes,
-                                          GIMP_TYPE_FLOAT_ARRAY, NULL,
+                                          GIMP_TYPE_DOUBLE_ARRAY, NULL,
                                           G_TYPE_NONE);
-  gimp_value_set_float_array (gimp_value_array_index (args, 2), strokes, num_strokes);
+  gimp_value_set_double_array (gimp_value_array_index (args, 1), strokes, num_strokes);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
                                                "gimp-eraser-default",
@@ -541,22 +551,23 @@ gimp_heal (GimpDrawable  *drawable,
            GimpDrawable  *src_drawable,
            gdouble        src_x,
            gdouble        src_y,
-           gint           num_strokes,
+           gsize          num_strokes,
            const gdouble *strokes)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
   gboolean success = TRUE;
 
+  g_return_val_if_fail (num_strokes >= 2, FALSE);
+
   args = gimp_value_array_new_from_types (NULL,
                                           GIMP_TYPE_DRAWABLE, drawable,
                                           GIMP_TYPE_DRAWABLE, src_drawable,
                                           G_TYPE_DOUBLE, src_x,
                                           G_TYPE_DOUBLE, src_y,
-                                          G_TYPE_INT, num_strokes,
-                                          GIMP_TYPE_FLOAT_ARRAY, NULL,
+                                          GIMP_TYPE_DOUBLE_ARRAY, NULL,
                                           G_TYPE_NONE);
-  gimp_value_set_float_array (gimp_value_array_index (args, 5), strokes, num_strokes);
+  gimp_value_set_double_array (gimp_value_array_index (args, 4), strokes, num_strokes);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
                                                "gimp-heal",
@@ -591,19 +602,20 @@ gimp_heal (GimpDrawable  *drawable,
  **/
 gboolean
 gimp_heal_default (GimpDrawable  *drawable,
-                   gint           num_strokes,
+                   gsize          num_strokes,
                    const gdouble *strokes)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
   gboolean success = TRUE;
 
+  g_return_val_if_fail (num_strokes >= 2, FALSE);
+
   args = gimp_value_array_new_from_types (NULL,
                                           GIMP_TYPE_DRAWABLE, drawable,
-                                          G_TYPE_INT, num_strokes,
-                                          GIMP_TYPE_FLOAT_ARRAY, NULL,
+                                          GIMP_TYPE_DOUBLE_ARRAY, NULL,
                                           G_TYPE_NONE);
-  gimp_value_set_float_array (gimp_value_array_index (args, 2), strokes, num_strokes);
+  gimp_value_set_double_array (gimp_value_array_index (args, 1), strokes, num_strokes);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
                                                "gimp-heal-default",
@@ -644,7 +656,7 @@ gimp_heal_default (GimpDrawable  *drawable,
 gboolean
 gimp_paintbrush (GimpDrawable             *drawable,
                  gdouble                   fade_out,
-                 gint                      num_strokes,
+                 gsize                     num_strokes,
                  const gdouble            *strokes,
                  GimpPaintApplicationMode  method,
                  gdouble                   gradient_length)
@@ -653,15 +665,16 @@ gimp_paintbrush (GimpDrawable             *drawable,
   GimpValueArray *return_vals;
   gboolean success = TRUE;
 
+  g_return_val_if_fail (num_strokes >= 2, FALSE);
+
   args = gimp_value_array_new_from_types (NULL,
                                           GIMP_TYPE_DRAWABLE, drawable,
                                           G_TYPE_DOUBLE, fade_out,
-                                          G_TYPE_INT, num_strokes,
-                                          GIMP_TYPE_FLOAT_ARRAY, NULL,
+                                          GIMP_TYPE_DOUBLE_ARRAY, NULL,
                                           GIMP_TYPE_PAINT_APPLICATION_MODE, method,
                                           G_TYPE_DOUBLE, gradient_length,
                                           G_TYPE_NONE);
-  gimp_value_set_float_array (gimp_value_array_index (args, 3), strokes, num_strokes);
+  gimp_value_set_double_array (gimp_value_array_index (args, 2), strokes, num_strokes);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
                                                "gimp-paintbrush",
@@ -702,19 +715,20 @@ gimp_paintbrush (GimpDrawable             *drawable,
  **/
 gboolean
 gimp_paintbrush_default (GimpDrawable  *drawable,
-                         gint           num_strokes,
+                         gsize          num_strokes,
                          const gdouble *strokes)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
   gboolean success = TRUE;
 
+  g_return_val_if_fail (num_strokes >= 2, FALSE);
+
   args = gimp_value_array_new_from_types (NULL,
                                           GIMP_TYPE_DRAWABLE, drawable,
-                                          G_TYPE_INT, num_strokes,
-                                          GIMP_TYPE_FLOAT_ARRAY, NULL,
+                                          GIMP_TYPE_DOUBLE_ARRAY, NULL,
                                           G_TYPE_NONE);
-  gimp_value_set_float_array (gimp_value_array_index (args, 2), strokes, num_strokes);
+  gimp_value_set_double_array (gimp_value_array_index (args, 1), strokes, num_strokes);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
                                                "gimp-paintbrush-default",
@@ -747,19 +761,20 @@ gimp_paintbrush_default (GimpDrawable  *drawable,
  **/
 gboolean
 gimp_pencil (GimpDrawable  *drawable,
-             gint           num_strokes,
+             gsize          num_strokes,
              const gdouble *strokes)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
   gboolean success = TRUE;
 
+  g_return_val_if_fail (num_strokes >= 2, FALSE);
+
   args = gimp_value_array_new_from_types (NULL,
                                           GIMP_TYPE_DRAWABLE, drawable,
-                                          G_TYPE_INT, num_strokes,
-                                          GIMP_TYPE_FLOAT_ARRAY, NULL,
+                                          GIMP_TYPE_DOUBLE_ARRAY, NULL,
                                           G_TYPE_NONE);
-  gimp_value_set_float_array (gimp_value_array_index (args, 2), strokes, num_strokes);
+  gimp_value_set_double_array (gimp_value_array_index (args, 1), strokes, num_strokes);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
                                                "gimp-pencil",
@@ -791,20 +806,21 @@ gimp_pencil (GimpDrawable  *drawable,
 gboolean
 gimp_smudge (GimpDrawable  *drawable,
              gdouble        pressure,
-             gint           num_strokes,
+             gsize          num_strokes,
              const gdouble *strokes)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
   gboolean success = TRUE;
 
+  g_return_val_if_fail (num_strokes >= 2, FALSE);
+
   args = gimp_value_array_new_from_types (NULL,
                                           GIMP_TYPE_DRAWABLE, drawable,
                                           G_TYPE_DOUBLE, pressure,
-                                          G_TYPE_INT, num_strokes,
-                                          GIMP_TYPE_FLOAT_ARRAY, NULL,
+                                          GIMP_TYPE_DOUBLE_ARRAY, NULL,
                                           G_TYPE_NONE);
-  gimp_value_set_float_array (gimp_value_array_index (args, 3), strokes, num_strokes);
+  gimp_value_set_double_array (gimp_value_array_index (args, 2), strokes, num_strokes);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
                                                "gimp-smudge",
@@ -835,19 +851,20 @@ gimp_smudge (GimpDrawable  *drawable,
  **/
 gboolean
 gimp_smudge_default (GimpDrawable  *drawable,
-                     gint           num_strokes,
+                     gsize          num_strokes,
                      const gdouble *strokes)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
   gboolean success = TRUE;
 
+  g_return_val_if_fail (num_strokes >= 2, FALSE);
+
   args = gimp_value_array_new_from_types (NULL,
                                           GIMP_TYPE_DRAWABLE, drawable,
-                                          G_TYPE_INT, num_strokes,
-                                          GIMP_TYPE_FLOAT_ARRAY, NULL,
+                                          GIMP_TYPE_DOUBLE_ARRAY, NULL,
                                           G_TYPE_NONE);
-  gimp_value_set_float_array (gimp_value_array_index (args, 2), strokes, num_strokes);
+  gimp_value_set_double_array (gimp_value_array_index (args, 1), strokes, num_strokes);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
                                                "gimp-smudge-default",

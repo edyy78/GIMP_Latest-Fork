@@ -34,8 +34,8 @@
 
 #include "text/gimptextlayer.h"
 
+#include "vectors/gimppath.h"
 #include "vectors/gimpstroke.h"
-#include "vectors/gimpvectors.h"
 
 
 GimpLayer *
@@ -185,32 +185,32 @@ gimp_image_pick_text_layer (GimpImage *image,
   return NULL;
 }
 
-GimpVectors *
-gimp_image_pick_vectors (GimpImage *image,
-                         gdouble    x,
-                         gdouble    y,
-                         gdouble    epsilon_x,
-                         gdouble    epsilon_y)
+GimpPath *
+gimp_image_pick_path (GimpImage *image,
+                      gdouble    x,
+                      gdouble    y,
+                      gdouble    epsilon_x,
+                      gdouble    epsilon_y)
 {
-  GimpVectors *ret = NULL;
-  GList       *all_vectors;
-  GList       *list;
-  gdouble      mindist = G_MAXDOUBLE;
+  GimpPath *ret = NULL;
+  GList    *all_path;
+  GList    *list;
+  gdouble   mindist = G_MAXDOUBLE;
 
   g_return_val_if_fail (GIMP_IS_IMAGE (image), NULL);
 
-  all_vectors = gimp_image_get_vectors_list (image);
+  all_path = gimp_image_get_path_list (image);
 
-  for (list = all_vectors; list; list = g_list_next (list))
+  for (list = all_path; list; list = g_list_next (list))
     {
-      GimpVectors *vectors = list->data;
+      GimpPath *vectors = list->data;
 
       if (gimp_item_is_visible (GIMP_ITEM (vectors)))
         {
           GimpStroke *stroke = NULL;
           GimpCoords  coords = GIMP_COORDS_DEFAULT_VALUES;
 
-          while ((stroke = gimp_vectors_stroke_get_next (vectors, stroke)))
+          while ((stroke = gimp_path_stroke_get_next (vectors, stroke)))
             {
               gdouble dist;
 
@@ -230,7 +230,7 @@ gimp_image_pick_vectors (GimpImage *image,
         }
     }
 
-  g_list_free (all_vectors);
+  g_list_free (all_path);
 
   return ret;
 }

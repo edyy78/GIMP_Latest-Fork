@@ -89,6 +89,9 @@ static GimpXcfLoaderFunc * const xcf_loaders[] =
   xcf_load_image,   /* version 18 */
   xcf_load_image,   /* version 19 */
   xcf_load_image,   /* version 20 */
+  xcf_load_image,   /* version 21 */
+  xcf_load_image,   /* version 22 */
+  xcf_load_image,   /* version 23 */
 };
 
 
@@ -156,18 +159,6 @@ xcf_init (Gimp *gimp)
                                                       "Input image",
                                                       FALSE,
                                                       GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               g_param_spec_int ("num-drawables",
-                                                 "Num drawables",
-                                                 "Number of drawables",
-                                                 0, G_MAXINT, 0,
-                                                 GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_object_array ("drawables",
-                                                             "Drawables",
-                                                             "Selected drawables",
-                                                             GIMP_TYPE_DRAWABLE,
-                                                             GIMP_PARAM_READWRITE | GIMP_PARAM_NO_VALIDATE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_object ("file",
                                                     "File",
@@ -475,7 +466,7 @@ xcf_save_invoker (GimpProcedure         *procedure,
   gimp_set_busy (gimp);
 
   image = g_value_get_object (gimp_value_array_index (args, 1));
-  file  = g_value_get_object (gimp_value_array_index (args, 4));
+  file  = g_value_get_object (gimp_value_array_index (args, 2));
 
   output = G_OUTPUT_STREAM (g_file_replace (file,
                                             NULL, FALSE, G_FILE_CREATE_NONE,

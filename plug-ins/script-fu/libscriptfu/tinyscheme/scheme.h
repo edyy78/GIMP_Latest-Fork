@@ -125,6 +125,9 @@ typedef struct num {
 
 #if !STANDALONE
 
+/* Functions to capture and retrieve output i.e. writes using display.
+ * SF Tools: Console, Eval, Server uses.
+ */
 typedef enum { TS_OUTPUT_NORMAL, TS_OUTPUT_ERROR } TsOutputType;
 
 typedef void (* ts_output_func)       (TsOutputType    type,
@@ -137,6 +140,10 @@ SCHEME_EXPORT void ts_register_output_func (ts_output_func  func,
 SCHEME_EXPORT void ts_output_string        (TsOutputType    type,
                                             const char     *string,
                                             int             len);
+
+/* Functions to retrieve error messages. */
+SCHEME_EXPORT const gchar *ts_get_error_string (scheme *sc);
+
 #endif
 
 SCHEME_EXPORT scheme *scheme_init_new(void);
@@ -145,9 +152,7 @@ SCHEME_EXPORT int scheme_init(scheme *sc);
 SCHEME_EXPORT int scheme_init_custom_alloc(scheme *sc, func_alloc, func_dealloc);
 SCHEME_EXPORT void scheme_deinit(scheme *sc);
 SCHEME_EXPORT void scheme_set_input_port_file(scheme *sc, FILE *fin);
-void scheme_set_input_port_string(scheme *sc, char *start, char *past_the_end);
 SCHEME_EXPORT void scheme_set_output_port_file(scheme *sc, FILE *fin);
-void scheme_set_output_port_string(scheme *sc, char *start, char *past_the_end);
 SCHEME_EXPORT void scheme_load_file(scheme *sc, FILE *fin);
 SCHEME_EXPORT void scheme_load_named_file(scheme *sc, FILE *fin, const char *filename);
 SCHEME_EXPORT void scheme_load_string(scheme *sc, const char *cmd);
@@ -170,6 +175,7 @@ pointer mk_empty_string(scheme *sc, int len, gunichar fill);
 pointer mk_byte (scheme *sc, guint8 b);
 pointer mk_character(scheme *sc, gunichar c);
 pointer mk_foreign_func(scheme *sc, foreign_func f);
+pointer mk_port (scheme *sc, void *port);
 void    putcharacter(scheme *sc, gunichar c);
 void    putstr(scheme *sc, const char *s);
 int list_length(scheme *sc, pointer a);
@@ -194,6 +200,7 @@ struct scheme_interface {
   pointer (*mk_vector)(scheme *sc, int len);
   pointer (*mk_foreign_func)(scheme *sc, foreign_func f);
   pointer (*mk_closure)(scheme *sc, pointer c, pointer e);
+  pointer (*mk_arg_name)(scheme *sc, const char *str);
   void (*putstr)(scheme *sc, const char *s);
   void (*putcharacter)(scheme *sc, gunichar c);
 
@@ -243,6 +250,8 @@ struct scheme_interface {
   int (*is_environment)(pointer p);
   int (*is_immutable)(pointer p);
   void (*setimmutable)(pointer p);
+
+  int (*is_arg_name)(pointer p);
 
   void (*load_file)(scheme *sc, FILE *fin);
   void (*load_string)(scheme *sc, const char *input);

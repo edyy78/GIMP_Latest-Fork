@@ -50,7 +50,7 @@
 
 
 #define LOAD_PROC      "file-sunras-load"
-#define SAVE_PROC      "file-sunras-save"
+#define EXPORT_PROC    "file-sunras-export"
 #define PLUG_IN_BINARY "file-sunras"
 #define PLUG_IN_ROLE   "gimp-file-sunras"
 
@@ -117,19 +117,18 @@ static GimpValueArray * sunras_load             (GimpProcedure         *procedur
                                                  GimpMetadataLoadFlags *flags,
                                                  GimpProcedureConfig   *config,
                                                  gpointer               run_data);
-static GimpValueArray * sunras_save             (GimpProcedure         *procedure,
+static GimpValueArray * sunras_export           (GimpProcedure         *procedure,
                                                  GimpRunMode            run_mode,
                                                  GimpImage             *image,
-                                                 gint                   n_drawables,
-                                                 GimpDrawable         **drawables,
                                                  GFile                 *file,
+                                                 GimpExportOptions     *options,
                                                  GimpMetadata          *metadata,
                                                  GimpProcedureConfig   *config,
                                                  gpointer               run_data);
 
 static GimpImage      * load_image              (GFile                 *file,
                                                  GError               **error);
-static gboolean         save_image              (GFile                 *file,
+static gboolean         export_image            (GFile                 *file,
                                                  GimpImage             *image,
                                                  GimpDrawable          *drawable,
                                                  GObject               *config,
@@ -257,7 +256,7 @@ sunras_query_procedures (GimpPlugIn *plug_in)
   GList *list = NULL;
 
   list = g_list_append (list, g_strdup (LOAD_PROC));
-  list = g_list_append (list, g_strdup (SAVE_PROC));
+  list = g_list_append (list, g_strdup (EXPORT_PROC));
 
   return list;
 }
@@ -277,8 +276,8 @@ sunras_create_procedure (GimpPlugIn  *plug_in,
       gimp_procedure_set_menu_label (procedure, _("SUN Rasterfile image"));
 
       gimp_procedure_set_documentation (procedure,
-                                        "Load file of the SunRaster file format",
-                                        "Load file of the SunRaster file format",
+                                        _("Load file of the SunRaster file format"),
+                                        _("Load file of the SunRaster file format"),
                                         name);
       gimp_procedure_set_attribution (procedure,
                                       "Peter Kirchgessner",
@@ -292,22 +291,22 @@ sunras_create_procedure (GimpPlugIn  *plug_in,
       gimp_file_procedure_set_magics (GIMP_FILE_PROCEDURE (procedure),
                                       "0,long,0x59a66a95");
     }
-  else if (! strcmp (name, SAVE_PROC))
+  else if (! strcmp (name, EXPORT_PROC))
     {
-      procedure = gimp_save_procedure_new (plug_in, name,
-                                           GIMP_PDB_PROC_TYPE_PLUGIN,
-                                           FALSE, sunras_save, NULL, NULL);
+      procedure = gimp_export_procedure_new (plug_in, name,
+                                             GIMP_PDB_PROC_TYPE_PLUGIN,
+                                             FALSE, sunras_export, NULL, NULL);
 
       gimp_procedure_set_image_types (procedure, "RGB, GRAY, INDEXED");
 
       gimp_procedure_set_menu_label (procedure, _("SUN Rasterfile image"));
 
       gimp_procedure_set_documentation (procedure,
-                                        "Export file in the SunRaster file "
-                                        "format",
-                                        "SUNRAS exporting handles all image "
-                                        "types except those with alpha "
-                                        "channels.",
+                                        _("Export file in the SunRaster file "
+                                          "format"),
+                                        _("SUNRAS exporting handles all image "
+                                          "types except those with alpha "
+                                          "channels."),
                                         name);
       gimp_procedure_set_attribution (procedure,
                                       "Peter Kirchgessner",
@@ -321,11 +320,20 @@ sunras_create_procedure (GimpPlugIn  *plug_in,
       gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
                                           "im1,im8,im24,im32,rs,ras,sun");
 
-      GIMP_PROC_ARG_INT (procedure, "rle",
-                         _("Data Formatting"),
-                         _("Use standard (0) or Run-Length Encoded (1) output"),
-                         0, 1, 1,
-                         G_PARAM_READWRITE);
+      gimp_export_procedure_set_capabilities (GIMP_EXPORT_PROCEDURE (procedure),
+                                              GIMP_EXPORT_CAN_HANDLE_RGB  |
+                                              GIMP_EXPORT_CAN_HANDLE_GRAY |
+                                              GIMP_EXPORT_CAN_HANDLE_INDEXED,
+                                              NULL, NULL, NULL);
+
+      gimp_procedure_add_choice_argument (procedure, "rle",
+                                          _("_Data Formatting"),
+                                          _("Use standard or Run-Length Encoded output"),
+                                           gimp_choice_new_with_values ("standard", 0, _("Standard"),           NULL,
+                                                                        "rle",      1, _("Run-Length Encoding"), NULL,
+                                                                        NULL),
+                                          "rle",
+                                          G_PARAM_READWRITE);
     }
 
   return procedure;
@@ -363,77 +371,47 @@ sunras_load (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
-sunras_save (GimpProcedure        *procedure,
-             GimpRunMode           run_mode,
-             GimpImage            *image,
-             gint                  n_drawables,
-             GimpDrawable        **drawables,
-             GFile                *file,
-             GimpMetadata         *metadata,
-             GimpProcedureConfig  *config,
-             gpointer              run_data)
+sunras_export (GimpProcedure        *procedure,
+               GimpRunMode           run_mode,
+               GimpImage            *image,
+               GFile                *file,
+               GimpExportOptions    *options,
+               GimpMetadata         *metadata,
+               GimpProcedureConfig  *config,
+               gpointer              run_data)
 {
   GimpPDBStatusType  status = GIMP_PDB_SUCCESS;
-  GimpExportReturn   export = GIMP_EXPORT_CANCEL;
+  GimpExportReturn   export = GIMP_EXPORT_IGNORE;
+  GList             *drawables;
   GError            *error  = NULL;
 
   gegl_init (NULL, NULL);
 
-  switch (run_mode)
-    {
-    case GIMP_RUN_INTERACTIVE:
-    case GIMP_RUN_WITH_LAST_VALS:
-      gimp_ui_init (PLUG_IN_BINARY);
-
-      export = gimp_export_image (&image, &n_drawables, &drawables, "SUNRAS",
-                                  GIMP_EXPORT_CAN_HANDLE_RGB  |
-                                  GIMP_EXPORT_CAN_HANDLE_GRAY |
-                                  GIMP_EXPORT_CAN_HANDLE_INDEXED);
-
-      if (export == GIMP_EXPORT_CANCEL)
-        return gimp_procedure_new_return_values (procedure,
-                                                 GIMP_PDB_CANCEL,
-                                                 NULL);
-      break;
-
-    default:
-      break;
-    }
-
-  if (n_drawables != 1)
-    {
-      /* PNG images have no layer concept. Export image should have a
-       * single drawable selected.
-       */
-      g_set_error (&error, G_FILE_ERROR, 0,
-                   _("SUNRAS format does not support multiple layers."));
-
-      return gimp_procedure_new_return_values (procedure,
-                                               GIMP_PDB_CALLING_ERROR,
-                                               error);
-    }
-
   if (run_mode == GIMP_RUN_INTERACTIVE)
     {
+      gimp_ui_init (PLUG_IN_BINARY);
+
       if (! save_dialog (image, procedure, G_OBJECT (config)))
         status = GIMP_PDB_CANCEL;
     }
 
+  export = gimp_export_options_get_image (options, &image);
+  drawables = gimp_image_list_layers (image);
+
   if (status == GIMP_PDB_SUCCESS)
     {
-      if (! save_image (file, image, drawables[0], G_OBJECT (config),
-                        &error))
+      if (! export_image (file, image, drawables->data, G_OBJECT (config),
+                          &error))
         {
           status = GIMP_PDB_EXECUTION_ERROR;
         }
     }
 
-  if (export == GIMP_EXPORT_EXPORT)
-    {
-      gimp_image_delete (image);
-      g_free (drawables);
-    }
 
+  if (export == GIMP_EXPORT_EXPORT)
+    gimp_image_delete (image);
+
+  g_list_free (drawables);
   return gimp_procedure_new_return_values (procedure, status, error);
 }
 
@@ -588,11 +566,11 @@ load_image (GFile   *file,
 }
 
 static gboolean
-save_image (GFile         *file,
-            GimpImage     *image,
-            GimpDrawable  *drawable,
-            GObject       *config,
-            GError       **error)
+export_image (GFile         *file,
+              GimpImage     *image,
+              GimpDrawable  *drawable,
+              GObject       *config,
+              GError       **error)
 {
   FILE          *ofp;
   GimpImageType  drawable_type;
@@ -601,9 +579,8 @@ save_image (GFile         *file,
 
   drawable_type = gimp_drawable_type (drawable);
 
-  g_object_get (config,
-                "rle", &rle,
-                NULL);
+  rle = gimp_procedure_config_get_choice_id (GIMP_PROCEDURE_CONFIG (config),
+                                             "rle");
 
   /*  Make sure we're not exporting an image with an alpha channel  */
   if (gimp_drawable_has_alpha (drawable))
@@ -1045,7 +1022,7 @@ set_color_table (GimpImage       *image,
             ColorMap[j*3], ColorMap[j*3+1], ColorMap[j*3+2]);
 #endif
 
-  gimp_image_set_colormap (image, ColorMap, ncols);
+  gimp_palette_set_colormap (gimp_image_get_palette (image), babl_format ("R'G'B' u8"), ColorMap, ncols * 3);
 }
 
 
@@ -1528,7 +1505,7 @@ save_index (FILE         *ofp,
     }
   else
     {
-      cmap = gimp_image_get_colormap (image, NULL, &ncols);
+      cmap = gimp_palette_get_colormap (gimp_image_get_palette (image), babl_format ("R'G'B' u8"), &ncols, NULL);
 
       for (j = 0; j < ncols; j++)
         {
@@ -1783,19 +1760,15 @@ save_dialog (GimpImage     *image,
              GimpProcedure *procedure,
              GObject       *config)
 {
-  GtkWidget    *dialog;
-  GtkListStore *store;
-  gboolean      run;
+  GtkWidget *dialog;
+  gboolean   run;
 
-  dialog = gimp_save_procedure_dialog_new (GIMP_SAVE_PROCEDURE (procedure),
-                                           GIMP_PROCEDURE_CONFIG (config),
-                                           image);
+  dialog = gimp_export_procedure_dialog_new (GIMP_EXPORT_PROCEDURE (procedure),
+                                             GIMP_PROCEDURE_CONFIG (config),
+                                             image);
 
-  store = gimp_int_store_new (_("S_tandard"),           FALSE,
-                              _("R_un-Length Encoded"), TRUE,
-                              NULL);
-  gimp_procedure_dialog_get_int_radio (GIMP_PROCEDURE_DIALOG (dialog),
-                                       "rle", GIMP_INT_STORE (store));
+  gimp_procedure_dialog_get_widget (GIMP_PROCEDURE_DIALOG (dialog),
+                                    "rle", GIMP_TYPE_INT_RADIO_FRAME);
 
   gimp_procedure_dialog_fill (GIMP_PROCEDURE_DIALOG (dialog),
                               NULL);

@@ -144,7 +144,7 @@ register_brush_select_procs (GimpPDB *pdb)
   /*
    * gimp-brushes-popup
    */
-  procedure = gimp_procedure_new (brushes_popup_invoker);
+  procedure = gimp_procedure_new (brushes_popup_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-brushes-popup");
   gimp_procedure_set_static_help (procedure,
@@ -173,6 +173,8 @@ register_brush_select_procs (GimpPDB *pdb)
                                gimp_param_spec_brush ("initial-brush",
                                                       "initial brush",
                                                       "The brush to set as the initial choice",
+                                                      TRUE,
+                                                      NULL,
                                                       FALSE,
                                                       GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
@@ -187,7 +189,7 @@ register_brush_select_procs (GimpPDB *pdb)
   /*
    * gimp-brushes-close-popup
    */
-  procedure = gimp_procedure_new (brushes_close_popup_invoker);
+  procedure = gimp_procedure_new (brushes_close_popup_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-brushes-close-popup");
   gimp_procedure_set_static_help (procedure,
@@ -211,7 +213,7 @@ register_brush_select_procs (GimpPDB *pdb)
   /*
    * gimp-brushes-set-popup
    */
-  procedure = gimp_procedure_new (brushes_set_popup_invoker);
+  procedure = gimp_procedure_new (brushes_set_popup_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-brushes-set-popup");
   gimp_procedure_set_static_help (procedure,
@@ -233,6 +235,8 @@ register_brush_select_procs (GimpPDB *pdb)
                                gimp_param_spec_brush ("brush",
                                                       "brush",
                                                       "The brush to set as selected",
+                                                      FALSE,
+                                                      NULL,
                                                       FALSE,
                                                       GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);

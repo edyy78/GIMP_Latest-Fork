@@ -25,6 +25,18 @@
  *  app/plug-in/gimpgpparams.c
  */
 
+static GimpImage   * get_image_by_id    (gpointer gimp,
+                                         gint     id);
+static GimpItem    * get_item_by_id     (gpointer gimp,
+                                         gint     id);
+static GimpDisplay * get_display_by_id  (gpointer gimp,
+                                         gint     id);
+static GObject     * get_resource_by_id (gint     id);
+static gint          get_resource_id    (GObject *resource);
+static GimpUnit    * get_unit_by_id     (gpointer gimp,
+                                         gint     id);
+
+
 GParamSpec *
 _gimp_gp_param_def_to_param_spec (const GPParamDef *param_def)
 {
@@ -41,11 +53,20 @@ _gimp_gp_param_def_to_param_spec (const GPParamDef *param_def)
       if (! strcmp (param_def->type_name, "GimpParamInt32Array"))
         return gimp_param_spec_int32_array (name, nick, blurb, flags);
 
-      if (! strcmp (param_def->type_name, "GimpParamFloatArray"))
-        return gimp_param_spec_float_array (name, nick, blurb, flags);
+      if (! strcmp (param_def->type_name, "GimpParamDoubleArray"))
+        return gimp_param_spec_double_array (name, nick, blurb, flags);
 
-      if (! strcmp (param_def->type_name, "GimpParamRGBArray"))
-        return gimp_param_spec_rgb_array (name, nick, blurb, flags);
+      if (! strcmp (param_def->type_name, "GimpParamValueArray"))
+        /* FIXME: ideally we should add a GP_PARAM_DEF_TYPE_VALUE_ARRAY
+         * def type which should recursively contain another
+         * GPParamDefType so that we'd recreate the spec as it was
+         * initially created (limiting the array to specific types,
+         * possibly further limited).
+         * For now, we just create a value array which accepts
+         * everything.
+         */
+        return gimp_param_spec_value_array (name, nick, blurb,
+                                            NULL, flags);
 
       if (! strcmp (param_def->type_name, "GimpParamParasite"))
         return gimp_param_spec_parasite (name, nick, blurb, flags);
@@ -60,11 +81,6 @@ _gimp_gp_param_def_to_param_spec (const GPParamDef *param_def)
         return g_param_spec_object (name, nick, blurb, G_TYPE_FILE, flags);
 
       if (! strcmp (param_def->type_name, "GParamBoxed") &&
-          ! strcmp (param_def->value_type_name, "GimpRGB"))
-        /* Unfortunately this type loses default and alpha info. */
-        return gimp_param_spec_rgb (name, nick, blurb, TRUE, NULL, flags);
-
-      if (! strcmp (param_def->type_name, "GParamBoxed") &&
           ! strcmp (param_def->value_type_name, "GStrv"))
         return g_param_spec_boxed (name, nick, blurb, G_TYPE_STRV, flags);
 
@@ -76,10 +92,26 @@ _gimp_gp_param_def_to_param_spec (const GPParamDef *param_def)
           ! strcmp (param_def->value_type_name, "GimpColorArray"))
         return g_param_spec_boxed (name, nick, blurb, GIMP_TYPE_COLOR_ARRAY, flags);
 
+      if (! strcmp (param_def->type_name, "GParamBoxed") &&
+          ! strcmp (param_def->value_type_name, "GimpBablFormat"))
+        return g_param_spec_boxed (name, nick, blurb, GIMP_TYPE_BABL_FORMAT, flags);
+
       break;
 
     case GP_PARAM_DEF_TYPE_CHOICE:
-      if (! strcmp (param_def->type_name, "GimpParamChoice"))
+      if (! strcmp (param_def->type_name, "GimpParamChoice") ||
+#ifdef LIBGIMP_COMPILATION
+          /* Special case for GeglParamEnum which are passed from core
+           * as a GimpChoice because the internal enum type could not
+           * always be reconstructed (XXX some could, the ones created
+           * as global GEGL enum types, but I could not find how to
+           * differentiate them on the other side of the wire).
+           */
+          ! strcmp (param_def->type_name, "GeglParamEnum")
+#else
+          FALSE
+#endif
+          )
         {
           return gimp_param_spec_choice (name, nick, blurb,
                                          g_object_ref (param_def->meta.m_choice.choice),
@@ -97,7 +129,13 @@ _gimp_gp_param_def_to_param_spec (const GPParamDef *param_def)
                                  param_def->meta.m_int.default_val,
                                  flags);
 
-      if (! strcmp (param_def->type_name, "GParamUInt"))
+      if (! strcmp (param_def->type_name, "GParamUInt") ||
+#ifdef LIBGIMP_COMPILATION
+          ! strcmp (param_def->type_name, "GeglParamSeed")
+#else
+          FALSE
+#endif
+         )
         return g_param_spec_uint (name, nick, blurb,
                                   param_def->meta.m_int.min_val,
                                   param_def->meta.m_int.max_val,
@@ -117,7 +155,7 @@ _gimp_gp_param_def_to_param_spec (const GPParamDef *param_def)
         return gimp_param_spec_unit (name, nick, blurb,
                                      param_def->meta.m_unit.allow_pixels,
                                      param_def->meta.m_unit.allow_percent,
-                                     param_def->meta.m_unit.default_val,
+                                     gimp_unit_get_by_id (param_def->meta.m_unit.default_val),
                                      flags);
       break;
 
@@ -143,12 +181,12 @@ _gimp_gp_param_def_to_param_spec (const GPParamDef *param_def)
                                      flags);
       break;
 
-    case GP_PARAM_DEF_TYPE_FLOAT:
+    case GP_PARAM_DEF_TYPE_DOUBLE:
       if (! strcmp (param_def->type_name, "GParamDouble"))
         return g_param_spec_double (name, nick, blurb,
-                                    param_def->meta.m_float.min_val,
-                                    param_def->meta.m_float.max_val,
-                                    param_def->meta.m_float.default_val,
+                                    param_def->meta.m_double.min_val,
+                                    param_def->meta.m_double.max_val,
+                                    param_def->meta.m_double.default_val,
                                     flags);
       break;
 
@@ -159,16 +197,9 @@ _gimp_gp_param_def_to_param_spec (const GPParamDef *param_def)
                                     flags);
       break;
 
-    case GP_PARAM_DEF_TYPE_COLOR:
-      if (! strcmp (param_def->type_name, "GimpParamRGB"))
-        return gimp_param_spec_rgb (name, nick, blurb,
-                                    param_def->meta.m_color.has_alpha,
-                                    &param_def->meta.m_color.default_val,
-                                    flags);
-      break;
-
     case GP_PARAM_DEF_TYPE_GEGL_COLOR:
-      if (! strcmp (param_def->type_name, "GeglParamColor"))
+      if (! strcmp (param_def->type_name, "GeglParamColor") ||
+          ! strcmp (param_def->type_name, "GimpParamColor"))
         {
           GeglColor *default_color = NULL;
 
@@ -181,12 +212,12 @@ _gimp_gp_param_def_to_param_spec (const GPParamDef *param_def)
 
               default_color = gegl_color_new ("black");
 
-              if (default_val->profile_data)
+              if (default_val->format.profile_data)
                 {
                   GimpColorProfile *profile;
 
-                  profile = gimp_color_profile_new_from_icc_profile (default_val->profile_data,
-                                                                     default_val->profile_size,
+                  profile = gimp_color_profile_new_from_icc_profile (default_val->format.profile_data,
+                                                                     default_val->format.profile_size,
                                                                      NULL);
                   if (profile)
                     {
@@ -206,17 +237,19 @@ _gimp_gp_param_def_to_param_spec (const GPParamDef *param_def)
                     }
                 }
 
-              format = babl_format_with_space (default_val->encoding, space);
+              format = babl_format_with_space (default_val->format.encoding, space);
               bpp    = babl_format_get_bytes_per_pixel (format);
 
               if (bpp != default_val->size)
                 g_printerr ("%s: encoding \"%s\" expects %d bpp but data size is %d bpp.\n",
-                            G_STRFUNC, default_val->encoding, bpp, default_val->size);
+                            G_STRFUNC, default_val->format.encoding, bpp, default_val->size);
               else
                 gegl_color_set_pixel (default_color, format, default_val->data);
             }
 
-          return gegl_param_spec_color (name, nick, blurb, default_color, flags);
+          return gimp_param_spec_color (name, nick, blurb,
+                                        param_def->meta.m_gegl_color.has_alpha,
+                                        default_color, flags);
         }
       break;
 
@@ -251,6 +284,11 @@ _gimp_gp_param_def_to_param_spec (const GPParamDef *param_def)
                                            param_def->meta.m_id.none_ok,
                                            flags);
 
+      if (! strcmp (param_def->type_name, "GimpParamGroupLayer"))
+        return gimp_param_spec_group_layer (name, nick, blurb,
+                                           param_def->meta.m_id.none_ok,
+                                           flags);
+
       if (! strcmp (param_def->type_name, "GimpParamChannel"))
         return gimp_param_spec_channel (name, nick, blurb,
                                         param_def->meta.m_id.none_ok,
@@ -266,41 +304,60 @@ _gimp_gp_param_def_to_param_spec (const GPParamDef *param_def)
                                           param_def->meta.m_id.none_ok,
                                           flags);
 
-      if (! strcmp (param_def->type_name, "GimpParamVectors"))
-        return gimp_param_spec_vectors (name, nick, blurb,
-                                        param_def->meta.m_id.none_ok,
-                                        flags);
+      if (! strcmp (param_def->type_name, "GimpParamPath"))
+        return gimp_param_spec_path (name, nick, blurb,
+                                     param_def->meta.m_id.none_ok,
+                                     flags);
 
-      if (! strcmp (param_def->type_name, "GimpParamResource"))
-        return gimp_param_spec_resource (name, nick, blurb,
-                                         param_def->meta.m_id.none_ok, flags);
-
-      if (! strcmp (param_def->type_name, "GimpParamBrush"))
-        return gimp_param_spec_brush (name, nick, blurb,
-                                      param_def->meta.m_id.none_ok, flags);
-
-      if (! strcmp (param_def->type_name, "GimpParamFont"))
-        return gimp_param_spec_font (name, nick, blurb,
-                                     param_def->meta.m_id.none_ok, flags);
-
-      if (! strcmp (param_def->type_name, "GimpParamGradient"))
-        return gimp_param_spec_gradient (name, nick, blurb,
-                                         param_def->meta.m_id.none_ok, flags);
-
-      if (! strcmp (param_def->type_name, "GimpParamPalette"))
-        return gimp_param_spec_palette (name, nick, blurb,
-                                        param_def->meta.m_id.none_ok, flags);
-
-      if (! strcmp (param_def->type_name, "GimpParamPattern"))
-        return gimp_param_spec_pattern (name, nick, blurb,
-                                        param_def->meta.m_id.none_ok, flags);
+      if (! strcmp (param_def->type_name, "GimpParamDrawableFilter"))
+        return gimp_param_spec_drawable_filter (name, nick, blurb,
+                                                param_def->meta.m_id.none_ok,
+                                                flags);
       break;
 
     case GP_PARAM_DEF_TYPE_ID_ARRAY:
-      if (! strcmp (param_def->type_name, "GimpParamObjectArray"))
-        return gimp_param_spec_object_array (name, nick, blurb,
-                                             g_type_from_name (param_def->meta.m_id_array.type_name),
-                                             flags);
+      if (! strcmp (param_def->type_name, "GimpParamCoreObjectArray"))
+        return gimp_param_spec_core_object_array (name, nick, blurb,
+                                                  g_type_from_name (param_def->meta.m_id_array.type_name),
+                                                  flags);
+      break;
+
+    case GP_PARAM_DEF_TYPE_EXPORT_OPTIONS:
+      if (! strcmp (param_def->type_name, "GimpParamExportOptions"))
+        {
+          return gimp_param_spec_export_options (name, nick, blurb, flags);
+        }
+      break;
+
+    case GP_PARAM_DEF_TYPE_RESOURCE:
+      if (g_type_from_name (param_def->type_name) != 0 &&
+          g_type_is_a (g_type_from_name (param_def->type_name), GIMP_TYPE_PARAM_RESOURCE))
+        return gimp_param_spec_resource (name, nick, blurb, g_type_from_name (param_def->type_name),
+                                         param_def->meta.m_resource.none_ok,
+                                         param_def->meta.m_resource.default_to_context ?
+                                         NULL : GIMP_RESOURCE (get_resource_by_id (param_def->meta.m_resource.default_resource_id)),
+                                         param_def->meta.m_resource.default_to_context,
+                                         flags);
+
+      break;
+
+    case GP_PARAM_DEF_TYPE_FILE:
+      if (! strcmp (param_def->type_name, "GimpParamFile"))
+        {
+          GFile      *file = NULL;
+          GParamSpec *pspec;
+
+          if (param_def->meta.m_file.default_uri &&
+              strlen (param_def->meta.m_file.default_uri) > 0)
+            file  = g_file_new_for_uri (param_def->meta.m_file.default_uri);
+
+          pspec = gimp_param_spec_file (name, nick, blurb,
+                                        (GimpFileChooserAction) param_def->meta.m_file.action,
+                                        param_def->meta.m_file.none_ok,
+                                        file, flags);
+          g_clear_object (&file);
+          return pspec;
+        }
       break;
     }
 
@@ -325,9 +382,18 @@ _gimp_param_spec_to_gp_param_def (GParamSpec *pspec,
   param_def->blurb           = (gchar *) g_param_spec_get_blurb (pspec);
   param_def->flags           = pspec->flags;
 
-  if (pspec_type == G_TYPE_PARAM_INT)
+  if (pspec_type == G_TYPE_PARAM_INT ||
+#ifdef LIBGIMP_COMPILATION
+      FALSE
+#else
+      pspec_type == GEGL_TYPE_PARAM_INT
+#endif
+      )
     {
       GParamSpecInt *ispec = G_PARAM_SPEC_INT (pspec);
+
+      if (! strcmp (param_def->type_name, "GeglParamInt"))
+        param_def->type_name = "GParamInt";
 
       param_def->param_def_type = GP_PARAM_DEF_TYPE_INT;
 
@@ -335,7 +401,13 @@ _gimp_param_spec_to_gp_param_def (GParamSpec *pspec,
       param_def->meta.m_int.max_val     = ispec->maximum;
       param_def->meta.m_int.default_val = ispec->default_value;
     }
-  else if (pspec_type == G_TYPE_PARAM_UINT)
+  else if (pspec_type == G_TYPE_PARAM_UINT ||
+#ifdef LIBGIMP_COMPILATION
+           FALSE
+#else
+           pspec_type == GEGL_TYPE_PARAM_SEED
+#endif
+           )
     {
       GParamSpecUInt *uspec = G_PARAM_SPEC_UINT (pspec);
 
@@ -357,15 +429,70 @@ _gimp_param_spec_to_gp_param_def (GParamSpec *pspec,
     }
   else if (pspec_type == GIMP_TYPE_PARAM_UNIT)
     {
-      GParamSpecInt     *ispec = G_PARAM_SPEC_INT (pspec);
-      GimpParamSpecUnit *uspec = GIMP_PARAM_SPEC_UNIT (pspec);
+      GObject *default_value;
+
+      default_value = gimp_param_spec_object_get_default (pspec);
 
       param_def->param_def_type = GP_PARAM_DEF_TYPE_UNIT;
 
-      param_def->meta.m_unit.allow_pixels  = (ispec->minimum < GIMP_UNIT_INCH);
-      param_def->meta.m_unit.allow_percent = uspec->allow_percent;
-      param_def->meta.m_unit.default_val   = ispec->default_value;
+      param_def->meta.m_unit.allow_pixels  = gimp_param_spec_unit_pixel_allowed (pspec);
+      param_def->meta.m_unit.allow_percent = gimp_param_spec_unit_percent_allowed (pspec);
+      param_def->meta.m_unit.default_val   = gimp_unit_get_id (GIMP_UNIT (default_value));
     }
+#ifndef LIBGIMP_COMPILATION
+  /* This trick is only for core side when it needs to send the param
+   * spec of an enum argument of a GEGL Operation, because for all enum
+   * types created with enum_start|end macros in GEGL code, we are not
+   * able to recreate the enum type on the other side of the wire.
+   * Callers for instance will typically use int values instead.
+   * What we do instead is to reuse GimpChoice (which was exactly
+   * created for such internal-only enums, though it was initially for
+   * plug-ins only. In particular it means the value nicks will be used
+   * to set such argument (as a string property).
+   */
+  else if (GEGL_IS_PARAM_SPEC_ENUM (pspec))
+    {
+      GParamSpecEnum    *espec  = G_PARAM_SPEC_ENUM (pspec);
+      GeglParamSpecEnum *gespec = GEGL_PARAM_SPEC_ENUM (pspec);
+      GimpChoice        *choice = gimp_choice_new ();
+      GEnumClass        *enum_class;
+      GEnumValue        *value;
+
+      param_def->param_def_type            = GP_PARAM_DEF_TYPE_CHOICE;
+      param_def->meta.m_choice.default_val = NULL;
+
+      enum_class = g_type_class_ref (value_type);
+      for (value = enum_class->values;
+           value->value_name;
+           value++)
+        {
+          GSList *iter;
+
+          if (value->value < enum_class->minimum || value->value > enum_class->maximum)
+            continue;
+
+          for (iter = gespec->excluded_values; iter; iter = iter->next)
+            if (GPOINTER_TO_INT (iter->data) == value->value)
+              break;
+
+          if (iter != NULL)
+            /* Excluded value. */
+            continue;
+
+          if (espec->default_value == value->value)
+            param_def->meta.m_choice.default_val = (gchar *) value->value_nick;
+          else if (param_def->meta.m_choice.default_val == NULL)
+            /* Make double-sure defaults is set. */
+            param_def->meta.m_choice.default_val = (gchar *) value->value_nick;
+
+          gimp_choice_add (choice, value->value_nick, value->value, value->value_name, NULL);
+        }
+
+      param_def->meta.m_choice.choice = choice;
+
+      g_type_class_unref (enum_class);
+    }
+#endif
   else if (G_IS_PARAM_SPEC_ENUM (pspec))
     {
       GParamSpecEnum *espec = G_PARAM_SPEC_ENUM (pspec);
@@ -373,15 +500,6 @@ _gimp_param_spec_to_gp_param_def (GParamSpec *pspec,
       param_def->param_def_type = GP_PARAM_DEF_TYPE_ENUM;
 
       param_def->meta.m_enum.default_val = espec->default_value;
-    }
-  else if (pspec_type == GIMP_TYPE_PARAM_CHOICE)
-    {
-      GimpParamSpecChoice *cspec = GIMP_PARAM_SPEC_CHOICE (pspec);
-
-      param_def->param_def_type = GP_PARAM_DEF_TYPE_CHOICE;
-
-      param_def->meta.m_choice.default_val = cspec->default_value;
-      param_def->meta.m_choice.choice      = cspec->choice;
     }
   else if (pspec_type == G_TYPE_PARAM_BOOLEAN)
     {
@@ -391,47 +509,86 @@ _gimp_param_spec_to_gp_param_def (GParamSpec *pspec,
 
       param_def->meta.m_boolean.default_val = bspec->default_value;
     }
-  else if (pspec_type == G_TYPE_PARAM_DOUBLE)
+  else if (pspec_type == G_TYPE_PARAM_DOUBLE ||
+#ifdef LIBGIMP_COMPILATION
+      FALSE
+#else
+      pspec_type == GEGL_TYPE_PARAM_DOUBLE
+#endif
+      )
     {
       GParamSpecDouble *dspec = G_PARAM_SPEC_DOUBLE (pspec);
 
-      param_def->param_def_type = GP_PARAM_DEF_TYPE_FLOAT;
+      /* We only support passing various GEGL param types from app to
+       * libgimp so far. It's used to send GEGL operations' arguments
+       * specifications.
+       * We transform them into simpler GLib param types. Additional
+       * features of GEGL params are mostly for UI usage.
+       */
+      if (! strcmp (param_def->type_name, "GeglParamDouble"))
+        param_def->type_name = "GParamDouble";
 
-      param_def->meta.m_float.min_val     = dspec->minimum;
-      param_def->meta.m_float.max_val     = dspec->maximum;
-      param_def->meta.m_float.default_val = dspec->default_value;
+      param_def->param_def_type = GP_PARAM_DEF_TYPE_DOUBLE;
+
+      param_def->meta.m_double.min_val     = dspec->minimum;
+      param_def->meta.m_double.max_val     = dspec->maximum;
+      param_def->meta.m_double.default_val = dspec->default_value;
     }
-  else if (G_IS_PARAM_SPEC_STRING (pspec))
+  /* Must be before G_IS_PARAM_SPEC_STRING() because it's a parent. */
+  else if (pspec_type == GIMP_TYPE_PARAM_CHOICE)
+    {
+      GParamSpecString *sspec = G_PARAM_SPEC_STRING (pspec);
+
+      param_def->param_def_type = GP_PARAM_DEF_TYPE_CHOICE;
+
+      param_def->meta.m_choice.default_val = sspec->default_value;
+      param_def->meta.m_choice.choice      = gimp_param_spec_choice_get_choice (pspec);
+    }
+  else if (G_IS_PARAM_SPEC_STRING (pspec) &&
+#ifdef LIBGIMP_COMPILATION
+           pspec_type != GEGL_TYPE_PARAM_STRING
+#else
+           TRUE
+#endif
+          )
     {
       GParamSpecString *gsspec = G_PARAM_SPEC_STRING (pspec);
 
-      if (! strcmp (param_def->type_name, "GimpParamString"))
+      if (! strcmp (param_def->type_name, "GimpParamString") ||
+          ! strcmp (param_def->type_name, "GeglParamString"))
         param_def->type_name = "GParamString";
 
       param_def->param_def_type = GP_PARAM_DEF_TYPE_STRING;
 
       param_def->meta.m_string.default_val = gsspec->default_value;
     }
-  else if (pspec_type == GIMP_TYPE_PARAM_RGB)
-    {
-      param_def->param_def_type = GP_PARAM_DEF_TYPE_COLOR;
-
-      param_def->meta.m_color.has_alpha =
-        gimp_param_spec_rgb_has_alpha (pspec);
-
-      gimp_param_spec_rgb_get_default (pspec,
-                                       &param_def->meta.m_color.default_val);
-    }
-  else if (GEGL_IS_PARAM_SPEC_COLOR (pspec))
+  else if (GEGL_IS_PARAM_SPEC_COLOR (pspec) ||
+           GIMP_IS_PARAM_SPEC_COLOR (pspec) ||
+           (pspec_type == G_TYPE_PARAM_OBJECT && value_type == GEGL_TYPE_COLOR))
     {
       GPParamColor *default_val = NULL;
       GeglColor    *default_color;
 
-      param_def->param_def_type         = GP_PARAM_DEF_TYPE_GEGL_COLOR;
-      /* TODO: no no-alpha support for the time being. */
-      param_def->meta.m_color.has_alpha = TRUE;
+      param_def->param_def_type              = GP_PARAM_DEF_TYPE_GEGL_COLOR;
+      param_def->meta.m_gegl_color.has_alpha = TRUE;
 
-      default_color = gegl_param_spec_color_get_default (pspec);
+      if (GEGL_IS_PARAM_SPEC_COLOR (pspec))
+        {
+          default_color = gegl_param_spec_color_get_default (pspec);
+        }
+      else if (GIMP_IS_PARAM_SPEC_COLOR (pspec))
+        {
+          default_color = GEGL_COLOR (gimp_param_spec_object_get_default (pspec));
+          param_def->meta.m_gegl_color.has_alpha = gimp_param_spec_color_has_alpha (pspec);
+        }
+      else
+        {
+          const GValue *value = g_param_spec_get_default_value (pspec);
+
+          default_color = g_value_get_object (value);
+          param_def->type_name = "GeglParamColor";
+        }
+
       if (default_color != NULL)
         {
           const Babl *format;
@@ -439,11 +596,11 @@ _gimp_param_spec_to_gp_param_def (GParamSpec *pspec,
           format      = gegl_color_get_format (default_color);
           default_val = g_new0 (GPParamColor, 1);
 
-          default_val->size     = babl_format_get_bytes_per_pixel (format);
-          default_val->encoding = (gchar *) g_strdup (babl_format_get_encoding (format));
+          default_val->size            = babl_format_get_bytes_per_pixel (format);
+          default_val->format.encoding = (gchar *) g_strdup (babl_format_get_encoding (format));
 
-          default_val->profile_data = NULL;
-          default_val->profile_size = 0;
+          default_val->format.profile_data = NULL;
+          default_val->format.profile_size = 0;
           if (babl_format_get_space (format) != babl_space ("sRGB"))
             {
               const char *icc;
@@ -453,55 +610,81 @@ _gimp_param_spec_to_gp_param_def (GParamSpec *pspec,
 
               if (icc_length > 0)
                 {
-                  default_val->profile_data = g_new0 (guint8, icc_length);
-                  memcpy (default_val->profile_data, icc, icc_length);
+                  default_val->format.profile_data = g_new0 (guint8, icc_length);
+                  memcpy (default_val->format.profile_data, icc, icc_length);
                 }
-              default_val->profile_size = icc_length;
+              default_val->format.profile_size = icc_length;
             }
         }
       param_def->meta.m_gegl_color.default_val = default_val;
     }
   else if (pspec_type == GIMP_TYPE_PARAM_IMAGE)
     {
-      GimpParamSpecImage *ispec = GIMP_PARAM_SPEC_IMAGE (pspec);
-
       param_def->param_def_type = GP_PARAM_DEF_TYPE_ID;
 
-      param_def->meta.m_id.none_ok = ispec->none_ok;
+      param_def->meta.m_id.none_ok = gimp_param_spec_image_none_allowed (pspec);
     }
   else if (GIMP_IS_PARAM_SPEC_ITEM (pspec))
     {
-      GimpParamSpecItem *ispec = GIMP_PARAM_SPEC_ITEM (pspec);
-
       param_def->param_def_type = GP_PARAM_DEF_TYPE_ID;
 
-      param_def->meta.m_id.none_ok = ispec->none_ok;
+      param_def->meta.m_id.none_ok = gimp_param_spec_item_none_allowed (pspec);
+    }
+  else if (GIMP_IS_PARAM_SPEC_DRAWABLE_FILTER (pspec))
+    {
+      param_def->param_def_type = GP_PARAM_DEF_TYPE_ID;
+
+      param_def->meta.m_id.none_ok = gimp_param_spec_drawable_filter_none_allowed (pspec);
     }
   else if (pspec_type == GIMP_TYPE_PARAM_DISPLAY)
     {
-      GimpParamSpecDisplay *ispec = GIMP_PARAM_SPEC_DISPLAY (pspec);
-
       param_def->param_def_type = GP_PARAM_DEF_TYPE_ID;
 
-      param_def->meta.m_id.none_ok = ispec->none_ok;
+      param_def->meta.m_id.none_ok = gimp_param_spec_display_none_allowed (pspec);
     }
   else if (GIMP_IS_PARAM_SPEC_RESOURCE (pspec))
     {
-      GimpParamSpecResource *rspec = GIMP_PARAM_SPEC_RESOURCE (pspec);
+      GObject  *default_value = NULL;
+      gboolean  default_to_context;
 
-      param_def->param_def_type = GP_PARAM_DEF_TYPE_ID;
+      param_def->param_def_type = GP_PARAM_DEF_TYPE_RESOURCE;
 
-      param_def->meta.m_id.none_ok = rspec->none_ok;
+      if (gimp_param_spec_object_has_default (pspec))
+        default_value = gimp_param_spec_object_get_default (pspec);
+
+      param_def->meta.m_resource.none_ok = gimp_param_spec_resource_none_allowed (pspec);
+      default_to_context = gimp_param_spec_resource_defaults_to_context (pspec);
+      param_def->meta.m_resource.default_to_context = default_to_context;
+      if (default_value != NULL && ! default_to_context)
+        param_def->meta.m_resource.default_resource_id = get_resource_id (default_value);
+      else
+        param_def->meta.m_resource.default_resource_id = 0;
     }
-  else if (GIMP_IS_PARAM_SPEC_OBJECT_ARRAY (pspec))
+  else if (pspec_type == GIMP_TYPE_PARAM_FILE)
+    {
+      GimpParamSpecObject *ospec = GIMP_PARAM_SPEC_OBJECT (pspec);
+
+      param_def->param_def_type = GP_PARAM_DEF_TYPE_FILE;
+
+      param_def->meta.m_file.action      = (gint32) gimp_param_spec_file_get_action (pspec);
+      param_def->meta.m_file.none_ok     = gimp_param_spec_file_none_allowed (pspec);
+      param_def->meta.m_file.default_uri =
+        ospec->_default_value ?  g_file_get_uri (G_FILE (ospec->_default_value)) : NULL;
+    }
+  else if (GIMP_IS_PARAM_SPEC_CORE_OBJECT_ARRAY (pspec))
     {
       param_def->param_def_type = GP_PARAM_DEF_TYPE_ID_ARRAY;
 
       param_def->meta.m_id_array.type_name =
-        (gchar *) g_type_name (GIMP_PARAM_SPEC_OBJECT_ARRAY (pspec)->object_type);
+        (gchar *) g_type_name (gimp_param_spec_core_object_array_get_object_type (pspec));
+    }
+  else if (pspec_type == GIMP_TYPE_PARAM_EXPORT_OPTIONS)
+    {
+      param_def->param_def_type = GP_PARAM_DEF_TYPE_EXPORT_OPTIONS;
     }
   else if (pspec_type == G_TYPE_PARAM_OBJECT &&
-           value_type != G_TYPE_FILE)
+           value_type != G_TYPE_FILE &&
+           value_type != GEGL_TYPE_COLOR)
     {
       const gchar *type_name  = NULL;
 
@@ -522,10 +705,17 @@ _gimp_param_spec_to_gp_param_def (GParamSpec *pspec,
         {
           type_name = "GimpParamDrawable";
         }
-      else if (g_type_is_a (value_type, GIMP_TYPE_LAYER))
+      else if (value_type == GIMP_TYPE_LAYER)
         {
-          /* g_type_is_a() because the core has layer subclasses */
           type_name = "GimpParamLayer";
+        }
+      else if (value_type == GIMP_TYPE_TEXT_LAYER)
+        {
+          type_name = "GimpParamTextLayer";
+        }
+      else if (value_type == GIMP_TYPE_GROUP_LAYER)
+        {
+          type_name = "GimpParamGroupLayer";
         }
       else if (value_type == GIMP_TYPE_CHANNEL)
         {
@@ -539,9 +729,9 @@ _gimp_param_spec_to_gp_param_def (GParamSpec *pspec,
         {
           type_name = "GimpParamSelection";
         }
-      else if (value_type == GIMP_TYPE_VECTORS)
+      else if (value_type == GIMP_TYPE_PATH)
         {
-          type_name = "GimpParamVectors";
+          type_name = "GimpParamPath";
         }
       else if (value_type == GIMP_TYPE_RESOURCE)
         {
@@ -566,10 +756,6 @@ _gimp_param_spec_to_gp_param_def (GParamSpec *pspec,
       else if (value_type == GIMP_TYPE_PATTERN)
         {
           type_name = "GimpParamPattern";
-        }
-      else if (value_type == GEGL_TYPE_COLOR)
-        {
-          type_name = "GeglParamColor";
         }
 
       if (type_name)
@@ -609,6 +795,17 @@ get_item_by_id (gpointer gimp,
 #endif
 }
 
+static GimpDrawableFilter *
+get_filter_by_id (gpointer gimp,
+                  gint     id)
+{
+#ifdef LIBGIMP_COMPILATION
+  return gimp_drawable_filter_get_by_id (id);
+#else
+  return gimp_drawable_filter_get_by_id (gimp, id);
+#endif
+}
+
 static GimpDisplay *
 get_display_by_id (gpointer gimp,
                    gint     id)
@@ -640,6 +837,13 @@ get_resource_id (GObject *resource)
 #endif
 }
 
+static GimpUnit *
+get_unit_by_id (gpointer gimp,
+                gint     id)
+{
+  return gimp_unit_get_by_id (id);
+}
+
 
 /* Deserialize a gp_param (from the wire) to an instance of object or
  * primitive type.
@@ -658,7 +862,9 @@ gimp_gp_param_to_value (gpointer        gimp,
 {
   g_return_if_fail (param != NULL);
   g_return_if_fail (value != NULL);
+  /* pspec is nullable. */
 
+  /* See also changing of types by caller. */
   if (type == G_TYPE_NONE || type == G_TYPE_INVALID)
     {
       type = g_type_from_name (param->type_name);
@@ -677,8 +883,7 @@ gimp_gp_param_to_value (gpointer        gimp,
 
   g_value_init (value, type);
 
-  if (type == G_TYPE_INT ||
-      type == GIMP_TYPE_UNIT)
+  if (type == G_TYPE_INT)
     {
       g_value_set_int (value, param->data.d_int);
     }
@@ -696,7 +901,7 @@ gimp_gp_param_to_value (gpointer        gimp,
     }
   else if (G_VALUE_HOLDS_DOUBLE (value))
     {
-      g_value_set_double (value, param->data.d_float);
+      g_value_set_double (value, param->data.d_double);
     }
   else if (G_VALUE_HOLDS_STRING (value))
     {
@@ -716,6 +921,39 @@ gimp_gp_param_to_value (gpointer        gimp,
                                    g_file_new_for_uri (param->data.d_string) :
                                    NULL));
     }
+  else if (GIMP_VALUE_HOLDS_BABL_FORMAT (value))
+    {
+      const Babl       *format = NULL;
+      const Babl       *space  = NULL;
+      const gchar      *encoding;
+      GimpColorProfile *profile;
+
+      encoding = param->data.d_format.encoding;
+      profile  = gimp_color_profile_new_from_icc_profile (param->data.d_format.profile_data,
+                                                          param->data.d_format.profile_size,
+                                                          NULL);
+
+      if (profile)
+        {
+          GError *error = NULL;
+
+          space = gimp_color_profile_get_space (profile,
+                                                GIMP_COLOR_RENDERING_INTENT_RELATIVE_COLORIMETRIC,
+                                                &error);
+
+          if (! space)
+            {
+              g_printerr ("%s: failed to create Babl space from profile: %s\n",
+                          G_STRFUNC, error->message);
+              g_clear_error (&error);
+            }
+          g_object_unref (profile);
+        }
+
+      format = babl_format_with_space (encoding, space);
+
+      g_value_set_boxed (value, format);
+    }
   else if (GIMP_VALUE_HOLDS_COLOR (value))
     {
       GeglColor        *color;
@@ -725,9 +963,9 @@ gimp_gp_param_to_value (gpointer        gimp,
       GimpColorProfile *profile;
       gint              bpp;
 
-      encoding = param->data.d_gegl_color.encoding;
-      profile = gimp_color_profile_new_from_icc_profile (param->data.d_gegl_color.profile_data,
-                                                         param->data.d_gegl_color.profile_size,
+      encoding = param->data.d_gegl_color.format.encoding;
+      profile = gimp_color_profile_new_from_icc_profile (param->data.d_gegl_color.format.profile_data,
+                                                         param->data.d_gegl_color.format.profile_size,
                                                          NULL);
 
       if (profile)
@@ -746,6 +984,7 @@ gimp_gp_param_to_value (gpointer        gimp,
             }
           g_object_unref (profile);
         }
+
       format = babl_format_with_space (encoding, space);
       color  = gegl_color_new ("black");
 
@@ -758,10 +997,6 @@ gimp_gp_param_to_value (gpointer        gimp,
 
       g_value_take_object (value, color);
     }
-  else if (GIMP_VALUE_HOLDS_RGB (value))
-    {
-      gimp_value_set_rgb (value, &param->data.d_color);
-    }
   else if (GIMP_VALUE_HOLDS_PARASITE (value))
     {
       g_value_set_boxed (value, &param->data.d_parasite);
@@ -773,21 +1008,13 @@ gimp_gp_param_to_value (gpointer        gimp,
                                   param->data.d_array.size /
                                   sizeof (gint32));
     }
-  else if (GIMP_VALUE_HOLDS_FLOAT_ARRAY (value))
+  else if (GIMP_VALUE_HOLDS_DOUBLE_ARRAY (value))
     {
-      gimp_value_set_float_array (value,
+      gimp_value_set_double_array (value,
                                   (const gdouble *)
                                   param->data.d_array.data,
                                   param->data.d_array.size /
                                   sizeof (gdouble));
-    }
-  else if (GIMP_VALUE_HOLDS_RGB_ARRAY (value))
-    {
-      gimp_value_set_rgb_array (value,
-                                (GimpRGB *)
-                                param->data.d_array.data,
-                                param->data.d_array.size /
-                                sizeof (GimpRGB));
     }
   else if (GIMP_VALUE_HOLDS_COLOR_ARRAY (value))
     {
@@ -804,10 +1031,10 @@ gimp_gp_param_to_value (gpointer        gimp,
           const gchar      *encoding;
           gint              bpp;
 
-          encoding = param->data.d_color_array.colors[i].encoding;
-          if (param->data.d_color_array.colors[i].profile_size > 0)
-            profile = gimp_color_profile_new_from_icc_profile (param->data.d_color_array.colors[i].profile_data,
-                                                               param->data.d_color_array.colors[i].profile_size,
+          encoding = param->data.d_color_array.colors[i].format.encoding;
+          if (param->data.d_color_array.colors[i].format.profile_size > 0)
+            profile = gimp_color_profile_new_from_icc_profile (param->data.d_color_array.colors[i].format.profile_data,
+                                                               param->data.d_color_array.colors[i].format.profile_size,
                                                                NULL);
 
           if (profile)
@@ -841,23 +1068,31 @@ gimp_gp_param_to_value (gpointer        gimp,
 
       g_value_take_boxed (value, colors);
     }
-  else if (GIMP_VALUE_HOLDS_OBJECT_ARRAY (value))
+  else if (GIMP_VALUE_HOLDS_CORE_OBJECT_ARRAY (value))
     {
-      GType     object_type;
+      GType     object_type = G_TYPE_INVALID;
       GObject **objects;
       gint      i;
 
-      if (param->data.d_id_array.type_name == NULL)
+      if (param->data.d_id_array.type_name != NULL)
         {
-          g_return_if_fail (param->data.d_id_array.size == 0 && pspec != NULL);
-          object_type = GIMP_PARAM_SPEC_OBJECT_ARRAY (pspec)->object_type;
-        }
-      else
-        {
+          /* An empty array from a NULL has an arbitrary type_name set earlier. */
           object_type = g_type_from_name (param->data.d_id_array.type_name);
         }
+      else if (pspec != NULL)
+        {
+          object_type = gimp_param_spec_core_object_array_get_object_type (pspec);
+        }
 
-      objects = g_new (GObject *, param->data.d_id_array.size);
+      if (param->data.d_id_array.size > 1 && ! g_type_is_a (object_type, G_TYPE_OBJECT))
+        {
+          g_warning ("%s: GimpCoreObjectArray of unknown type.", G_STRFUNC);
+          return;
+        }
+
+      /* size might be zero. */
+
+      objects = g_new0 (GObject *, param->data.d_id_array.size + 1);
 
       for (i = 0; i < param->data.d_id_array.size; i++)
         {
@@ -871,6 +1106,10 @@ gimp_gp_param_to_value (gpointer        gimp,
             {
               objects[i] = (GObject *) get_item_by_id (gimp, id);
             }
+          else if (g_type_is_a (object_type, GIMP_TYPE_DRAWABLE_FILTER))
+            {
+              objects[i] = (GObject *) get_filter_by_id (gimp, id);
+            }
           else if (g_type_is_a (object_type, GIMP_TYPE_DISPLAY))
             {
               objects[i] = (GObject *) get_display_by_id (gimp, id);
@@ -879,13 +1118,12 @@ gimp_gp_param_to_value (gpointer        gimp,
             {
               objects[i] = (GObject *) get_resource_by_id (id);
             }
-
-          if (objects[i])
-            g_object_ref (objects[i]);
         }
 
-      gimp_value_take_object_array (value, object_type, objects,
-                                    param->data.d_id_array.size);
+      /* Even when size is zero, set gvalue to an empty GimpObjectArray object,
+       * having a valid but possibly arbitrary type of its elements.
+       */
+      g_value_set_boxed (value, objects);
     }
   else if (GIMP_VALUE_HOLDS_IMAGE (value))
     {
@@ -895,6 +1133,10 @@ gimp_gp_param_to_value (gpointer        gimp,
     {
       g_value_set_object (value, get_item_by_id (gimp, param->data.d_int));
     }
+  else if (GIMP_VALUE_HOLDS_DRAWABLE_FILTER (value))
+    {
+      g_value_set_object (value, get_filter_by_id (gimp, param->data.d_int));
+    }
   else if (GIMP_VALUE_HOLDS_DISPLAY (value))
     {
       g_value_set_object (value, get_display_by_id (gimp, param->data.d_int));
@@ -903,12 +1145,40 @@ gimp_gp_param_to_value (gpointer        gimp,
     {
       g_value_set_object (value, get_resource_by_id (param->data.d_int));
     }
+  else if (GIMP_VALUE_HOLDS_UNIT (value))
+    {
+      g_value_set_object (value, get_unit_by_id (gimp, param->data.d_int));
+    }
+  else if (g_type_is_a (G_VALUE_TYPE (value), GIMP_TYPE_EXPORT_OPTIONS))
+    {
+      GimpExportOptions *options;
+
+      /* Recreating the same options when it'll have settings. The
+       * "capabilities" property doesn't need to be recreated. It is
+       * managed by the GimpExportProcedure code.
+       */
+      options = g_object_new (GIMP_TYPE_EXPORT_OPTIONS, NULL);
+
+      g_value_set_object (value, options);
+
+      g_object_unref (options);
+    }
   else if (G_VALUE_HOLDS_PARAM (value))
     {
       GParamSpec *pspec =
         _gimp_gp_param_def_to_param_spec (&param->data.d_param_def);
 
       g_value_take_param (value, pspec);
+    }
+  else if (GIMP_VALUE_HOLDS_VALUE_ARRAY (value))
+    {
+      GimpValueArray *values;
+
+      values = _gimp_gp_params_to_value_array (gimp, NULL, 0,
+                                               param->data.d_value_array.values,
+                                               param->data.d_value_array.n_values,
+                                               FALSE);
+      g_value_take_boxed (value, values);
     }
   else
     {
@@ -1020,8 +1290,7 @@ gimp_value_to_gp_param (const GValue *value,
   else
     param->type_name = (gchar *) g_type_name (type);
 
-  if (type == G_TYPE_INT ||
-      type == GIMP_TYPE_UNIT)
+  if (type == G_TYPE_INT)
     {
       param->param_type = GP_PARAM_TYPE_INT;
 
@@ -1053,9 +1322,9 @@ gimp_value_to_gp_param (const GValue *value,
     }
   else if (G_VALUE_HOLDS_DOUBLE (value))
     {
-      param->param_type = GP_PARAM_TYPE_FLOAT;
+      param->param_type = GP_PARAM_TYPE_DOUBLE;
 
-      param->data.d_float = g_value_get_double (value);
+      param->data.d_double = g_value_get_double (value);
     }
   else if (G_VALUE_HOLDS_STRING (value))
     {
@@ -1074,11 +1343,45 @@ gimp_value_to_gp_param (const GValue *value,
 
       param->data.d_string = file ? g_file_get_uri (file) : NULL;
     }
-  else if (GIMP_VALUE_HOLDS_RGB (value))
+  else if (GIMP_VALUE_HOLDS_BABL_FORMAT (value))
     {
-      param->param_type = GP_PARAM_TYPE_COLOR;
+      const Babl *format;
+      int         icc_length = 0;
 
-      gimp_value_get_rgb (value, &param->data.d_color);
+      param->param_type = GP_PARAM_TYPE_BABL_FORMAT;
+
+      format = g_value_get_boxed (value);
+
+      /* TODO: For indexed colors, we'll convert to R'G'B'(A) u8 as that
+       * is currently what we support. As indexed format support improves,
+       * we'll want to make this space and encoding agnostic. */
+      if (babl_format_is_palette (format))
+        {
+          const Babl *indexed_format = NULL;
+          gint        bpp;
+
+          g_warning ("%s: GValue of type '%s' holds an indexed format. "
+                     "This is unsupported and replaced with \"R'G'B' u8\".",
+                     G_STRFUNC, param->type_name);
+          bpp = babl_format_get_bytes_per_pixel (format);
+          if (bpp == 1)
+            indexed_format = babl_format_with_space ("R'G'B' u8",
+                                                     babl_format_get_space (format));
+          else if (bpp == 2)
+            indexed_format = babl_format_with_space ("R'G'B'A u8",
+                                                     babl_format_get_space (format));
+
+          /* TODO: This is to notify us in the future when indexed image can have more than
+           * 256 colors - we'll need to update encoding support accordingly */
+          g_return_if_fail (indexed_format != NULL);
+
+          format = indexed_format;
+        }
+
+      param->data.d_format.encoding     = (gchar *) babl_format_get_encoding (format);
+      param->data.d_format.profile_data = (guint8 *) babl_space_get_icc (babl_format_get_space (format),
+                                                                         &icc_length);
+      param->data.d_format.profile_size = icc_length;
     }
   else if (GIMP_VALUE_HOLDS_COLOR (value))
     {
@@ -1091,13 +1394,36 @@ gimp_value_to_gp_param (const GValue *value,
       color  = g_value_get_object (value);
       format = gegl_color_get_format (color);
 
+      /* TODO: For indexed colors, we'll convert to R'G'B'(A) u8 as that
+       * is currently what we support. As indexed format support improves,
+       * we'll want to make this space and encoding agnostic. */
+      if (babl_format_is_palette (format))
+        {
+          const Babl *indexed_format = NULL;
+          gint        bpp;
+
+          bpp = babl_format_get_bytes_per_pixel (format);
+          if (bpp == 1)
+            indexed_format = babl_format_with_space ("R'G'B' u8",
+                                                     babl_format_get_space (format));
+          else if (bpp == 2)
+            indexed_format = babl_format_with_space ("R'G'B'A u8",
+                                                     babl_format_get_space (format));
+
+          /* TODO: This is to notify us in the future when indexed image can have more than
+           * 256 colors - we'll need to update encoding support accordingly */
+          g_return_if_fail (indexed_format != NULL);
+
+          format = indexed_format;
+        }
+
       param->data.d_gegl_color.size = babl_format_get_bytes_per_pixel (format);
       gegl_color_get_pixel (color, format, &param->data.d_gegl_color.data);
 
-      param->data.d_gegl_color.encoding     = (gchar *) babl_format_get_encoding (format);
-      param->data.d_gegl_color.profile_data = (guint8 *) babl_space_get_icc (babl_format_get_space (format),
-                                                                             &icc_length);
-      param->data.d_gegl_color.profile_size = icc_length;
+      param->data.d_gegl_color.format.encoding     = (gchar *) babl_format_get_encoding (format);
+      param->data.d_gegl_color.format.profile_data = (guint8 *) babl_space_get_icc (babl_format_get_space (format),
+                                                                                    &icc_length);
+      param->data.d_gegl_color.format.profile_size = icc_length;
     }
   else if (GIMP_VALUE_HOLDS_PARASITE (value))
     {
@@ -1133,8 +1459,7 @@ gimp_value_to_gp_param (const GValue *value,
         }
     }
   else if (GIMP_VALUE_HOLDS_INT32_ARRAY (value) ||
-           GIMP_VALUE_HOLDS_FLOAT_ARRAY (value) ||
-           GIMP_VALUE_HOLDS_RGB_ARRAY (value))
+           GIMP_VALUE_HOLDS_DOUBLE_ARRAY (value))
     {
       GimpArray *array = g_value_get_boxed (value);
 
@@ -1177,12 +1502,12 @@ gimp_value_to_gp_param (const GValue *value,
               param->data.d_color_array.colors[i].size = babl_format_get_bytes_per_pixel (format);
               gegl_color_get_pixel (colors[i], format, &param->data.d_color_array.colors[i].data);
 
-              param->data.d_color_array.colors[i].encoding = (gchar *) babl_format_get_encoding (format);
+              param->data.d_color_array.colors[i].format.encoding = (gchar *) babl_format_get_encoding (format);
 
               if (babl_format_get_space (format) != babl_space ("sRGB"))
-                param->data.d_color_array.colors[i].profile_data = (guint8 *) babl_space_get_icc (babl_format_get_space (format),
-                                                                                                  &icc_length);
-              param->data.d_gegl_color.profile_size = icc_length;
+                param->data.d_color_array.colors[i].format.profile_data = (guint8 *) babl_space_get_icc (babl_format_get_space (format),
+                                                                                                         &icc_length);
+              param->data.d_gegl_color.format.profile_size = icc_length;
             }
         }
       else
@@ -1218,48 +1543,98 @@ gimp_value_to_gp_param (const GValue *value,
       else
         param->data.d_strv = array;
     }
-  else if (GIMP_VALUE_HOLDS_OBJECT_ARRAY (value))
+  else if (GIMP_VALUE_HOLDS_CORE_OBJECT_ARRAY (value))
     {
-      GimpObjectArray *array = g_value_get_boxed (value);
+      GObject **array = g_value_get_boxed (value);
 
       param->param_type = GP_PARAM_TYPE_ID_ARRAY;
+      param->data.d_id_array.type_name = NULL;
 
-      if (array)
+      if (array && array[0])
         {
-          gint i;
+          GType element_type = G_TYPE_NONE;
+          gsize array_length;
+          gint  i;
 
-          if (full_copy)
-            param->data.d_id_array.type_name =
-              g_strdup (g_type_name (array->object_type));
-          else
-            param->data.d_id_array.type_name =
-              (gchar *) g_type_name (array->object_type);
-
-          param->data.d_id_array.size = array->length;
-
-          /* must be free'd also for full_copy == FALSE */
-          param->data.d_id_array.data = g_new (gint32, array->length);
-
-          for (i = 0; i < array->length; i++)
+          for (i = 0; array[i] != NULL; i++)
             {
-              if (GIMP_IS_IMAGE (array->data[i]))
+              if (element_type != G_TYPE_NONE)
+                {
+                  if (! g_type_is_a (G_TYPE_FROM_INSTANCE (array[i]), element_type))
+                    {
+                      g_warning ("%s: GimpCoreObjectArray with element type %s holds unsupported element of type '%s'", G_STRFUNC,
+                                 g_type_name (element_type), g_type_name (G_TYPE_FROM_INSTANCE (array[i])));
+                      break;
+                    }
+                  continue;
+                }
+
+              if (GIMP_IS_IMAGE (array[i]))
+                {
+                  element_type = GIMP_TYPE_IMAGE;
+                }
+              else if (GIMP_IS_ITEM (array[i]))
+                {
+                  element_type = GIMP_TYPE_ITEM;
+                }
+              else if (GIMP_IS_DRAWABLE_FILTER (array[i]))
+                {
+                  element_type = GIMP_TYPE_DRAWABLE_FILTER;
+                }
+              else if (GIMP_IS_DISPLAY (array[i]))
+                {
+                  element_type = GIMP_TYPE_DISPLAY;
+                }
+              else if (GIMP_IS_RESOURCE (array[i]))
+                {
+                  element_type = GIMP_TYPE_RESOURCE;
+                }
+              else
+                {
+                  g_warning ("%s: GimpCoreObjectArray holds unsupported type '%s'", G_STRFUNC,
+                             g_type_name (G_TYPE_FROM_INSTANCE (array[i])));
+                  break;
+                }
+            }
+          array_length = i;
+          param->data.d_id_array.size = array_length;
+
+          if (array_length > 0)
+            {
+              if (full_copy)
+                param->data.d_id_array.type_name = g_strdup (g_type_name (element_type));
+              else
+                param->data.d_id_array.type_name = (gchar *) g_type_name (element_type);
+
+              /* must be free'd also for full_copy == FALSE */
+              param->data.d_id_array.data = g_new (gint32, array_length);
+            }
+
+          for (i = 0; i < array_length; i++)
+            {
+              if (GIMP_IS_IMAGE (array[i]))
                 {
                   param->data.d_id_array.data[i] =
-                    gimp_image_get_id (GIMP_IMAGE (array->data[i]));
+                    gimp_image_get_id (GIMP_IMAGE (array[i]));
                 }
-              else if (GIMP_IS_ITEM (array->data[i]))
+              else if (GIMP_IS_ITEM (array[i]))
                 {
                   param->data.d_id_array.data[i] =
-                    gimp_item_get_id (GIMP_ITEM (array->data[i]));
+                    gimp_item_get_id (GIMP_ITEM (array[i]));
                 }
-              else if (GIMP_IS_DISPLAY (array->data[i]))
+              else if (GIMP_IS_DRAWABLE_FILTER (array[i]))
                 {
                   param->data.d_id_array.data[i] =
-                    gimp_display_get_id (GIMP_DISPLAY (array->data[i]));
+                    gimp_drawable_filter_get_id (GIMP_DRAWABLE_FILTER (array[i]));
                 }
-              else if (GIMP_IS_RESOURCE (array->data[i]))
+              else if (GIMP_IS_DISPLAY (array[i]))
                 {
-                  param->data.d_id_array.data[i] = get_resource_id (array->data[i]);
+                  param->data.d_id_array.data[i] =
+                    gimp_display_get_id (GIMP_DISPLAY (array[i]));
+                }
+              else if (GIMP_IS_RESOURCE (array[i]))
+                {
+                  param->data.d_id_array.data[i] = get_resource_id (array[i]);
                 }
               else
                 {
@@ -1269,6 +1644,9 @@ gimp_value_to_gp_param (const GValue *value,
         }
       else
         {
+          /* GValue intended to hold an array of objects is NULL.
+           * For convenience, we allow this, meaning empty.
+           */
           param->data.d_id_array.size = 0;
           param->data.d_id_array.data = NULL;
         }
@@ -1289,6 +1667,14 @@ gimp_value_to_gp_param (const GValue *value,
 
       param->data.d_int = item ? gimp_item_get_id (item) : -1;
     }
+  else if (GIMP_VALUE_HOLDS_DRAWABLE_FILTER (value))
+    {
+      GimpDrawableFilter *filter = g_value_get_object (value);
+
+      param->param_type = GP_PARAM_TYPE_INT;
+
+      param->data.d_int = filter ? gimp_drawable_filter_get_id (filter) : -1;
+    }
   else if (GIMP_VALUE_HOLDS_DISPLAY (value))
     {
       GimpDisplay *display = g_value_get_object (value);
@@ -1305,12 +1691,35 @@ gimp_value_to_gp_param (const GValue *value,
 
       param->data.d_int = resource ? get_resource_id (resource) : -1;
     }
+  else if (GIMP_VALUE_HOLDS_UNIT (value))
+    {
+      GimpUnit *unit = g_value_get_object (value);
+
+      param->param_type = GP_PARAM_TYPE_INT;
+
+      param->data.d_int = unit ? gimp_unit_get_id (unit) : -1;
+    }
+  else if (g_type_is_a (G_VALUE_TYPE (value), GIMP_TYPE_EXPORT_OPTIONS))
+    {
+      param->param_type = GP_PARAM_TYPE_EXPORT_OPTIONS;
+    }
   else if (G_VALUE_HOLDS_PARAM (value))
     {
       param->param_type = GP_PARAM_TYPE_PARAM_DEF;
 
       _gimp_param_spec_to_gp_param_def (g_value_get_param (value),
                                         &param->data.d_param_def);
+    }
+  else if (GIMP_VALUE_HOLDS_VALUE_ARRAY (value))
+    {
+      GimpValueArray *array = g_value_get_boxed (value);
+
+      param->param_type = GP_PARAM_TYPE_VALUE_ARRAY;
+
+      param->data.d_value_array.n_values = gimp_value_array_length (array);
+      param->data.d_value_array.values   = NULL;
+      if (param->data.d_value_array.n_values > 0)
+        param->data.d_value_array.values = _gimp_value_array_to_gp_params (array, full_copy);
     }
 
   if (param->param_type == -1)
@@ -1356,7 +1765,7 @@ _gimp_gp_params_free (GPParam  *params,
       switch (params[i].param_type)
         {
         case GP_PARAM_TYPE_INT:
-        case GP_PARAM_TYPE_FLOAT:
+        case GP_PARAM_TYPE_DOUBLE:
           break;
 
         case GP_PARAM_TYPE_STRING:
@@ -1369,9 +1778,7 @@ _gimp_gp_params_free (GPParam  *params,
           g_free (params[i].data.d_string);
           break;
 
-        case GP_PARAM_TYPE_COLOR:
-          break;
-
+        case GP_PARAM_TYPE_BABL_FORMAT:
         case GP_PARAM_TYPE_GEGL_COLOR:
           break;
 
@@ -1409,7 +1816,19 @@ _gimp_gp_params_free (GPParam  *params,
             }
           break;
 
+        case GP_PARAM_TYPE_EXPORT_OPTIONS:
+          break;
+
         case GP_PARAM_TYPE_PARAM_DEF:
+          if (params[i].data.d_param_def.param_def_type == GP_PARAM_DEF_TYPE_CHOICE &&
+              g_strcmp0 (params[i].data.d_param_def.type_name, "GeglParamEnum") == 0)
+            g_clear_object (&params[i].data.d_param_def.meta.m_choice.choice);
+          break;
+
+        case GP_PARAM_TYPE_VALUE_ARRAY:
+          _gimp_gp_params_free (params[i].data.d_value_array.values,
+                                params[i].data.d_value_array.n_values,
+                                full_copy);
           break;
         }
     }

@@ -65,24 +65,9 @@ typedef enum
 } GimpArgumentSync;
 
 
-#define GIMP_TYPE_PROCEDURE            (gimp_procedure_get_type ())
-#define GIMP_PROCEDURE(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_PROCEDURE, GimpProcedure))
-#define GIMP_PROCEDURE_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_PROCEDURE, GimpProcedureClass))
-#define GIMP_IS_PROCEDURE(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_PROCEDURE))
-#define GIMP_IS_PROCEDURE_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_PROCEDURE))
-#define GIMP_PROCEDURE_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_PROCEDURE, GimpProcedureClass))
+#define GIMP_TYPE_PROCEDURE (gimp_procedure_get_type ())
+G_DECLARE_DERIVABLE_TYPE (GimpProcedure, gimp_procedure, GIMP, PROCEDURE, GObject)
 
-G_DEFINE_AUTOPTR_CLEANUP_FUNC (GimpProcedure, g_object_unref);
-
-typedef struct _GimpProcedureClass   GimpProcedureClass;
-typedef struct _GimpProcedurePrivate GimpProcedurePrivate;
-
-struct _GimpProcedure
-{
-  GObject               parent_instance;
-
-  GimpProcedurePrivate *priv;
-};
 
 /**
  * GimpProcedureClass:
@@ -120,6 +105,7 @@ struct _GimpProcedureClass
 
   /* Padding for future expansion */
   /*< private >*/
+  void (*_gimp_reserved0) (void);
   void (*_gimp_reserved1) (void);
   void (*_gimp_reserved2) (void);
   void (*_gimp_reserved3) (void);
@@ -128,10 +114,9 @@ struct _GimpProcedureClass
   void (*_gimp_reserved6) (void);
   void (*_gimp_reserved7) (void);
   void (*_gimp_reserved8) (void);
+  void (*_gimp_reserved9) (void);
 };
 
-
-GType            gimp_procedure_get_type           (void) G_GNUC_CONST;
 
 GimpProcedure  * gimp_procedure_new                (GimpPlugIn           *plug_in,
                                                     const gchar          *name,
@@ -189,27 +174,6 @@ const gchar    * gimp_procedure_get_authors        (GimpProcedure        *proced
 const gchar    * gimp_procedure_get_copyright      (GimpProcedure        *procedure);
 const gchar    * gimp_procedure_get_date           (GimpProcedure        *procedure);
 
-GParamSpec     * gimp_procedure_add_argument       (GimpProcedure        *procedure,
-                                                    GParamSpec           *pspec);
-GParamSpec     * gimp_procedure_add_argument_from_property
-                                                   (GimpProcedure        *procedure,
-                                                    GObject              *config,
-                                                    const gchar          *prop_name);
-
-GParamSpec     * gimp_procedure_add_aux_argument   (GimpProcedure        *procedure,
-                                                    GParamSpec           *pspec);
-GParamSpec     * gimp_procedure_add_aux_argument_from_property
-                                                   (GimpProcedure        *procedure,
-                                                    GObject              *config,
-                                                    const gchar          *prop_name);
-
-GParamSpec     * gimp_procedure_add_return_value   (GimpProcedure        *procedure,
-                                                    GParamSpec           *pspec);
-GParamSpec     * gimp_procedure_add_return_value_from_property
-                                                   (GimpProcedure        *procedure,
-                                                    GObject              *config,
-                                                    const gchar          *prop_name);
-
 GParamSpec     * gimp_procedure_find_argument      (GimpProcedure        *procedure,
                                                     const gchar          *name);
 GParamSpec     * gimp_procedure_find_aux_argument  (GimpProcedure        *procedure,
@@ -243,16 +207,30 @@ GimpValueArray * gimp_procedure_run_valist         (GimpProcedure        *proced
 GimpValueArray * gimp_procedure_run_config         (GimpProcedure        *procedure,
                                                     GimpProcedureConfig  *config);
 
-void             gimp_procedure_extension_ready    (GimpProcedure        *procedure);
+void             gimp_procedure_persistent_ready   (GimpProcedure        *procedure);
 
 GimpProcedureConfig *
                  gimp_procedure_create_config      (GimpProcedure        *procedure);
 
+gboolean         gimp_procedure_is_internal        (GimpProcedure        *procedure);
+
 
 /* Internal use */
 
-G_GNUC_INTERNAL GimpValueArray * _gimp_procedure_run_array (GimpProcedure  *procedure,
-                                                            GimpValueArray *args);
+G_GNUC_INTERNAL GParamSpec          * _gimp_procedure_add_argument       (GimpProcedure  *procedure,
+                                                                         GParamSpec     *pspec);
+G_GNUC_INTERNAL GParamSpec          * _gimp_procedure_add_aux_argument   (GimpProcedure  *procedure,
+                                                                         GParamSpec     *pspec);
+G_GNUC_INTERNAL GParamSpec          * _gimp_procedure_add_return_value   (GimpProcedure  *procedure,
+                                                                         GParamSpec     *pspec);
+
+G_GNUC_INTERNAL GimpProcedureConfig * _gimp_procedure_create_run_config (GimpProcedure  *procedure);
+
+G_GNUC_INTERNAL GimpValueArray      * _gimp_procedure_run_array         (GimpProcedure  *procedure,
+                                                                         GimpValueArray *args);
+
+G_GNUC_INTERNAL gint                  _gimp_procedure_get_ref_count     (GimpProcedure  *procedure,
+                                                                         GObject        *object);
 
 
 G_END_DECLS

@@ -144,7 +144,7 @@ register_pattern_select_procs (GimpPDB *pdb)
   /*
    * gimp-patterns-popup
    */
-  procedure = gimp_procedure_new (patterns_popup_invoker);
+  procedure = gimp_procedure_new (patterns_popup_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-patterns-popup");
   gimp_procedure_set_static_help (procedure,
@@ -173,6 +173,8 @@ register_pattern_select_procs (GimpPDB *pdb)
                                gimp_param_spec_pattern ("initial-pattern",
                                                         "initial pattern",
                                                         "The pattern to set as the initial choice",
+                                                        TRUE,
+                                                        NULL,
                                                         FALSE,
                                                         GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
@@ -187,7 +189,7 @@ register_pattern_select_procs (GimpPDB *pdb)
   /*
    * gimp-patterns-close-popup
    */
-  procedure = gimp_procedure_new (patterns_close_popup_invoker);
+  procedure = gimp_procedure_new (patterns_close_popup_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-patterns-close-popup");
   gimp_procedure_set_static_help (procedure,
@@ -211,7 +213,7 @@ register_pattern_select_procs (GimpPDB *pdb)
   /*
    * gimp-patterns-set-popup
    */
-  procedure = gimp_procedure_new (patterns_set_popup_invoker);
+  procedure = gimp_procedure_new (patterns_set_popup_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-patterns-set-popup");
   gimp_procedure_set_static_help (procedure,
@@ -233,6 +235,8 @@ register_pattern_select_procs (GimpPDB *pdb)
                                gimp_param_spec_pattern ("pattern",
                                                         "pattern",
                                                         "The pattern to set as selected",
+                                                        FALSE,
+                                                        NULL,
                                                         FALSE,
                                                         GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);

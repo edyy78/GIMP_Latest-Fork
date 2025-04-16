@@ -37,10 +37,11 @@
 #include "core/gimplayer.h"
 #include "core/gimplayer-new.h"
 #include "core/gimplayermask.h"
+#include "core/gimplist.h"
 #include "core/gimpimage.h"
 #include "core/gimpimage-undo.h"
 
-#include "vectors/gimpvectors-import.h"
+#include "vectors/gimppath-import.h"
 
 #include "widgets/gimpclipboard.h"
 #include "widgets/gimphelp-ids.h"
@@ -280,7 +281,7 @@ edit_copy_cmd_callback (GimpAction *action,
   return_if_no_drawables (image, drawables, data);
 
   copy = gimp_edit_copy (image, drawables, action_data_get_context (data),
-                         &error);
+                         FALSE, &error);
 
   if (copy)
     {
@@ -402,7 +403,7 @@ edit_paste_cmd_callback (GimpAction *action,
                             GIMP_PASTE_TYPE_NEW_LAYER :
                             GIMP_PASTE_TYPE_NEW_LAYER_IN_PLACE;
 
-          edit_paste (display, converted_type, merged, FALSE);
+          edit_paste (display, converted_type, merged, TRUE);
         }
       g_list_free (drawables);
 
@@ -433,7 +434,7 @@ edit_paste_as_new_image_cmd_callback (GimpAction *action,
 
   if (image)
     {
-      gimp_create_display (gimp, image, GIMP_UNIT_PIXEL, 1.0,
+      gimp_create_display (gimp, image, gimp_unit_pixel (), 1.0,
                            G_OBJECT (gimp_widget_get_monitor (widget)));
       g_object_unref (image);
     }
@@ -655,10 +656,10 @@ edit_paste (GimpDisplay   *display,
 
       if (svg)
         {
-          if (gimp_vectors_import_buffer (image, svg, svg_size,
-                                          TRUE, FALSE,
-                                          GIMP_IMAGE_ACTIVE_PARENT, -1,
-                                          NULL, NULL))
+          if (gimp_path_import_buffer (image, svg, svg_size,
+                                       TRUE, FALSE,
+                                       GIMP_IMAGE_ACTIVE_PARENT, -1,
+                                       NULL, NULL))
             {
               gimp_image_flush (image);
             }
@@ -718,6 +719,7 @@ edit_paste (GimpDisplay   *display,
                                             merged, x, y, width, height)))
         {
           gimp_image_set_selected_layers (image, pasted_layers);
+
           g_list_free (pasted_layers);
           gimp_image_flush (image);
         }

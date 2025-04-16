@@ -112,7 +112,7 @@ gradients_save_as_pov_ray_cmd_callback (GimpAction *action,
                                g_object_ref (gradient),
                                G_CONNECT_SWAPPED);
 
-      gimp_help_connect (dialog, gimp_standard_help_func,
+      gimp_help_connect (dialog, NULL, gimp_standard_help_func,
                          GIMP_HELP_GRADIENT_SAVE_AS_POV, NULL, NULL);
 
       dialogs_attach_dialog (G_OBJECT (gradient),
@@ -122,7 +122,7 @@ gradients_save_as_pov_ray_cmd_callback (GimpAction *action,
   gtk_window_present (GTK_WINDOW (dialog));
 
 #ifdef G_OS_WIN32
-  gimp_window_set_title_bar_theme (context->gimp, dialog, FALSE);
+  gimp_window_set_title_bar_theme (context->gimp, dialog);
 #endif
 }
 

@@ -206,11 +206,7 @@ gimp_g_value_get_memsize (GValue *value)
     }
   else if (G_VALUE_HOLDS_BOXED (value))
     {
-      if (GIMP_VALUE_HOLDS_RGB (value))
-        {
-          memsize += sizeof (GimpRGB);
-        }
-      else if (GIMP_VALUE_HOLDS_MATRIX2 (value))
+      if (GIMP_VALUE_HOLDS_MATRIX2 (value))
         {
           memsize += sizeof (GimpMatrix2);
         }
@@ -221,7 +217,7 @@ gimp_g_value_get_memsize (GValue *value)
         }
       else if (GIMP_VALUE_HOLDS_ARRAY (value)       ||
                GIMP_VALUE_HOLDS_INT32_ARRAY (value) ||
-               GIMP_VALUE_HOLDS_FLOAT_ARRAY (value))
+               GIMP_VALUE_HOLDS_DOUBLE_ARRAY (value))
         {
           GimpArray *array = g_value_get_boxed (value);
 

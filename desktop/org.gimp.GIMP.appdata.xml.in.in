@@ -44,12 +44,20 @@
   <url type="contribute">https://www.gimp.org/develop/</url>
   <screenshots>
     <screenshot type="default">
-      <image>https://www.gimp.org/screenshots/Screenshot-gimp-2.10-painting.jpg</image>
-      <caption>Painting in GIMP</caption>
+      <image>https://www.gimp.org/screenshots/Screenshot-gimp-3.0-painting.jpg</image>
+      <caption>Scene 4 cut 15 of "ZeMarmot" being edited in GIMP. Illustration by Aryeom (CC by-sa 4.0 International)</caption>
     </screenshot>
     <screenshot type="default">
-      <image>https://www.gimp.org/screenshots/Screenshot-gimp-2.10-photo-editing.jpg</image>
-      <caption>Photo editing in GIMP</caption>
+      <image>https://www.gimp.org/screenshots/Screenshot-gimp-3.0-photo-editing-1.jpg</image>
+      <caption>Gull on beach photograph being edited in GIMP. Photo by Iana (CC by-sa 4.0 International)</caption>
+    </screenshot>
+    <screenshot type="default">
+      <image>https://www.gimp.org/screenshots/Screenshot-gimp-3.0-photo-editing-2.jpg</image>
+      <caption>Portrait of Sofiia being edited in GIMP. Photo by Sofia (CC by-sa 4.0 International)</caption>
+    </screenshot>
+    <screenshot type="default">
+      <image>https://www.gimp.org/screenshots/Screenshot-gimp-3.0-engraving.jpg</image>
+      <caption>Scanned engraving being edited in GIMP. Artwork by Liam (CC0)</caption>
     </screenshot>
   </screenshots>
   <update_contact>gimp-developer-list_at_gnome.org</update_contact>
@@ -63,7 +71,7 @@
     <kudo>ModernToolkit</kudo>
     <kudo>UserDocs</kudo>
   </kudos>
-  <translation type="gettext">gimp20</translation>
+  <translation type="gettext">gimp30</translation>
 
   <launchable type="desktop-id">gimp.desktop</launchable>
   <provides>
@@ -74,6 +82,114 @@
   </provides>
 
   <releases>
+    <release version="3.0.2" date="2025-03-23">
+      <description>
+        <p>
+        As could be expected from a major release, a few critical bugs slipped through our testing!
+        This first micro-point release fix such bugs.
+        </p>
+      </description>
+    </release>
+    <release version="3.0.0" date="2025-03-16">
+      <description>
+        <p>
+        Our initial release for the next generation in image manipulation!
+        While GIMP 3.0 has too many improvements to make an exhaustive list, here are
+        some of the highlights:
+        </p>
+        <ul>
+          <li demo="layer-list">Multi-selection of layers in the Layers dockable</li>
+          <li>Proper high pixel density display support</li>
+          <li>Improved graphics tablets support</li>
+          <li>Wayland support</li>
+          <li>New soft-proofing toggle in the status bar, with pop-over settings on right click</li>
+
+          <li demo="layer-list,
+                    layer-list:item-effect-header-icon">
+          Initial UI for non-destructive layer effects
+          </li>
+          <li demo="toolbox:paintbrush,
+                    tool-options:expand-use">
+          Paint tools now have an "Expand Layers" option and sub-options to auto-expand layers when painting over their boundaries
+          </li>
+          <li demo="toolbox:align,
+                    tool-options">
+          Align and Distribute tool: completely reworked usage
+          </li>
+          <li demo="toolbox:text,
+                    tool-options:outline=2,
+                    tool-options:text-outline-settings">
+          Text tool: new "Outlined" and "Outlined and filled" options
+          </li>
+          <li demo="toolbox:bucket-fill,
+                    tool-options:fill-area=2,
+                    tool-options:line-art-stroke-border=1">
+          New "Stroke borders" option in Bucket Fill tool's "Fill by line art detection"
+          </li>
+          <li demo="toolbox:bucket-fill,
+                    tool-options:fill-area=2,
+                    tool-options:line-art-settings">
+          Redesigned and reorganized "Fill by line art detection" settings
+          </li>
+
+          <li>Deeply reworked API for plug-in developers</li>
+          <li>Plug-in API now available in C/C++, Python 3, Javascript, Lua, Vala and more</li>
+
+          <li>Improved support of many image formats</li>
+        </ul>
+      </description>
+    </release>
+
+    <release version="3.0.0~rc3" date="2025-02-09" type="development">
+      <description>
+        <p>
+        While GIMP 3.0 is getting more and more robust with this
+        third release candidate, some core changes require more testing.
+        Some of the highlights of this version are:
+        </p>
+        <ul>
+          <li>Reworked image graph for even less destructive filters</li>
+          <li>BC7 compression support for DDS file import</li>
+          <li>Improved PSD support (16-bit per channel LAB import, metadata, etc.)</li>
+          <li>Various API improvements for plug-in developers</li>
+          <li>Script-Fu: new named-argument syntax for functions generated from PDB procedures</li>
+          <li>Many bug fixes and a much more robust base overall</li>
+        </ul>
+      </description>
+    </release>
+    <release version="3.0.0~rc2" date="2024-12-27" type="development">
+      <description>
+        <p>
+        The second release candidate for the upcoming GIMP 3.0.0 features a lot of bug fixes, as well as a few
+        necessary core or plug-in changes:
+        </p>
+        <ul>
+          <li>New API functions for handling layer effects from plug-ins</li>
+          <li>More compat PDB procedures removed in favor of new API</li>
+          <li>Perceptual space for layer mode renamed non-linear and real perceptual space added</li>
+          <li>Major BMP support improvement</li>
+          <li>Many bug fixes</li>
+        </ul>
+      </description>
+    </release>
+    <release version="3.0.0~rc1" date="2024-11-04" type="development">
+      <description>
+        <p>
+        GIMP 3.0.0-RC1 is the first release candidate of the GIMP 3 stable branch.
+        Most work has happened under the hood on bug fixes, API changes,
+        plug-ins ported to new API and stability in general.
+        Some more visible changes include:
+        </p>
+        <ul>
+          <li>Logo updated</li>
+          <li>The dialog for layer effects now proposes a "Merge filter" checkbox</li>
+          <li>Arrow key navigation in item dockables is now multi-layer aware</li>
+          <li>Dockable tab navigation with scroll input was reimplemented (feature removed from GTK)</li>
+          <li>New support for Sketchbook TIFF layers</li>
+          <li>Public libgimp API v3 now stable</li>
+        </ul>
+      </description>
+    </release>
     <release version="2.99.18" date="2024-02-17" type="development">
       <description>
         <p>
@@ -158,7 +274,7 @@
 
           <li>Floating selections not created anymore when pasting new layers</li>
           <li>New "Gray" theme based on a 18.42% luminance middle-gray background</li>
-          <li>Icon sizes can be overriden in Preferences > Themes</li>
+          <li>Icon sizes can be overridden in Preferences > Themes</li>
 
           <li>Faster save of XCF files</li>
           <li>XCF file format improved with a proper structure for path items</li>
@@ -437,6 +553,17 @@
       </description>
     </release>
 
+    <release version="2.10.38" date="2024-05-02">
+      <description>
+        <p>
+            GIMP 2.10.38 has been the first bug-fix only release for a long
+            time, correcting various bugs, some more annoying than others.
+        </p>
+        <p>
+            On Windows, the Windows Ink API support has been backported.
+        </p>
+      </description>
+    </release>
     <release version="2.10.36" date="2023-11-05">
       <description>
         <p>

@@ -4,7 +4,9 @@
 libgimp/gimp.c
 libgimp/gimpbrushchooser.c
 libgimp/gimpdrawablechooser.c
-libgimp/gimpexport.c
+libgimp/gimpexportoptions.c
+libgimp/gimpexportprocedure.c
+libgimp/gimpexportproceduredialog.c
 libgimp/gimpimagemetadata.c
 libgimp/gimpimagemetadata-save.c
 libgimp/gimploadprocedure.c
@@ -16,14 +18,15 @@ libgimp/gimpprocedure.c
 libgimp/gimpproceduredialog.c
 libgimp/gimpprocview.c
 libgimp/gimppropwidgets.c
-libgimp/gimpsaveprocedure.c
-libgimp/gimpsaveproceduredialog.c
-libgimp/gimpunitcache.c
+libgimp/gimpresolutionentry-private.c
+libgimp/gimpvectorloadprocedure.c
+libgimp/gimpvectorloadproceduredialog.c
 
 libgimpbase/gimpbaseenums.c
 libgimpbase/gimpcpuaccel.c
 libgimpbase/gimpmemsize.c
 libgimpbase/gimpmetadata.c
+libgimpbase/gimpunit.c
 libgimpbase/gimputils.c
 
 libgimpcolor/gimpcolorprofile.c
@@ -53,6 +56,7 @@ libgimpwidgets/gimpcolorselect.c
 libgimpwidgets/gimpcolorselection.c
 libgimpwidgets/gimpcontroller.c
 libgimpwidgets/gimpdialog.c
+libgimpwidgets/gimpfilechooser.c
 libgimpwidgets/gimpfileentry.c
 libgimpwidgets/gimphelpui.c
 libgimpwidgets/gimpicons.c

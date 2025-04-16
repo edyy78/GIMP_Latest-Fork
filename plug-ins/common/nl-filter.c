@@ -84,7 +84,6 @@ static GimpProcedure  * nlfilter_create_procedure (GimpPlugIn           *plug_in
 static GimpValueArray * nlfilter_run              (GimpProcedure        *procedure,
                                                    GimpRunMode           run_mode,
                                                    GimpImage            *image,
-                                                   gint                  n_drawables,
                                                    GimpDrawable        **drawables,
                                                    GimpProcedureConfig  *config,
                                                    gpointer              run_data);
@@ -170,27 +169,27 @@ nlfilter_create_procedure (GimpPlugIn  *plug_in,
                                       "Graeme W. Gill, Eric L. Hernes",
                                       "1997");
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "alpha",
-                            _("_Alpha"),
-                            _("The amount of the filter to apply"),
-                            0, 1, 0.3,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "alpha",
+                                          _("_Alpha"),
+                                          _("The amount of the filter to apply"),
+                                          0, 1, 0.3,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "radius",
-                            _("Ra_dius"),
-                            _("The filter radius"),
-                            1.0 / 3.0, 1, 1.0 / 3.0,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "radius",
+                                          _("Ra_dius"),
+                                          _("The filter radius"),
+                                          1.0 / 3.0, 1, 1.0 / 3.0,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "filter",
-                         _("Filter"),
-                         _("The Filter to Run, "
-                           "0 - alpha trimmed mean; "
-                           "1 - optimal estimation "
-                           "(alpha controls noise variance); "
-                           "2 - edge enhancement"),
-                         0, 2, 0,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_choice_argument (procedure, "filter",
+                                          _("_Filter"),
+                                          _("The Filter to Run"),
+                                          gimp_choice_new_with_values ("alpha-trim",         filter_alpha_trim,   _("Alpha trimmed mean"), NULL,
+                                                                       "optimal-estimation", filter_opt_est,      _("Optimal estimation"), NULL,
+                                                                       "edge-enhancement",   filter_edge_enhance, _("Edge enhancement"),   NULL,
+                                                                       NULL),
+                                          "alpha-trim",
+                                          G_PARAM_READWRITE);
     }
 
   return procedure;
@@ -200,7 +199,6 @@ static GimpValueArray *
 nlfilter_run (GimpProcedure        *procedure,
               GimpRunMode           run_mode,
               GimpImage            *image,
-              gint                  n_drawables,
               GimpDrawable        **drawables,
               GimpProcedureConfig  *config,
               gpointer              run_data)
@@ -209,7 +207,7 @@ nlfilter_run (GimpProcedure        *procedure,
 
   gegl_init (NULL, NULL);
 
-  if (n_drawables != 1)
+  if (gimp_core_object_array_get_length ((GObject **) drawables) != 1)
     {
       GError *error = NULL;
 
@@ -957,8 +955,9 @@ nlfilter (GObject      *config,
   g_object_get (config,
                 "alpha",  &alpha,
                 "radius", &radius,
-                "filter", &filter,
                 NULL);
+  filter = gimp_procedure_config_get_choice_id (GIMP_PROCEDURE_CONFIG (config),
+                                                "filter");
 
   if (preview)
     {
@@ -1092,12 +1091,11 @@ nlfilter_dialog (GimpProcedure *procedure,
                  GObject       *config,
                  GimpDrawable  *drawable)
 {
-  GtkWidget     *dialog;
-  GtkWidget     *preview;
-  GtkListStore  *store;
-  GtkWidget     *frame;
-  GtkWidget     *scale;
-  gboolean       run;
+  GtkWidget *dialog;
+  GtkWidget *preview;
+  GtkWidget *frame;
+  GtkWidget *scale;
+  gboolean   run;
 
   gimp_ui_init (PLUG_IN_BINARY);
 
@@ -1105,19 +1103,8 @@ nlfilter_dialog (GimpProcedure *procedure,
                                       GIMP_PROCEDURE_CONFIG (config),
                                       _("NL Filter"));
 
-  gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
-                                            GTK_RESPONSE_OK,
-                                            GTK_RESPONSE_CANCEL,
-                                           -1);
-
-  gimp_window_set_transient (GTK_WINDOW (dialog));
-
-  store = gimp_int_store_new (_("Alpha trimmed mean"), 0,
-                              _("Optimal estimation"), 1,
-                              _("Edge enhancement"),   2,
-                              NULL);
-  frame = gimp_procedure_dialog_get_int_radio (GIMP_PROCEDURE_DIALOG (dialog),
-                                               "filter", GIMP_INT_STORE (store));
+  frame = gimp_procedure_dialog_get_widget (GIMP_PROCEDURE_DIALOG (dialog),
+                                            "filter", GIMP_TYPE_INT_RADIO_FRAME);
   gtk_widget_set_margin_bottom (frame, 12);
 
   scale = gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),

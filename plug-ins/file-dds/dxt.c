@@ -36,6 +36,7 @@
 
 #include <libgimp/gimp.h>
 
+#include "bc7.h"
 #include "dds.h"
 #include "dxt.h"
 #include "endian_rw.h"
@@ -108,6 +109,9 @@ extract_block (const unsigned char *src,
     }
 }
 
+#if 0
+/* Currently unused, hidden to avoid compilation warnings. */
+
 /* pack BGR8 to RGB565 */
 static inline unsigned short
 pack_rgb565 (const unsigned char *c)
@@ -116,6 +120,7 @@ pack_rgb565 (const unsigned char *c)
          (mul8bit(c[1], 63) <<  5) |
          (mul8bit(c[0], 31)      );
 }
+#endif
 
 /* unpack RGB565 to BGR */
 static void
@@ -1342,6 +1347,11 @@ dxt_decompress (unsigned char *dst,
             {
               decode_alpha_block_BC3(block, s, width);
               decode_alpha_block_BC3(block + 1, s + 8, width);
+              s += 16;
+            }
+          else if (format == DDS_COMPRESS_BC7)
+            {
+              bc7_decompress (s, size, block);
               s += 16;
             }
 

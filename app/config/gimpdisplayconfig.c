@@ -115,7 +115,6 @@ static void
 gimp_display_config_class_init (GimpDisplayConfigClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
-  GimpRGB       xor_rgb      = { 0, 0, 0, 0 };
   GeglColor    *color        = gegl_color_new (NULL);
 
   object_class->finalize     = gimp_display_config_finalize;
@@ -138,20 +137,20 @@ gimp_display_config_class_init (GimpDisplayConfigClass *klass)
                          GIMP_CHECK_TYPE_GRAY_CHECKS,
                          GIMP_PARAM_STATIC_STRINGS);
 
-  gegl_color_set_pixel (color, babl_format ("R'G'B'A double"), &GIMP_CHECKS_CUSTOM_COLOR1);
+  gegl_color_set_pixel (color, babl_format ("R'G'B'A double"), GIMP_CHECKS_CUSTOM_COLOR1);
   GIMP_CONFIG_PROP_COLOR (object_class, PROP_TRANSPARENCY_CUSTOM_COLOR1,
                           "transparency-custom-color1",
                           _("Transparency custom color 1"),
                           TRANSPARENCY_CUSTOM_COLOR1_BLURB,
-                          color,
+                          FALSE, color,
                           GIMP_PARAM_STATIC_STRINGS);
 
-  gegl_color_set_pixel (color, babl_format ("R'G'B'A double"), &GIMP_CHECKS_CUSTOM_COLOR2);
+  gegl_color_set_pixel (color, babl_format ("R'G'B'A double"), GIMP_CHECKS_CUSTOM_COLOR2);
   GIMP_CONFIG_PROP_COLOR (object_class, PROP_TRANSPARENCY_CUSTOM_COLOR2,
                           "transparency-custom-color2",
                           _("Transparency custom color 2"),
                           TRANSPARENCY_CUSTOM_COLOR2_BLURB,
-                          color,
+                          FALSE, color,
                           GIMP_PARAM_STATIC_STRINGS);
 
   GIMP_CONFIG_PROP_INT (object_class, PROP_SNAP_DISTANCE,
@@ -379,12 +378,12 @@ gimp_display_config_class_init (GimpDisplayConfigClass *klass)
                             GIMP_PARAM_STATIC_STRINGS |
                             GIMP_CONFIG_PARAM_IGNORE);
 
-  GIMP_CONFIG_PROP_RGB (object_class, PROP_XOR_COLOR,
-                        "xor-color",
-                        NULL, NULL,
-                        FALSE, &xor_rgb,
-                        GIMP_PARAM_STATIC_STRINGS |
-                        GIMP_CONFIG_PARAM_IGNORE);
+  GIMP_CONFIG_PROP_COLOR (object_class, PROP_XOR_COLOR,
+                          "xor-color",
+                          NULL, NULL,
+                          FALSE, color,
+                          GIMP_PARAM_STATIC_STRINGS |
+                          GIMP_CONFIG_PARAM_IGNORE);
 
   GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_PERFECT_MOUSE,
                             "perfect-mouse",
@@ -413,11 +412,11 @@ gimp_display_config_init (GimpDisplayConfig *config)
   GeglColor *color;
 
   color = gegl_color_new (NULL);
-  gegl_color_set_pixel (color, babl_format ("R'G'B'A double"), &GIMP_CHECKS_CUSTOM_COLOR1);
+  gegl_color_set_pixel (color, babl_format ("R'G'B'A double"), GIMP_CHECKS_CUSTOM_COLOR1);
   config->transparency_custom_color1 = color;
 
   color = gegl_color_new (NULL);
-  gegl_color_set_pixel (color, babl_format ("R'G'B'A double"), &GIMP_CHECKS_CUSTOM_COLOR2);
+  gegl_color_set_pixel (color, babl_format ("R'G'B'A double"), GIMP_CHECKS_CUSTOM_COLOR2);
   config->transparency_custom_color2 = color;
 
   config->default_view =

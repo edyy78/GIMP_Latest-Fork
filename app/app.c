@@ -44,6 +44,7 @@
 #undef GIMP_DISABLE_DEPRECATED /* for compat enums */
 #include "libgimpbase/gimpbase.h"
 #define GIMP_DISABLE_DEPRECATED
+#include "libgimpbase/gimpbase-private.h"
 #include "libgimpconfig/gimpconfig.h"
 
 #include "core/core-types.h"
@@ -92,6 +93,12 @@ static void       app_restore_after_callback (Gimp               *gimp,
 static gboolean   app_exit_after_callback    (Gimp               *gimp,
                                               gboolean            kill_it,
                                               GApplication       *app);
+
+#ifdef G_OS_WIN32
+static BOOL       app_quit_on_ctrl_c         (DWORD               ctrl_type);
+#else
+static void       app_quit_on_ctrl_c         (gint                sig_num);
+#endif
 
 #if 0
 /*  left here as documentation how to do compat enums  */
@@ -359,6 +366,7 @@ app_activate_callback (GimpCoreApp *app,
   GimpInitStatusFunc  update_status_func = NULL;
   const gchar       **filenames;
   const gchar        *current_language;
+  const gchar        *system_lang_l10n   = NULL;
   gchar              *prev_language      = NULL;
   GError             *font_error         = NULL;
   gint                batch_retval;
@@ -369,9 +377,15 @@ app_activate_callback (GimpCoreApp *app,
 
   gimp_core_app_set_exit_status (app, EXIT_SUCCESS);
 
+  /* Language was already initialized. I call this again only to get the
+   * actual language information and the "System Language" string
+   * localized in the actual system language.
+   */
+  current_language = language_init (NULL, &system_lang_l10n);
 #ifndef GIMP_CONSOLE_COMPILATION
   if (! gimp->no_interface)
-    update_status_func = gui_init (gimp, gimp_app_get_no_splash (GIMP_APP (app)), GIMP_APP (app), NULL);
+    update_status_func = gui_init (gimp, gimp_app_get_no_splash (GIMP_APP (app)),
+                                   GIMP_APP (app), NULL, system_lang_l10n);
 #endif
 
   if (! update_status_func)
@@ -385,10 +399,7 @@ app_activate_callback (GimpCoreApp *app,
   g_object_get (gimp->edit_config,
                 "prev-language", &prev_language,
                 NULL);
-  /* Language was already initialized. I call this again only to get the
-   * actual language information.
-   */
-  current_language = language_init (NULL);
+
   gimp->query_all = (prev_language == NULL ||
                      g_strcmp0 (prev_language, current_language) != 0);
   g_free (prev_language);
@@ -518,6 +529,29 @@ app_activate_callback (GimpCoreApp *app,
       */
       gimp_exit (gimp, TRUE);
     }
+  else
+#ifndef GIMP_CONSOLE_COMPILATION
+    if (gimp->no_interface)
+#endif
+    {
+      /* In console version or GUI version with no interface, we keep
+       * running when --quit was not set. For instance, there could be
+       * an always-ON plug-in (GIMP_PDB_PROC_TYPE_PERSISTENT) which is
+       * set up to receive commands for GIMP.
+       */
+#ifdef G_OS_WIN32
+      SetConsoleCtrlHandler ((PHANDLER_ROUTINE) app_quit_on_ctrl_c, TRUE);
+#else
+      gimp_signal_private (SIGINT, app_quit_on_ctrl_c, 0);
+#endif
+      g_printf ("\n== %s ==\n%s\n\n%s\n",
+                /* TODO: localize when string freeze is over. */
+                "INFO",
+                "GIMP is now running as a background process. "
+                "You can quit anytime with Ctrl-C (SIGINT).",
+                "If you wanted to quit immediately instead, call GIMP with --quit.");
+      g_application_hold (G_APPLICATION (app));
+    }
 }
 
 static void
@@ -542,28 +576,40 @@ app_exit_after_callback (Gimp         *gimp,
   if (gimp->be_verbose)
     g_print ("EXIT: %s\n", G_STRFUNC);
 
-  /*
-   *  In stable releases, we simply call exit() here. This speeds up
-   *  the process of quitting GIMP and also works around the problem
-   *  that plug-ins might still be running.
-   *
-   *  In unstable releases, we shut down GIMP properly in an attempt
-   *  to catch possible problems in our finalizers.
-   */
-
-#ifdef GIMP_UNSTABLE
-
   g_application_quit (G_APPLICATION (app));
-
-#else
-
-  gimp_gegl_exit (gimp);
-
-  gegl_exit ();
-
-  exit (gimp_core_app_get_exit_status (GIMP_CORE_APP (app)));
-
-#endif
 
   return FALSE;
 }
+
+#ifdef G_OS_WIN32
+static BOOL
+app_quit_on_ctrl_c (DWORD ctrl_type)
+{
+  gboolean handled = FALSE;
+
+  if (ctrl_type == CTRL_C_EVENT)
+    {
+      GApplication *app = g_application_get_default ();
+      Gimp         *gimp;
+
+      g_application_release (app);
+      gimp = gimp_core_app_get_gimp (GIMP_CORE_APP (app));
+      gimp_exit (gimp, TRUE);
+
+      handled = TRUE;
+    }
+
+  return handled;
+}
+#else
+static void
+app_quit_on_ctrl_c (gint sig_num)
+{
+  GApplication *app = g_application_get_default ();
+  Gimp         *gimp;
+
+  g_application_release (app);
+  gimp = gimp_core_app_get_gimp (GIMP_CORE_APP (app));
+  gimp_exit (gimp, TRUE);
+}
+#endif

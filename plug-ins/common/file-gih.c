@@ -17,25 +17,24 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-  /* Example of how to call file_gih_save from script-fu:
+  /* Example of how to call file-gih-export from script-fu:
 
   (let ((ranks (cons-array 1 'byte)))
     (aset ranks 0 12)
-    (file-gih-save 1
-                   img
-                   drawable
-                   "foo.gih"
-                   "foo.gih"
-                   100
-                   "test brush"
-                   125
-                   125
-                   3
-                   4
-                   1
-                   ranks
-                   1
-                   '("random")))
+    (file-gih-export 1
+                     img
+                     "foo.gih"
+                     "foo.gih"
+                     100
+                     "test brush"
+                     125
+                     125
+                     3
+                     4
+                     1
+                     ranks
+                     1
+                     '("random")))
   */
 
 
@@ -48,7 +47,7 @@
 #include "libgimp/stdplugins-intl.h"
 
 
-#define SAVE_PROC      "file-gih-save"
+#define EXPORT_PROC    "file-gih-export"
 #define PLUG_IN_BINARY "file-gih"
 #define PLUG_IN_ROLE   "gimp-file-gih"
 
@@ -83,12 +82,11 @@ static GList          * gih_query_procedures  (GimpPlugIn           *plug_in);
 static GimpProcedure  * gih_create_procedure  (GimpPlugIn           *plug_in,
                                                const gchar          *name);
 
-static GimpValueArray * gih_save              (GimpProcedure        *procedure,
+static GimpValueArray * gih_export            (GimpProcedure        *procedure,
                                                GimpRunMode           run_mode,
                                                GimpImage            *image,
-                                               gint                  n_drawables,
-                                               GimpDrawable        **drawables,
                                                GFile                *file,
+                                               GimpExportOptions    *options,
                                                GimpMetadata         *metadata,
                                                GimpProcedureConfig  *config,
                                                gpointer              run_data);
@@ -137,7 +135,7 @@ gih_init (Gih *gih)
 static GList *
 gih_query_procedures (GimpPlugIn *plug_in)
 {
-  return g_list_append (NULL, g_strdup (SAVE_PROC));
+  return g_list_append (NULL, g_strdup (EXPORT_PROC));
 }
 
 static GimpProcedure *
@@ -146,11 +144,11 @@ gih_create_procedure (GimpPlugIn  *plug_in,
 {
   GimpProcedure *procedure = NULL;
 
-  if (! strcmp (name, SAVE_PROC))
+  if (! strcmp (name, EXPORT_PROC))
     {
-      procedure = gimp_save_procedure_new (plug_in, name,
-                                           GIMP_PDB_PROC_TYPE_PLUGIN,
-                                           FALSE, gih_save, NULL, NULL);
+      procedure = gimp_export_procedure_new (plug_in, name,
+                                             GIMP_PDB_PROC_TYPE_PLUGIN,
+                                             FALSE, gih_export, NULL, NULL);
 
       gimp_procedure_set_image_types (procedure, "RGB*, GRAY*");
 
@@ -158,17 +156,17 @@ gih_create_procedure (GimpPlugIn  *plug_in,
       gimp_procedure_set_icon_name (procedure, GIMP_ICON_BRUSH);
 
       gimp_procedure_set_documentation (procedure,
-                                        "exports images in GIMP brush pipe "
-                                        "format",
-                                        "This plug-in exports an image in "
-                                        "the GIMP brush pipe format. For a "
-                                        "colored brush pipe, RGBA layers are "
-                                        "used, otherwise the layers should be "
-                                        "grayscale masks. The image can be "
-                                        "multi-layered, and additionally the "
-                                        "layers can be divided into a "
-                                        "rectangular array of brushes.",
-                                        SAVE_PROC);
+                                        _("Exports images in GIMP Brush Pipe "
+                                          "format"),
+                                        _("This plug-in exports an image in "
+                                          "the GIMP brush pipe format. For a "
+                                          "colored brush pipe, RGBA layers are "
+                                          "used, otherwise the layers should be "
+                                          "grayscale masks. The image can be "
+                                          "multi-layered, and additionally the "
+                                          "layers can be divided into a "
+                                          "rectangular array of brushes."),
+                                        EXPORT_PROC);
       gimp_procedure_set_attribution (procedure,
                                       "Tor Lillqvist",
                                       "Tor Lillqvist",
@@ -183,84 +181,91 @@ gih_create_procedure (GimpPlugIn  *plug_in,
       gimp_file_procedure_set_handles_remote (GIMP_FILE_PROCEDURE (procedure),
                                               TRUE);
 
-      GIMP_PROC_ARG_INT (procedure, "spacing",
-                         _("Spacing (_percent)"),
-                         _("Spacing of the brush"),
-                         1, 1000, 20,
-                         GIMP_PARAM_READWRITE);
+      gimp_export_procedure_set_capabilities (GIMP_EXPORT_PROCEDURE (procedure),
+                                              GIMP_EXPORT_CAN_HANDLE_RGB   |
+                                              GIMP_EXPORT_CAN_HANDLE_GRAY  |
+                                              GIMP_EXPORT_CAN_HANDLE_ALPHA |
+                                              GIMP_EXPORT_CAN_HANDLE_LAYERS,
+                                              NULL, NULL, NULL);
 
-      GIMP_PROC_ARG_STRING (procedure, "description",
-                            _("_Description"),
-                            _("Short description of the GIH brush pipe"),
-                            "GIMP Brush Pipe",
-                            GIMP_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "spacing",
+                                       _("Spacing (_percent)"),
+                                       _("Spacing of the brush"),
+                                       1, 1000, 20,
+                                       GIMP_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "cell-width",
-                         _("Cell _width"),
-                         _("Width of the brush cells in pixels"),
-                         1, 1000, 1,
-                         GIMP_PARAM_READWRITE);
+      gimp_procedure_add_string_argument (procedure, "description",
+                                          _("_Description"),
+                                          _("Short description of the GIH brush pipe"),
+                                          "GIMP Brush Pipe",
+                                          GIMP_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "cell-height",
-                         _("Cell _height"),
-                         _("Height of the brush cells in pixels"),
-                         1, 1000, 1,
-                         GIMP_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "cell-width",
+                                       _("Cell _width"),
+                                       _("Width of the brush cells in pixels"),
+                                       1, GIMP_MAX_IMAGE_SIZE, 1,
+                                       GIMP_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "num-cells",
-                         _("_Number of cells"),
-                         _("Number of cells to cut up"),
-                         1, 1000, 1,
-                         GIMP_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "cell-height",
+                                       _("Cell _height"),
+                                       _("Height of the brush cells in pixels"),
+                                       1, GIMP_MAX_IMAGE_SIZE, 1,
+                                       GIMP_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BYTES (procedure, "ranks",
-                           _("_Rank"),
-                           _("Ranks of the dimensions"),
-                           GIMP_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "num-cells",
+                                       _("_Number of cells"),
+                                       _("Number of cells to cut up"),
+                                       1, 1000, 1,
+                                       GIMP_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_STRV (procedure, "selection-modes",
-                          "Selection modes",
-                          "Selection modes",
-                          GIMP_PARAM_READWRITE);
+      gimp_procedure_add_bytes_argument (procedure, "ranks",
+                                         _("_Rank"),
+                                         _("Ranks of the dimensions"),
+                                         GIMP_PARAM_READWRITE);
+
+      gimp_procedure_add_string_array_argument (procedure, "selection-modes",
+                                               _("Selection modes"),
+                                               _("Selection modes"),
+                                               GIMP_PARAM_READWRITE);
 
       /* Auxiliary arguments. Only useful for the GUI, to pass info around. */
 
-      GIMP_PROC_AUX_ARG_STRING (procedure, "info-text",
-                                _("Display as"),
-                                _("Describe how the layers will be split"),
-                                "", GIMP_PARAM_READWRITE);
+      gimp_procedure_add_string_aux_argument (procedure, "info-text",
+                                              _("Display as"),
+                                              _("Describe how the layers will be split"),
+                                              "", GIMP_PARAM_READWRITE);
 
-      GIMP_PROC_AUX_ARG_INT (procedure, "dimension",
-                             _("D_imension"),
-                             _("How many dimensions the animated brush has"),
-                             1, 1000, 1,
-                             GIMP_PARAM_READWRITE);
+      gimp_procedure_add_int_aux_argument (procedure, "dimension",
+                                           _("D_imension"),
+                                           _("How many dimensions the animated brush has"),
+                                           1, GIMP_PIXPIPE_MAXDIM, 1,
+                                           GIMP_PARAM_READWRITE);
 
-      GIMP_PROC_AUX_ARG_INT32_ARRAY (procedure, "guides",
-                                     "Guides",
-                                     "Guides to show how the layers will be split in cells",
-                                     GIMP_PARAM_READWRITE);
+      gimp_procedure_add_int32_array_aux_argument (procedure, "guides",
+                                                   "Guides",
+                                                   "Guides to show how the layers will be split in cells",
+                                                   GIMP_PARAM_READWRITE);
     }
 
   return procedure;
 }
 
 static GimpValueArray *
-gih_save (GimpProcedure        *procedure,
-          GimpRunMode           run_mode,
-          GimpImage            *image,
-          gint                  n_drawables,
-          GimpDrawable        **drawables,
-          GFile                *file,
-          GimpMetadata         *metadata,
-          GimpProcedureConfig  *config,
-          gpointer              run_data)
+gih_export (GimpProcedure        *procedure,
+            GimpRunMode           run_mode,
+            GimpImage            *image,
+            GFile                *file,
+            GimpExportOptions    *options,
+            GimpMetadata         *metadata,
+            GimpProcedureConfig  *config,
+            gpointer              run_data)
 {
-  GimpPDBStatusType  status = GIMP_PDB_SUCCESS;
-  GimpExportReturn   export = GIMP_EXPORT_CANCEL;
+  GimpPDBStatusType  status    = GIMP_PDB_SUCCESS;
+  GimpExportReturn   export    = GIMP_EXPORT_IGNORE;
+  GimpLayer        **layers    = NULL;
   GimpParasite      *parasite;
   GimpImage         *orig_image;
-  GError            *error  = NULL;
+  GError            *error     = NULL;
 
   GimpPixPipeParams  gihparams   = { 0, };
   gchar             *description = NULL;
@@ -279,16 +284,7 @@ gih_save (GimpProcedure        *procedure,
       gint        cell_width;
       gint        cell_height;
 
-      export = gimp_export_image (&image, &n_drawables, &drawables, "GIH",
-                                  GIMP_EXPORT_CAN_HANDLE_RGB   |
-                                  GIMP_EXPORT_CAN_HANDLE_GRAY  |
-                                  GIMP_EXPORT_CAN_HANDLE_ALPHA |
-                                  GIMP_EXPORT_CAN_HANDLE_LAYERS);
-
-      if (export == GIMP_EXPORT_CANCEL)
-        return gimp_procedure_new_return_values (procedure,
-                                                 GIMP_PDB_CANCEL,
-                                                 NULL);
+      gimp_pixpipe_params_init (&gihparams);
 
       /*  Possibly retrieve data  */
       parasite = gimp_image_get_parasite (orig_image,
@@ -300,7 +296,7 @@ gih_save (GimpProcedure        *procedure,
 
           parasite_data = (gchar *) gimp_parasite_get_data (parasite, &parasite_size);
 
-          g_object_set (config, "description", parasite_data , NULL);
+          g_object_set (config, "description", parasite_data, NULL);
 
           gimp_parasite_free (parasite);
         }
@@ -316,6 +312,53 @@ gih_save (GimpProcedure        *procedure,
 
           g_free (name);
         }
+
+      parasite = gimp_image_get_parasite (orig_image,
+                                          "gimp-brush-pipe-parameters");
+      if (parasite)
+       {
+          gchar   *parasite_data;
+          guint32  parasite_size;
+
+          parasite_data = (gchar *) gimp_parasite_get_data (parasite,
+                                                            &parasite_size);
+          parasite_data = g_strndup (parasite_data, parasite_size);
+
+          gimp_pixpipe_params_parse (parasite_data, &gihparams);
+
+          g_object_set (config,
+                        "num-cells", gihparams.ncells,
+                        "dimension", gihparams.dim,
+                        NULL);
+
+          if (gihparams.dim > 0)
+            {
+              GBytes  *ranks = NULL;
+              guint8   rank_int[gihparams.dim];
+              gchar  **selection_modes;
+
+              selection_modes = g_new0 (gchar *, gihparams.dim + 1);
+
+              for (gint i = 0; i < gihparams.dim; i++)
+                {
+                  selection_modes[i] = gihparams.selection[i];
+                  rank_int[i]        = (guint8) gihparams.rank[i];
+                }
+
+              ranks =
+                g_bytes_new (rank_int, sizeof (guint8) * gihparams.dim);
+              g_object_set (config,
+                            "ranks",           ranks,
+                            "selection-modes", selection_modes,
+                            NULL);
+
+              g_bytes_unref (ranks);
+              g_free (selection_modes);
+            }
+
+          gimp_parasite_free (parasite);
+          g_free (parasite_data);
+       }
 
       g_object_get (config,
                     "cell-width",  &cell_width,
@@ -353,7 +396,8 @@ gih_save (GimpProcedure        *procedure,
         }
     }
 
-  gimp_pixpipe_params_init (&gihparams);
+  export = gimp_export_options_get_image (options, &image);
+  layers = gimp_image_get_layers (image);
 
   g_object_get (config,
                 "spacing",         &spacing,
@@ -382,27 +426,22 @@ gih_save (GimpProcedure        *procedure,
 
   if (status == GIMP_PDB_SUCCESS)
     {
-      GimpProcedure   *procedure;
-      GimpValueArray  *save_retvals;
-      GimpObjectArray *drawables_array;
-      gchar           *paramstring;
+      GimpProcedure  *procedure;
+      GimpValueArray *save_retvals;
+      gchar          *paramstring;
 
       paramstring = gimp_pixpipe_params_build (&gihparams);
 
-      drawables_array = gimp_object_array_new (GIMP_TYPE_DRAWABLE, (GObject **) drawables,
-                                               n_drawables, FALSE);
-      procedure    = gimp_pdb_lookup_procedure (gimp_get_pdb (),
-                                                "file-gih-save-internal");
+      procedure = gimp_pdb_lookup_procedure (gimp_get_pdb (),
+                                             "file-gih-export-internal");
       save_retvals = gimp_procedure_run (procedure,
-                                         "image",         image,
-                                         "num-drawables", n_drawables,
-                                         "drawables",     drawables_array,
-                                         "file",          file,
-                                         "spacing",       spacing,
-                                         "name",          description,
-                                         "params",        paramstring,
+                                         "image",     image,
+                                         "drawables", (GimpDrawable **) layers,
+                                         "file",      file,
+                                         "spacing",   spacing,
+                                         "name",      description,
+                                         "params",    paramstring,
                                          NULL);
-      gimp_object_array_free (drawables_array);
 
       if (GIMP_VALUES_GET_ENUM (save_retvals, 0) == GIMP_PDB_SUCCESS)
         {
@@ -412,11 +451,13 @@ gih_save (GimpProcedure        *procedure,
                                         description);
           gimp_image_attach_parasite (orig_image, parasite);
           gimp_parasite_free (parasite);
+
+          gimp_image_detach_parasite (image, "gimp-brush-pipe-parameters");
         }
       else
         {
           g_set_error (&error, 0, 0,
-                       "Running procedure 'file-gih-save-internal' "
+                       "Running procedure 'file-gih-export-internal' "
                        "failed: %s",
                        gimp_pdb_get_last_error (gimp_get_pdb ()));
 
@@ -431,20 +472,18 @@ gih_save (GimpProcedure        *procedure,
 
  out:
   if (export == GIMP_EXPORT_EXPORT)
-    {
-      gimp_image_delete (image);
-      g_free (drawables);
-    }
+    gimp_image_delete (image);
 
+  g_free (layers);
   return gimp_procedure_new_return_values (procedure, status, error);
 }
 
 
-/*  save routines */
+/*  export routines */
 
 static void
 gih_remove_guides (GimpProcedureConfig *config,
-                        GimpImage           *image)
+                   GimpImage           *image)
 {
   GimpArray *array;
 
@@ -627,9 +666,9 @@ gih_save_dialog (GimpImage           *image,
   gint                 dimension;
   gboolean             run;
 
-  dialog = gimp_save_procedure_dialog_new (GIMP_SAVE_PROCEDURE (procedure),
-                                           GIMP_PROCEDURE_CONFIG (config),
-                                           image);
+  dialog = gimp_export_procedure_dialog_new (GIMP_EXPORT_PROCEDURE (procedure),
+                                             GIMP_PROCEDURE_CONFIG (config),
+                                             image);
 
   gtk_widget_set_halign (gimp_procedure_dialog_get_label (GIMP_PROCEDURE_DIALOG (dialog),
                                                           "info-text", NULL, TRUE, FALSE),

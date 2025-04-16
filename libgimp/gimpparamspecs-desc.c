@@ -42,13 +42,27 @@ gimp_param_spec_boolean_desc (GParamSpec *pspec)
 }
 
 static gchar *
+gimp_param_spec_unit_desc (GParamSpec *pspec)
+{
+  GObject *default_value;
+
+  default_value = gimp_param_spec_object_get_default (pspec);
+
+  return g_strdup_printf ("<i>(default %s%s%s)</i>",
+                          gimp_unit_get_abbreviation (GIMP_UNIT (default_value)),
+                          gimp_param_spec_unit_pixel_allowed (pspec) ? ", pixel allowed": "",
+                          gimp_param_spec_unit_percent_allowed (pspec) ? ", percent allowed": "");
+}
+
+static gchar *
 gimp_param_spec_choice_desc (GParamSpec *pspec)
 {
-  GimpParamSpecChoice *cspec = GIMP_PARAM_SPEC_CHOICE (pspec);
-  GList               *choices;
-  GString             *desc;
+  GimpChoice *choice;
+  GList      *choices;
+  GString    *desc;
 
-  choices = gimp_choice_list_nicks (cspec->choice);
+  choice  = gimp_param_spec_choice_get_choice (pspec);
+  choices = gimp_choice_list_nicks (choice);
   desc    = g_string_new ("\n");
 
   g_string_append_printf (desc, "<i>%s</i>", _("Allowed values:"));
@@ -59,7 +73,7 @@ gimp_param_spec_choice_desc (GParamSpec *pspec)
       gchar *label = NULL;
       gchar *help  = NULL;
 
-      gimp_choice_get_documentation (cspec->choice, (const gchar *) nick, (const gchar **) &label, (const gchar **) &help);
+      gimp_choice_get_documentation (choice, (const gchar *) nick, (const gchar **) &label, (const gchar **) &help);
       nick  = g_markup_escape_text (nick, -1);
       label = g_markup_escape_text (label, -1);
       help  = (help != NULL ? g_markup_escape_text (help, -1) : NULL);
@@ -238,6 +252,7 @@ gimp_param_spec_get_desc (GParamSpec *pspec)
 
   if (GIMP_IS_PARAM_SPEC_UNIT (pspec))
     {
+      return gimp_param_spec_unit_desc (pspec);
     }
   else if (GIMP_IS_PARAM_SPEC_CHOICE (pspec))
     {

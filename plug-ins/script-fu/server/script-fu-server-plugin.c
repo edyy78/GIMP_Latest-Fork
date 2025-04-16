@@ -110,31 +110,31 @@ script_fu_server_create_procedure (GimpPlugIn  *plug_in,
                                   "Spencer Kimball & Peter Mattis",
                                   "1997");
 
-  GIMP_PROC_ARG_ENUM (procedure, "run-mode",
-                      "Run mode",
-                      "The run mode",
-                      GIMP_TYPE_RUN_MODE,
-                      GIMP_RUN_INTERACTIVE,
-                      G_PARAM_READWRITE);
+  gimp_procedure_add_enum_argument (procedure, "run-mode",
+                                    "Run mode",
+                                    "The run mode",
+                                    GIMP_TYPE_RUN_MODE,
+                                    GIMP_RUN_INTERACTIVE,
+                                    G_PARAM_READWRITE);
 
-  GIMP_PROC_ARG_STRING (procedure, "ip",
-                        "IP",
-                        "The IP on which to listen for requests",
-                        NULL,
-                        G_PARAM_READWRITE);
+  gimp_procedure_add_string_argument (procedure, "ip",
+                                      "IP",
+                                      "The IP on which to listen for requests",
+                                      NULL,
+                                      G_PARAM_READWRITE);
 
-  GIMP_PROC_ARG_INT (procedure, "port",
-                     "Port",
-                     "The port on which to listen for requests",
-                     0, G_MAXINT, 0,
-                     G_PARAM_READWRITE);
+  gimp_procedure_add_int_argument (procedure, "port",
+                                   "Port",
+                                   "The port on which to listen for requests",
+                                   0, G_MAXINT, 0,
+                                   G_PARAM_READWRITE);
 
-  /* FUTURE: GIMP_PROC_ARG_FILE, but little benefit, need change script-fu-server.c */
-  GIMP_PROC_ARG_STRING (procedure, "logfile",
-                        "Log File",
-                        "The file to log activity to",
-                        NULL,
-                        G_PARAM_READWRITE);
+  /* FUTURE: gimp_procedure_add_file_argument, but little benefit, need change script-fu-server.c */
+  gimp_procedure_add_string_argument (procedure, "logfile",
+                                      "Log File",
+                                      "The file to log activity to",
+                                      NULL,
+                                      G_PARAM_READWRITE);
 
   return procedure;
 }
@@ -211,29 +211,38 @@ script_fu_server_outer_run (GimpProcedure        *procedure,
   return return_vals;
 }
 
-/*
- * The server is just the interpreter.
- * It does not register any scripts as TEMPORARY procs.
- * extension-script-fu should also be running, to register its TEMPORARY procs
- * (those defined by .scm files in /scripts)
- * in the PDB, and to execute the TEMPORARY PDB procs.
+/* Init the server's interpreter.
  *
- * We do load initialization and compatibility scripts.
+ * See below, we do load /scripts.
+ * So the server serves those scripts directly, instead of via PDB calls
+ * to extension-script-fu.
+ * Thus there are two "servers" of the same script files.
+ * Version 2 of the SF server also loads /scripts.
+ *
+ * Alternatively (not loading /scripts), only extension-script-fu serves /scripts,
+ * and the SF server calls extension-script-fu via PDB calls.
  */
 static void
 script_fu_server_run_init (GimpProcedure *procedure,
                            GimpRunMode    run_mode)
 {
-  GList *path;
+  GList      *path;
+  GimpPlugIn *plug_in = gimp_procedure_get_plug_in (procedure);
 
-  /*
-   * Non-null path so we load init and compat scripts
-   * which are jumbled in same dir as TEMPORARY procedure scripts.
-   */
+  /* The path to init and compat scripts, and /scripts. */
   path = script_fu_search_path ();
 
-  /*  Init the interpreter, not allow register scripts */
-  script_fu_init_embedded_interpreter (path, FALSE, run_mode);
+  /* Init the interpreter, not allow scripts to register in the PDB.
+   * This loads init and compat scripts, but not /scripts.
+   */
+  script_fu_init_embedded_interpreter (path, FALSE, run_mode, FALSE);
+
+  /* Load /scripts, their defined run functions.
+   * Then a call to a script is not a PDB call, and does not require run_mode arg.
+   * The yielded repr is of the last evaluated expression of the script.
+   * Otherwise, as a PDB call would yield the repr of a call to a void func: #t.
+   */
+  script_fu_find_and_register_scripts (plug_in, path);
 
   g_list_free_full (path, (GDestroyNotify) g_object_unref);
 }

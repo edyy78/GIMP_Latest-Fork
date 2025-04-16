@@ -30,34 +30,26 @@ G_BEGIN_DECLS
 /* For information look into the C source or the html documentation */
 
 
-#define GIMP_TYPE_PROCEDURE_DIALOG            (gimp_procedure_dialog_get_type ())
-#define GIMP_PROCEDURE_DIALOG(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_PROCEDURE_DIALOG, GimpProcedureDialog))
-#define GIMP_PROCEDURE_DIALOG_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_PROCEDURE_DIALOG, GimpProcedureDialogClass))
-#define GIMP_IS_PROCEDURE_DIALOG(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_PROCEDURE_DIALOG))
-#define GIMP_IS_PROCEDURE_DIALOG_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_PROCEDURE_DIALOG))
-#define GIMP_PROCEDURE_DIALOG_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_PROCEDURE_DIALOG, GimpProcedureDialogClass))
-
-
-typedef struct _GimpProcedureDialogClass   GimpProcedureDialogClass;
-typedef struct _GimpProcedureDialogPrivate GimpProcedureDialogPrivate;
-
-struct _GimpProcedureDialog
-{
-  GimpDialog                  parent_instance;
-
-  GimpProcedureDialogPrivate *priv;
-};
+#define GIMP_TYPE_PROCEDURE_DIALOG (gimp_procedure_dialog_get_type ())
+G_DECLARE_DERIVABLE_TYPE (GimpProcedureDialog, gimp_procedure_dialog, GIMP, PROCEDURE_DIALOG, GimpDialog)
 
 struct _GimpProcedureDialogClass
 {
   GimpDialogClass  parent_class;
 
-  void             (* fill_list) (GimpProcedureDialog *dialog,
-                                  GimpProcedure       *procedure,
-                                  GimpProcedureConfig *config,
-                                  GList               *properties);
+  void             (* fill_start) (GimpProcedureDialog *dialog,
+                                   GimpProcedure       *procedure,
+                                   GimpProcedureConfig *config);
+  void             (* fill_end)   (GimpProcedureDialog *dialog,
+                                   GimpProcedure       *procedure,
+                                   GimpProcedureConfig *config);
+  void             (* fill_list)  (GimpProcedureDialog *dialog,
+                                   GimpProcedure       *procedure,
+                                   GimpProcedureConfig *config,
+                                   GList               *properties);
 
   /* Padding for future expansion */
+  void (*_gimp_reserved0) (void);
   void (*_gimp_reserved1) (void);
   void (*_gimp_reserved2) (void);
   void (*_gimp_reserved3) (void);
@@ -66,10 +58,9 @@ struct _GimpProcedureDialogClass
   void (*_gimp_reserved6) (void);
   void (*_gimp_reserved7) (void);
   void (*_gimp_reserved8) (void);
+  void (*_gimp_reserved9) (void);
 };
 
-
-GType       gimp_procedure_dialog_get_type          (void) G_GNUC_CONST;
 
 GtkWidget * gimp_procedure_dialog_new               (GimpProcedure       *procedure,
                                                      GimpProcedureConfig *config,
@@ -109,9 +100,6 @@ GtkWidget * gimp_procedure_dialog_get_label         (GimpProcedureDialog *dialog
                                                      const gchar         *text,
                                                      gboolean             is_markup,
                                                      gboolean             with_mnemonic);
-GtkWidget * gimp_procedure_dialog_get_file_chooser  (GimpProcedureDialog *dialog,
-                                                     const gchar         *property,
-                                                     GtkFileChooserAction action);
 
 GtkWidget * gimp_procedure_dialog_get_drawable_preview
                                                     (GimpProcedureDialog *dialog,

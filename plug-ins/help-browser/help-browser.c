@@ -87,7 +87,7 @@ help_browser_create_procedure (GimpPlugIn  *plug_in,
   if (! strcmp (name, GIMP_HELP_BROWSER_EXT_PROC))
     {
       procedure = gimp_procedure_new (plug_in, name,
-                                      GIMP_PDB_PROC_TYPE_EXTENSION,
+                                      GIMP_PDB_PROC_TYPE_PERSISTENT,
                                       help_browser_run, plug_in, NULL);
 
       gimp_procedure_set_documentation (procedure,
@@ -104,27 +104,27 @@ help_browser_create_procedure (GimpPlugIn  *plug_in,
                                       "Henrik Brix Andersen",
                                       "1999-2008");
 
-      GIMP_PROC_ARG_ENUM (procedure, "run-mode",
-                          "Run mode",
-                          "The run mode",
-                          GIMP_TYPE_RUN_MODE,
-                          GIMP_RUN_INTERACTIVE,
-                          G_PARAM_READWRITE);
+      gimp_procedure_add_enum_argument (procedure, "run-mode",
+                                        "Run mode",
+                                        "The run mode",
+                                        GIMP_TYPE_RUN_MODE,
+                                        GIMP_RUN_INTERACTIVE,
+                                        G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_STRV (procedure, "domain-names",
-                          "Domain names",
-                          "Domain names",
-                          G_PARAM_READWRITE);
+      gimp_procedure_add_string_array_argument (procedure, "domain-names",
+                                                "Domain names",
+                                                "Domain names",
+                                                G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_STRV (procedure, "domain-uris",
-                          "Domain URIs",
-                          "Domain URIs",
-                          G_PARAM_READWRITE);
+      gimp_procedure_add_string_array_argument (procedure, "domain-uris",
+                                                "Domain URIs",
+                                                "Domain URIs",
+                                                G_PARAM_READWRITE);
 
-      GIMP_PROC_AUX_ARG_BYTES (procedure, "dialog-data",
-                               "Dialog data",
-                               "Remembering dialog's basic features; this is never meant to be a public argument",
-                               GIMP_PARAM_READWRITE);
+      gimp_procedure_add_bytes_aux_argument (procedure, "dialog-data",
+                                             "Dialog data",
+                                             "Remembering dialog's basic features; this is never meant to be a public argument",
+                                             GIMP_PARAM_READWRITE);
     }
 
   return procedure;
@@ -182,8 +182,8 @@ help_browser_run (GimpProcedure        *procedure,
 
   temp_proc_install (gimp_procedure_get_plug_in (procedure));
 
-  gimp_procedure_extension_ready (procedure);
-  gimp_plug_in_extension_enable (gimp_procedure_get_plug_in (procedure));
+  gimp_procedure_persistent_ready (procedure);
+  gimp_plug_in_persistent_enable (gimp_procedure_get_plug_in (procedure));
 
 #if GLIB_CHECK_VERSION(2,74,0)
   browser->app = gtk_application_new (NULL, G_APPLICATION_DEFAULT_FLAGS);
@@ -220,23 +220,23 @@ temp_proc_install (GimpPlugIn *plug_in)
                                   "Henrik Brix Andersen",
                                   "1999-2008");
 
-  GIMP_PROC_ARG_STRING (procedure, "help-domain",
-                        "Help domain",
-                        "Help domain to use",
-                        NULL,
-                        G_PARAM_READWRITE);
+  gimp_procedure_add_string_argument (procedure, "help-domain",
+                                      "Help domain",
+                                      "Help domain to use",
+                                      NULL,
+                                      G_PARAM_READWRITE);
 
-  GIMP_PROC_ARG_STRING (procedure, "help-locales",
-                        "Help locales",
-                        "Language to use",
-                        NULL,
-                        G_PARAM_READWRITE);
+  gimp_procedure_add_string_argument (procedure, "help-locales",
+                                      "Help locales",
+                                      "Language to use",
+                                      NULL,
+                                      G_PARAM_READWRITE);
 
-  GIMP_PROC_ARG_STRING (procedure, "help-id",
-                        "Help ID",
-                        "Help ID to open",
-                        NULL,
-                        G_PARAM_READWRITE);
+  gimp_procedure_add_string_argument (procedure, "help-id",
+                                      "Help ID",
+                                      "Help ID to open",
+                                      NULL,
+                                      G_PARAM_READWRITE);
 
   gimp_plug_in_add_temp_procedure (plug_in, procedure);
   g_object_unref (procedure);

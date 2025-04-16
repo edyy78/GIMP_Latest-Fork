@@ -23,10 +23,6 @@
 #include <gegl.h>
 #include <gtk/gtk.h>
 
-#ifdef GDK_WINDOWING_WAYLAND
-#include <gdk/gdkwayland.h>
-#endif
-
 #include "libgimpbase/gimpbase.h"
 #include "libgimpmath/gimpmath.h"
 #include "libgimpcolor/gimpcolor.h"
@@ -152,6 +148,7 @@ static void      gimp_display_shell_get_property   (GObject          *object,
                                                     GValue           *value,
                                                     GParamSpec       *pspec);
 
+static void      gimp_display_shell_style_updated  (GtkWidget        *widget);
 static void      gimp_display_shell_unrealize      (GtkWidget        *widget);
 static void      gimp_display_shell_unmap          (GtkWidget        *widget);
 static void      gimp_display_shell_screen_changed (GtkWidget        *widget,
@@ -190,6 +187,9 @@ static void   gimp_display_shell_transform_overlay (GimpDisplayShell *shell,
                                                     GtkWidget        *child,
                                                     gdouble          *x,
                                                     gdouble          *y);
+static gboolean gimp_display_shell_draw            (GimpDisplayShell *shell,
+                                                    cairo_t          *cr,
+                                                    gpointer         *data);
 
 
 G_DEFINE_TYPE_WITH_CODE (GimpDisplayShell, gimp_display_shell,
@@ -252,6 +252,7 @@ gimp_display_shell_class_init (GimpDisplayShellClass *klass)
   widget_class->unrealize          = gimp_display_shell_unrealize;
   widget_class->unmap              = gimp_display_shell_unmap;
   widget_class->screen_changed     = gimp_display_shell_screen_changed;
+  widget_class->style_updated      = gimp_display_shell_style_updated;
   widget_class->popup_menu         = gimp_display_shell_popup_menu;
 
   klass->scaled                    = gimp_display_shell_real_scaled;
@@ -282,7 +283,7 @@ gimp_display_shell_class_init (GimpDisplayShellClass *klass)
   g_object_class_install_property (object_class, PROP_UNIT,
                                    gimp_param_spec_unit ("unit", NULL, NULL,
                                                          TRUE, FALSE,
-                                                         GIMP_UNIT_PIXEL,
+                                                         gimp_unit_pixel (),
                                                          GIMP_PARAM_READWRITE));
 
   g_object_class_install_property (object_class, PROP_TITLE,
@@ -307,6 +308,14 @@ gimp_display_shell_class_init (GimpDisplayShellClass *klass)
                                                          NULL, NULL,
                                                          FALSE,
                                                          GIMP_PARAM_READABLE));
+
+  gtk_widget_class_install_style_property (widget_class,
+                                           g_param_spec_enum ("button-icon-size",
+                                                              NULL, NULL,
+                                                              GTK_TYPE_ICON_SIZE,
+                                                              GTK_ICON_SIZE_MENU,
+                                                              GIMP_PARAM_READABLE));
+
 
   gtk_widget_class_set_css_name (widget_class, "GimpDisplayShell");
 }
@@ -335,6 +344,7 @@ gimp_display_shell_init (GimpDisplayShell *shell)
   shell->dot_for_dot = TRUE;
   shell->scale_x     = 1.0;
   shell->scale_y     = 1.0;
+  shell->unit        = gimp_unit_pixel ();
 
   shell->show_image  = TRUE;
 
@@ -367,6 +377,7 @@ gimp_display_shell_init (GimpDisplayShell *shell)
   shell->equidistance_side_vertical   = GIMP_ARRANGE_HFILL;
   shell->near_layer_vertical1         = NULL;
   shell->near_layer_vertical2         = NULL;
+  shell->drawn                        = FALSE;
 
   env = g_getenv ("GIMP_DISPLAY_RENDER_BUF_SIZE");
 
@@ -423,7 +434,11 @@ gimp_display_shell_init (GimpDisplayShell *shell)
                     G_CALLBACK (gimp_display_shell_events),
                     shell);
 
-  gimp_help_connect (GTK_WIDGET (shell), gimp_standard_help_func,
+  g_signal_connect (shell, "draw",
+                    G_CALLBACK (gimp_display_shell_draw),
+                    NULL);
+
+  gimp_help_connect (GTK_WIDGET (shell), NULL, gimp_standard_help_func,
                      GIMP_HELP_IMAGE_WINDOW, NULL, NULL);
 }
 
@@ -435,6 +450,7 @@ gimp_display_shell_constructed (GObject *object)
   GimpImage         *image;
   GtkWidget         *grid;
   GtkWidget         *gtk_image;
+  GtkIconSize        button_icon_size;
   GimpAction        *action;
   gint               image_width;
   gint               image_height;
@@ -451,6 +467,10 @@ gimp_display_shell_constructed (GObject *object)
 
   gimp_display_shell_profile_init (shell);
 
+  gtk_widget_style_get (GTK_WIDGET (shell),
+                        "button-icon-size", &button_icon_size,
+                        NULL);
+
   if (image)
     {
       image_width  = gimp_image_get_width  (image);
@@ -461,9 +481,11 @@ gimp_display_shell_constructed (GObject *object)
       /* These values are arbitrary. The width is determined by the
        * menubar and the height is chosen to give a window aspect
        * ratio of roughly 3:1 (as requested by the UI team).
+       * It must be smaller than the minimal supported display
+       * dimension (1280x720 a.k.a. 720p).
        */
       image_width  = GIMP_DEFAULT_IMAGE_WIDTH;
-      image_height = GIMP_DEFAULT_IMAGE_HEIGHT / 3;
+      image_height = GIMP_DEFAULT_IMAGE_HEIGHT / 4;
     }
 
   shell->dot_for_dot = config->default_dot_for_dot;
@@ -482,7 +504,8 @@ gimp_display_shell_constructed (GObject *object)
   /* adjust the initial scale -- so that window fits on screen. */
   if (image)
     {
-      gimp_display_shell_set_initial_scale (shell, 1.0, //scale,
+      gimp_display_shell_set_initial_scale (shell,
+                                            (gdouble) gtk_widget_get_scale_factor (GTK_WIDGET (shell)),
                                             &shell_width, &shell_height);
     }
   else
@@ -513,7 +536,7 @@ gimp_display_shell_constructed (GObject *object)
   /*  the menu popup button  */
   shell->origin = gtk_event_box_new ();
   gtk_image = gtk_image_new_from_icon_name (GIMP_ICON_MENU_RIGHT,
-                                            GTK_ICON_SIZE_MENU);
+                                            button_icon_size);
   gtk_container_add (GTK_CONTAINER (shell->origin), gtk_image);
   gtk_widget_show (gtk_image);
 
@@ -599,6 +622,19 @@ gimp_display_shell_constructed (GObject *object)
                     G_CALLBACK (gimp_display_shell_canvas_draw),
                     shell);
 
+  g_signal_connect_object (shell->display->gimp->config,
+                           "notify::theme",
+                           G_CALLBACK (gimp_display_shell_style_updated),
+                           shell, G_CONNECT_AFTER | G_CONNECT_SWAPPED);
+  g_signal_connect_object (shell->display->gimp->config,
+                           "notify::override-theme-icon-size",
+                           G_CALLBACK (gimp_display_shell_style_updated),
+                           shell, G_CONNECT_AFTER | G_CONNECT_SWAPPED);
+  g_signal_connect_object (shell->display->gimp->config,
+                           "notify::custom-icon-size",
+                           G_CALLBACK (gimp_display_shell_style_updated),
+                           shell, G_CONNECT_AFTER | G_CONNECT_SWAPPED);
+
   g_signal_connect (shell->canvas, "enter-notify-event",
                     G_CALLBACK (gimp_display_shell_canvas_tool_events),
                     shell);
@@ -663,7 +699,7 @@ gimp_display_shell_constructed (GObject *object)
                                      NULL);
   gtk_widget_set_can_focus (shell->zoom_button, FALSE);
   gtk_image = gtk_image_new_from_icon_name (GIMP_ICON_ZOOM_FOLLOW_WINDOW,
-                                            GTK_ICON_SIZE_MENU);
+                                            button_icon_size);
   gtk_container_add (GTK_CONTAINER (shell->zoom_button), gtk_image);
   gtk_widget_show (gtk_image);
 
@@ -684,7 +720,7 @@ gimp_display_shell_constructed (GObject *object)
                                            NULL);
   gtk_widget_set_can_focus (shell->quick_mask_button, FALSE);
   gtk_image = gtk_image_new_from_icon_name (GIMP_ICON_QUICK_MASK_OFF,
-                                            GTK_ICON_SIZE_MENU);
+                                            button_icon_size);
   gtk_container_add (GTK_CONTAINER (shell->quick_mask_button), gtk_image);
   gtk_widget_show (gtk_image);
 
@@ -707,7 +743,7 @@ gimp_display_shell_constructed (GObject *object)
   /*  the navigation window button  */
   shell->nav_ebox = gtk_event_box_new ();
   gtk_image = gtk_image_new_from_icon_name (GIMP_ICON_DIALOG_NAVIGATION,
-                                            GTK_ICON_SIZE_MENU);
+                                            button_icon_size);
   gtk_container_add (GTK_CONTAINER (shell->nav_ebox), gtk_image);
   gtk_widget_show (gtk_image);
 
@@ -724,6 +760,7 @@ gimp_display_shell_constructed (GObject *object)
   gimp_statusbar_set_shell (GIMP_STATUSBAR (shell->statusbar), shell);
   gimp_help_set_help_data (shell->statusbar, NULL,
                            GIMP_HELP_IMAGE_WINDOW_STATUS_BAR);
+  GIMP_STATUSBAR (shell->statusbar)->icon_size = button_icon_size;
 
   /*  pack all the widgets  */
   gtk_grid_attach (GTK_GRID (grid), shell->origin, 0, 0, 1, 1);
@@ -853,16 +890,7 @@ gimp_display_shell_dispose (GObject *object)
 
   shell->display = NULL;
 
-  if (shell->window_handle != NULL)
-    {
-#ifdef GDK_WINDOWING_WAYLAND
-      if (GDK_IS_WAYLAND_DISPLAY (gdk_display_get_default ()) &&
-          /* The GdkWindow is likely already destroyed. */
-          gtk_widget_get_window (GTK_WIDGET (shell)) != NULL)
-        gdk_wayland_window_unexport_handle (gtk_widget_get_window (GTK_WIDGET (shell)));
-#endif
-      g_clear_pointer (&shell->window_handle, g_bytes_unref);
-    }
+  gimp_widget_free_native_handle (GTK_WIDGET (shell), &shell->window_handle);
 
   G_OBJECT_CLASS (parent_class)->dispose (object);
 }
@@ -904,7 +932,7 @@ gimp_display_shell_set_property (GObject      *object,
       shell->display = g_value_get_object (value);
       break;
     case PROP_UNIT:
-      gimp_display_shell_set_unit (shell, g_value_get_int (value));
+      gimp_display_shell_set_unit (shell, g_value_get_object (value));
       break;
     case PROP_TITLE:
       g_free (shell->title);
@@ -944,7 +972,7 @@ gimp_display_shell_get_property (GObject    *object,
       g_value_set_object (value, shell->display);
       break;
     case PROP_UNIT:
-      g_value_set_int (value, shell->unit);
+      g_value_set_object (value, shell->unit);
       break;
     case PROP_TITLE:
       g_value_set_string (value, shell->title);
@@ -967,6 +995,58 @@ gimp_display_shell_get_property (GObject    *object,
 }
 
 static void
+gimp_display_shell_style_updated (GtkWidget *widget)
+{
+  GimpDisplayShell *shell = GIMP_DISPLAY_SHELL (widget);
+  GtkIconSize       icon_size;
+  gint              pixel_size;
+  GList            *children;
+
+  GTK_WIDGET_CLASS (parent_class)->style_updated (widget);
+
+  gtk_widget_style_get (GTK_WIDGET (shell),
+                        "button-icon-size", &icon_size,
+                        NULL);
+  gtk_icon_size_lookup (icon_size, &pixel_size, NULL);
+
+  if (shell->origin)
+    {
+      children = gtk_container_get_children (GTK_CONTAINER (shell->origin));
+      gtk_image_set_pixel_size (GTK_IMAGE (children->data), pixel_size);
+      g_list_free (children);
+    }
+
+  if (shell->zoom_button)
+    {
+      children = gtk_container_get_children (GTK_CONTAINER (shell->zoom_button));
+      gtk_image_set_pixel_size (GTK_IMAGE (children->data), pixel_size);
+      g_list_free (children);
+    }
+
+  if (shell->quick_mask_button)
+    {
+      children = gtk_container_get_children (GTK_CONTAINER (shell->quick_mask_button));
+      gtk_image_set_pixel_size (GTK_IMAGE (children->data), pixel_size);
+      g_list_free (children);
+    }
+
+  if (shell->nav_ebox)
+    {
+      children = gtk_container_get_children (GTK_CONTAINER (shell->nav_ebox));
+      gtk_image_set_pixel_size (GTK_IMAGE (children->data), pixel_size);
+      g_list_free (children);
+    }
+
+  if (shell->statusbar)
+    {
+      GimpStatusbar *statusbar = GIMP_STATUSBAR (shell->statusbar);
+
+      statusbar->icon_size = icon_size;
+      GTK_WIDGET_GET_CLASS (statusbar)->style_updated (GTK_WIDGET (statusbar));
+    }
+}
+
+static void
 gimp_display_shell_unrealize (GtkWidget *widget)
 {
   GimpDisplayShell *shell = GIMP_DISPLAY_SHELL (widget);
@@ -975,6 +1055,11 @@ gimp_display_shell_unrealize (GtkWidget *widget)
     gtk_widget_unrealize (shell->nav_popup);
 
   GTK_WIDGET_CLASS (parent_class)->unrealize (widget);
+
+  shell->drawn = FALSE;
+  g_signal_connect (shell, "draw",
+                    G_CALLBACK (gimp_display_shell_draw),
+                    NULL);
 }
 
 static void
@@ -1271,12 +1356,25 @@ gimp_display_shell_transform_overlay (GimpDisplayShell *shell,
     }
 }
 
+static gboolean
+gimp_display_shell_draw (GimpDisplayShell *shell,
+                         cairo_t          *cr,
+                         gpointer         *data)
+{
+  g_signal_handlers_disconnect_by_func (G_OBJECT (shell),
+                                        G_CALLBACK (gimp_display_shell_draw),
+                                        data);
+
+  shell->drawn = TRUE;
+
+  return FALSE;
+}
 
 /*  public functions  */
 
 GtkWidget *
 gimp_display_shell_new (GimpDisplay   *display,
-                        GimpUnit       unit,
+                        GimpUnit      *unit,
                         gdouble        scale,
                         GimpUIManager *popup_manager,
                         GdkMonitor    *monitor)
@@ -1504,8 +1602,11 @@ gimp_display_shell_empty (GimpDisplayShell *shell)
   if (shell->display == gimp_context_get_display (user_context))
     gimp_ui_manager_update (shell->popup_manager, shell->display);
 
-  shell->blink_timeout_id =
-    g_timeout_add (1403230, (GSourceFunc) gimp_display_shell_blink, shell);
+  if (gimp_widget_animation_enabled ())
+    {
+      shell->blink_timeout_id =
+        g_timeout_add (1403230, (GSourceFunc) gimp_display_shell_blink, shell);
+    }
 }
 
 static gboolean
@@ -1528,7 +1629,7 @@ gimp_display_shell_fill_idle (GimpDisplayShell *shell)
 void
 gimp_display_shell_fill (GimpDisplayShell *shell,
                          GimpImage        *image,
-                         GimpUnit          unit,
+                         GimpUnit         *unit,
                          gdouble           scale)
 {
   GimpDisplayConfig *config;
@@ -1640,7 +1741,7 @@ gimp_display_shell_rotated (GimpDisplayShell *shell)
 
 void
 gimp_display_shell_set_unit (GimpDisplayShell *shell,
-                             GimpUnit          unit)
+                             GimpUnit         *unit)
 {
   g_return_if_fail (GIMP_IS_DISPLAY_SHELL (shell));
 
@@ -1656,10 +1757,10 @@ gimp_display_shell_set_unit (GimpDisplayShell *shell,
     }
 }
 
-GimpUnit
+GimpUnit *
 gimp_display_shell_get_unit (GimpDisplayShell *shell)
 {
-  g_return_val_if_fail (GIMP_IS_DISPLAY_SHELL (shell), GIMP_UNIT_PIXEL);
+  g_return_val_if_fail (GIMP_IS_DISPLAY_SHELL (shell), gimp_unit_pixel ());
 
   return shell->unit;
 }
@@ -1689,7 +1790,7 @@ gimp_display_shell_snap_coords (GimpDisplayShell *shell,
   gboolean   snap_to_guides       = FALSE;
   gboolean   snap_to_grid         = FALSE;
   gboolean   snap_to_canvas       = FALSE;
-  gboolean   snap_to_vectors      = FALSE;
+  gboolean   snap_to_path      = FALSE;
   gboolean   snap_to_bbox         = FALSE;
   gboolean   snap_to_equidistance = FALSE;
   gboolean   snapped              = FALSE;
@@ -1714,9 +1815,9 @@ gimp_display_shell_snap_coords (GimpDisplayShell *shell,
   snap_to_canvas = gimp_display_shell_get_snap_to_canvas (shell);
 
   if (gimp_display_shell_get_snap_to_vectors (shell) &&
-      gimp_image_get_selected_vectors (image))
+      gimp_image_get_selected_paths (image))
     {
-      snap_to_vectors = TRUE;
+      snap_to_path = TRUE;
     }
 
   if (gimp_display_shell_get_snap_to_bbox (shell))
@@ -1735,7 +1836,7 @@ gimp_display_shell_snap_coords (GimpDisplayShell *shell,
   shell->equidistance_side_horizontal = GIMP_ARRANGE_HFILL;
   shell->equidistance_side_vertical = GIMP_ARRANGE_HFILL;
 
-  if (snap_to_guides || snap_to_grid || snap_to_canvas || snap_to_vectors || snap_to_bbox || snap_to_equidistance)
+  if (snap_to_guides || snap_to_grid || snap_to_canvas || snap_to_path || snap_to_bbox || snap_to_equidistance)
     {
       gint    snap_distance;
       gdouble tx, ty;
@@ -1759,7 +1860,7 @@ gimp_display_shell_snap_coords (GimpDisplayShell *shell,
                                                snap_to_guides,
                                                snap_to_grid,
                                                snap_to_canvas,
-                                               snap_to_vectors,
+                                               snap_to_path,
                                                snap_to_bbox,
                                                snap_to_equidistance);
 
@@ -1786,7 +1887,7 @@ gimp_display_shell_snap_coords (GimpDisplayShell *shell,
                                            snap_to_guides,
                                            snap_to_grid,
                                            snap_to_canvas,
-                                           snap_to_vectors,
+                                           snap_to_path,
                                            snap_to_bbox,
                                            shell->show_all);
         }
@@ -2203,4 +2304,23 @@ gimp_display_shell_set_mask (GimpDisplayShell *shell,
 
   gimp_display_shell_expose_full (shell);
   gimp_display_shell_render_invalidate_full (shell);
+}
+
+/**
+ * gimp_display_shell_is_drawn:
+ * @shell:
+ *
+ * This should be run when you need to verify that the shell or its
+ * display were actually drawn. gtk_widget_is_visible(),
+ * gtk_widget_get_mapped() or gtk_widget_get_realized() are not enough
+ * because they may all return TRUE before the window is actually on
+ * screen.
+ *
+ * Returns: whether @shell was actually drawn on screen, i.e. the "draw"
+ * signal has run.
+ */
+gboolean
+gimp_display_shell_is_drawn (GimpDisplayShell *shell)
+{
+  return shell->drawn;
 }

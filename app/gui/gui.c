@@ -66,9 +66,9 @@
 #include "widgets/gimpmessagebox.h"
 #include "widgets/gimpradioaction.h"
 #include "widgets/gimpsessioninfo.h"
+#include "widgets/gimptranslationstore.h"
 #include "widgets/gimpuimanager.h"
 #include "widgets/gimpwidgets-utils.h"
-#include "widgets/gimplanguagestore-parser.h"
 
 #include "actions/actions.h"
 #include "actions/windows-commands.h"
@@ -223,7 +223,8 @@ GimpInitStatusFunc
 gui_init (Gimp         *gimp,
           gboolean      no_splash,
           GimpApp      *app,
-          const gchar  *test_base_dir)
+          const gchar  *test_base_dir,
+          const gchar  *system_lang_l10n)
 {
   GimpInitStatusFunc  status_callback = NULL;
   gchar              *abort_message;
@@ -247,7 +248,7 @@ gui_init (Gimp         *gimp,
   gtk_widget_set_default_direction (gtk_get_locale_direction ());
 
   gui_unique_init (gimp);
-  gimp_language_store_parser_init ();
+  gimp_translation_store_initialize (system_lang_l10n);
 
   /*  initialize icon themes before gimp_widgets_init() so we avoid
    *  setting the configured theme twice
@@ -616,7 +617,7 @@ gui_restore_after_callback (Gimp               *gimp,
 
       /*  create the empty display  */
       display = GIMP_DISPLAY (gimp_create_display (gimp, NULL,
-                                                   GIMP_UNIT_PIXEL, 1.0,
+                                                   gimp_unit_pixel (), 1.0,
                                                    G_OBJECT (initial_monitor)));
 
       shell = gimp_display_get_shell (display);
@@ -714,8 +715,6 @@ gui_exit_callback (Gimp     *gimp,
 
   gimp_tools_save (gimp, gui_config->save_tool_options, FALSE);
   gimp_tools_exit (gimp);
-
-  gimp_language_store_parser_clean ();
 
   return FALSE; /* continue exiting */
 }

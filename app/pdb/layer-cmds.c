@@ -35,14 +35,17 @@
 #include "pdb-types.h"
 
 #include "core/gimp.h"
+#include "core/gimpcontainer.h"
+#include "core/gimpdrawable-filters.h"
 #include "core/gimpdrawable.h"
-#include "core/gimpgrouplayer.h"
+#include "core/gimpdrawablefilter.h"
 #include "core/gimpimage-color-profile.h"
 #include "core/gimpimage-undo.h"
 #include "core/gimpimage.h"
 #include "core/gimplayer-new.h"
 #include "core/gimplayer.h"
 #include "core/gimplayermask.h"
+#include "core/gimplist.h"
 #include "core/gimpparamspecs.h"
 #include "core/gimppickable.h"
 #include "core/gimpprogress.h"
@@ -68,19 +71,19 @@ layer_new_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
+  const gchar *name;
   gint width;
   gint height;
   gint type;
-  const gchar *name;
   gdouble opacity;
   gint mode;
   GimpLayer *layer = NULL;
 
   image = g_value_get_object (gimp_value_array_index (args, 0));
-  width = g_value_get_int (gimp_value_array_index (args, 1));
-  height = g_value_get_int (gimp_value_array_index (args, 2));
-  type = g_value_get_enum (gimp_value_array_index (args, 3));
-  name = g_value_get_string (gimp_value_array_index (args, 4));
+  name = g_value_get_string (gimp_value_array_index (args, 1));
+  width = g_value_get_int (gimp_value_array_index (args, 2));
+  height = g_value_get_int (gimp_value_array_index (args, 3));
+  type = g_value_get_enum (gimp_value_array_index (args, 4));
   opacity = g_value_get_double (gimp_value_array_index (args, 5));
   mode = g_value_get_enum (gimp_value_array_index (args, 6));
 
@@ -235,9 +238,49 @@ layer_new_from_drawable_invoker (GimpProcedure         *procedure,
       new_item = gimp_item_convert (GIMP_ITEM (drawable), dest_image, new_type);
 
       if (new_item)
-        layer_copy = GIMP_LAYER (new_item);
+        {
+          GimpContainer *filters;
+
+          layer_copy = GIMP_LAYER (new_item);
+
+          filters = gimp_drawable_get_filters (GIMP_DRAWABLE (drawable));
+          if (gimp_container_get_n_children (filters) > 0)
+            {
+              GList        *filter_list;
+              GimpDrawable *drawable_copy;
+
+              drawable_copy = GIMP_DRAWABLE (layer_copy);
+
+              for (filter_list = GIMP_LIST (filters)->queue->tail;
+                   filter_list;
+                   filter_list = g_list_previous (filter_list))
+                {
+                  if (GIMP_IS_DRAWABLE_FILTER (filter_list->data))
+                    {
+                      GimpDrawableFilter *old_filter = filter_list->data;
+                      GimpDrawableFilter *filter;
+
+                      filter =
+                        gimp_drawable_filter_duplicate (drawable_copy,
+                                                        old_filter);
+
+                      if (filter != NULL)
+                        {
+                          gimp_drawable_filter_apply (filter, NULL);
+                          gimp_drawable_filter_commit (filter, TRUE, NULL,
+                                                       FALSE);
+
+                          gimp_drawable_filter_layer_mask_freeze (filter);
+                          g_object_unref (filter);
+                        }
+                    }
+                }
+            }
+        }
       else
-        success = FALSE;
+        {
+          success = FALSE;
+        }
     }
 
   return_vals = gimp_procedure_get_return_values (procedure, success,
@@ -245,38 +288,6 @@ layer_new_from_drawable_invoker (GimpProcedure         *procedure,
 
   if (success)
     g_value_set_object (gimp_value_array_index (return_vals, 1), layer_copy);
-
-  return return_vals;
-}
-
-static GimpValueArray *
-layer_group_new_invoker (GimpProcedure         *procedure,
-                         Gimp                  *gimp,
-                         GimpContext           *context,
-                         GimpProgress          *progress,
-                         const GimpValueArray  *args,
-                         GError               **error)
-{
-  gboolean success = TRUE;
-  GimpValueArray *return_vals;
-  GimpImage *image;
-  GimpLayer *layer_group = NULL;
-
-  image = g_value_get_object (gimp_value_array_index (args, 0));
-
-  if (success)
-    {
-      layer_group = gimp_group_layer_new (image);
-
-      if (! layer_group)
-        success = FALSE;
-    }
-
-  return_vals = gimp_procedure_get_return_values (procedure, success,
-                                                  error ? *error : NULL);
-
-  if (success)
-    g_value_set_object (gimp_value_array_index (return_vals, 1), layer_group);
 
   return return_vals;
 }
@@ -292,11 +303,9 @@ layer_copy_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpLayer *layer;
-  gboolean add_alpha;
   GimpLayer *layer_copy = NULL;
 
   layer = g_value_get_object (gimp_value_array_index (args, 0));
-  add_alpha = g_value_get_boolean (gimp_value_array_index (args, 1));
 
   if (success)
     {
@@ -304,8 +313,41 @@ layer_copy_invoker (GimpProcedure         *procedure,
                                                     G_TYPE_FROM_INSTANCE (layer)));
       if (layer_copy)
         {
-          if (add_alpha)
-            gimp_layer_add_alpha (layer_copy);
+          GimpContainer *filters;
+
+          filters = gimp_drawable_get_filters (GIMP_DRAWABLE (layer));
+          if (gimp_container_get_n_children (filters) > 0)
+            {
+              GList        *filter_list;
+              GimpDrawable *drawable_copy;
+
+              drawable_copy = GIMP_DRAWABLE (layer_copy);
+
+              for (filter_list = GIMP_LIST (filters)->queue->tail;
+                   filter_list;
+                   filter_list = g_list_previous (filter_list))
+                {
+                  if (GIMP_IS_DRAWABLE_FILTER (filter_list->data))
+                    {
+                      GimpDrawableFilter *old_filter = filter_list->data;
+                      GimpDrawableFilter *filter;
+
+                      filter =
+                        gimp_drawable_filter_duplicate (drawable_copy,
+                                                        old_filter);
+
+                      if (filter != NULL)
+                        {
+                          gimp_drawable_filter_apply (filter, NULL);
+                          gimp_drawable_filter_commit (filter, TRUE, NULL,
+                                                       FALSE);
+
+                          gimp_drawable_filter_layer_mask_freeze (filter);
+                          g_object_unref (filter);
+                        }
+                    }
+                }
+            }
         }
       else
         {
@@ -1252,12 +1294,16 @@ register_layer_procs (GimpPDB *pdb)
   /*
    * gimp-layer-new
    */
-  procedure = gimp_procedure_new (layer_new_invoker);
+  procedure = gimp_procedure_new (layer_new_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-layer-new");
   gimp_procedure_set_static_help (procedure,
                                   "Create a new layer.",
-                                  "This procedure creates a new layer with the specified width, height, and type. If @name is %NULL, a default layer name will be used. Opacity, and mode are also supplied parameters. The new layer still needs to be added to the image, as this is not automatic. Add the new layer with the 'gimp-image-insert-layer' command. Other attributes such as layer mask modes, and offsets should be set with explicit procedure calls.",
+                                  "This procedure creates a new layer with the specified @width, @height and @type. If @name is %NULL, a default layer name will be used. @opacity and @mode are also supplied parameters.\n"
+                                  "\n"
+                                  "The new layer still needs to be added to the image as this is not automatic. Add the new layer with the [method@Image.insert_layer] method.\n"
+                                  "\n"
+                                  "Other attributes such as layer mask modes and offsets should be set with explicit procedure calls.",
                                   NULL);
   gimp_procedure_set_static_attribution (procedure,
                                          "Spencer Kimball & Peter Mattis",
@@ -1269,6 +1315,13 @@ register_layer_procs (GimpPDB *pdb)
                                                       "The image to which to add the layer",
                                                       FALSE,
                                                       GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_string ("name",
+                                                       "name",
+                                                       "The layer name",
+                                                       FALSE, TRUE, FALSE,
+                                                       NULL,
+                                                       GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_int ("width",
                                                  "width",
@@ -1289,13 +1342,6 @@ register_layer_procs (GimpPDB *pdb)
                                                   GIMP_RGB_IMAGE,
                                                   GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_string ("name",
-                                                       "name",
-                                                       "The layer name",
-                                                       FALSE, TRUE, FALSE,
-                                                       NULL,
-                                                       GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
                                g_param_spec_double ("opacity",
                                                     "opacity",
                                                     "The layer opacity",
@@ -1311,7 +1357,7 @@ register_layer_procs (GimpPDB *pdb)
   gimp_procedure_add_return_value (procedure,
                                    gimp_param_spec_layer ("layer",
                                                           "layer",
-                                                          "The newly created layer",
+                                                          "The newly created layer. The object belongs to libgimp and you should not free it.",
                                                           FALSE,
                                                           GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
@@ -1320,7 +1366,7 @@ register_layer_procs (GimpPDB *pdb)
   /*
    * gimp-layer-new-from-visible
    */
-  procedure = gimp_procedure_new (layer_new_from_visible_invoker);
+  procedure = gimp_procedure_new (layer_new_from_visible_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-layer-new-from-visible");
   gimp_procedure_set_static_help (procedure,
@@ -1362,7 +1408,7 @@ register_layer_procs (GimpPDB *pdb)
   /*
    * gimp-layer-new-from-drawable
    */
-  procedure = gimp_procedure_new (layer_new_from_drawable_invoker);
+  procedure = gimp_procedure_new (layer_new_from_drawable_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-layer-new-from-drawable");
   gimp_procedure_set_static_help (procedure,
@@ -1395,44 +1441,14 @@ register_layer_procs (GimpPDB *pdb)
   g_object_unref (procedure);
 
   /*
-   * gimp-layer-group-new
-   */
-  procedure = gimp_procedure_new (layer_group_new_invoker);
-  gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-layer-group-new");
-  gimp_procedure_set_static_help (procedure,
-                                  "Create a new layer group.",
-                                  "This procedure creates a new layer group. Attributes such as layer mode and opacity should be set with explicit procedure calls. Add the new layer group (which is a kind of layer) with the 'gimp-image-insert-layer' command.\n"
-                                  "Other procedures useful with layer groups: 'gimp-image-reorder-item', 'gimp-item-get-parent', 'gimp-item-get-children', 'gimp-item-is-group'.",
-                                  NULL);
-  gimp_procedure_set_static_attribution (procedure,
-                                         "Barak Itkin <lightningismyname@gmail.com>",
-                                         "Barak Itkin",
-                                         "2010");
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image ("image",
-                                                      "image",
-                                                      "The image to which to add the layer group",
-                                                      FALSE,
-                                                      GIMP_PARAM_READWRITE));
-  gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_layer ("layer-group",
-                                                          "layer group",
-                                                          "The newly created layer group",
-                                                          FALSE,
-                                                          GIMP_PARAM_READWRITE));
-  gimp_pdb_register_procedure (pdb, procedure);
-  g_object_unref (procedure);
-
-  /*
    * gimp-layer-copy
    */
-  procedure = gimp_procedure_new (layer_copy_invoker);
+  procedure = gimp_procedure_new (layer_copy_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-layer-copy");
   gimp_procedure_set_static_help (procedure,
                                   "Copy a layer.",
-                                  "This procedure copies the specified layer and returns the copy. The newly copied layer is for use within the original layer's image. It should not be subsequently added to any other image. The copied layer can optionally have an added alpha channel. This is useful if the background layer in an image is being copied and added to the same image.",
+                                  "This procedure copies the specified layer and returns the copy. The newly copied layer is for use within the original layer's image. It should not be subsequently added to any other image.",
                                   NULL);
   gimp_procedure_set_static_attribution (procedure,
                                          "Spencer Kimball & Peter Mattis",
@@ -1444,16 +1460,10 @@ register_layer_procs (GimpPDB *pdb)
                                                       "The layer to copy",
                                                       FALSE,
                                                       GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               g_param_spec_boolean ("add-alpha",
-                                                     "add alpha",
-                                                     "Add an alpha channel to the copied layer",
-                                                     FALSE,
-                                                     GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    gimp_param_spec_layer ("layer-copy",
                                                           "layer copy",
-                                                          "The newly copied layer",
+                                                          "The newly copied layer. The object belongs to libgimp and you should not free it.",
                                                           FALSE,
                                                           GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
@@ -1462,7 +1472,7 @@ register_layer_procs (GimpPDB *pdb)
   /*
    * gimp-layer-add-alpha
    */
-  procedure = gimp_procedure_new (layer_add_alpha_invoker);
+  procedure = gimp_procedure_new (layer_add_alpha_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-layer-add-alpha");
   gimp_procedure_set_static_help (procedure,
@@ -1485,7 +1495,7 @@ register_layer_procs (GimpPDB *pdb)
   /*
    * gimp-layer-flatten
    */
-  procedure = gimp_procedure_new (layer_flatten_invoker);
+  procedure = gimp_procedure_new (layer_flatten_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-layer-flatten");
   gimp_procedure_set_static_help (procedure,
@@ -1508,7 +1518,7 @@ register_layer_procs (GimpPDB *pdb)
   /*
    * gimp-layer-scale
    */
-  procedure = gimp_procedure_new (layer_scale_invoker);
+  procedure = gimp_procedure_new (layer_scale_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-layer-scale");
   gimp_procedure_set_static_help (procedure,
@@ -1549,7 +1559,7 @@ register_layer_procs (GimpPDB *pdb)
   /*
    * gimp-layer-resize
    */
-  procedure = gimp_procedure_new (layer_resize_invoker);
+  procedure = gimp_procedure_new (layer_resize_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-layer-resize");
   gimp_procedure_set_static_help (procedure,
@@ -1596,7 +1606,7 @@ register_layer_procs (GimpPDB *pdb)
   /*
    * gimp-layer-resize-to-image-size
    */
-  procedure = gimp_procedure_new (layer_resize_to_image_size_invoker);
+  procedure = gimp_procedure_new (layer_resize_to_image_size_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-layer-resize-to-image-size");
   gimp_procedure_set_static_help (procedure,
@@ -1619,7 +1629,7 @@ register_layer_procs (GimpPDB *pdb)
   /*
    * gimp-layer-set-offsets
    */
-  procedure = gimp_procedure_new (layer_set_offsets_invoker);
+  procedure = gimp_procedure_new (layer_set_offsets_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-layer-set-offsets");
   gimp_procedure_set_static_help (procedure,
@@ -1654,7 +1664,7 @@ register_layer_procs (GimpPDB *pdb)
   /*
    * gimp-layer-create-mask
    */
-  procedure = gimp_procedure_new (layer_create_mask_invoker);
+  procedure = gimp_procedure_new (layer_create_mask_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-layer-create-mask");
   gimp_procedure_set_static_help (procedure,
@@ -1701,7 +1711,7 @@ register_layer_procs (GimpPDB *pdb)
   /*
    * gimp-layer-get-mask
    */
-  procedure = gimp_procedure_new (layer_get_mask_invoker);
+  procedure = gimp_procedure_new (layer_get_mask_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-layer-get-mask");
   gimp_procedure_set_static_help (procedure,
@@ -1730,7 +1740,7 @@ register_layer_procs (GimpPDB *pdb)
   /*
    * gimp-layer-from-mask
    */
-  procedure = gimp_procedure_new (layer_from_mask_invoker);
+  procedure = gimp_procedure_new (layer_from_mask_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-layer-from-mask");
   gimp_procedure_set_static_help (procedure,
@@ -1759,7 +1769,7 @@ register_layer_procs (GimpPDB *pdb)
   /*
    * gimp-layer-add-mask
    */
-  procedure = gimp_procedure_new (layer_add_mask_invoker);
+  procedure = gimp_procedure_new (layer_add_mask_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-layer-add-mask");
   gimp_procedure_set_static_help (procedure,
@@ -1788,7 +1798,7 @@ register_layer_procs (GimpPDB *pdb)
   /*
    * gimp-layer-remove-mask
    */
-  procedure = gimp_procedure_new (layer_remove_mask_invoker);
+  procedure = gimp_procedure_new (layer_remove_mask_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-layer-remove-mask");
   gimp_procedure_set_static_help (procedure,
@@ -1818,7 +1828,7 @@ register_layer_procs (GimpPDB *pdb)
   /*
    * gimp-layer-is-floating-sel
    */
-  procedure = gimp_procedure_new (layer_is_floating_sel_invoker);
+  procedure = gimp_procedure_new (layer_is_floating_sel_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-layer-is-floating-sel");
   gimp_procedure_set_static_help (procedure,
@@ -1847,7 +1857,7 @@ register_layer_procs (GimpPDB *pdb)
   /*
    * gimp-layer-get-lock-alpha
    */
-  procedure = gimp_procedure_new (layer_get_lock_alpha_invoker);
+  procedure = gimp_procedure_new (layer_get_lock_alpha_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-layer-get-lock-alpha");
   gimp_procedure_set_static_help (procedure,
@@ -1876,7 +1886,7 @@ register_layer_procs (GimpPDB *pdb)
   /*
    * gimp-layer-set-lock-alpha
    */
-  procedure = gimp_procedure_new (layer_set_lock_alpha_invoker);
+  procedure = gimp_procedure_new (layer_set_lock_alpha_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-layer-set-lock-alpha");
   gimp_procedure_set_static_help (procedure,
@@ -1905,7 +1915,7 @@ register_layer_procs (GimpPDB *pdb)
   /*
    * gimp-layer-get-apply-mask
    */
-  procedure = gimp_procedure_new (layer_get_apply_mask_invoker);
+  procedure = gimp_procedure_new (layer_get_apply_mask_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-layer-get-apply-mask");
   gimp_procedure_set_static_help (procedure,
@@ -1934,7 +1944,7 @@ register_layer_procs (GimpPDB *pdb)
   /*
    * gimp-layer-set-apply-mask
    */
-  procedure = gimp_procedure_new (layer_set_apply_mask_invoker);
+  procedure = gimp_procedure_new (layer_set_apply_mask_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-layer-set-apply-mask");
   gimp_procedure_set_static_help (procedure,
@@ -1963,7 +1973,7 @@ register_layer_procs (GimpPDB *pdb)
   /*
    * gimp-layer-get-show-mask
    */
-  procedure = gimp_procedure_new (layer_get_show_mask_invoker);
+  procedure = gimp_procedure_new (layer_get_show_mask_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-layer-get-show-mask");
   gimp_procedure_set_static_help (procedure,
@@ -1992,7 +2002,7 @@ register_layer_procs (GimpPDB *pdb)
   /*
    * gimp-layer-set-show-mask
    */
-  procedure = gimp_procedure_new (layer_set_show_mask_invoker);
+  procedure = gimp_procedure_new (layer_set_show_mask_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-layer-set-show-mask");
   gimp_procedure_set_static_help (procedure,
@@ -2021,7 +2031,7 @@ register_layer_procs (GimpPDB *pdb)
   /*
    * gimp-layer-get-edit-mask
    */
-  procedure = gimp_procedure_new (layer_get_edit_mask_invoker);
+  procedure = gimp_procedure_new (layer_get_edit_mask_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-layer-get-edit-mask");
   gimp_procedure_set_static_help (procedure,
@@ -2050,7 +2060,7 @@ register_layer_procs (GimpPDB *pdb)
   /*
    * gimp-layer-set-edit-mask
    */
-  procedure = gimp_procedure_new (layer_set_edit_mask_invoker);
+  procedure = gimp_procedure_new (layer_set_edit_mask_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-layer-set-edit-mask");
   gimp_procedure_set_static_help (procedure,
@@ -2079,7 +2089,7 @@ register_layer_procs (GimpPDB *pdb)
   /*
    * gimp-layer-get-opacity
    */
-  procedure = gimp_procedure_new (layer_get_opacity_invoker);
+  procedure = gimp_procedure_new (layer_get_opacity_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-layer-get-opacity");
   gimp_procedure_set_static_help (procedure,
@@ -2108,7 +2118,7 @@ register_layer_procs (GimpPDB *pdb)
   /*
    * gimp-layer-set-opacity
    */
-  procedure = gimp_procedure_new (layer_set_opacity_invoker);
+  procedure = gimp_procedure_new (layer_set_opacity_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-layer-set-opacity");
   gimp_procedure_set_static_help (procedure,
@@ -2137,7 +2147,7 @@ register_layer_procs (GimpPDB *pdb)
   /*
    * gimp-layer-get-mode
    */
-  procedure = gimp_procedure_new (layer_get_mode_invoker);
+  procedure = gimp_procedure_new (layer_get_mode_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-layer-get-mode");
   gimp_procedure_set_static_help (procedure,
@@ -2167,7 +2177,7 @@ register_layer_procs (GimpPDB *pdb)
   /*
    * gimp-layer-set-mode
    */
-  procedure = gimp_procedure_new (layer_set_mode_invoker);
+  procedure = gimp_procedure_new (layer_set_mode_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-layer-set-mode");
   gimp_procedure_set_static_help (procedure,
@@ -2197,7 +2207,7 @@ register_layer_procs (GimpPDB *pdb)
   /*
    * gimp-layer-get-blend-space
    */
-  procedure = gimp_procedure_new (layer_get_blend_space_invoker);
+  procedure = gimp_procedure_new (layer_get_blend_space_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-layer-get-blend-space");
   gimp_procedure_set_static_help (procedure,
@@ -2227,7 +2237,7 @@ register_layer_procs (GimpPDB *pdb)
   /*
    * gimp-layer-set-blend-space
    */
-  procedure = gimp_procedure_new (layer_set_blend_space_invoker);
+  procedure = gimp_procedure_new (layer_set_blend_space_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-layer-set-blend-space");
   gimp_procedure_set_static_help (procedure,
@@ -2257,7 +2267,7 @@ register_layer_procs (GimpPDB *pdb)
   /*
    * gimp-layer-get-composite-space
    */
-  procedure = gimp_procedure_new (layer_get_composite_space_invoker);
+  procedure = gimp_procedure_new (layer_get_composite_space_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-layer-get-composite-space");
   gimp_procedure_set_static_help (procedure,
@@ -2287,7 +2297,7 @@ register_layer_procs (GimpPDB *pdb)
   /*
    * gimp-layer-set-composite-space
    */
-  procedure = gimp_procedure_new (layer_set_composite_space_invoker);
+  procedure = gimp_procedure_new (layer_set_composite_space_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-layer-set-composite-space");
   gimp_procedure_set_static_help (procedure,
@@ -2317,7 +2327,7 @@ register_layer_procs (GimpPDB *pdb)
   /*
    * gimp-layer-get-composite-mode
    */
-  procedure = gimp_procedure_new (layer_get_composite_mode_invoker);
+  procedure = gimp_procedure_new (layer_get_composite_mode_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-layer-get-composite-mode");
   gimp_procedure_set_static_help (procedure,
@@ -2347,7 +2357,7 @@ register_layer_procs (GimpPDB *pdb)
   /*
    * gimp-layer-set-composite-mode
    */
-  procedure = gimp_procedure_new (layer_set_composite_mode_invoker);
+  procedure = gimp_procedure_new (layer_set_composite_mode_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-layer-set-composite-mode");
   gimp_procedure_set_static_help (procedure,

@@ -112,7 +112,9 @@
 ; except by proximity in the output.
 (define (test! string)
   (displayln "")
-  (displayln string))
+  (displayln string)
+  ; also to GIMP Error Console
+  (gimp-message string))
 
 
 ; reset testing state when test framework is loaded
@@ -253,7 +255,7 @@
 ;        expected-error)
 
 
-; Statments in the testing DSL.
+; Statements in the testing DSL.
 
 ; The usual or normal test.
 ; <code> is a boolean proposition expected to yield #t
@@ -368,46 +370,7 @@
 
 
 
-
-
-;    port utility
-
-
-(define (with-string open-function str function)
-  (let ((port (open-function str)))
-    (if (port? port)
-      (let ((result '()))
-        (set! result (function port))
-        (close-port port)
-        result)
-      ; Testing internal error.  Hijack the testing framework
-      (testing:log-fail! "Failed to open string for string port!" '() ))))
-
-(define (call-with-output-string str function)
-  (with-string open-output-string str function))
-
-
-
 ;   string utility
-
-(define (trim char chars)
-  (if (= (char->integer char) (char->integer (car chars)))
-      (trim char (cdr chars))
-      chars))
-
-(define (rtrim str)
-  (list->string (reverse (trim #\space (reverse (string->list str))))))
-
-; any is code
-; Not using atom->string.  Using write
-(define (any->string any)
-  (let* ((to-string
-           (lambda (any)
-             (let* ((str (make-string 256)))
-               (call-with-output-string str
-                 (lambda (port) (write any port)))
-               str))))
-    (rtrim (to-string any))))
 
 
 ; string-prefix? is in R5RS but not tinyscheme.
@@ -450,19 +413,72 @@
   (gimp-message (path-to-test-scripts filename))
   (load (path-to-test-scripts filename)))
 
-; Tell Gimp to load a test image
+; Tell Gimp to load a test image by name
 ; Returns ID of image
 ; Knows installed image directory (not dedicated to testing but always there.)
 ; Accepts image suffixes that Gimp can load.
-; Typical is /usr/local/share/gimp/2.99/images/wilber.png
+; Typical is /usr/local/share/gimp/2.99/images/gimp-logo.png
 (define (testing:load-test-image filename)
   (gimp-message (path-to-test-images filename))
   ; unpack ID via car
   (car (gimp-file-load RUN-NONINTERACTIVE (path-to-test-images filename))))
 
+
+; Tell Gimp to load a basic image always distributed with Gimp
+; This hides the name of the file.
+; Many tests use this, so you can temporarily change the file name
+; and many tests will then use a different image.
+; But some tests expect the image to have certain properties, like 256x256.
+(define (testing:load-test-image-basic)
+  (testing:load-test-image "gimp-logo.png"))
+
+; Load a basic image while we are using v3 binding: no car
+(define (testing:load-test-image-basic-v3)
+  (gimp-file-load RUN-NONINTERACTIVE (path-to-test-images "gimp-logo.png")))
+
 ; Returns path to file containing named color profile
 ; Currently, assumes color profiles downloaded to /work dir.
-; FUTURE: platform indpendent path
+; FUTURE: platform independent path
 ; FUTURE: color profile test files in the repo
 (define (testing:path-to-color-profile name)
-  (string-append "/work/" name))
+  (string-append "/work/colorProfilesICC/" name))
+
+; Return a new layer in the given image, not inserted.
+; The new layer initial attributes are hard-coded.
+; The new layer is not added i.e. inserted in the image.
+(define (testing:layer-new testImage)
+  (gimp-layer-new
+    testImage
+    "LayerNew"  ; name
+    21 22      ; dimensions
+    RGB-IMAGE   ; mode
+    50.0        ; opacity
+    LAYER-MODE-NORMAL))
+
+; Return a new layer in the given image, inserted.
+; The new layer initial attributes are hard-coded.
+(define (testing:layer-new-inserted testImage)
+  (let ((newLayer (testing:layer-new testImage)))
+    (gimp-image-insert-layer
+            testImage
+            newLayer
+            0 0) ; parent, position within parent
+    newLayer))
+
+
+; float comparison utility
+; are a and b relatively equal, to within epsilon?
+(define (equal-relative? a b epsilon)
+  (<= (abs (- a b))
+      (* epsilon (max (abs a) (abs b)))))
+
+
+; graphical result utility
+
+; When testing is in the GUI environment and not in batch mode,
+; show an image result of testing.
+; Now commented out.
+; The PDB API has no predicate answering "can open display?"
+(define (testing:show image)
+  ;(gimp-display-new image)
+  )

@@ -32,55 +32,31 @@ G_BEGIN_DECLS
 
 /* For information look into the C source or the html documentation */
 
+/* The whole GimpFileEntry widget was deprecated in 2006 (commit
+ * 99f979e1189) apparently to be replaced by GtkFileChooserButton, yet
+ * it is still used in the GimpPathEditor. For GIMP 3.0, we removed the
+ * header from installed headers and made the class and all functions
+ * internal, though we still use it.
+ *
+ * TODO: eventually we want either this widget fully removed and
+ * replaced by a generic GTK widget or reimplemented and made public
+ * again.
+ */
 
-#define GIMP_TYPE_FILE_ENTRY            (gimp_file_entry_get_type ())
-#define GIMP_FILE_ENTRY(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_FILE_ENTRY, GimpFileEntry))
-#define GIMP_FILE_ENTRY_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_FILE_ENTRY, GimpFileEntryClass))
-#define GIMP_IS_FILE_ENTRY(obj)         (G_TYPE_CHECK_INSTANCE_TYPE (obj, GIMP_TYPE_FILE_ENTRY))
-#define GIMP_IS_FILE_ENTRY_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_FILE_ENTRY))
-#define GIMP_FILE_ENTRY_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_FILE_ENTRY, GimpFileEntryClass))
-
-
-typedef struct _GimpFileEntryPrivate GimpFileEntryPrivate;
-typedef struct _GimpFileEntryClass   GimpFileEntryClass;
-
-struct _GimpFileEntry
-{
-  GtkBox                parent_instance;
-
-  GimpFileEntryPrivate *priv;
-};
-
-struct _GimpFileEntryClass
-{
-  GtkBoxClass  parent_class;
-
-  void (* filename_changed) (GimpFileEntry *entry);
-
-  /* Padding for future expansion */
-  void (* _gimp_reserved1) (void);
-  void (* _gimp_reserved2) (void);
-  void (* _gimp_reserved3) (void);
-  void (* _gimp_reserved4) (void);
-  void (* _gimp_reserved5) (void);
-  void (* _gimp_reserved6) (void);
-  void (* _gimp_reserved7) (void);
-  void (* _gimp_reserved8) (void);
-};
+#define GIMP_TYPE_FILE_ENTRY (_gimp_file_entry_get_type ())
+G_DECLARE_FINAL_TYPE (GimpFileEntry, _gimp_file_entry, GIMP, FILE_ENTRY, GtkBox)
 
 
-GType       gimp_file_entry_get_type     (void) G_GNUC_CONST;
+G_GNUC_INTERNAL GtkWidget * _gimp_file_entry_new          (const gchar   *title,
+                                                           const gchar   *filename,
+                                                           gboolean       dir_only,
+                                                           gboolean       check_valid);
 
-GtkWidget * gimp_file_entry_new          (const gchar   *title,
-                                          const gchar   *filename,
-                                          gboolean       dir_only,
-                                          gboolean       check_valid);
+G_GNUC_INTERNAL gchar     * _gimp_file_entry_get_filename (GimpFileEntry *entry);
+G_GNUC_INTERNAL void        _gimp_file_entry_set_filename (GimpFileEntry *entry,
+                                                           const gchar   *filename);
 
-gchar     * gimp_file_entry_get_filename (GimpFileEntry *entry);
-void        gimp_file_entry_set_filename (GimpFileEntry *entry,
-                                          const gchar   *filename);
-
-GtkWidget * gimp_file_entry_get_entry    (GimpFileEntry *entry);
+G_GNUC_INTERNAL GtkWidget * _gimp_file_entry_get_entry    (GimpFileEntry *entry);
 
 
 G_END_DECLS

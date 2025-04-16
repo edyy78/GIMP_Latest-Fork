@@ -74,7 +74,6 @@ static GimpProcedure  * metadata_create_procedure (GimpPlugIn           *plug_in
 static GimpValueArray * metadata_run              (GimpProcedure        *procedure,
                                                    GimpRunMode           run_mode,
                                                    GimpImage            *image,
-                                                   gint                  n_drawables,
                                                    GimpDrawable        **drawables,
                                                    GimpProcedureConfig  *config,
                                                    gpointer              run_data);
@@ -133,6 +132,7 @@ static void     metadata_editor_create_tree_grid (const me_column_info *tree_inf
 
 static gboolean metadata_editor_dialog           (GimpImage           *image,
                                                   GimpMetadata        *metadata,
+                                                  GimpProcedureConfig *config,
                                                   GError             **error);
 
 static void metadata_dialog_editor_set_metadata  (GExiv2Metadata      *metadata,
@@ -768,6 +768,11 @@ metadata_create_procedure (GimpPlugIn  *plug_in,
                                       "Ben Touchette",
                                       "Ben Touchette",
                                       "2017");
+
+      gimp_procedure_add_bytes_argument (procedure, "parent-handle",
+                                         _("Parent's window handle"),
+                                         _("The opaque handle of the window to set this plug-in's dialog transient to"),
+                                         G_PARAM_READWRITE | GIMP_PARAM_DONT_SERIALIZE);
     }
 
   return procedure;
@@ -777,7 +782,6 @@ static GimpValueArray *
 metadata_run (GimpProcedure        *procedure,
               GimpRunMode           run_mode,
               GimpImage            *image,
-              gint                  n_drawables,
               GimpDrawable        **drawables,
               GimpProcedureConfig  *config,
               gpointer              run_data)
@@ -800,7 +804,7 @@ metadata_run (GimpProcedure        *procedure,
       gimp_image_set_metadata (image, metadata);
     }
 
-  if (metadata_editor_dialog (image, metadata, &error))
+  if (metadata_editor_dialog (image, metadata, config, &error))
     return gimp_procedure_new_return_values (procedure, GIMP_PDB_SUCCESS, NULL);
   else
     return gimp_procedure_new_return_values (procedure, GIMP_PDB_EXECUTION_ERROR, error);
@@ -1140,9 +1144,10 @@ metadata_editor_create_tree_grid (const me_column_info *tree_info,
 }
 
 static gboolean
-metadata_editor_dialog (GimpImage     *image,
-                        GimpMetadata  *g_metadata,
-                        GError       **error)
+metadata_editor_dialog (GimpImage            *image,
+                        GimpMetadata         *g_metadata,
+                        GimpProcedureConfig  *config,
+                        GError              **error)
 {
   GExiv2Metadata *metadata;
   GtkWidget      *dialog;
@@ -1154,8 +1159,11 @@ metadata_editor_dialog (GimpImage     *image,
   GtkWidget      *grid;
   GtkWidget      *widget;
   GtkListStore   *store;
+  GBytes         *parent_handle = NULL;
   gchar          *title;
   gchar          *name;
+
+  g_object_get (config, "parent-handle", &parent_handle, NULL);
 
   metadata = GEXIV2_METADATA (g_metadata);
 
@@ -1189,7 +1197,13 @@ metadata_editor_dialog (GimpImage     *image,
                                             GTK_RESPONSE_CANCEL,
                                             -1);
 
-  gimp_window_set_transient (GTK_WINDOW (dialog));
+  if (parent_handle && g_bytes_get_size (parent_handle) != 0)
+    gimp_window_set_transient_for (GTK_WINDOW (dialog), parent_handle);
+  else
+    gimp_window_set_transient (GTK_WINDOW (dialog));
+
+  gtk_window_set_destroy_with_parent (GTK_WINDOW (dialog), TRUE);
+  g_bytes_unref (parent_handle);
 
   content_area = gtk_dialog_get_content_area (GTK_DIALOG (dialog));
 
@@ -1700,10 +1714,12 @@ on_date_button_clicked (GtkButton *widget,
 
   if (gtk_dialog_run (GTK_DIALOG (calendar_dialog)) == GTK_RESPONSE_OK)
     {
-      gchar date[25];
+      GString *date;
       gtk_calendar_get_date (GTK_CALENDAR (calendar), &year, &month, &day);
-      g_sprintf ((gchar*) &date, "%u-%02u-%02uT00:00:00+00:00", year, month+1, day);
-      gtk_entry_set_text (GTK_ENTRY (entry_widget), date);
+      date = g_string_new ("");
+      g_string_printf (date, "%u-%02u-%02uT00:00:00+00:00", year, month + 1, day);
+      gtk_entry_set_text (GTK_ENTRY (entry_widget), date->str);
+      (void) g_string_free (date, TRUE);
     }
 
   gtk_widget_destroy (calendar_dialog);
@@ -4867,8 +4883,6 @@ set_gps_longitude_latitude (GimpMetadata *metadata,
       g_log (ME_LOG_DOMAIN, G_LOG_LEVEL_DEBUG, "String split into: %s - %s - %s", str1, str2, str3);
     }
 
-  g_free (s);
-
   if (str1 && str2 && str3)
     {
       /* Assuming degrees, minutes, seconds */
@@ -4896,6 +4910,8 @@ set_gps_longitude_latitude (GimpMetadata *metadata,
     }
   else
     remove_val = TRUE;
+
+  g_free (s);
 
   if (!remove_val)
     {
@@ -5115,8 +5131,36 @@ metadata_editor_write_callback (GtkWidget       *dialog,
 
                           if (date_time_split[1] != NULL)
                             {
+                              gchar **time_split = NULL;
+                              gchar  *iptc_time  = NULL;
+
+                              /* IPTC TimeCreated can't have fractional parts. */
+                              time_split = g_strsplit (date_time_split[1], ".", 2);
+
+                              /* A timezone adjustment can follow this, which
+                               * we want to keep. */
+                              if (time_split[1] != NULL)
+                                {
+                                  gchar **tz_split = NULL;
+
+                                  tz_split = g_strsplit_set (time_split[1], "+-", 2);
+                                  if (tz_split[1] != NULL)
+                                    iptc_time = g_strconcat (time_split[0],
+                                                             time_split[1] + strlen (tz_split[0]),
+                                                             NULL);
+                                  else
+                                    iptc_time = g_strdup (time_split[0]);
+                                  g_strfreev (tz_split);
+                                }
+                              else
+                                {
+                                  iptc_time = g_strdup (time_split[0]);
+                                }
+
                               set_tag_string (g_metadata, "Iptc.Application2.TimeCreated",
-                                              date_time_split[1], FALSE);
+                                              iptc_time, FALSE);
+                              g_strfreev (time_split);
+                              g_free (iptc_time);
                             }
                           else
                             {

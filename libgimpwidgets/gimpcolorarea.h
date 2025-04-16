@@ -34,43 +34,9 @@
 G_BEGIN_DECLS
 
 
-#define GIMP_TYPE_COLOR_AREA            (gimp_color_area_get_type ())
-#define GIMP_COLOR_AREA(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_COLOR_AREA, GimpColorArea))
-#define GIMP_COLOR_AREA_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_COLOR_AREA, GimpColorAreaClass))
-#define GIMP_IS_COLOR_AREA(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_COLOR_AREA))
-#define GIMP_IS_COLOR_AREA_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_COLOR_AREA))
-#define GIMP_COLOR_AREA_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_COLOR_AREA, GimpColorAreaClass))
+#define GIMP_TYPE_COLOR_AREA (gimp_color_area_get_type ())
+G_DECLARE_FINAL_TYPE (GimpColorArea, gimp_color_area, GIMP, COLOR_AREA, GtkDrawingArea)
 
-
-typedef struct _GimpColorAreaPrivate GimpColorAreaPrivate;
-typedef struct _GimpColorAreaClass   GimpColorAreaClass;
-
-struct _GimpColorArea
-{
-  GtkDrawingArea        parent_instance;
-
-  GimpColorAreaPrivate *priv;
-};
-
-struct _GimpColorAreaClass
-{
-  GtkDrawingAreaClass  parent_class;
-
-  void (* color_changed) (GimpColorArea *area);
-
-  /* Padding for future expansion */
-  void (* _gimp_reserved1) (void);
-  void (* _gimp_reserved2) (void);
-  void (* _gimp_reserved3) (void);
-  void (* _gimp_reserved4) (void);
-  void (* _gimp_reserved5) (void);
-  void (* _gimp_reserved6) (void);
-  void (* _gimp_reserved7) (void);
-  void (* _gimp_reserved8) (void);
-};
-
-
-GType       gimp_color_area_get_type         (void) G_GNUC_CONST;
 
 GtkWidget * gimp_color_area_new              (GeglColor         *color,
                                               GimpColorAreaType  type,

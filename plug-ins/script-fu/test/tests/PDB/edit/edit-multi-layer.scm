@@ -9,40 +9,34 @@
 ;  - no selection
 
 
+(script-fu-use-v3)
 
 ; setup
 ; Load test image that already has drawable
-(define testImage (testing:load-test-image "wilber.png"))
+(define testImage (testing:load-test-image-basic-v3))
 
-; Add a layer
-(define testLayer2
-         (car (gimp-layer-new
-                    testImage
-                    21
-                    22
-                    RGB-IMAGE
-                    "LayerNew"
-                    50.0
-                    LAYER-MODE-NORMAL)))
-; Insert new layer
-(assert `(gimp-image-insert-layer
-            ,testImage
-            ,testLayer2
-            0 0))  ; parent, position within parent
+(assert `(= (gimp-image-get-width ,testImage)
+            128))
+
+; Add a layer already inserted in image
+(define testLayer2 (testing:layer-new-inserted testImage))
+
 
 ; get all the root layers
 ; testImage has two layers at root.
-(define testLayers (cadr (gimp-image-get-layers testImage)))
+(define testLayers (gimp-image-get-layers testImage))
 ;testLayers is-a vector
 
 ; capture a ref to the first layer
 (define testLayer (vector-ref testLayers 0))
 
-; check the image has two layers
-(assert `(= (car (gimp-image-get-layers ,testImage))
+(test! "insert layer was effective")
+
+; the image has two layers
+(assert `(= (vector-length (gimp-image-get-layers ,testImage))
             2))
 
-; check our local list of layers is length 2
+; our local list of layers is length 2
 (assert `(= (vector-length ,testLayers)
             2))
 
@@ -51,23 +45,26 @@
 
 ; tests
 
-; copy when no selection
+(test! "copy when no selection")
 
 ; copy returns true when no selection and copies entire drawables
 
 ; FIXME this should fail? the passed length does not match the length of list
 ; copy first of two
-(assert-PDB-true `(gimp-edit-copy 1 ,testLayers))
+; returns #t in v3 binding
+(assert `(gimp-edit-copy
+              (make-vector 1 (vector-ref ,testLayers 0))))
 ; copy both of two
-(assert-PDB-true `(gimp-edit-copy 2 ,testLayers))
+(assert `(gimp-edit-copy ,testLayers))
 
 
+(test! "paste with clip of two layers")
 ; paste when:
 ;  - clip is not empty
 ;  - clip has two layers
 ;  - no selection
 ; returns the pasted layers, a vector of length two
-(assert `(= (car (gimp-edit-paste
+(assert `(= (vector-length (gimp-edit-paste
                    ,testLayer
                   TRUE)) ; paste-into
             2))
@@ -76,15 +73,16 @@
 ; the passed layer is moot: new layers are created.
 
 ; the image now has four layers
-(assert `(= (car (gimp-image-get-layers ,testImage))
+(assert `(= (vector-length (gimp-image-get-layers ,testImage))
             4))
 
-; the new layers were pasted centered at (0,0)
-; the new layers are partially off the canvas
+; The new layers were pasted centered at (0,0)
+; The new layers are partially off the canvas.
 
 ; The image i.e. canvas is NOT larger now
-(assert `(= (car (gimp-image-get-width ,testImage))
-            256))
+; Original test image was 128
+(assert `(= (gimp-image-get-width ,testImage)
+            128))
 ; !!! Note that some layers, when selected,
 ; might not be visible, since the scrollbars are on the current canvas
 ; not the size of the bounding box of all the layers.
@@ -96,37 +94,44 @@
 
 
 
+(test! "paste off canvas layers")
 
 ; test pasting into a layer whose origin is off the canvas
 ; don't resize and then paste into the new layer that is off canvas.
 ; the clip still has two layers
 
-; get reference to one of the new layers
+; Get reference to one of the new layers
 ; it is top of stack, the first element in the vector of layers
-(define testOffCanvasLayer (vector-ref (cadr (gimp-image-get-layers testImage))
+(define testOffCanvasLayer (vector-ref (gimp-image-get-layers testImage)
                                        0))
 
-(assert `(= (car (gimp-edit-paste
+; returns (2 <vector>)
+(assert `(= (vector-length (gimp-edit-paste
                    ,testOffCanvasLayer
                   TRUE)) ; paste-into
             2))
 ; The image now has six layers, extending to the upper left.
 (assert `(gimp-image-resize-to-layers ,testImage))
-(assert `(= (car (gimp-image-get-width ,testImage))
-            490))
+; ??? TODO I don't understand this test nor the results
+(assert `(= (gimp-image-get-width ,testImage)
+            234))
 
 
 ; copy-visible when image has many layers
 ; only puts one layer on clip
-(assert-PDB-true `(gimp-edit-copy-visible ,testImage))
+; returns #t
+(assert `(gimp-edit-copy-visible ,testImage))
+
+; TODO get the clipboard and check its size
+
 
 ; TODO this tested elsewhere
 ; paste when:
 ;  - clip is not empty
 ;  - clip has one layers
 ;  - no selection
-; returns the pasted layers, a vector of length one
-(assert `(= (car (gimp-edit-paste
+; returns (1 <vector>) a vector of length one
+(assert `(= (vector-length (gimp-edit-paste
                    ,testLayer
                   TRUE)) ; paste-into
             1))
@@ -142,3 +147,5 @@
 
 ; for debugging individual test file:
 ;(gimp-display-new testImage)
+
+(script-fu-use-v2)

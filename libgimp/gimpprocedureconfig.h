@@ -31,29 +31,15 @@ G_BEGIN_DECLS
 /* For information look into the C source or the html documentation */
 
 
-#define GIMP_TYPE_PROCEDURE_CONFIG            (gimp_procedure_config_get_type ())
-#define GIMP_PROCEDURE_CONFIG(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_PROCEDURE_CONFIG, GimpProcedureConfig))
-#define GIMP_PROCEDURE_CONFIG_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_PROCEDURE_CONFIG, GimpProcedureConfigClass))
-#define GIMP_IS_PROCEDURE_CONFIG(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_PROCEDURE_CONFIG))
-#define GIMP_IS_PROCEDURE_CONFIG_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_PROCEDURE_CONFIG))
-#define GIMP_PROCEDURE_CONFIG_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_PROCEDURE_CONFIG, GimpProcedureConfigClass))
-
-
-typedef struct _GimpProcedureConfigClass   GimpProcedureConfigClass;
-typedef struct _GimpProcedureConfigPrivate GimpProcedureConfigPrivate;
-
-struct _GimpProcedureConfig
-{
-  GObject                     parent_instance;
-
-  GimpProcedureConfigPrivate *priv;
-};
+#define GIMP_TYPE_PROCEDURE_CONFIG (gimp_procedure_config_get_type ())
+G_DECLARE_DERIVABLE_TYPE (GimpProcedureConfig, gimp_procedure_config, GIMP, PROCEDURE_CONFIG, GObject)
 
 struct _GimpProcedureConfigClass
 {
   GObjectClass  parent_class;
 
   /* Padding for future expansion */
+  void (* _gimp_reserved0) (void);
   void (* _gimp_reserved1) (void);
   void (* _gimp_reserved2) (void);
   void (* _gimp_reserved3) (void);
@@ -62,24 +48,38 @@ struct _GimpProcedureConfigClass
   void (* _gimp_reserved6) (void);
   void (* _gimp_reserved7) (void);
   void (* _gimp_reserved8) (void);
+  void (* _gimp_reserved9) (void);
 };
 
 
-GType   gimp_procedure_config_get_type      (void) G_GNUC_CONST;
-
-GimpProcedure *
-        gimp_procedure_config_get_procedure (GimpProcedureConfig *config);
+GimpProcedure  * gimp_procedure_config_get_procedure         (GimpProcedureConfig *config);
 
 
-void    gimp_procedure_config_save_metadata (GimpProcedureConfig  *config,
-                                             GimpImage            *exported_image,
-                                             GFile                *file);
+void             gimp_procedure_config_save_metadata         (GimpProcedureConfig  *config,
+                                                              GimpImage            *exported_image,
+                                                              GFile                *file);
 
+
+/* Binding functions */
+
+GObject       ** gimp_procedure_config_get_core_object_array (GimpProcedureConfig  *config,
+                                                              const gchar          *property_name);
+void             gimp_procedure_config_set_core_object_array (GimpProcedureConfig  *config,
+                                                              const gchar          *property_name,
+                                                              GObject             **objects,
+                                                              gsize                 n_objects);
+
+GeglColor     ** gimp_procedure_config_get_color_array       (GimpProcedureConfig  *config,
+                                                              const gchar          *property_name);
+void             gimp_procedure_config_set_color_array       (GimpProcedureConfig  *config,
+                                                              const gchar          *property_name,
+                                                              GeglColor           **colors,
+                                                              gsize                 n_colors);
 
 /* Utility functions */
 
-gint    gimp_procedure_config_get_choice_id (GimpProcedureConfig  *config,
-                                             const gchar          *property_name);
+gint             gimp_procedure_config_get_choice_id         (GimpProcedureConfig  *config,
+                                                              const gchar          *property_name);
 
 
 G_END_DECLS

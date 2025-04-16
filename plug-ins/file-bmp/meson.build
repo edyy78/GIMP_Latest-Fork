@@ -1,9 +1,20 @@
 plugin_name = 'file-bmp'
 
+gen_huffman = executable('generate-huffman',
+                         'generate-huffman.c',
+                         native: true
+)
+
+huffman = custom_target('huffman.h',
+                        output: 'huffman.h',
+                        command: [gen_huffman, '@OUTPUT@'],
+)
+
 plugin_sources = [
   'bmp-load.c',
-  'bmp-save.c',
+  'bmp-export.c',
   'bmp.c',
+  huffman,
 ]
 
 if platform_windows
@@ -20,9 +31,10 @@ if platform_windows
   )
 endif
 
-executable(plugin_name,
-  plugin_sources,
-  dependencies: libgimpui_dep,
-  install: true,
-  install_dir: gimpplugindir / 'plug-ins' / plugin_name,
-)
+plugin_exe = executable(plugin_name,
+                        plugin_sources,
+                        dependencies: libgimpui_dep,
+                        win_subsystem: 'windows',
+                        install: true,
+                        install_dir: gimpplugindir / 'plug-ins' / plugin_name)
+plugin_executables += [plugin_exe.full_path()]

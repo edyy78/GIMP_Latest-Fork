@@ -19,16 +19,23 @@
 ;
 
 (define (script-fu-difference-clouds image
-                                     drawable)
+                                     drawables
+                                     seed
+                                     detail
+                                     tileable
+                                     turbulent
+                                     x_size
+                                     y_size)
 
-  (let* ((draw-offset-x (car (gimp-drawable-get-offsets drawable)))
-         (draw-offset-y (cadr (gimp-drawable-get-offsets drawable)))
-         (has-sel       (car (gimp-drawable-mask-intersect drawable)))
-         (sel-offset-x  (cadr (gimp-drawable-mask-intersect drawable)))
-         (sel-offset-y  (caddr (gimp-drawable-mask-intersect drawable)))
-         (width         (cadddr (gimp-drawable-mask-intersect drawable)))
-         (height        (caddr (cddr (gimp-drawable-mask-intersect drawable))))
-         (type          (car (gimp-drawable-type-with-alpha drawable)))
+  (let* ((layer (vector-ref drawables 0))
+         (draw-offset-x (car (gimp-drawable-get-offsets layer)))
+         (draw-offset-y (cadr (gimp-drawable-get-offsets layer)))
+         (has-sel       (car (gimp-drawable-mask-intersect layer)))
+         (sel-offset-x  (cadr (gimp-drawable-mask-intersect layer)))
+         (sel-offset-y  (caddr (gimp-drawable-mask-intersect layer)))
+         (width         (cadddr (gimp-drawable-mask-intersect layer)))
+         (height        (caddr (cddr (gimp-drawable-mask-intersect layer))))
+         (type          (car (gimp-drawable-type-with-alpha layer)))
          (diff-clouds  -1)
          (offset-x      0)
          (offset-y      0)
@@ -37,8 +44,8 @@
     (gimp-image-undo-group-start image)
 
     ; Create the cloud layer
-    (set! diff-clouds (car (gimp-layer-new image width height type
-                                             "Clouds" 100 LAYER-MODE-DIFFERENCE)))
+    (set! diff-clouds (car (gimp-layer-new image "Clouds" width height type
+                                           100 LAYER-MODE-DIFFERENCE)))
 
     ; Add the cloud layer above the current layer
     (gimp-image-insert-layer image diff-clouds 0 -1)
@@ -51,11 +58,16 @@
     (set! offset-y (+ draw-offset-y sel-offset-y))
 
     ; Offset the clouds layer
-    (if (gimp-item-is-layer drawable)
+    (if (gimp-item-id-is-layer layer)
       (gimp-item-transform-translate diff-clouds offset-x offset-y))
 
-    ; Show the solid noise dialog
-    (plug-in-solid-noise SF-RUN-MODE image diff-clouds 0 0 0 1 4.0 4.0)
+    ; Run GEGL Solid Noise filter
+    (let* ((cloud-width  (cadddr (gimp-drawable-mask-intersect diff-clouds)))
+           (cloud-height (caddr (cddr (gimp-drawable-mask-intersect diff-clouds)))))
+      (gimp-drawable-merge-new-filter diff-clouds "gegl:noise-solid" 0 LAYER-MODE-REPLACE 1.0 "tileable" tileable "turbulent" turbulent "seed" seed
+                                                                                               "detail" detail "x-size" x_size "y-size" y_size
+                                                                                               "width" cloud-width "height" cloud-height)
+    )
 
     ; Merge the clouds layer with the layer below
     (gimp-image-merge-down image diff-clouds EXPAND-AS-NECESSARY)
@@ -66,15 +78,21 @@
   )
 )
 
-(script-fu-register "script-fu-difference-clouds"
-                    _"_Difference Clouds"
-                    _"Solid noise applied with Difference layer mode"
-                    "Martin Nordholts <enselic@hotmail.com>"
-                    "Martin Nordholts"
-                    "2006/10/25"
-                    "RGB* GRAY*"
-                    SF-IMAGE       "Image"           0
-                    SF-DRAWABLE    "Drawable"        0)
+(script-fu-register-filter "script-fu-difference-clouds"
+                           _"_Difference Clouds"
+                           _"Solid noise applied with Difference layer mode"
+                           "Martin Nordholts <enselic@hotmail.com>"
+                           "Martin Nordholts"
+                           "2006/10/25"
+                           "RGB* GRAY*"
+                           SF-ONE-OR-MORE-DRAWABLE
+                           SF-ADJUSTMENT            _"Random Seed" '(0 0 1024 1 10 0 1)
+                           SF-ADJUSTMENT            _"Levels"      '(1 0 15 1 10 0 1)
+                           SF-TOGGLE                _"Tileable"    FALSE
+                           SF-TOGGLE                _"Turbulent"   FALSE
+                           SF-ADJUSTMENT            _"X"           '(4 0.1 16 0.1 1 1 0)
+                           SF-ADJUSTMENT            _"Y"           '(4 0.1 16 0.1 1 1 0)
+                         )
 
 (script-fu-menu-register "script-fu-difference-clouds"
 			 "<Image>/Filters/Render/Noise")

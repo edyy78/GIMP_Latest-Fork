@@ -46,6 +46,9 @@
 #include <ApplicationServices/ApplicationServices.h>
 #include <CoreServices/CoreServices.h>
 #endif
+#ifdef PLATFORM_OSX
+#import <Cocoa/Cocoa.h>
+#endif
 
 #include "libgimpcolor/gimpcolor.h"
 #include "libgimpconfig/gimpconfig.h"
@@ -714,25 +717,28 @@ gimp_monitor_get_color_profile (GdkMonitor *monitor)
                   }
               }
 
-            filename = g_utf16_to_utf8 (filename_utf16, -1, NULL, NULL, NULL);
+            if (filename_utf16 != NULL)
+              {
+                filename = g_utf16_to_utf8 (filename_utf16, -1, NULL, NULL, NULL);
 
-            GetColorDirectoryW (NULL, NULL, &len);
-            dir_utf16 = g_malloc0 (len);
-            GetColorDirectoryW (NULL, dir_utf16, &len);
+                GetColorDirectoryW (NULL, NULL, &len);
+                dir_utf16 = g_malloc0 (len);
+                GetColorDirectoryW (NULL, dir_utf16, &len);
 
-            dir = g_utf16_to_utf8 (dir_utf16, -1, NULL, NULL, NULL);
+                dir = g_utf16_to_utf8 (dir_utf16, -1, NULL, NULL, NULL);
 
-            fullpath = g_build_filename (dir, filename, NULL);
-            file = g_file_new_for_path (fullpath);
+                fullpath = g_build_filename (dir, filename, NULL);
+                file = g_file_new_for_path (fullpath);
 
-            profile = gimp_color_profile_new_from_file (file, NULL);
-            g_object_unref (file);
+                profile = gimp_color_profile_new_from_file (file, NULL);
+                g_object_unref (file);
 
-            g_free (fullpath);
-            g_free (dir);
-            g_free (dir_utf16);
-            g_free (filename);
-            g_free (filename_utf16);
+                g_free (fullpath);
+                g_free (dir);
+                g_free (dir_utf16);
+                g_free (filename);
+                g_free (filename_utf16);
+              }
           }
       }
   }
@@ -1096,9 +1102,13 @@ gimp_widget_get_render_space (GtkWidget       *widget,
     dest_profile = gimp_widget_get_color_profile (gtk_widget_get_toplevel (widget));
 
   if (dest_profile)
-    space = gimp_color_profile_get_space (dest_profile,
-                                          GIMP_COLOR_RENDERING_INTENT_RELATIVE_COLORIMETRIC,
-                                          NULL);
+    {
+      space = gimp_color_profile_get_space (dest_profile,
+                                            GIMP_COLOR_RENDERING_INTENT_RELATIVE_COLORIMETRIC,
+                                            NULL);
+      g_object_unref (dest_profile);
+    }
+
   return space;
 }
 
@@ -1152,6 +1162,100 @@ gimp_widget_set_native_handle (GtkWidget  *widget,
     gimp_widget_set_handle_on_mapped (widget, NULL, handle);
 }
 
+/**
+ * gimp_widget_free_native_handle:
+ * @widget: a #GtkWindow
+ * @window_handle: (out): same pointer previously passed to set_native_handle
+ *
+ * Disposes a widget's native window handle created asynchronously after
+ * a previous call to gimp_widget_set_native_handle.
+ * This disposes what the pointer points to, a *GBytes, if any.
+ * Call this when the widget and the window handle it owns is being disposed.
+ *
+ * This should be called at least once, paired with set_native_handle.
+ * This knows how to free @window_handle, especially that on some platforms,
+ * an asynchronous callback must be canceled else it might call back
+ * with the pointer, after the widget and its private is freed.
+ *
+ * This is safe to call when deferenced @window_handle is NULL,
+ * when the window handle was never actually set,
+ * on Wayland where actual setting is asynchronous.
+ *
+ * !!! The word "handle" has two meanings.
+ * A "window handle" is an ID of a window.
+ * A "handle" also commonly means a pointer to a pointer, in this case **GBytes.
+ * @window_handle is both kinds of handle.
+ */
+void
+gimp_widget_free_native_handle (GtkWidget  *widget,
+                                GBytes    **window_handle)
+{
+  g_return_if_fail (GTK_IS_WIDGET (widget));
+  /* window-handle as pointer to pointer must not be NULL. */
+  g_return_if_fail (window_handle != NULL);
+
+  #ifdef GDK_WINDOWING_WAYLAND
+  /* Cancel the asynch callback which has a pointer into widget's private.
+   * Cancel regardless whether callback has already come.
+   */
+  if (GDK_IS_WAYLAND_DISPLAY (gdk_display_get_default ()) &&
+      /* The GdkWindow is likely already destroyed. */
+      gtk_widget_get_window (widget) != NULL)
+    gdk_wayland_window_unexport_handle (gtk_widget_get_window (widget));
+  #endif
+
+  /* On some platforms, window_handle may be NULL when an asynch callback has not come yet.
+   * The dereferenced pointer is the window handle.
+   */
+  if (*window_handle != NULL)
+    {
+      /* On all platforms *window_handle is-a allocated GBytes.
+       * A GBytes is NOT a GObject and there is no way to ensure is-a GBytes.
+       *
+       * g_clear_pointer takes a pointer to pointer and unrefs at the pointer.
+       */
+      g_clear_pointer (window_handle, g_bytes_unref);
+    }
+  /* Else no GBytes was ever allocated. */
+}
+
+/**
+ * gimp_widget_animation_enabled:
+ *
+ * This function attempts to read the user's system preference for
+ * showing animation. It can be used to turn off or hide unnecessary
+ * animations such as the scrolling credits or Easter Egg animations.
+ *
+ * Returns: %TRUE if the user has animations enabled on their system
+ *
+ * Since: 3.0
+ */
+gboolean
+gimp_widget_animation_enabled (void)
+{
+  gboolean animation_enabled = TRUE;
+
+  /* Per Luca Bacci, KDE syncs their animation setting with GTK. See
+   * https://invent.kde.org/plasma/kde-gtk-config/-/blob/v6.0.90/kded/gtkconfig.cpp?ref_type=tags#L232
+   */
+  g_object_get (gtk_settings_get_default (),
+                "gtk-enable-animations", &animation_enabled,
+                NULL);
+
+#ifdef PLATFORM_OSX
+  /* The MacOS setting is TRUE if the user wants animations turned off, so
+   * we invert it to match the format of the other platforms */
+  animation_enabled =
+    ! ([[NSWorkspace sharedWorkspace] accessibilityDisplayShouldReduceMotion]);
+#endif
+#ifdef G_OS_WIN32
+  SystemParametersInfo (SPI_GETCLIENTAREAANIMATION, 0x00, &animation_enabled,
+                        0x00);
+#endif
+
+  return animation_enabled;
+}
+
 
 /* Internal functions */
 
@@ -1185,6 +1289,13 @@ _gimp_widget_get_profiles (GtkWidget         *widget,
 /* Private functions */
 
 #ifdef GDK_WINDOWING_WAYLAND
+/* Handler from asynchronous callback from Wayland.
+ * You can't know when it will be called, if ever.
+ *
+ * @phandle is the address of a pointer in some widget's private data.
+ * Before freeing that private data, you must cancel (unexport)
+ * so that this callback is not subsequently invoked.
+ */
 static void
 gimp_widget_wayland_window_exported (GdkWindow   *window,
                                      const char  *handle,
@@ -1192,7 +1303,7 @@ gimp_widget_wayland_window_exported (GdkWindow   *window,
 {
   GBytes *wayland_handle;
 
-  wayland_handle = g_bytes_new (handle, strlen (handle));
+  wayland_handle = g_bytes_new (handle, strlen (handle) + 1);
 
   g_bytes_unref (*phandle);
   *phandle = wayland_handle;
@@ -1251,6 +1362,9 @@ gimp_widget_set_handle_on_mapped (GtkWidget    *widget,
       handle = g_bytes_new (&id, sizeof (Window));
     }
 #endif
+
+  *phandle = handle;
+
 #ifdef GDK_WINDOWING_WAYLAND
   if (GDK_IS_WAYLAND_WINDOW (surface))
     {
@@ -1267,8 +1381,6 @@ gimp_widget_set_handle_on_mapped (GtkWidget    *widget,
                     G_STRFUNC);
     }
 #endif
-
-  *phandle = handle;
 
   return FALSE;
 }

@@ -36,16 +36,16 @@ gboolean      gimp_item_id_is_valid         (gint                item_id);
 gboolean      gimp_item_id_is_drawable      (gint                item_id);
 gboolean      gimp_item_id_is_layer         (gint                item_id);
 gboolean      gimp_item_id_is_text_layer    (gint                item_id);
+gboolean      gimp_item_id_is_group_layer   (gint                item_id);
 gboolean      gimp_item_id_is_channel       (gint                item_id);
 gboolean      gimp_item_id_is_layer_mask    (gint                item_id);
+gboolean      gimp_item_id_is_path          (gint                item_id);
 gboolean      gimp_item_id_is_selection     (gint                item_id);
-gboolean      gimp_item_id_is_vectors       (gint                item_id);
 GimpImage*    gimp_item_get_image           (GimpItem           *item);
 gboolean      gimp_item_delete              (GimpItem           *item);
 gboolean      gimp_item_is_group            (GimpItem           *item);
 GimpItem*     gimp_item_get_parent          (GimpItem           *item);
-GimpItem**    gimp_item_get_children        (GimpItem           *item,
-                                             gint               *num_children);
+GimpItem**    gimp_item_get_children        (GimpItem           *item);
 gboolean      gimp_item_get_expanded        (GimpItem           *item);
 gboolean      gimp_item_set_expanded        (GimpItem           *item,
                                              gboolean            expanded);

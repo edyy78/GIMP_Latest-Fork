@@ -153,7 +153,6 @@ static GimpProcedure  * twain_create_procedure (GimpPlugIn           *plug_in,
 static GimpValueArray * twain_run              (GimpProcedure        *procedure,
                                                 GimpRunMode           run_mode,
                                                 GimpImage            *image,
-                                                gint                  n_drawables,
                                                 GimpDrawable        **drawables,
                                                 GimpProcedureConfig  *config,
                                                 gpointer              run_data);
@@ -216,17 +215,11 @@ twain_create_procedure (GimpPlugIn  *plug_in,
                                       PLUG_IN_COPYRIGHT,
                                       PLUG_IN_VERSION);
 
-      GIMP_PROC_VAL_INT (procedure, "image-count",
-                         "Number of acquired images",
-                         "Number of acquired images",
-                         0, G_MAXINT, 0,
-                         G_PARAM_READWRITE);
-
-      GIMP_PROC_VAL_OBJECT_ARRAY (procedure, "images",
-                                  "Array of acquired images",
-                                  "Array of acquired images",
-                                  GIMP_TYPE_IMAGE,
-                                  G_PARAM_READWRITE);
+      gimp_procedure_add_core_object_array_return_value (procedure, "images",
+                                                         "Array of acquired images",
+                                                         "Array of acquired images",
+                                                         GIMP_TYPE_IMAGE,
+                                                         G_PARAM_READWRITE);
      }
 
   return procedure;
@@ -391,7 +384,6 @@ static GimpValueArray *
 twain_run (GimpProcedure        *procedure,
            GimpRunMode           run_mode,
            GimpImage            *image,
-           gint                  n_drawables,
            GimpDrawable        **drawables,
            GimpProcedureConfig  *config,
            gpointer              run_data)
@@ -414,8 +406,12 @@ twain_run (GimpProcedure        *procedure,
    */
   if (! twainIsAvailable ())
     {
+      GError *error = NULL;
+
+      g_set_error (&error, GIMP_PLUG_IN_ERROR, 0,
+                   _("TWAIN driver not found, scanning not available"));
       return gimp_procedure_new_return_values (procedure, GIMP_PDB_EXECUTION_ERROR,
-                                               NULL);
+                                               error);
     }
 
   if (run_mode == GIMP_RUN_NONINTERACTIVE)
@@ -439,22 +435,20 @@ twain_run (GimpProcedure        *procedure,
        */
 
       num_images = g_list_length (image_list);
-      images     = g_new (GimpImage *, num_images);
+      images     = g_new0 (GimpImage *, num_images + 1);
 
       for (list = image_list, i = 0;
            list;
            list = g_list_next (list), i++)
         {
-          images[i] = g_object_ref (list->data);
+          images[i] = list->data;
         }
 
       g_list_free (image_list);
 
       /* Set return values */
-      return_vals = gimp_procedure_new_return_values (procedure, status,
-                                                      NULL);
-      GIMP_VALUES_SET_INT           (return_vals, 1, num_images);
-      GIMP_VALUES_TAKE_OBJECT_ARRAY (return_vals, 2, GIMP_TYPE_IMAGE, images, num_images);
+      return_vals = gimp_procedure_new_return_values (procedure, status, NULL);
+      GIMP_VALUES_TAKE_CORE_OBJECT_ARRAY (return_vals, 1, images);
 
       return return_vals;
     }
@@ -629,7 +623,7 @@ beginTransferCallback (pTW_IMAGEINFO  imageInfo,
   gimp_image_set_resolution (theClientData->image,
                              FIX32ToFloat (imageInfo->XResolution),
                              FIX32ToFloat (imageInfo->YResolution));
-  gimp_image_set_unit (theClientData->image, GIMP_UNIT_INCH);
+  gimp_image_set_unit (theClientData->image, gimp_unit_inch ());
 
   /* Create a layer */
   theClientData->layer = gimp_layer_new (theClientData->image,

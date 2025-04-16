@@ -1,7 +1,7 @@
 project('gimp',
   'c', 'cpp',
-  version: '2.99.19',
-  meson_version: '>=0.59.0',
+  version: '3.0.3',
+  meson_version: '>=0.61.0',
   default_options: [
     'cpp_std=gnu++14',
     'buildtype=debugoptimized',
@@ -29,7 +29,21 @@ package_string= prettyname + ' ' + gimp_version
 gimp_app_version_arr = gimp_version.split('.')
 gimp_app_version_major = gimp_app_version_arr[0].to_int()
 gimp_app_version_minor = gimp_app_version_arr[1].to_int()
-gimp_app_version_micro = gimp_app_version_arr[2].to_int()
+gimp_app_micro_rc      = gimp_app_version_arr[2].split('-')
+gimp_app_version_micro = gimp_app_micro_rc[0].to_int()
+gimp_app_version_rc    = 0
+gimp_rc_git            = false
+if gimp_app_micro_rc.length() > 1
+  if not gimp_app_micro_rc[1].startswith('RC')
+    error('Version format is: <major>.<minor>.<micro> with optional "-RC<num>" suffix and optional "+git".')
+  endif
+  if gimp_app_micro_rc[1].endswith('+git')
+    gimp_app_version_rc = gimp_app_micro_rc[1].substring(2, -4).to_int()
+    gimp_rc_git = true
+  else
+    gimp_app_version_rc = gimp_app_micro_rc[1].substring(2).to_int()
+  endif
+endif
 
 # Override for Release-candidates
 gimp_app_version = '@0@.@1@'.format(
@@ -40,11 +54,10 @@ gimp_app_version = '@0@.@1@'.format(
 
 # API & pkg-config version
 api_version_major = gimp_app_version_major
-api_version_minor = gimp_app_version_minor
+api_version_minor = 0
 
-if api_version_minor == 99
+if gimp_app_version_minor == 99
   api_version_major += 1
-  api_version_minor = 0
 endif
 
 gimp_api_version = '@0@.@1@'.format(api_version_major, api_version_minor)
@@ -52,7 +65,7 @@ gimp_api_name = 'gimp-' + gimp_api_version
 
 
 # Libtool versioning
-gimp_interface_age = 19
+gimp_interface_age = 3
 
 gimp_binary_age = 100 * gimp_app_version_minor + gimp_app_version_micro
 lt_current      = 100 * gimp_app_version_minor + gimp_app_version_micro - gimp_interface_age
@@ -73,11 +86,29 @@ conf.set_quoted('GIMP_VERSION', gimp_version)
 
 # GIMP_UNSTABLE tells if we are on an unstable or stable development branch.
 stable = (gimp_app_version_minor % 2 == 0)
-conf.set('GIMP_UNSTABLE', stable ? false : 1)
+gimp_unstable = stable ? false : 1
+if gimp_unstable != false
+  conf.set('GIMP_UNSTABLE', gimp_unstable)
+endif
 
 # GIMP_RELEASE tells if this is a release or in-between release (git) code.
 release = (gimp_app_version_micro % 2 == 0)
 conf.set('GIMP_RELEASE', release ? 1 : false)
+
+# GIMP_RC_VERSION can only be set on release candidates.
+gimp_rc_version = release and gimp_app_version_rc > 0 ? gimp_app_version_rc : false
+if gimp_rc_version != false
+  conf.set('GIMP_RC_VERSION', gimp_rc_version)
+endif
+# GIMP_IS_GIT can only be set during development of a RC.
+conf.set('GIMP_IS_RC_GIT', gimp_rc_git ? 1 : false)
+
+# Mutex version
+if gimp_unstable != false
+  conf.set_quoted('GIMP_MUTEX_VERSION', gimp_app_version)
+else
+  conf.set_quoted('GIMP_MUTEX_VERSION', gimp_app_version_major.to_string())
+endif
 
 versionconfig = configuration_data()
 versionconfig.set('GIMP_FULL_NAME',     full_name)
@@ -104,6 +135,9 @@ prefix    = get_option('prefix')
 buildtype = get_option('buildtype')
 exec_ver  = '-' + gimp_app_version
 
+gimpconsole_exe_name = 'gimp-console' + exec_ver
+gimpmain_exe_name    = 'gimp' + exec_ver
+
 compiler_args = []
 linker_args = []
 
@@ -114,6 +148,8 @@ host_cpu_family = host_machine.cpu_family()
 message('Host machine cpu family: ' + host_cpu_family)
 
 host_cpu_family = host_machine.cpu_family()
+have_x86 = false
+have_ppc = false
 if   host_cpu_family == 'x86'
   have_x86 = true
   conf.set10('ARCH_X86',    true)
@@ -288,6 +324,23 @@ if platform_windows and cc.get_id() == 'gcc'
 endif
 
 
+if platform_windows and cc.get_id() == 'clang'
+  # Optimize DWARF symbols to Dr. Mingw
+  # https://github.com/jrfonseca/drmingw/issues/42
+  compiler_args += '-gdwarf-aranges'
+  # Workaround to get colored output
+  # https://github.com/msys2/MINGW-packages/issues/2988
+  compiler_args += '-fansi-escape-codes'
+endif
+
+# Generate native .pdb (CodeView) debug symbols (for DIA or DbgHelp debuggers and LLDB)
+pdb_support = cc.has_argument('-gcodeview') and cc.has_link_argument('-Wl,--pdb=')
+if platform_windows and pdb_support
+  compiler_args += '-gcodeview'
+  linker_args += '-Wl,--pdb='
+endif
+
+
 conf.set('HAVE__NL_MEASUREMENT_MEASUREMENT',
   cc.compiles('''
     #include<langinfo.h>
@@ -343,7 +396,7 @@ winsock           = platform_windows ? cc.find_library('ws2_32') : no_dep
 mscms             = platform_windows ? cc.find_library('mscms') : no_dep
 atk_minver        = '2.4.0'
 atk               = dependency('atk',                version: '>='+atk_minver)
-babl_minver       = '0.1.108'
+babl_minver       = '0.1.112'
 babl              = dependency('babl-0.1',           version: '>='+babl_minver, required: false)
 if not babl.found()
   # babl changed its pkg-config name from 'babl' to 'babl-0.1' in version
@@ -365,7 +418,7 @@ freetype2_minver  = '2.1.7'
 freetype2         = dependency('freetype2',          version: '>='+freetype2_minver)
 gdk_pixbuf_minver = '2.30.8'
 gdk_pixbuf        = dependency('gdk-pixbuf-2.0',     version: '>='+gdk_pixbuf_minver)
-gegl_minver       = '0.4.48'
+gegl_minver       = '0.4.58'
 gegl              = dependency('gegl-0.4',           version: '>='+gegl_minver)
 exiv2_minver      = '0.27.4'
 exiv2             = dependency('exiv2',              version: '>='+exiv2_minver)
@@ -387,9 +440,10 @@ gmodule           = dependency('gmodule-no-export-2.0')
 
 gtk3_minver       = '3.24.0'
 gtk3              = dependency('gtk+-3.0',           version: '>='+gtk3_minver)
-harfbuzz_minver   = '1.0.5'
+harfbuzz_minver   = '2.8.2'
 harfbuzz          = dependency('harfbuzz',           version: '>='+harfbuzz_minver)
-json_glib         = dependency('json-glib-1.0',      version: '>=1.2.6')
+json_glib_minver  = '1.2.6'
+json_glib         = dependency('json-glib-1.0',      version: '>='+json_glib_minver)
 lcms_minver       = '2.8'
 lcms              = dependency('lcms2',              version: '>='+lcms_minver)
 libmypaint_minver = '1.3.0'
@@ -416,9 +470,33 @@ endif
 conf.set_quoted('MYPAINT_BRUSHES_DIR', mypaint_brushes_dir)
 
 pango_minver = '1.50.0'
-pango        = dependency('pango',       version: '>='+pango_minver)
-pangocairo   = dependency('pangocairo',  version: '>='+pango_minver)
-pangoft2     = dependency('pangoft2',    version: '>='+pango_minver)
+if platform_osx
+  pango_macos_recommended_version = '1.55.0'
+  pango_macos_warning='''
+        GIMP encounters major display breakage on some macOS installations
+        with pango < 1.55.0. We highly recommend pango >= 1.55.0.
+        See: https://gitlab.gnome.org/GNOME/gimp/-/issues/7589
+  '''
+  pango = dependency('pango',
+                     version: '>='+pango_macos_recommended_version,
+                     required: false)
+  if pango.found()
+    pangocairo = dependency('pangocairo',  version: '>='+pango_macos_recommended_version)
+    pangoft2   = dependency('pangoft2',    version: '>='+pango_macos_recommended_version)
+  else
+    warning(pango_macos_warning)
+    warnings += pango_macos_warning
+  endif
+else
+  pango = no_dep
+endif
+
+if not pango.found()
+  pango        = dependency('pango',       version: '>='+pango_minver)
+  pangocairo   = dependency('pangocairo',  version: '>='+pango_minver)
+  pangoft2     = dependency('pangoft2',    version: '>='+pango_minver)
+endif
+
 rsvg_minver  = '2.40.6'
 rsvg         = dependency('librsvg-2.0', version: '>='+rsvg_minver)
 
@@ -523,7 +601,11 @@ libarchive = dependency('libarchive')
 # Check for debug console (Win32)
 
 if platform_windows
-  conf.set('ENABLE_WIN32_DEBUG_CONSOLE', get_option('win32-debug-console'))
+  enable_win32_debug_console = get_option('win32-debug-console').enabled() or \
+                               (get_option('win32-debug-console').auto() and (not stable or not release))
+  conf.set('ENABLE_WIN32_DEBUG_CONSOLE', enable_win32_debug_console)
+  # When we'll depend on meson >= 1.1.0, we can just use:
+  # conf.set('ENABLE_WIN32_DEBUG_CONSOLE', get_option('win32-debug-console').enable_auto_if(not stable or not release).enabled())
 endif
 
 ################################################################################
@@ -580,6 +662,36 @@ libunwind = ( get_option('libunwind')
 )
 conf.set('HAVE_LIBUNWIND', libunwind.found())
 
+## Check for backtrace() API
+# In musl, backtrace() is in the libexecinfo library.
+# In glibc, it is internal (there we only need the header).
+# So we look for both cases, so that we are able to link to libexecinfo
+# if it exists. Cf. !455.
+opt_execinfo = cc.find_library('execinfo', has_headers: ['execinfo.h'], required: false)
+have_execinfo_h = opt_execinfo.found() or cc.has_header('execinfo.h')
+conf.set('HAVE_EXECINFO_H', have_execinfo_h ? 1 : false)
+
+# See app/core/gimpbacktrace-backend.h for supported platforms.
+dashboard_backtrace='no (unsupported platform)'
+if platform_windows
+  if have_x86
+    dashboard_backtrace='yes'
+  else
+    dashboard_backtrace='no (x86 only on Windows)'
+  endif
+elif platform_linux
+  if not have_execinfo_h
+    dashboard_backtrace='no (missing: execinfo.h)'
+  elif not libbacktrace.found() and not libunwind.found()
+    dashboard_backtrace='rough (missing: libbacktrace and libunwind)'
+  elif not libbacktrace.found()
+    dashboard_backtrace='partially detailed (missing: libbacktrace)'
+  elif not libunwind.found()
+    dashboard_backtrace='partially detailed (missing: libunwind)'
+  else
+    dashboard_backtrace='detailed'
+  endif
+endif
 
 ## Check for Dr. Mingw
 drmingw = no_dep
@@ -592,12 +704,6 @@ if platform_windows
 endif
 conf.set('HAVE_EXCHNDL', drmingw.found())
 
-
-detailed_backtraces = (
-  libbacktrace.found() or
-  libunwind.found() or
-  drmingw.found()
-)
 
 ################################################################################
 # Check for x11 support
@@ -678,7 +784,12 @@ MIMEtypes += 'image/jpeg'
 zlib = dependency('zlib')
 MIMEtypes += 'image/x-psp'
 
-bz2 = cc.find_library('bz2')
+# Compiler-provided headers can't be found in crossroads environment
+if not meson.is_cross_build()
+  bz2 = cc.find_library('bz2')
+else
+  bz2 = dependency('bzip2')
+endif
 
 liblzma_minver = '5.0.0'
 liblzma = dependency('liblzma', version: '>='+liblzma_minver)
@@ -1034,8 +1145,8 @@ endif
 isocodes = dependency('iso-codes', required: false)
 if isocodes.found()
   isocodes_prefix = isocodes.get_variable(pkgconfig: 'prefix')
-  isocodes_location = isocodes_prefix / get_option('datadir') / 'xml' / 'iso-codes'
-  isocodes_localedir= isocodes_prefix / get_option('datadir') / 'locale'
+  isocodes_location = isocodes_prefix / 'share' / 'xml' / 'iso-codes'
+  isocodes_localedir= isocodes_prefix / 'share' / 'locale'
 endif
 conf.set('HAVE_ISO_CODES', isocodes.found())
 
@@ -1047,92 +1158,96 @@ perl = find_program('perl5', 'perl', 'perl5.005', 'perl5.004', 'perl')
 
 ## Python
 
-# By default, we want packagers to install Python plug-ins to get the
-# optimum experience. -Dpython=true will check for a Python 3
-# interpreter and PyGObject, and warns without.
-# It is up to the packager to ensure they are available at run time.
-# This can be useful in particular when cross-compiling since anyway
-# the interpreter is not useful at build time.
-
 python3_minver = '>=3.6'
 
-python = pythonmod.find_installation('python3')
+python = pythonmod.find_installation('python3', required: true)
 message('Found Python @0@'.format(python.language_version()))
 
-have_python = get_option('python').enabled()
-
-if get_option('python').allowed()
-  python_found = (
-    python.found() and
-    python.language_version().version_compare(python3_minver)
-  )
-  if python_found
-    pygobject_found = run_command(
-      python, '-c',
-      '\n'.join([
-        '''import sys, gi''',
-        '''version = '@0@' '''.format('3.0'),
-        '''sys.exit(gi.check_version(version))''',
-      ]),
-      check: false
-    ).returncode() == 0
-    message('Found Pygobject: @0@'.format(pygobject_found))
-    python_found = python_found and pygobject_found
-  endif
-
-  if python_found
-    have_python = true
-  elif have_python
-    python_warning = '''
-    Python @0@ or PyGObject was not found.
-    Python plug-ins will be installed anyway but you should make sure that
-    a compatible Python interpreter is available at installation, otherwise
-    installed plug-ins won't be usable.
-    '''.format(python3_minver)
-    warning(python_warning)
-    warnings += python_warning
-  endif
-
-  MIMEtypes += 'image/openraster'
+if not python.language_version().version_compare(python3_minver)
+  error('Minimum supported Python version: @0@'.format(python3_minver))
 endif
+
+pygobject_found = run_command(python, '-c',
+                              '\n'.join([
+                              '''import sys, gi''',
+                              '''version = '@0@' '''.format('3.0'),
+                              '''sys.exit(gi.check_version(version))''']),
+                              check: false).returncode() == 0
+message('Found PyGObject: @0@'.format(pygobject_found))
+
+if not pygobject_found
+  error('PyGObject is required.')
+endif
+
+MIMEtypes += 'image/openraster'
 
 ## Javascript
 
-gjs = find_program('gjs', required: get_option('javascript'))
+gjs = find_program('gjs', required: false)
 have_javascript = get_option('javascript').enabled() or (gjs.found() and get_option('javascript').auto())
 if not gjs.found() and have_javascript
-  gjs = find_program('gjs', required: false)
-  if not gjs.found()
-    js_warning = '''
-    GJS was not found.
-    JavaScript plug-ins will be installed anyway but you should make sure that
-    the JavaScript interpreter GJS is available at installation, otherwise
-    installed plug-ins won't be usable.
-    '''
-    warning(js_warning)
-    warnings += js_warning
-  endif
+  js_warning = '''
+  GJS was not found.
+  JavaScript plug-ins will be installed anyway but you should make sure that
+  the JavaScript interpreter GJS is available at installation, otherwise
+  installed plug-ins won't be usable.
+  '''
+  warning(js_warning)
+  warnings += js_warning
 endif
 
 ## Lua
 
-have_lua = false
-# At time of writing, lua-lgi works Lua 5.1, Lua 5.2, Lua 5.3 and LuaJIT2. On
-# most platforms, we use luajit. On MSYS2, only lua5.1 works with lua-lgi. This
-# is why we use this order for lua detection.
-if get_option('lua').allowed()
+have_lua = get_option('lua')
+have_lua_output = have_lua
+# At time of writing, lua-lgi works with Lua 5.1, 5.2, 5.3 and LuaJIT2, but we
+# support only Lua 5.1 API. See: https://gitlab.gnome.org/GNOME/gimp/-/issues/11876
+if have_lua
   have_lua_lgi = false
 
-  foreach lua_bin : [ 'luajit', 'lua5.1', 'lua5.2', 'lua5.3' ]
+  foreach lua_bin : [ 'luajit', 'lua5.1', 'lua-5.1', 'lua' ]
     lua = find_program(lua_bin, required: false)
 
     if lua.found() and meson.can_run_host_binaries()
-      have_lua_lgi = run_command(lua, '-e',
-      '''
-      local lgi = require 'lgi'
-      ''',
-      check: false
-      ).returncode() == 0
+      if lua_bin == 'lua'
+        is_supported_lua = false
+        lua_cmd = run_command(lua, '-v', check: false)
+        if lua_cmd.returncode() == 0
+          message('Found Lua: @0@'.format(lua_cmd.stdout().strip()))
+          lua_stdout = lua_cmd.stdout().split()
+          if lua_stdout.length() < 2 or lua_stdout[0].to_lower() != lua_bin
+            # The output function used to be configurable, and we had a
+            # report where it was on stderr instead of stdout. This is
+            # why we fall back to stdout.
+            # See #11950.
+            lua_stdout = lua_cmd.stderr().split()
+          endif
+
+          if lua_stdout.length() > 1 and lua_stdout[0].to_lower() == lua_bin
+            message('Parsed Lua version: @0@'.format(lua_stdout[1]))
+            # We only want any lua version 5.1.x
+            if lua_stdout[1].version_compare('>=5.1.0') and lua_stdout[1].version_compare('<5.2.0')
+              is_supported_lua = true
+            else
+              warning('Unsupported Lua version (!= 5.1): @0@'.format(lua_stdout[1]))
+            endif
+          else
+            warning('Failed to parse Lua version.')
+          endif
+        else
+          warning('Failed to run `lua -v`')
+        endif
+      else
+        is_supported_lua = true
+      endif
+
+      if is_supported_lua
+        have_lua_lgi = run_command(lua, '-e',
+                                   '''
+                                   local lgi = require 'lgi'
+                                   ''',
+                                   check: false).returncode() == 0
+      endif
 
       if have_lua_lgi
         break
@@ -1140,18 +1255,19 @@ if get_option('lua').allowed()
     endif
   endforeach
 
-  have_lua = get_option('lua').enabled() or have_lua_lgi
-  if have_lua and not have_lua_lgi
+  if not have_lua_lgi
     lua_warning = '''
-      Neither Luajit nor Lua, with lua-lgi support, was found. Or you are
-      cross-compiling so we couldn't test lua-lgi support.
-      Lua plug-ins will be installed anyway but you should make sure that
-      luajit or lua and that LGI are available at installation, otherwise
-      installed plug-ins won't be usable.
+      Neither Luajit nor Lua 5.1, with lua-lgi support, was found.
+      Or you are cross-compiling so we couldn't test lua-lgi support.
+      Lua example plug-in (EXPERIMENTAL) will be installed anyway but you
+      should make sure that luajit or lua and that LGI are available at
+      installation, otherwise Lua plug-ins won't be usable.
       '''
     warning(lua_warning)
     warnings += lua_warning
   endif
+
+  have_lua_output = '@0@ (@1@)'.format(have_lua, have_lua_lgi ? lua.full_path() : 'no working lua-lgi found!')
 endif
 
 # Check for XML tools
@@ -1164,11 +1280,6 @@ appstreamcli = find_program('appstreamcli', version: '>=0.15.3', required: get_o
 # Check for doc generation tools
 
 gi_docgen = find_program('gi-docgen', required: get_option('gi-docgen'))
-
-if get_option('g-ir-doc')
-  gir_doc_tool = find_program('g-ir-doc-tool', required: true)
-  yelp_build   = find_program('yelp-build', required: true)
-endif
 
 # Check for vector icons
 have_vector_icons = get_option('vector-icons')
@@ -1202,10 +1313,6 @@ else
   warning(vec_warning)
   warnings += vec_warning
 endif
-
-native_glib_minver = '2.2.0'
-native_glib = dependency('glib-2.0',    version: '>='+native_glib_minver, native: true)
-native_rsvg = dependency('librsvg-2.0', version: '>='+rsvg_minver, native: true)
 
 # Running tests headless
 xvfb_run = find_program('xvfb-run', required: get_option('headless-tests'))
@@ -1294,10 +1401,6 @@ endif
 
 enable_console_bin = get_option('enable-console-bin')
 
-if enable_default_bin and meson.version().version_compare('<0.61.0')
-  error('"enable-default-bin" build option requires meson 0.61 or later. Please disable the option or update meson.')
-endif
-
 # Possibly change default gimpdir from $XDG_CONFIG_HOME/GIMP/gimp_user_version
 gimpdir = get_option('gimpdir')
 if gimpdir == ''
@@ -1305,7 +1408,7 @@ if gimpdir == ''
   gimpdir = meson.project_name().to_upper()
 endif
 
-project_subdir = meson.project_name() / gimp_app_version
+project_subdir = meson.project_name() / gimp_api_version
 gimpdatadir    = get_option('datadir')    / project_subdir
 gimpplugindir  = get_option('libdir')     / project_subdir
 gimpsysconfdir = get_option('sysconfdir') / project_subdir
@@ -1430,13 +1533,6 @@ foreach header : [
   ]
   conf.set(header['m'], cc.has_header(header['v']) ? 1 : false)
 endforeach
-
-# In musl, backtrace() is in the libexecinfo library.
-# In glibc, it is internal (there we only need the header).
-# So we look for both cases, so that we are able to link to libexecinfo
-# if it exists. Cf. !455.
-opt_execinfo = cc.find_library('execinfo', has_headers: ['execinfo.h'], required: false)
-conf.set('HAVE_EXECINFO_H', opt_execinfo.found() or cc.has_header('execinfo.h') ? 1 : false)
 
 
 ################################################################################
@@ -1687,8 +1783,10 @@ install_conf.set('GEXIV2_REQUIRED_VERSION',       gexiv2_minver)
 install_conf.set('GLIB_REQUIRED_VERSION',         glib_minver)
 install_conf.set('GTK_REQUIRED_VERSION',          gtk3_minver)
 install_conf.set('HARFBUZZ_REQUIRED_VERSION',     harfbuzz_minver)
+install_conf.set('JSON_GLIB_REQUIRED_VERSION',    json_glib_minver)
 install_conf.set('LCMS_REQUIRED_VERSION',         lcms_minver)
 install_conf.set('LIBHEIF_REQUIRED_VERSION',      libheif_minver)
+install_conf.set('LIBJXL_REQUIRED_VERSION',       jpegxl_minver)
 install_conf.set('LIBLZMA_REQUIRED_VERSION',      liblzma_minver)
 install_conf.set('LIBTIFF_REQUIRED_VERSION',      libtiff_minver)
 install_conf.set('LIBMYPAINT_REQUIRED_VERSION',   libmypaint_minver)
@@ -1714,6 +1812,26 @@ if is_git_repository
   )
 endif
 
+if is_git_repository
+  has_gimp_data = run_command(python, '-c',
+    'import sys,os; sys.exit(0 if os.path.exists("gimp-data/meson.build") else 1)',
+    check: false
+  ).returncode() == 0
+
+  if not has_gimp_data
+    error('gimp-data submodule not present. Run: git submodule update --init')
+  endif
+
+  if git.found()
+    git_submodule_check = run_command(meson.project_source_root() / 'build/meson/check-gimp-data.py',
+                                      check: false)
+    if git_submodule_check.returncode() != 0
+      submodule_warning = 'gimp-data submodule seems outdated. Possibly run from the source repository: git submodule update'
+      warning(submodule_warning)
+      warnings += submodule_warning
+    endif
+  endif
+endif
 
 configure_file(
   output: 'config.h',
@@ -1749,7 +1867,7 @@ custom_target('AUTHORS',
   ],
   build_by_default: false,
 )
-date = run_command('date', '-u', '+"%Y-%m-%dT%H:%M:%SZ"', check: true)
+date = run_command('date', '-u', '+%Y-%m-%dT%H:%M:%SZ', check: true)
 custom_target('authors.md',
   input : [ 'authors4gimp-web.xsl', 'authors.xml', ],
   output: 'authors.md',
@@ -1791,16 +1909,15 @@ meson.add_dist_script('meson_dist_script.sh',
                       generate_version_h ?  gitversion_h.full_path() : gitversion_h,
                       meson.project_source_root(), meson.project_build_root())
 
-
 ################################################################################
-# Subdirs
-
+# Subdirs: part 1
 
 rootInclude = include_directories('.')
 appInclude  = include_directories('app')
 
-subdir('build/flatpak')
-subdir('build/windows')
+if platform_windows
+  subdir('build/windows')
+endif
 
 # Tools
 subdir('libgimpbase')
@@ -1816,13 +1933,14 @@ subdir('po-script-fu')
 subdir('po-tags')
 subdir('po-tips')
 # Data / Desktop / xml files
-subdir('cursors')
 subdir('data')
 subdir('desktop')
 subdir('etc')
-subdir('icons')
 subdir('menus')
 subdir('themes')
+
+# gimp-data submodule part 1
+subdir('gimp-data')
 
 # Libraries (order here is important!)
 subdir('libgimpcolor')
@@ -1834,11 +1952,114 @@ subdir('libgimpwidgets')
 subdir('libgimp')
 
 # Executables, plugins
+plugin_executables = []
 subdir('extensions')
 subdir('modules')
 subdir('plug-ins')
 subdir('app')
 subdir('app-tools')
+
+################################################################################
+# Make GIMP runnable without being installed for unit-testing or as a build
+# tool.
+
+gimp_run_env=environment()
+gimp_run_env.set('GIMP_GLOBAL_BUILD_ROOT',  meson.global_build_root())
+gimp_run_env.set('GIMP_GLOBAL_SOURCE_ROOT', meson.global_source_root())
+if get_option('debug-self-in-build')
+ gimp_run_env.set('GIMP_DEBUG_SELF', '1')
+endif
+
+if meson.can_run_host_binaries() and have_gobject_introspection
+  if enable_console_bin
+    gimp_real_exe = gimpconsole_exe
+  else
+    gimp_real_exe = gimpmain_exe
+  endif
+  gimp_exe_depends = [gimp_real_exe]
+  gimp_run_env.set('GIMP_SELF_IN_BUILD', gimp_real_exe.full_path())
+
+  menu_paths=meson.global_build_root() / 'menus:' + meson.global_source_root() / 'menus'
+  gimp_run_env.set('GIMP_TESTING_MENUS_PATH', menu_paths)
+
+  gimp_run_env.set('GIMP3_SYSCONFDIR', meson.global_source_root() / 'etc')
+
+  gimp_run_env.set('GIMP_TESTING_PLUGINDIRS', meson.global_build_root() / 'plug-ins')
+  gimp_run_env.append('GIMP_TESTING_PLUGINDIRS', meson.global_build_root() / 'plug-ins/python')
+  gimp_run_env.append('GIMP_TESTING_PLUGINDIRS', meson.global_build_root() / 'plug-ins/common/test-plug-ins/')
+
+  gimp_run_env.set('GIMP_TESTING_INTERPRETER_DIRS', meson.global_build_root() / 'plug-ins/python/')
+  gimp_run_env.append('GIMP_TESTING_INTERPRETER_DIRS', meson.global_build_root() / 'extensions/')
+  gimp_run_env.set('GIMP_TESTING_ENVIRON_DIRS', meson.global_source_root() / 'data/environ/')
+
+  # Makes build errors output way less polluted, making easier to debug
+  gimp_run_env.set('GIMP3_LOCALEDIR', meson.global_build_root() / 'po-plug-ins')
+
+  gimp_run_env.prepend('GI_TYPELIB_PATH', prefix / 'lib/girepository-1.0/')
+  if platform_osx
+    gimp_run_env.prepend('GI_TYPELIB_PATH', meson.global_build_root() / 'libgimp/tmp')
+  else
+    gimp_run_env.prepend('GI_TYPELIB_PATH', meson.global_build_root() / 'libgimp')
+  endif
+
+  gimp_run_env.prepend('LD_LIBRARY_PATH', meson.global_build_root() / 'libgimp')
+  gimp_run_env.prepend('LD_LIBRARY_PATH', meson.global_build_root() / 'libgimpbase')
+  gimp_run_env.prepend('LD_LIBRARY_PATH', meson.global_build_root() / 'libgimpcolor')
+  gimp_run_env.prepend('LD_LIBRARY_PATH', meson.global_build_root() / 'libgimpconfig')
+  gimp_run_env.prepend('LD_LIBRARY_PATH', meson.global_build_root() / 'libgimpmath')
+  gimp_run_env.prepend('LD_LIBRARY_PATH', meson.global_build_root() / 'libgimpmodule')
+  gimp_run_env.prepend('LD_LIBRARY_PATH', meson.global_build_root() / 'libgimpthumb')
+  gimp_run_env.prepend('LD_LIBRARY_PATH', meson.global_build_root() / 'libgimpwidgets')
+
+  if platform_windows
+    # On Windows, DLL are found through PATH rather than LD_LIBRARY_PATH.
+    gimp_run_env.prepend('PATH', meson.global_build_root() / 'libgimp')
+    gimp_run_env.prepend('PATH', meson.global_build_root() / 'libgimpbase')
+    gimp_run_env.prepend('PATH', meson.global_build_root() / 'libgimpcolor')
+    gimp_run_env.prepend('PATH', meson.global_build_root() / 'libgimpconfig')
+    gimp_run_env.prepend('PATH', meson.global_build_root() / 'libgimpmath')
+    gimp_run_env.prepend('PATH', meson.global_build_root() / 'libgimpmodule')
+    gimp_run_env.prepend('PATH', meson.global_build_root() / 'libgimpthumb')
+    gimp_run_env.prepend('PATH', meson.global_build_root() / 'libgimpwidgets')
+  elif platform_osx
+    gimp_exe_depends += [gimp_exe_typelib]
+
+    gimp_run_env.set('GIMP_GI_DIR', gi.get_variable('libdir'))
+
+    gimp_run_env.set('GIMP_TEMP_UPDATE_RPATH', gimp_real_exe.full_path())
+    gimp_run_env.prepend('GIMP_TEMP_UPDATE_RPATH', libgimp.full_path())
+    gimp_run_env.prepend('GIMP_TEMP_UPDATE_RPATH', libgimpbase.full_path())
+    gimp_run_env.prepend('GIMP_TEMP_UPDATE_RPATH', libgimpcolor.full_path())
+    gimp_run_env.prepend('GIMP_TEMP_UPDATE_RPATH', libgimpconfig.full_path())
+    gimp_run_env.prepend('GIMP_TEMP_UPDATE_RPATH', libgimpmath.full_path())
+    gimp_run_env.prepend('GIMP_TEMP_UPDATE_RPATH', libgimpmodule.full_path())
+    gimp_run_env.prepend('GIMP_TEMP_UPDATE_RPATH', libgimpthumb.full_path())
+    gimp_run_env.prepend('GIMP_TEMP_UPDATE_RPATH', libgimpwidgets.full_path())
+    foreach plugin_exe : plugin_executables
+      gimp_run_env.prepend('GIMP_TEMP_UPDATE_RPATH', plugin_exe)
+    endforeach
+  endif
+else
+  # Cross-builds require an existing native GIMP installed, unless we
+  # can run target binaries.
+  native_gimp_exe = find_program([gimpconsole_exe_name, gimpmain_exe_name],
+                                 native: true, required: false)
+
+  if not native_gimp_exe.found()
+    error('When cross-compiling, the build requires either an exe_wrapper or a native GIMP installed (@0@ or @1@).'.format(gimpconsole_exe_name, gimpmain_exe_name))
+  endif
+
+  gimp_run_env.set('GIMP_SELF_IN_BUILD', native_gimp_exe.full_path())
+  gimp_exe_depends = []
+endif
+
+gimp_exe = find_program('tools'/'in-build-gimp.py')
+
+################################################################################
+# Subdirs: part 2
+
+# gimp-data submodule part 2
+subdir('gimp-data/images/')
 
 # Unit testing
 subdir('libgimp/tests')
@@ -1847,7 +2068,7 @@ subdir('libgimp/tests')
 subdir('docs')
 subdir('devel-docs')
 
-# Windows installer
+# Inno Windows installer
 if get_option('windows-installer')
   subdir('po-windows-installer')
   subdir('build/windows/installer')
@@ -1859,9 +2080,11 @@ pkgconfig.generate(libgimp,
   description: 'GIMP Library',
   version: gimp_version,
   requires: [
-    gdk_pixbuf,
     cairo,
+    gdk_pixbuf,
     gegl,
+    gexiv2,
+    pango,
   ],
   libraries: [
     libgimpbase,
@@ -1913,7 +2136,20 @@ pkgconfig.generate(libgimpui,
   ],
 )
 
+################################################################################
+# Install native debug data (.pdb) on Windows
+# Ideally meson should take care of it automatically.
+# See: https://github.com/mesonbuild/meson/issues/12977
+if platform_windows and pdb_support
+  install_win_debug_script = find_program('build/windows/2_bundle-gimp-uni_sym.sh')
+  meson.add_install_script(install_win_debug_script)
+endif
 
+# On Windows, install deps in a bundle before distributing
+if get_option('windows-installer') or get_option('ms-store')
+  install_win_bundling_script = find_program('build/windows/2_bundle-gimp-uni_base.py')
+  meson.add_install_script(install_win_bundling_script)
+endif
 
 ################################################################################
 # Subdir installations
@@ -1953,7 +2189,7 @@ final_message = [
 '''  Relocatable Bundle:        @0@'''.format(relocatable_bundle),
 '''  Default ICC directory:     @0@'''.format(icc_directory),
 '''  32-bit DLL folder (Win32): @0@'''.format(get_option('win32-32bits-dll-folder')),
-'''  Detailed backtraces:       @0@'''.format(detailed_backtraces),
+'''  Dashboard backtraces:      @0@'''.format(dashboard_backtrace),
 '''  Binary symlinks:           @0@'''.format(enable_default_bin),
 '''  OpenMP:                    @0@'''.format(have_openmp),
 '',
@@ -1971,9 +2207,7 @@ final_message = [
                                 .format(can_import_avif, can_export_avif),
 '''  PDF (export):        @0@'''.format(cairopdf.found()),
 '''  Print:               @0@'''.format(have_print),
-'''  Python 3 plug-ins:   @0@'''.format(have_python),
 '''  Javascript plug-ins: @0@'''.format(have_javascript),
-'''  Lua plug-ins:        @0@'''.format(have_lua),
 '''  Vala plug-ins:       @0@'''.format(have_vala),
 '''  TWAIN (Win32):       @0@'''.format(platform_windows),
 '''  WMF:                 @0@'''.format(wmf.found()),
@@ -1983,6 +2217,9 @@ final_message = [
 '''  Amiga IFF/ILBM:      @0@'''.format(have_ilbm),
 '''  Email:               @0@'''.format(email_message),
 '''  FITS:                @0@'''.format(cfitsio_dep.found()),
+'',
+'''Experimental Plug-Ins (discouraged except for developers):''',
+'''  Lua plug-ins:        @0@'''.format(have_lua_output),
 '',
 '''Unmaintained Plug-Ins (discouraged except for developers):''',
 '''  Help Browser:        @0@'''.format(get_option('webkit-unmaintained')),
@@ -2000,7 +2237,6 @@ final_message = [
 '',
 '''Documentation:''',
 '''  libgimp API Reference: @0@'''.format(gi_docgen.found() and have_gobject_introspection),
-'''  GObject Introspection: @0@'''.format(get_option('g-ir-doc')),
 '',
 '''Bug report URL: @0@'''.format(bug_report_url),
 ]

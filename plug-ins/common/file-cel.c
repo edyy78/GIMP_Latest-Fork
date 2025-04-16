@@ -32,7 +32,7 @@
 
 
 #define LOAD_PROC      "file-cel-load"
-#define SAVE_PROC      "file-cel-save"
+#define EXPORT_PROC    "file-cel-export"
 #define PLUG_IN_BINARY "file-cel"
 #define PLUG_IN_ROLE   "gimp-file-cel"
 
@@ -67,12 +67,11 @@ static GimpValueArray * cel_load             (GimpProcedure         *procedure,
                                               GimpMetadataLoadFlags *flags,
                                               GimpProcedureConfig   *config,
                                               gpointer               run_data);
-static GimpValueArray * cel_save             (GimpProcedure         *procedure,
+static GimpValueArray * cel_export           (GimpProcedure         *procedure,
                                               GimpRunMode            run_mode,
                                               GimpImage             *image,
-                                              gint                   n_drawables,
-                                              GimpDrawable         **drawables,
                                               GFile                 *file,
+                                              GimpExportOptions     *options,
                                               GimpMetadata          *metadata,
                                               GimpProcedureConfig   *config,
                                               gpointer               run_data);
@@ -83,7 +82,7 @@ static gint             load_palette         (GFile                 *file,
 static GimpImage      * load_image           (GFile                 *file,
                                               GFile                 *palette_file,
                                               GError               **error);
-static gboolean         save_image           (GFile                 *file,
+static gboolean         export_image         (GFile                 *file,
                                               GimpImage             *image,
                                               GimpDrawable          *drawable,
                                               GError               **error);
@@ -121,7 +120,7 @@ cel_query_procedures (GimpPlugIn *plug_in)
   GList *list = NULL;
 
   list = g_list_append (list, g_strdup (LOAD_PROC));
-  list = g_list_append (list, g_strdup (SAVE_PROC));
+  list = g_list_append (list, g_strdup (EXPORT_PROC));
 
   return list;
 }
@@ -155,16 +154,18 @@ cel_create_procedure (GimpPlugIn  *plug_in,
       gimp_file_procedure_set_magics (GIMP_FILE_PROCEDURE (procedure),
                                       "0,string,KiSS\\040");
 
-      GIMP_PROC_ARG_FILE (procedure, "palette-file",
-                          _("_Palette file"),
-                          _("KCF file to load palette from"),
-                          G_PARAM_READWRITE);
+      gimp_procedure_add_file_argument (procedure, "palette-file",
+                                        _("_Palette file"),
+                                        _("KCF file to load palette from"),
+                                        GIMP_FILE_CHOOSER_ACTION_OPEN,
+                                        FALSE, NULL,
+                                        G_PARAM_READWRITE);
     }
-  else if (! strcmp (name, SAVE_PROC))
+  else if (! strcmp (name, EXPORT_PROC))
     {
-      procedure = gimp_save_procedure_new (plug_in, name,
-                                           GIMP_PDB_PROC_TYPE_PLUGIN,
-                                           FALSE, cel_save, NULL, NULL);
+      procedure = gimp_export_procedure_new (plug_in, name,
+                                             GIMP_PDB_PROC_TYPE_PLUGIN,
+                                             FALSE, cel_export, NULL, NULL);
 
       gimp_procedure_set_image_types (procedure, "RGB*, INDEXED*");
 
@@ -185,10 +186,18 @@ cel_create_procedure (GimpPlugIn  *plug_in,
       gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
                                           "cel");
 
-      GIMP_PROC_ARG_FILE (procedure, "palette-file",
-                          "Palette file",
-                          "File to save palette to",
-                          G_PARAM_READWRITE);
+      gimp_export_procedure_set_capabilities (GIMP_EXPORT_PROCEDURE (procedure),
+                                              GIMP_EXPORT_CAN_HANDLE_RGB   |
+                                              GIMP_EXPORT_CAN_HANDLE_ALPHA |
+                                              GIMP_EXPORT_CAN_HANDLE_INDEXED,
+                                              NULL, NULL, NULL);
+
+      gimp_procedure_add_file_argument (procedure, "palette-file",
+                                        _("_Palette file"),
+                                        _("File to save palette to"),
+                                        GIMP_FILE_CHOOSER_ACTION_SAVE,
+                                        FALSE, NULL,
+                                        G_PARAM_READWRITE);
     }
 
   return procedure;
@@ -274,62 +283,33 @@ cel_load (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
-cel_save (GimpProcedure        *procedure,
-          GimpRunMode           run_mode,
-          GimpImage            *image,
-          gint                  n_drawables,
-          GimpDrawable        **drawables,
-          GFile                *file,
-          GimpMetadata         *metadata,
-          GimpProcedureConfig  *config,
-          gpointer              run_data)
+cel_export (GimpProcedure        *procedure,
+            GimpRunMode           run_mode,
+            GimpImage            *image,
+            GFile                *file,
+            GimpExportOptions    *options,
+            GimpMetadata         *metadata,
+            GimpProcedureConfig  *config,
+            gpointer              run_data)
 {
   GimpPDBStatusType  status = GIMP_PDB_SUCCESS;
-  GimpExportReturn   export = GIMP_EXPORT_CANCEL;
-  GError            *error = NULL;
+  GimpExportReturn   export = GIMP_EXPORT_IGNORE;
+  GList             *drawables;
+  GError            *error  = NULL;
 
   gegl_init (NULL, NULL);
 
-  switch (run_mode)
-    {
-    case GIMP_RUN_INTERACTIVE:
-    case GIMP_RUN_WITH_LAST_VALS:
-      gimp_ui_init (PLUG_IN_BINARY);
+  export = gimp_export_options_get_image (options, &image);
 
-      export = gimp_export_image (&image, &n_drawables, &drawables, "CEL",
-                                  GIMP_EXPORT_CAN_HANDLE_RGB   |
-                                  GIMP_EXPORT_CAN_HANDLE_ALPHA |
-                                  GIMP_EXPORT_CAN_HANDLE_INDEXED);
+  drawables = gimp_image_list_layers (image);
 
-      if (export == GIMP_EXPORT_CANCEL)
-        return gimp_procedure_new_return_values (procedure,
-                                                 GIMP_PDB_CANCEL,
-                                                 NULL);
-      break;
-
-    default:
-      break;
-    }
-
-  if (n_drawables != 1)
-    {
-      g_set_error (&error, G_FILE_ERROR, 0,
-                   _("CEL format does not support multiple layers."));
-
-      return gimp_procedure_new_return_values (procedure,
-                                               GIMP_PDB_CALLING_ERROR,
-                                               error);
-    }
-
-  if (! save_image (file, image, drawables[0], &error))
+  if (! export_image (file, image, drawables->data, &error))
     status = GIMP_PDB_EXECUTION_ERROR;
 
   if (export == GIMP_EXPORT_EXPORT)
-    {
-      gimp_image_delete (image);
-      g_free (drawables);
-    }
+    gimp_image_delete (image);
 
+  g_list_free (drawables);
   return gimp_procedure_new_return_values (procedure, status, error);
 }
 
@@ -639,7 +619,7 @@ load_image (GFile   *file,
             }
         }
 
-      gimp_image_set_colormap (image, palette + 3, colors - 1);
+      gimp_palette_set_colormap (gimp_image_get_palette (image), babl_format ("R'G'B' u8"), palette + 3, (colors - 1) * 3);
     }
 
   /* Now get everything redrawn and hand back the finished image */
@@ -800,10 +780,10 @@ load_palette (GFile   *file,
 }
 
 static gboolean
-save_image (GFile         *file,
-            GimpImage     *image,
-            GimpDrawable  *drawable,
-            GError       **error)
+export_image (GFile         *file,
+              GimpImage     *image,
+              GimpDrawable  *drawable,
+              GError       **error)
 {
   GOutputStream *output;
   GeglBuffer    *buffer;
@@ -813,7 +793,7 @@ save_image (GFile         *file,
   gint           height;
   guchar         header[32];    /* File header */
   gint           bpp;           /* Bit per pixel */
-  gint           colors;        /* Number of colors */
+  gint           colors = 0;    /* Number of colors */
   gint           type;          /* type of layer */
   gint           offx, offy;    /* Layer offsets */
   guchar        *buf  = NULL;   /* Temporary buffer */
@@ -870,7 +850,7 @@ save_image (GFile         *file,
   /* Work out whether to save as 8bit or 4bit */
   if (bpp < 32)
     {
-      g_free (gimp_image_get_colormap (image, NULL, &colors));
+      colors = gimp_palette_get_color_count (gimp_image_get_palette (image));
 
       if (colors > 15)
         {

@@ -44,11 +44,16 @@
 #include "../script-fu-intl.h"
 
 #include "scheme-private.h"
+#include "string-port.h"
+#include "error-port.h"
 
 #if !STANDALONE
 static ts_output_func   ts_output_handler = NULL;
 static gpointer         ts_output_data = NULL;
 
+/* Register an output func from a wrapping interpeter.
+ * Typically the output func writes to a string, or to stdout.
+ */
 void
 ts_register_output_func (ts_output_func  func,
                          gpointer        user_data)
@@ -68,6 +73,28 @@ ts_output_string (TsOutputType  type,
 
   if (ts_output_handler && len > 0)
     (* ts_output_handler) (type, string, len, ts_output_data);
+}
+
+static gboolean
+ts_is_output_redirected (void)
+{
+  return ts_output_handler != NULL;
+}
+
+/* Returns string of errors declared by interpreter or script.
+ *
+ * You must call when a script has returned an error flag.
+ * Side effect is to clear: you should only call once.
+ *
+ * When called when the script did not return an error flag,
+ * returns "Unknown error"
+ *
+ * Returned string is transfered, owned by the caller and must be freed.
+ */
+const gchar*
+ts_get_error_string (scheme *sc)
+{
+  return error_port_take_string_and_close (sc);
 }
 #endif
 
@@ -89,6 +116,7 @@ ts_output_string (TsOutputType  type,
 #define TOK_SHARP_CONST 11
 #define TOK_VEC     12
 #define TOK_USCORE  13
+#define TOK_ARG     14
 
 #define BACKQUOTE '`'
 #define DELIMITERS  "()\";\f\t\v\n\r "
@@ -101,6 +129,19 @@ ts_output_string (TsOutputType  type,
 
 #include <string.h>
 #include <stdlib.h>
+
+/* Set current outport with checks for validity. */
+static void
+set_outport (scheme * sc, pointer arg)
+{
+  if (! is_port (arg))
+    g_warning ("%s arg not a port", G_STRFUNC);
+
+  if ( ! is_outport (arg) )
+    g_warning ("%s port not an output port, or closed", G_STRFUNC);
+
+  sc->outport = arg;
+}
 
 #define stricmp utf8_stricmp
 
@@ -158,7 +199,8 @@ enum scheme_types {
   T_PROMISE=13,
   T_ENVIRONMENT=14,
   T_BYTE=15,
-  T_LAST_SYSTEM_TYPE=15
+  T_ARG_SLOT=16,
+  T_LAST_SYSTEM_TYPE=16
 };
 
 /* ADJ is enough slack to align cells in a TYPE_BITS-bit boundary */
@@ -201,6 +243,7 @@ static num num_one;
 #define type(p)          (typeflag(p)&T_MASKTYPE)
 
 INTERFACE INLINE int is_string(pointer p)     { return (type(p)==T_STRING); }
+INTERFACE INLINE int is_arg_name(pointer p)   { return (type(p)==T_ARG_SLOT); }
 #define strvalue(p)      ((p)->_object._string._svalue)
 #define strlength(p)     ((p)->_object._string._length)
 
@@ -388,13 +431,10 @@ static char *store_string(scheme *sc, int len, const char *str, gunichar fill);
 static pointer mk_vector(scheme *sc, int len);
 static pointer mk_atom(scheme *sc, char *q);
 static pointer mk_sharp_const(scheme *sc, char *name);
-static pointer mk_port(scheme *sc, port *p);
 static pointer port_from_filename(scheme *sc, const char *fn, int prop);
 static pointer port_from_file(scheme *sc, FILE *, int prop);
-static pointer port_from_string(scheme *sc, char *start, char *past_the_end, int prop);
 static port *port_rep_from_filename(scheme *sc, const char *fn, int prop);
 static port *port_rep_from_file(scheme *sc, FILE *, int prop);
-static port *port_rep_from_string(scheme *sc, char *start, char *past_the_end, int prop);
 static void port_close(scheme *sc, pointer p, int flag);
 static void mark(pointer a);
 static void gc(scheme *sc, pointer a, pointer b);
@@ -405,6 +445,7 @@ static gunichar inchar(scheme *sc);
 static void backchar(scheme *sc, gunichar c);
 static char *readstr_upto(scheme *sc, char *delim);
 static pointer readstrexp(scheme *sc);
+static pointer read_arg_name_exp(scheme *sc);
 static INLINE int skipspace(scheme *sc);
 static int token(scheme *sc);
 static void printslashstring(scheme *sc, char *s, int len);
@@ -696,6 +737,7 @@ static pointer _get_cell(scheme *sc, pointer a, pointer b) {
         || sc->free_cell == sc->NIL) {
       /* if only a few recovered, get more to avoid fruitless gc's */
       if (!alloc_cellseg(sc,1) && sc->free_cell == sc->NIL) {
+        g_warning ("%s", G_STRFUNC);
         sc->no_memory=1;
         return sc->sink;
       }
@@ -720,12 +762,14 @@ static pointer reserve_cells(scheme *sc, int n) {
                if (sc->fcells < n) {
                        /* If there still aren't, try getting more heap */
                        if (!alloc_cellseg(sc,1)) {
+                               g_warning ("%s", G_STRFUNC);
                                sc->no_memory=1;
                                return sc->NIL;
                        }
                }
                if (sc->fcells < n) {
                        /* If all fail, report failure */
+                       g_warning ("%s", G_STRFUNC);
                        sc->no_memory=1;
                        return sc->NIL;
                }
@@ -750,6 +794,7 @@ static pointer get_consecutive_cells(scheme *sc, int n) {
   /* If there still aren't, try getting more heap */
   if (!alloc_cellseg(sc,1))
     {
+      g_warning ("%s", G_STRFUNC);
       sc->no_memory=1;
       return sc->sink;
     }
@@ -758,6 +803,7 @@ static pointer get_consecutive_cells(scheme *sc, int n) {
   if (x != sc->NIL) { return x; }
 
   /* If all fail, report failure */
+  g_warning ("%s", G_STRFUNC);
   sc->no_memory=1;
   return sc->sink;
 }
@@ -972,7 +1018,8 @@ static pointer oblist_all_symbols(scheme *sc)
 
 #endif
 
-static pointer mk_port(scheme *sc, port *p) {
+/* Declare p as void* but require port* */
+pointer mk_port(scheme *sc, void *p) {
   pointer x = get_cell(sc, sc->NIL, sc->NIL);
 
   typeflag(x) = T_PORT|T_ATOM;
@@ -1081,6 +1128,7 @@ static char *store_string(scheme *sc, int char_cnt,
      }
 
      if(q==0) {
+       g_warning ("%s", G_STRFUNC);
        sc->no_memory=1;
        return sc->strbuff;
      }
@@ -1113,6 +1161,21 @@ INTERFACE pointer mk_counted_string(scheme *sc, const char *str, int len) {
      strvalue(x) = store_string(sc,len,str,0);
      strlength(x) = len;
      return (x);
+}
+
+INTERFACE pointer
+mk_arg_name (scheme     *sc,
+             const char *str)
+{
+  gint len = strlen (str);
+
+  pointer x = get_cell (sc, sc->NIL, sc->NIL);
+
+  typeflag(x)  = (T_ARG_SLOT | T_ATOM);
+  strvalue(x)  = store_string (sc, len, str, 0);
+  strlength(x) = len;
+
+  return (x);
 }
 
 /* len is the length for the empty string in characters */
@@ -1462,15 +1525,32 @@ static void gc(scheme *sc, pointer a, pointer b) {
 }
 
 static void finalize_cell(scheme *sc, pointer a) {
-  if(is_string(a)) {
-    sc->free(strvalue(a));
-  } else if(is_port(a)) {
-    if(a->_object._port->kind&port_file
-       && a->_object._port->rep.stdio.closeit) {
-      port_close(sc,a,port_input|port_output);
+  if (is_string(a))
+    {
+      sc->free(strvalue(a));
     }
-    sc->free(a->_object._port);
-  }
+  else if(is_port(a))
+    {
+      /* Scheme does not require a script to close a port.
+       * Close the file on the system and/or free memory resources.
+       */
+      if(a->_object._port->kind & port_file)
+        {
+          if (a->_object._port->rep.stdio.closeit)
+            /* Safe to call port_close when already closed. */
+            port_close(sc,a,port_input|port_output);
+          sc->free(a->_object._port);
+        }
+      else if (a->_object._port->kind & port_string)
+        {
+          string_port_dispose (sc, a);
+        }
+      else
+        {
+          g_warning ("%s Unknown port kind.", G_STRFUNC);
+        }
+    }
+    /* Else object has no allocation. */
 }
 
 /* ========== Routines for Reading ========== */
@@ -1502,8 +1582,10 @@ static void file_pop(scheme *sc) {
  if(sc->file_i != 0) {
      sc->nesting=sc->nesting_stack[sc->file_i];
      port_close(sc,sc->loadport,port_input);
+     /* Pop load stack, discarding port soon to be gc. */
      sc->file_i--;
-     sc->loadport->_object._port=sc->load_stack+sc->file_i;
+     /* Top of stack into current load port. */
+     sc->loadport->_object._port = sc->load_stack + sc->file_i;
    }
 }
 
@@ -1571,62 +1653,30 @@ static pointer port_from_file(scheme *sc, FILE *f, int prop) {
   return mk_port(sc,pt);
 }
 
-static port *port_rep_from_string(scheme *sc, char *start, char *past_the_end, int prop) {
-  port *pt;
-  pt=(port*)sc->malloc(sizeof(port));
-  if(pt==0) {
-    return 0;
-  }
-  pt->kind=port_string|prop;
-  pt->rep.string.start=start;
-  pt->rep.string.curr=start;
-  pt->rep.string.past_the_end=past_the_end;
-  return pt;
-}
 
-static pointer port_from_string(scheme *sc, char *start, char *past_the_end, int prop) {
-  port *pt;
-  pt=port_rep_from_string(sc,start,past_the_end,prop);
-  if(pt==0) {
-    return sc->NIL;
-  }
-  return mk_port(sc,pt);
-}
-
-#define BLOCK_SIZE 256
-
-static port *port_rep_from_scratch(scheme *sc) {
-  port *pt;
-  char *start;
-  pt=(port*)sc->malloc(sizeof(port));
-  if(pt==0) {
-    return 0;
-  }
-  start=sc->malloc(BLOCK_SIZE);
-  if(start==0) {
-    return 0;
-  }
-  memset(start,' ',BLOCK_SIZE-1);
-  start[BLOCK_SIZE-1]='\0';
-  pt->kind=port_string|port_output|port_srfi6;
-  pt->rep.string.start=start;
-  pt->rep.string.curr=start;
-  pt->rep.string.past_the_end=start+BLOCK_SIZE-1;
-  return pt;
-}
-
-static pointer port_from_scratch(scheme *sc) {
-  port *pt;
-  pt=port_rep_from_scratch(sc);
-  if(pt==0) {
-    return sc->NIL;
-  }
-  return mk_port(sc,pt);
-}
-
-static void port_close(scheme *sc, pointer p, int flag) {
+/* Close one or more directions of the port.
+ *
+ * When there are no directions remaining, the port becomes fully closed.
+ *
+ * When the port is already fully closed, this does nothing.
+ *
+ * When a port becomes fully closed, release OS resources (close the file),
+ * for a file-port. A string-port has no system resources.
+ *
+ * The port remains an object to be gc'd later
+ * but a script cannot call some port methods on the port.
+ */
+static void port_close(scheme *sc, pointer p, int directions) {
   port *pt=p->_object._port;
-  pt->kind&=~flag;
+
+  /* Fully closed already? */
+  if((pt->kind & (port_input|port_output))==0)
+    return;
+
+  /* Clear directions that are closing. */
+  pt->kind &= ~directions;
+
+  /* Fully closed? */
   if((pt->kind & (port_input|port_output))==0) {
     if(pt->kind&port_file) {
 
@@ -1640,7 +1690,9 @@ static void port_close(scheme *sc, pointer p, int flag) {
 
       fclose(pt->rep.stdio.file);
     }
-    pt->kind=port_free;
+    /* Closing does not lose the kind of port nor the saw_EOF flag.
+     * The port struct still has attributes, until it is destroyed.
+     */
   }
 }
 
@@ -1697,16 +1749,9 @@ static gint
 basic_inbyte (port *pt)
 {
   if (pt->kind & port_file)
-    {
-      return fgetc (pt->rep.stdio.file);
-    }
+    return fgetc (pt->rep.stdio.file);
   else
-    {
-      if (pt->rep.string.curr == pt->rep.string.past_the_end)
-        return EOF;
-      else
-        return (guint8) *pt->rep.string.curr++;
-    }
+    return string_port_inbyte (pt);
 }
 
 /* Read a single unsigned byte from the active port. */
@@ -1754,78 +1799,54 @@ backbyte (scheme *sc, gint b)
     return;
   pt = sc->inport->_object._port;
   if (pt->kind & port_file)
-    {
-      ungetc (b, pt->rep.stdio.file);
-    }
+    ungetc (b, pt->rep.stdio.file);
   else
-    {
-      if (pt->rep.string.start != NULL &&
-          pt->rep.string.curr > pt->rep.string.start)
-        {
-          pt->rep.string.curr--;
-        }
-    }
+    string_port_backbyte (pt);
 }
 
-static int realloc_port_string(scheme *sc, port *p)
-{
-  char *start=p->rep.string.start;
-  size_t new_size=p->rep.string.past_the_end-start+1+BLOCK_SIZE;
-  char *str=sc->malloc(new_size);
-  if(str) {
-    memset(str,' ',new_size-1);
-    str[new_size-1]='\0';
-    strcpy(str,start);
-    p->rep.string.start=str;
-    p->rep.string.past_the_end=str+new_size-1;
-    p->rep.string.curr-=start-str;
-    sc->free(start);
-    return 1;
-  } else {
-    return 0;
-  }
-}
 
 static void
 putbytes (scheme *sc, const char *bytes, int byte_count)
 {
-  int   free_bytes;     /* Space remaining in buffer (in bytes) */
-  int   l;
-  port *pt=sc->outport->_object._port;
+  port *pt;
+
+  if (error_port_is_redirect_output (sc))
+    pt = error_port_get_port_rep (sc);
+  else
+    pt = sc->outport->_object._port;
 
   if(pt->kind&port_file) {
 #if STANDALONE
       fwrite (bytes, 1, byte_count, pt->rep.stdio.file);
       fflush(pt->rep.stdio.file);
 #else
-      /* If output is still directed to stdout (the default) it should be    */
-      /* safe to redirect it to the registered output routine. */
+      /* If output is still directed to stdout (the default) try
+       * redirect it to any registered output routine.
+       * Currently, we require outer wrapper to set_output_func.
+       */
       if (pt->rep.stdio.file == stdout)
         {
-          ts_output_string (TS_OUTPUT_NORMAL, bytes, byte_count);
+          if (ts_is_output_redirected ())
+            ts_output_string (TS_OUTPUT_NORMAL, bytes, byte_count);
+          else
+            g_warning ("%s Output disappears since outer wrapper did not redirect.", G_STRFUNC);
         }
       else
         {
+          /* Otherwise, the script has set the output port, write to it. */
           fwrite (bytes, 1, byte_count, pt->rep.stdio.file);
           fflush (pt->rep.stdio.file);
         }
 #endif
-  } else {
-    if (pt->rep.string.past_the_end != pt->rep.string.curr)
-    {
-       free_bytes = pt->rep.string.past_the_end - pt->rep.string.curr;
-       l          = min (byte_count, free_bytes);
-       memcpy (pt->rep.string.curr, bytes, l);
-       pt->rep.string.curr += l;
-    }
-    else if(pt->kind&port_srfi6&&realloc_port_string(sc,pt))
-    {
-       free_bytes = pt->rep.string.past_the_end - pt->rep.string.curr;
-       l          = min (byte_count, free_bytes);
-       memcpy (pt->rep.string.curr, bytes, byte_count);
-       pt->rep.string.curr += l;
-    }
   }
+  else if (pt->kind & port_string)
+    {
+      string_port_put_bytes (sc, pt, bytes, byte_count);
+    }
+  else
+    {
+      g_warning ("%s closed or unknown port kind", G_STRFUNC);
+    }
 }
 
 static void
@@ -1987,6 +2008,35 @@ static pointer readstrexp(scheme *sc) {
   }
 }
 
+static pointer
+read_arg_name_exp (scheme *sc)
+{
+   char     *p = sc->strbuff;
+   gunichar  c;
+
+   while (TRUE)
+     {
+       c = inchar (sc);
+       if (c == EOF || p - sc->strbuff > sizeof (sc->strbuff) - 1)
+         {
+           *p = 0;
+           return sc->F;
+         }
+       else if (g_unichar_isspace (c))
+         {
+           *p = 0;
+           return mk_arg_name (sc, sc->strbuff);
+         }
+       else
+         {
+           gint len;
+
+           len = g_unichar_to_utf8 (c, p);
+           p += len;
+         }
+     }
+}
+
 /* check c is in chars */
 static INLINE int is_one_of(char *s, gunichar c) {
   if (c==EOF)
@@ -2095,6 +2145,8 @@ static int token(scheme *sc) {
              { return (TOK_EOF); }
            else
              { return (token(sc));}
+          } else if (c == ':') {
+               return (TOK_ARG);
           } else {
                backchar(sc,c);
                if(is_one_of(" tfodxb\\",c)) {
@@ -3857,6 +3909,7 @@ static pointer opexe_2(scheme *sc, enum scheme_opcodes op) {
           newlen = p1_len+utf8_len+p2_len;
           newstr = (char *)sc->malloc(newlen+1);
           if (newstr == NULL) {
+             g_warning ("%s string-set", G_STRFUNC);
              sc->no_memory=1;
              Error_1(sc,"string-set!: No memory to alter string:",x);
           }
@@ -3892,6 +3945,7 @@ static pointer opexe_2(scheme *sc, enum scheme_opcodes op) {
 
        newstr = (char *)sc->malloc(len+1);
        if (newstr == NULL) {
+          g_warning ("%s string-append", G_STRFUNC);
           sc->no_memory=1;
           Error_1(sc,"string-set!: No memory to append strings:",car(sc->args));
        }
@@ -3946,6 +4000,7 @@ static pointer opexe_2(scheme *sc, enum scheme_opcodes op) {
 
           str = (char *)sc->malloc(len+1);
           if (str == NULL) {
+             g_warning ("%s substring", G_STRFUNC);
              sc->no_memory=1;
              Error_1(sc,"string-set!: No memory to extract substring:",car(sc->args));
           }
@@ -4205,7 +4260,7 @@ static pointer opexe_4(scheme *sc, enum scheme_opcodes op) {
                if(cadr(sc->args)!=sc->outport) {
                     x=cons(sc,sc->outport,sc->NIL);
                     s_save(sc,OP_SET_OUTPORT, x, sc->NIL);
-                    sc->outport=cadr(sc->args);
+                    set_outport (sc, cadr (sc->args));
                }
           }
           sc->args = car(sc->args);
@@ -4221,14 +4276,20 @@ static pointer opexe_4(scheme *sc, enum scheme_opcodes op) {
                if(car(sc->args)!=sc->outport) {
                     x=cons(sc,sc->outport,sc->NIL);
                     s_save(sc,OP_SET_OUTPORT, x, sc->NIL);
-                    sc->outport=car(sc->args);
+                    set_outport (sc, car (sc->args));
                }
           }
           putstr(sc, "\n");
           s_return(sc,sc->T);
 
      case OP_ERR0:  /* error */
+          /* Subsequently, the current interpretation will abort. */
           sc->retcode=-1;
+
+          /* Subsequently, putbytes will write to error_port*/
+          error_port_redirect_output (sc);
+
+          /* Print prefix: "Error: <reason>" OR "Error: --" */
           if (!is_string(car(sc->args))) {
                sc->args=cons(sc,mk_string(sc," -- "),sc->args);
                setimmutable(car(sc->args));
@@ -4241,17 +4302,30 @@ static pointer opexe_4(scheme *sc, enum scheme_opcodes op) {
      case OP_ERR1:  /* error */
           putstr(sc, " ");
           if (sc->args != sc->NIL) {
+               /* Print other args.*/
                s_save(sc,OP_ERR1, cdr(sc->args), sc->NIL);
                sc->args = car(sc->args);
                sc->print_flag = 1;
                s_goto(sc,OP_P0LIST);
+               /* Continues at saved OP_ERR1. */
           } else {
-               putstr(sc, "\n");
-               if(sc->interactive_repl) {
-                    s_goto(sc,OP_T0LVL);
-               } else {
-                    return sc->NIL;
-               }
+              if (sc->interactive_repl)
+                {
+                  /* Case is SF Text Console, not SF Console (w GUI).
+                   * Simple write to stdout.
+                   */
+                  gchar *error_message = (gchar*) error_port_take_string_and_close (sc);
+                  g_printf ("%s", error_message);
+                  g_free (error_message);
+
+                  /* Continue to read stdin and eval. */
+                  s_goto (sc, OP_T0LVL);
+                }
+              else
+                {
+                  /* ScriptFu wrapper will retrieve error message. */
+                  return sc->NIL;
+                }
           }
 
      case OP_REVERSE:   /* reverse */
@@ -4388,52 +4462,36 @@ static pointer opexe_4(scheme *sc, enum scheme_opcodes op) {
                case OP_OPEN_INOUTSTRING:  prop=port_input|port_output; break;
                default:                   break;  /* Quiet the compiler */
           }
-          p = port_from_string (sc,
-                                strvalue (car (sc->args)),
-                                strvalue (car (sc->args)) + strlength (car (sc->args)),
-                                prop);
+          /* !!! open-input-output-string is defined same as open-input-string.
+           * The prop argument has no effect.
+           * This version's behavior is not the same as upstream.
+           *
+           * Because no document specifies how input-output should work,
+           * we cannot test whatever is implemented upstream.
+           * Assume it should be a pipe, a string-port does NOT have
+           * both a read and write pointer, and so cannot be a pipe.
+           */
+          p = string_port_open_input_string (sc, car (sc->args), prop);
+
           if(p==sc->NIL) {
                s_return(sc,sc->F);
           }
           s_return(sc,p);
      }
      case OP_OPEN_OUTSTRING: /* open-output-string */ {
-          pointer p;
-          if(car(sc->args)==sc->NIL) {
-               p=port_from_scratch(sc);
-               if(p==sc->NIL) {
-                    s_return(sc,sc->F);
-               }
-          } else {
-               p=port_from_string(sc, strvalue(car(sc->args)),
-                          strvalue(car(sc->args))+strlength(car(sc->args)),
-                          port_output);
-               if(p==sc->NIL) {
-                    s_return(sc,sc->F);
-               }
-          }
-          s_return(sc,p);
+          pointer p = string_port_open_output_string (sc, car(sc->args));
+          if( p == sc->NIL)
+              s_return(sc,sc->F);
+          else
+            s_return(sc,p);
      }
      case OP_GET_OUTSTRING: /* get-output-string */ {
           port *p;
 
-          if ((p=car(sc->args)->_object._port)->kind&port_string) {
-               off_t size;
-               char *str;
-
-               size=p->rep.string.curr-p->rep.string.start+1;
-               str=sc->malloc(size);
-               if(str != NULL) {
-                    pointer s;
-
-                    memcpy(str,p->rep.string.start,size-1);
-                    str[size-1]='\0';
-                    s=mk_string(sc,str);
-                    sc->free(str);
-                    s_return(sc,s);
-               }
-          }
-          s_return(sc,sc->F);
+          if ((p=car(sc->args)->_object._port)->kind&port_string)
+            s_return (sc, string_port_get_output_string (sc, p));
+          else
+            s_return(sc, sc->F);
      }
 #endif
 
@@ -4549,7 +4607,7 @@ static pointer opexe_5(scheme *sc, enum scheme_opcodes op) {
           s_return(sc,sc->value);
 
      case OP_SET_OUTPORT: /* set-output-port */
-          sc->outport=car(sc->args);
+          set_outport (sc, car (sc->args));
           s_return(sc,sc->value);
 
      case OP_RDSEXPR:
@@ -4641,6 +4699,14 @@ static pointer opexe_5(scheme *sc, enum scheme_opcodes op) {
                } else {
                     s_return(sc,x);
                }
+          case TOK_ARG: {
+               x = read_arg_name_exp(sc);
+               if (x == sc->F) {
+                 Error_0 (sc, "Error reading argument slot name");
+               }
+               setimmutable(x);
+               s_return(sc,x);
+          }
           case TOK_RPAREN:
                Error_1 (sc, "syntax error: unexpected right parenthesis", 0);
           case TOK_DOT:
@@ -5089,6 +5155,7 @@ static struct scheme_interface vtbl ={
   mk_vector,
   mk_foreign_func,
   mk_closure,
+  mk_arg_name,
   putstr,
   putcharacter,
 
@@ -5136,6 +5203,8 @@ static struct scheme_interface vtbl ={
   is_environment,
   is_immutable,
   setimmutable,
+
+  is_arg_name,
 
   scheme_load_file,
   scheme_load_string
@@ -5195,6 +5264,7 @@ int scheme_init_custom_alloc(scheme *sc, func_alloc malloc, func_dealloc free) {
   sc->outport=sc->NIL;
   sc->save_inport=sc->NIL;
   sc->loadport=sc->NIL;
+  error_port_init (sc);
   sc->nesting=0;
   sc->interactive_repl=0;
   sc->print_output=0;
@@ -5273,16 +5343,8 @@ SCHEME_EXPORT void scheme_set_input_port_file(scheme *sc, FILE *fin) {
   sc->inport=port_from_file(sc,fin,port_input);
 }
 
-void scheme_set_input_port_string(scheme *sc, char *start, char *past_the_end) {
-  sc->inport=port_from_string(sc,start,past_the_end,port_input);
-}
-
 SCHEME_EXPORT void scheme_set_output_port_file(scheme *sc, FILE *fout) {
   sc->outport=port_from_file(sc,fout,port_output);
-}
-
-void scheme_set_output_port_string(scheme *sc, char *start, char *past_the_end) {
-  sc->outport=port_from_string(sc,start,past_the_end,port_output);
 }
 
 void scheme_set_external_data(scheme *sc, void *p) {
@@ -5316,6 +5378,7 @@ void scheme_deinit(scheme *sc) {
     typeflag(sc->loadport) = T_ATOM;
   }
   sc->loadport=sc->NIL;
+  error_port_init (sc);
   sc->gc_verbose=0;
   gc(sc,sc->NIL,sc->NIL);
 
@@ -5375,10 +5438,7 @@ void scheme_load_string(scheme *sc, const char *cmd) {
   dump_stack_reset(sc);
   sc->envir = sc->global_env;
   sc->file_i=0;
-  sc->load_stack[0].kind=port_input|port_string;
-  sc->load_stack[0].rep.string.start=(char*)cmd; /* This func respects const */
-  sc->load_stack[0].rep.string.past_the_end=(char*)cmd+strlen(cmd);
-  sc->load_stack[0].rep.string.curr=(char*)cmd;
+  string_port_init_static_port (sc->load_stack, cmd);
   sc->loadport=mk_port(sc,sc->load_stack);
   sc->retcode=0;
   sc->interactive_repl=0;

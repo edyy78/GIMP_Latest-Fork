@@ -24,6 +24,7 @@
 #include <gdk-pixbuf/gdk-pixbuf.h>
 
 #include "libgimpbase/gimpbase.h"
+#include "libgimpcolor/gimpcolor.h"
 #include "libgimpconfig/gimpconfig.h"
 
 #include "operations-types.h"
@@ -150,8 +151,45 @@ gimp_operation_config_get_type (Gimp        *gimp,
               strcmp (pspec->name, "input")     &&
               strcmp (pspec->name, "output"))
             {
-              pspecs[j] = pspec;
-              j++;
+              GParamFlags flags;
+
+              flags = pspec->flags & ~(GEGL_PARAM_PAD_INPUT | GEGL_PARAM_PAD_OUTPUT);
+
+              if (GEGL_IS_PARAM_SPEC_COLOR (pspec))
+                {
+                  /* As special exception, let's transform GeglParamColor
+                   * into GimpParamColor in all core code. This way, we
+                   * have one less param type to handle.
+                   */
+                  gchar **prop_keys;
+                  guint   n_keys = 0;
+
+                  pspecs[j] = gimp_param_spec_color (pspec->name,
+                                                     g_param_spec_get_nick (pspec),
+                                                     g_param_spec_get_blurb (pspec),
+                                                     TRUE,
+                                                     gegl_param_spec_color_get_default (pspec),
+                                                     flags);
+                  prop_keys = gegl_operation_list_property_keys (operation, pspec->name, &n_keys);
+                  for (gint k = 0; k < n_keys; k++)
+                    {
+                      const gchar *key;
+
+                      key = gegl_param_spec_get_property_key (pspec, prop_keys[k]);
+                      gegl_param_spec_set_property_key (pspecs[j], prop_keys[k], key);
+                    }
+
+                  g_free (prop_keys);
+                }
+              else
+                {
+                  pspecs[j] = gimp_config_param_spec_duplicate (pspec);
+                  if (pspecs[j])
+                    pspecs[j]->flags = flags;
+                }
+
+              if (pspecs[j])
+                j++;
             }
         }
 

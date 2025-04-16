@@ -22,7 +22,7 @@
  *   query()                     - Respond to a plug-in query...
  *   run()                       - Run the plug-in...
  *   load_image()                - Load a PNG image into a new image window.
- *   save_image()                - Export the specified image to a PNG file.
+ *   export_image()              - Export the specified image to a PNG file.
  *   save_ok_callback()          - Destroy the export dialog and export the image.
  *   save_dialog()               - Pop up the export dialog.
  *
@@ -41,7 +41,7 @@
 
 
 #define LOAD_PROC        "file-sgi-load"
-#define SAVE_PROC        "file-sgi-save"
+#define EXPORT_PROC      "file-sgi-export"
 #define PLUG_IN_BINARY   "file-sgi"
 #define PLUG_IN_VERSION  "1.1.1 - 17 May 1998"
 
@@ -76,19 +76,18 @@ static GimpValueArray * sgi_load             (GimpProcedure         *procedure,
                                               GimpMetadataLoadFlags *flags,
                                               GimpProcedureConfig   *config,
                                               gpointer               run_data);
-static GimpValueArray * sgi_save             (GimpProcedure         *procedure,
+static GimpValueArray * sgi_export           (GimpProcedure         *procedure,
                                               GimpRunMode            run_mode,
                                               GimpImage             *image,
-                                              gint                   n_drawables,
-                                              GimpDrawable         **drawables,
                                               GFile                 *file,
+                                              GimpExportOptions     *options,
                                               GimpMetadata          *metadata,
                                               GimpProcedureConfig   *config,
                                               gpointer               run_data);
 
 static GimpImage      * load_image           (GFile                 *file,
                                               GError               **error);
-static gint             save_image           (GFile                 *file,
+static gint             export_image         (GFile                 *file,
                                               GimpImage             *image,
                                               GimpDrawable          *drawable,
                                               GObject               *config,
@@ -126,7 +125,7 @@ sgi_query_procedures (GimpPlugIn *plug_in)
   GList *list = NULL;
 
   list = g_list_append (list, g_strdup (LOAD_PROC));
-  list = g_list_append (list, g_strdup (SAVE_PROC));
+  list = g_list_append (list, g_strdup (EXPORT_PROC));
 
   return list;
 }
@@ -162,11 +161,11 @@ sgi_create_procedure (GimpPlugIn  *plug_in,
       gimp_file_procedure_set_magics (GIMP_FILE_PROCEDURE (procedure),
                                       "0,short,474");
     }
-  else if (! strcmp (name, SAVE_PROC))
+  else if (! strcmp (name, EXPORT_PROC))
     {
-      procedure = gimp_save_procedure_new (plug_in, name,
-                                           GIMP_PDB_PROC_TYPE_PLUGIN,
-                                           FALSE, sgi_save, NULL, NULL);
+      procedure = gimp_export_procedure_new (plug_in, name,
+                                             GIMP_PDB_PROC_TYPE_PLUGIN,
+                                             FALSE, sgi_export, NULL, NULL);
 
       gimp_procedure_set_image_types (procedure, "*");
 
@@ -190,11 +189,22 @@ sgi_create_procedure (GimpPlugIn  *plug_in,
       gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
                                           "sgi,rgb,rgba,bw,icon");
 
-      GIMP_PROC_ARG_INT (procedure, "compression",
-                         _("Compression _type"),
-                         _("Compression level (0 = none, 1 = RLE, 2 = ARLE)"),
-                         0, 2, SGI_COMP_RLE,
-                         GIMP_PARAM_READWRITE);
+      gimp_export_procedure_set_capabilities (GIMP_EXPORT_PROCEDURE (procedure),
+                                              GIMP_EXPORT_CAN_HANDLE_RGB     |
+                                              GIMP_EXPORT_CAN_HANDLE_GRAY    |
+                                              GIMP_EXPORT_CAN_HANDLE_INDEXED |
+                                              GIMP_EXPORT_CAN_HANDLE_ALPHA,
+                                              NULL, NULL, NULL);
+
+      gimp_procedure_add_choice_argument (procedure, "compression",
+                                          _("Compression _type"),
+                                          _("Compression level"),
+                                          gimp_choice_new_with_values ("none", SGI_COMP_NONE, _("No compression"),                        NULL,
+                                                                       "rle",  SGI_COMP_RLE,  _("RLE compression"),                       NULL,
+                                                                       "arle", SGI_COMP_ARLE, _("Aggressive RLE (not supported by SGI)"), NULL,
+                                                                       NULL),
+                                          "rle",
+                                          G_PARAM_READWRITE);
     }
 
   return procedure;
@@ -232,75 +242,46 @@ sgi_load (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
-sgi_save (GimpProcedure        *procedure,
-          GimpRunMode           run_mode,
-          GimpImage            *image,
-          gint                  n_drawables,
-          GimpDrawable        **drawables,
-          GFile                *file,
-          GimpMetadata         *metadata,
-          GimpProcedureConfig  *config,
-          gpointer              run_data)
+sgi_export (GimpProcedure        *procedure,
+            GimpRunMode           run_mode,
+            GimpImage            *image,
+            GFile                *file,
+            GimpExportOptions    *options,
+            GimpMetadata         *metadata,
+            GimpProcedureConfig  *config,
+            gpointer              run_data)
 {
   GimpPDBStatusType  status = GIMP_PDB_SUCCESS;
-  GimpExportReturn   export = GIMP_EXPORT_CANCEL;
+  GimpExportReturn   export = GIMP_EXPORT_IGNORE;
+  GList             *drawables;
   GError            *error  = NULL;
 
   gegl_init (NULL, NULL);
 
-  switch (run_mode)
-    {
-    case GIMP_RUN_INTERACTIVE:
-    case GIMP_RUN_WITH_LAST_VALS:
-      gimp_ui_init (PLUG_IN_BINARY);
-
-      export = gimp_export_image (&image, &n_drawables, &drawables, "SGI",
-                                  GIMP_EXPORT_CAN_HANDLE_RGB     |
-                                  GIMP_EXPORT_CAN_HANDLE_GRAY    |
-                                  GIMP_EXPORT_CAN_HANDLE_INDEXED |
-                                  GIMP_EXPORT_CAN_HANDLE_ALPHA);
-
-      if (export == GIMP_EXPORT_CANCEL)
-        return gimp_procedure_new_return_values (procedure,
-                                                 GIMP_PDB_CANCEL,
-                                                 NULL);
-      break;
-
-    default:
-      break;
-    }
-
-  if (n_drawables != 1)
-    {
-      g_set_error (&error, G_FILE_ERROR, 0,
-                   _("SGI format does not support multiple layers."));
-
-      return gimp_procedure_new_return_values (procedure,
-                                               GIMP_PDB_CALLING_ERROR,
-                                               error);
-    }
-
   if (run_mode == GIMP_RUN_INTERACTIVE)
     {
+      gimp_ui_init (PLUG_IN_BINARY);
+
       if (! save_dialog (procedure, G_OBJECT (config), image))
         status = GIMP_PDB_CANCEL;
     }
 
+  export = gimp_export_options_get_image (options, &image);
+  drawables = gimp_image_list_layers (image);
+
   if (status == GIMP_PDB_SUCCESS)
     {
-      if (! save_image (file, image, drawables[0],
-                        G_OBJECT (config), &error))
+      if (! export_image (file, image, drawables->data,
+                          G_OBJECT (config), &error))
         {
           status = GIMP_PDB_EXECUTION_ERROR;
         }
     }
 
   if (export == GIMP_EXPORT_EXPORT)
-    {
-      gimp_image_delete (image);
-      g_free (drawables);
-    }
+    gimp_image_delete (image);
 
+  g_list_free (drawables);
   return gimp_procedure_new_return_values (procedure, status, error);
 }
 
@@ -316,6 +297,7 @@ load_image (GFile   *file,
                  tile_height, /* Height of tile in GIMP */
                  count,       /* Count of rows to put in image */
                  bytes;       /* Number of channels to use */
+  gboolean       errprinted;  /* flag to avoid spamming logfile */
   sgi_t         *sgip;        /* File pointer */
   GimpImage     *image;       /* Image */
   GimpLayer     *layer;       /* Layer */
@@ -504,6 +486,7 @@ load_image (GFile   *file,
    * Load the image...
    */
 
+  errprinted = FALSE;
   for (y = 0, count = 0;
        y < sgip->ysize;
        y ++, count ++)
@@ -520,9 +503,12 @@ load_image (GFile   *file,
         }
 
       for (i = 0; i < sgip->zsize; i ++)
-        if (sgiGetRow (sgip, rows[i], sgip->ysize - 1 - y, i) < 0)
-          g_printerr ("sgiGetRow(sgip, rows[i], %d, %d) failed!\n",
-                      sgip->ysize - 1 - y, i);
+        if (sgiGetRow (sgip, rows[i], sgip->ysize - 1 - y, i) < 0 && ! errprinted)
+          {
+            g_printerr ("sgiGetRow(sgip, rows[i], %d, %d) failed!\n",
+                        sgip->ysize - 1 - y, i);
+            errprinted = TRUE;
+          }
 
       if (sgip->bpp == 1)
         {
@@ -575,11 +561,11 @@ load_image (GFile   *file,
 }
 
 static gint
-save_image (GFile        *file,
-            GimpImage    *image,
-            GimpDrawable *drawable,
-            GObject      *config,
-            GError      **error)
+export_image (GFile        *file,
+              GimpImage    *image,
+              GimpDrawable *drawable,
+              GObject      *config,
+              GError      **error)
 {
   gint         compression;
   gint         i, j;        /* Looping var */
@@ -597,9 +583,9 @@ save_image (GFile        *file,
   guchar      *pptr;        /* Current pixel */
   gushort    **rows;        /* SGI image data */
 
-  g_object_get (config,
-                "compression", &compression,
-                NULL);
+  compression =
+    gimp_procedure_config_get_choice_id (GIMP_PROCEDURE_CONFIG (config),
+                                         "compression");
 
   /*
    * Get the drawable for the current image...
@@ -674,7 +660,7 @@ save_image (GFile        *file,
     rows[i] = rows[0] + i * sgip->xsize;
 
   /*
-   * Save the image...
+   * Export the image...
    */
 
   for (y = 0; y < height; y += count)
@@ -732,24 +718,13 @@ save_dialog (GimpProcedure *procedure,
              GObject       *config,
              GimpImage     *image)
 {
-  GtkWidget    *dialog;
-  GtkWidget    *vbox;
-  GtkListStore *store;
-  gboolean      run;
+  GtkWidget *dialog;
+  GtkWidget *vbox;
+  gboolean   run;
 
-  dialog = gimp_save_procedure_dialog_new (GIMP_SAVE_PROCEDURE (procedure),
-                                           GIMP_PROCEDURE_CONFIG (config),
-                                           image);
-
-  store = gimp_int_store_new (_("No compression"),
-                              SGI_COMP_NONE,
-                              _("RLE compression"),
-                              SGI_COMP_RLE,
-                              _("Aggressive RLE (not supported by SGI)"),
-                              SGI_COMP_ARLE,
-                              NULL);
-  gimp_procedure_dialog_get_int_combo (GIMP_PROCEDURE_DIALOG (dialog),
-                                       "compression", GIMP_INT_STORE (store));
+  dialog = gimp_export_procedure_dialog_new (GIMP_EXPORT_PROCEDURE (procedure),
+                                             GIMP_PROCEDURE_CONFIG (config),
+                                             image);
 
   vbox = gimp_procedure_dialog_fill_box (GIMP_PROCEDURE_DIALOG (dialog),
                                          "sgi-vbox", "compression", NULL);

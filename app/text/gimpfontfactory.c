@@ -455,6 +455,7 @@ gimp_font_factory_recursive_add_fontdir (FcConfig  *config,
                                          GError   **error)
 {
   GFileEnumerator *enumerator;
+  GError          *file_error = NULL;
 
   g_return_if_fail (config != NULL);
 
@@ -464,7 +465,7 @@ gimp_font_factory_recursive_add_fontdir (FcConfig  *config,
                                           G_FILE_ATTRIBUTE_STANDARD_TYPE ","
                                           G_FILE_ATTRIBUTE_TIME_MODIFIED,
                                           G_FILE_QUERY_INFO_NONE,
-                                          NULL, NULL);
+                                          NULL, &file_error);
   if (enumerator)
     {
       GFileInfo *info;
@@ -540,25 +541,50 @@ gimp_font_factory_recursive_add_fontdir (FcConfig  *config,
         {
           gchar *path = g_file_get_path (file);
 
-          if (*error)
+          /* The font directories are supposed to exist since we create
+           * them in gimp_font_factory_add_directories() when they
+           * aren't already there.
+           * Yet there are cases where empty folders can be deleted and
+           * system paths are read-only. This happens for instance for
+           * MSIX (see #11401).
+           * So as a special exception, we ignore the case where the
+           * folders don't exist, but we still warn for all other types
+           * of errors.
+           */
+          if (! file_error || file_error->code != G_IO_ERROR_NOT_FOUND)
             {
-              gchar *current_message = g_strdup ((*error)->message);
+              if (*error)
+                {
+                  gchar *current_message = g_strdup ((*error)->message);
 
-              g_clear_error (error);
-              g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
-                           "%s\n- %s%s", current_message, path,
-                           G_DIR_SEPARATOR_S);
-              g_free (current_message);
-            }
-          else
-            {
-              g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
-                           "- %s%s", path, G_DIR_SEPARATOR_S);
+                  g_clear_error (error);
+                  if (file_error != NULL)
+                    g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                                 "%s\n- %s%s (%s)", current_message, path,
+                                 G_DIR_SEPARATOR_S, file_error->message);
+                  else
+                    g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                                 "%s\n- %s%s", current_message, path,
+                                 G_DIR_SEPARATOR_S);
+                  g_free (current_message);
+                }
+              else
+                {
+                  if (file_error != NULL)
+                    g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                                 "- %s%s (%s)", path, G_DIR_SEPARATOR_S,
+                                 file_error->message);
+                  else
+                    g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                                 "- %s%s", path, G_DIR_SEPARATOR_S);
+                }
             }
 
           g_free (path);
         }
     }
+
+  g_clear_error (&file_error);
 }
 
 static void
@@ -606,7 +632,11 @@ gimp_font_factory_add_font (GimpContainer        *container,
         }
       else
         {
-          gimp_data_make_internal (GIMP_DATA (font), "gimp-font-standard-alias");
+          gchar *collection;
+
+          collection = g_strdup_printf ("gimp-font-standard-alias: %s", name);
+          gimp_data_make_internal (GIMP_DATA (font), collection);
+          g_free (collection);
         }
 
       gimp_container_add (container, GIMP_OBJECT (font));
@@ -635,6 +665,7 @@ gimp_font_factory_make_alias (GimpContainer *container,
   gchar                *style       = NULL;
   gchar                *psname      = NULL;
   gchar                *fullname    = NULL;
+  gchar                *file        = NULL;
   gint                  index       = -1;
   gint                  weight      = -1;
   gint                  width       = -1;
@@ -657,6 +688,7 @@ gimp_font_factory_make_alias (GimpContainer *container,
   /* this is for backward compatibility*/
   desc_str = pango_font_description_to_string (desc);
 
+  FcPatternGetString  (fcpattern, FC_FILE,            0, (FcChar8 **) &file);
   FcPatternGetString  (fcpattern, FC_FULLNAME,        0, (FcChar8 **) &fullname);
   FcPatternGetString  (fcpattern, FC_POSTSCRIPT_NAME, 0, (FcChar8 **) &psname);
   FcPatternGetString  (fcpattern, FC_STYLE,           0, (FcChar8 **) &style);
@@ -676,6 +708,7 @@ gimp_font_factory_make_alias (GimpContainer *container,
   font_info[PROP_INDEX]       = (gpointer) &index;
   font_info[PROP_SLANT]       = (gpointer) &slant;
   font_info[PROP_FONTVERSION] = (gpointer) &fontversion;
+  font_info[PROP_FILE]        = (gpointer)  file;
 
   /* This might be the only valid time where a NULL path is valid. Though I do
    * wonder if really these aliases are the right thing to do. Generic aliases
@@ -759,16 +792,18 @@ gimp_font_factory_load_names (GimpFontFactory *factory,
       PangoFontDescription *pfd;
       GString              *xml;
       GString              *xml_bold_variant;
-      gchar                *fontformat;
+      GString              *xml_italic_variant;
+      GString              *xml_bold_italic_variant;
       gchar                *family           = NULL;
       gchar                *style            = NULL;
       gchar                *psname           = NULL;
       gchar                *newname          = NULL;
+      gchar                *display_name     = NULL;
       gchar                *escaped_fullname = NULL;
       gchar                *fullname         = NULL;
-      gchar                *fullname2        = NULL;
       gchar                *escaped_file     = NULL;
       gchar                *file             = NULL;
+      hb_blob_t            *blob             = NULL;
       gint                  index            = -1;
       gint                  weight           = -1;
       gint                  width            = -1;
@@ -780,43 +815,41 @@ gimp_font_factory_load_names (GimpFontFactory *factory,
 
       FcPatternGetString (fontset->fonts[i], FC_FILE, 0, (FcChar8 **) &file);
 
+      if (file == NULL || ! g_utf8_validate (file, -1, NULL))
+        {
+          g_string_append_printf (ignored_fonts, "- %s (not a valid utf-8 file name)\n", file);
+          n_ignored++;
+          continue;
+        }
+
+      blob = hb_blob_create_from_file_or_fail (file);
       /*
-       * woff and woff2 cause problems with pango (probably with harfbuzz).
+       * Pango doesn't support non SFNT fonts because harfbuzz doesn't support them.
+       * woff and woff2, not supported by pango (because they are not yet supported by harfbuzz).
        * pcf,pcf.gz are bitmap font formats, not supported by pango (because of harfbuzz).
        * afm, pfm, pfb are type1 font formats, not supported by pango (because of harfbuzz).
        */
-      if (g_str_has_suffix (file, ".woff")   ||
-          g_str_has_suffix (file, ".woff2")  ||
-          g_str_has_suffix (file, ".pcf")    ||
-          g_str_has_suffix (file, ".pcf.gz") ||
-          g_str_has_suffix (file, ".afm")    ||
-          g_str_has_suffix (file, ".pfm")    ||
-          g_str_has_suffix (file, ".pfb"))
+      if (blob == NULL || hb_face_count (blob) == 0)
         {
           g_string_append_printf (ignored_fonts, "- %s (not supported by pango)\n", file);
           n_ignored++;
           continue;
         }
 
-      /* Pango doesn't support non SFNT fonts because harfbuzz doesn't  support them. */
-      if (FcPatternGetString (fontset->fonts[i], FC_FONTFORMAT, 0, (FcChar8 **) &fontformat) != FcResultMatch ||
-          (g_ascii_strcasecmp (fontformat, "TrueType") != 0 &&
-           g_ascii_strcasecmp (fontformat, "CFF")      != 0))
+      hb_blob_destroy (blob);
+
+      /* Some variable fonts have only a family name and a font version.
+       * But we also check in case there is no family name */
+      if (FcPatternGetString (fontset->fonts[i], FC_FULLNAME, 0, (FcChar8 **) &fullname) != FcResultMatch ||
+          FcPatternGetString (fontset->fonts[i], FC_FAMILY,   0, (FcChar8 **) &family)   != FcResultMatch ||
+          ! g_utf8_validate (fullname, -1, NULL)                                                          ||
+          ! g_utf8_validate (family,   -1, NULL))
         {
-          g_string_append_printf (ignored_fonts, "- %s (non-SFNT font)\n", file);
+          g_string_append_printf (ignored_fonts, "- %s (no or invalid full name and/or family)\n", file);
           n_ignored++;
           continue;
         }
 
-      /* Some variable fonts have only a family name and a font version. */
-      if (FcPatternGetString (fontset->fonts[i], FC_FULLNAME, 0, (FcChar8 **) &fullname) != FcResultMatch)
-        {
-          g_string_append_printf (ignored_fonts, "- %s (no full name)\n", file);
-          n_ignored++;
-          continue;
-        }
-
-      FcPatternGetString  (fontset->fonts[i], FC_FAMILY,          0, (FcChar8 **) &family);
       FcPatternGetString  (fontset->fonts[i], FC_POSTSCRIPT_NAME, 0, (FcChar8 **) &psname);
       FcPatternGetString  (fontset->fonts[i], FC_STYLE,           0, (FcChar8 **) &style);
       FcPatternGetInteger (fontset->fonts[i], FC_WEIGHT,          0,              &weight);
@@ -839,20 +872,16 @@ gimp_font_factory_load_names (GimpFontFactory *factory,
       font_info[PROP_INDEX]       = (gpointer) &index;
       font_info[PROP_SLANT]       = (gpointer) &slant;
       font_info[PROP_FONTVERSION] = (gpointer) &fontversion;
-
-      /* Sometimes a font has more than one fullname,
-       * sometimes the second is more appropriate for display,
-       * in such cases we use it instead of the first.
-       */
-      if (FcPatternGetString (fontset->fonts[i], FC_FULLNAME, 1, (FcChar8 **) &fullname2) != FcResultMatch)
-        fullname2 = NULL;
+      font_info[PROP_FILE]        = (gpointer)  file;
 
       newname = g_strdup_printf ("gimpfont%i", i);
 
       xml = g_string_new ("<match>");
 
       /*We can't use faux bold (sometimes real bold) unless it is specified in fontconfig*/
-      xml_bold_variant = g_string_new ("<?xml version=\"1.0\"?>\n<match>");
+      xml_bold_variant   = g_string_new ("<match>");
+      xml_italic_variant = g_string_new ("<match>");
+      xml_bold_italic_variant = g_string_new ("<match>");
 
       g_string_append_printf (xml,
                               "<test name=\"family\"><string>%s</string></test>",
@@ -860,17 +889,25 @@ gimp_font_factory_load_names (GimpFontFactory *factory,
       g_string_append_printf (xml_bold_variant,
                               "<test name=\"family\"><string>%s</string></test>",
                               newname);
+      g_string_append_printf (xml_italic_variant,
+                              "<test name=\"family\"><string>%s</string></test>",
+                              newname);
+      g_string_append_printf (xml_bold_italic_variant,
+                              "<test name=\"family\"><string>%s</string></test>",
+                              newname);
       g_string_append (xml_bold_variant,
                        "<test name=\"weight\" compare=\"eq\"><const>bold</const></test>");
+      g_string_append (xml_italic_variant,
+                       "<test name=\"slant\" compare=\"eq\"><const>italic</const></test>");
+      g_string_append (xml_bold_italic_variant,
+                       "<test name=\"weight\" compare=\"eq\"><const>bold</const></test>");
+      g_string_append (xml_bold_italic_variant,
+                       "<test name=\"slant\" compare=\"eq\"><const>italic</const></test>");
 
       escaped_fullname = g_markup_escape_text (fullname, -1);
       g_string_append_printf (xml,
                               "<edit name=\"fullname\" mode=\"assign\" binding=\"strong\"><string>%s</string></edit>",
                               escaped_fullname);
-      g_string_append_printf (xml_bold_variant,
-                              "<edit name=\"fullname\" mode=\"prepend\" binding=\"strong\"><string>%s</string></edit>",
-                              escaped_fullname);
-      g_free (escaped_fullname);
 
       family = g_markup_escape_text (family, -1);
       g_string_append_printf (xml,
@@ -879,47 +916,62 @@ gimp_font_factory_load_names (GimpFontFactory *factory,
       g_string_append_printf (xml_bold_variant,
                               "<edit name=\"family\" mode=\"assign\" binding=\"strong\"><string>%s</string></edit>",
                               family);
+      g_string_append_printf (xml_italic_variant,
+                              "<edit name=\"family\" mode=\"assign\" binding=\"strong\"><string>%s</string></edit>",
+                              family);
+      g_string_append_printf (xml_bold_italic_variant,
+                              "<edit name=\"family\" mode=\"assign\" binding=\"strong\"><string>%s</string></edit>",
+                              family);
+
+      g_string_append_printf (xml_bold_variant,
+                              "<edit name=\"family\" mode=\"prepend\" binding=\"strong\"><string>%s</string></edit>",
+                              escaped_fullname);
+      g_string_append_printf (xml_italic_variant,
+                              "<edit name=\"family\" mode=\"prepend\" binding=\"strong\"><string>%s</string></edit>",
+                              escaped_fullname);
+      g_string_append_printf (xml_bold_italic_variant,
+                              "<edit name=\"family\" mode=\"prepend\" binding=\"strong\"><string>%s</string></edit>",
+                              escaped_fullname);
+      g_free (escaped_fullname);
       g_free (family);
 
       escaped_file = g_markup_escape_text (file, -1);
       g_string_append_printf (xml,
                               "<edit name=\"file\" mode=\"assign\" binding=\"strong\"><string>%s</string></edit>",
                               escaped_file);
-      g_string_append_printf (xml_bold_variant,
-                              "<edit name=\"file\" mode=\"assign\" binding=\"strong\"><string>%s</string></edit>",
-                              escaped_file);
       g_free (escaped_file);
 
-      if (psname != NULL)
+      if (psname != NULL && g_utf8_validate (psname, -1, NULL))
         {
           psname = g_markup_escape_text (psname, -1);
           g_string_append_printf (xml,
                                   "<edit name=\"postscriptname\" mode=\"assign\" binding=\"strong\"><string>%s</string></edit>",
                                   psname);
-          g_string_append_printf (xml_bold_variant,
-                                  "<edit name=\"postscriptname\" mode=\"assign\" binding=\"strong\"><string>%s</string></edit>",
-                                  psname);
           g_free (psname);
         }
 
-      if (style != NULL)
+      if (style != NULL && g_utf8_validate (style, -1, NULL))
         {
+          display_name = g_strdup_printf ("%s %s", (gchar *)font_info[PROP_FAMILY], style);
           style = g_markup_escape_text (style, -1);
           g_string_append_printf (xml,
-                                  "<edit name=\"style\" mode=\"assign\" binding=\"strong\"><string>%s</string></edit>",
-                                  style);
-          g_string_append_printf (xml_bold_variant,
                                   "<edit name=\"style\" mode=\"assign\" binding=\"strong\"><string>%s</string></edit>",
                                   style);
           g_free (style);
         }
 
       g_string_append (xml_bold_variant, "<edit name=\"weight\" mode=\"assign\" binding=\"strong\"><const>bold</const></edit>");
+      g_string_append (xml_bold_italic_variant, "<edit name=\"weight\" mode=\"assign\" binding=\"strong\"><const>bold</const></edit>");
 
       if (weight != -1)
-        g_string_append_printf (xml,
-                                "<edit name=\"weight\" mode=\"prepend\" binding=\"strong\"><int>%i</int></edit>",
-                                weight);
+        {
+          g_string_append_printf (xml,
+                                  "<edit name=\"weight\" mode=\"prepend\" binding=\"strong\"><int>%i</int></edit>",
+                                  weight);
+          g_string_append_printf (xml_italic_variant,
+                                  "<edit name=\"weight\" mode=\"prepend\" binding=\"strong\"><int>%i</int></edit>",
+                                  weight);
+        }
 
       if (width != -1)
         {
@@ -929,7 +981,16 @@ gimp_font_factory_load_names (GimpFontFactory *factory,
           g_string_append_printf (xml_bold_variant,
                                   "<edit name=\"width\" mode=\"assign\" binding=\"strong\"><int>%i</int></edit>",
                                   width);
+          g_string_append_printf (xml_italic_variant,
+                                  "<edit name=\"width\" mode=\"assign\" binding=\"strong\"><int>%i</int></edit>",
+                                  width);
+          g_string_append_printf (xml_bold_italic_variant,
+                                  "<edit name=\"width\" mode=\"assign\" binding=\"strong\"><int>%i</int></edit>",
+                                  width);
         }
+
+      g_string_append (xml_italic_variant, "<edit name=\"slant\" mode=\"assign\" binding=\"strong\"><const>italic</const></edit>");
+      g_string_append (xml_bold_italic_variant, "<edit name=\"slant\" mode=\"assign\" binding=\"strong\"><const>italic</const></edit>");
 
       if (slant != -1)
         {
@@ -949,6 +1010,12 @@ gimp_font_factory_load_names (GimpFontFactory *factory,
           g_string_append_printf (xml_bold_variant,
                                   "<edit name=\"fontversion\" mode=\"assign\" binding=\"strong\"><int>%i</int></edit>",
                                   fontversion);
+          g_string_append_printf (xml_italic_variant,
+                                  "<edit name=\"fontversion\" mode=\"assign\" binding=\"strong\"><int>%i</int></edit>",
+                                  fontversion);
+          g_string_append_printf (xml_bold_italic_variant,
+                                  "<edit name=\"fontversion\" mode=\"assign\" binding=\"strong\"><int>%i</int></edit>",
+                                  fontversion);
         }
 
       if (index != -1)
@@ -956,25 +1023,34 @@ gimp_font_factory_load_names (GimpFontFactory *factory,
           g_string_append_printf (xml,
                                   "<edit name=\"index\" mode=\"assign\" binding=\"strong\"><int>%i</int></edit>",
                                   index);
-          g_string_append_printf (xml_bold_variant,
-                                  "<edit name=\"index\" mode=\"assign\" binding=\"strong\"><int>%i</int></edit>",
-                                  index);
         }
 
 
       g_string_append (xml, "</match>\n");
       g_string_append (xml_bold_variant, "</match>\n");
+      g_string_append (xml_italic_variant, "</match>\n");
+      g_string_append (xml_bold_italic_variant, "</match>\n");
 
+      FcConfigParseAndLoadFromMemory (FcConfigGetCurrent (), (const FcChar8 *) xml_bold_italic_variant->str, FcTrue);
+      FcConfigParseAndLoadFromMemory (FcConfigGetCurrent (), (const FcChar8 *) xml_italic_variant->str, FcTrue);
       FcConfigParseAndLoadFromMemory (FcConfigGetCurrent (), (const FcChar8 *) xml_bold_variant->str, FcTrue);
       FcConfigParseAndLoadFromMemory (FcConfigGetCurrent (), (const FcChar8 *) xml->str, FcTrue);
 
       pfd = pango_font_description_from_string (newname);
 
-      if (fullname2 != NULL && g_str_is_ascii (fullname2))
-        fullname = fullname2;
+      if (display_name != NULL)
+        {
+          gimp_font_factory_add_font (container, context, pfd, display_name, (const gchar *) file, font_info);
+          g_free (display_name);
+        }
+      else
+        {
+          gimp_font_factory_add_font (container, context, pfd, fullname, (const gchar *) file, font_info);
+        }
 
-      gimp_font_factory_add_font (container, context, pfd, fullname, (const gchar *) file, font_info);
-
+      g_string_append (global_xml, xml_bold_italic_variant->str);
+      g_string_append (global_xml, xml_italic_variant->str);
+      g_string_append (global_xml, xml_bold_variant->str);
       g_string_append (global_xml, xml->str);
 
       pango_font_description_free (pattern_pfd);
@@ -983,6 +1059,8 @@ gimp_font_factory_load_names (GimpFontFactory *factory,
       g_free (newname);
       g_string_free (xml, TRUE);
       g_string_free (xml_bold_variant, TRUE);
+      g_string_free (xml_italic_variant, TRUE);
+      g_string_free (xml_bold_italic_variant, TRUE);
     }
 
   g_string_append (global_xml, "</fontconfig>");
@@ -992,10 +1070,12 @@ gimp_font_factory_load_names (GimpFontFactory *factory,
 
   if (n_ignored > 0)
     {
-      if (g_getenv ("GIMP_DEBUG_FONTS") == NULL)
-        g_printerr ("%s: %d unsupported fonts were ignored. Set the GIMP_DEBUG_FONTS environment variable for a listing.\n", G_STRFUNC, n_ignored);
+      if (g_getenv ("GIMP_DEBUG_FONTS") != NULL)
+        g_printerr ("%s: %d unsupported fonts were ignored: \n%s", G_STRFUNC, n_ignored, ignored_fonts->str);
+#if defined (GIMP_UNSTABLE) || ! defined (GIMP_RELEASE)
       else
-        g_printerr ("%s: %d unsupported fonts were ignored: %s", G_STRFUNC, n_ignored, ignored_fonts->str);
+        g_printerr ("%s: %d unsupported fonts were ignored. Set the GIMP_DEBUG_FONTS environment variable for a listing.\n", G_STRFUNC, n_ignored);
+#endif
     }
 
   g_string_free (ignored_fonts, TRUE);
@@ -1006,6 +1086,4 @@ gimp_font_factory_load_names (GimpFontFactory *factory,
     gimp_font_factory_load_aliases (container, context);
 
   FcFontSetDestroy (fontset);
-
-  gimp_font_class_set_font_factory (container);
 }

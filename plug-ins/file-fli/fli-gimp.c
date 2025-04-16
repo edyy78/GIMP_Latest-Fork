@@ -56,6 +56,8 @@
 
 #include <glib/gstdio.h>
 
+#include "libgimpcolor/gimpcolor-private.h"
+
 #include <libgimp/gimp.h>
 #include <libgimp/gimpui.h>
 
@@ -65,7 +67,7 @@
 
 
 #define LOAD_PROC      "file-fli-load"
-#define SAVE_PROC      "file-fli-save"
+#define EXPORT_PROC    "file-fli-export"
 #define INFO_PROC      "file-fli-info"
 #define PLUG_IN_BINARY "file-fli"
 #define PLUG_IN_ROLE   "gimp-file-fli"
@@ -101,12 +103,11 @@ static GimpValueArray * fli_load             (GimpProcedure         *procedure,
                                               GimpMetadataLoadFlags *flags,
                                               GimpProcedureConfig   *config,
                                               gpointer               run_data);
-static GimpValueArray * fli_save             (GimpProcedure         *procedure,
+static GimpValueArray * fli_export           (GimpProcedure         *procedure,
                                               GimpRunMode            run_mode,
                                               GimpImage             *image,
-                                              gint                   n_drawables,
-                                              GimpDrawable         **drawables,
                                               GFile                 *file,
+                                              GimpExportOptions     *options,
                                               GimpMetadata          *metadata,
                                               GimpProcedureConfig   *config,
                                               gpointer               run_data);
@@ -121,7 +122,7 @@ static gboolean         load_dialog          (GFile                 *file,
                                               GimpProcedure         *procedure,
                                               GObject               *config);
 
-static gboolean         save_image           (GFile                 *file,
+static gboolean         export_image         (GFile                 *file,
                                               GimpImage             *image,
                                               GObject               *config,
                                               GError               **error);
@@ -163,7 +164,7 @@ fli_query_procedures (GimpPlugIn *plug_in)
   GList *list = NULL;
 
   list = g_list_append (list, g_strdup (LOAD_PROC));
-  list = g_list_append (list, g_strdup (SAVE_PROC));
+  list = g_list_append (list, g_strdup (EXPORT_PROC));
   list = g_list_append (list, g_strdup (INFO_PROC));
 
   return list;
@@ -198,23 +199,23 @@ fli_create_procedure (GimpPlugIn  *plug_in,
       gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
                                           "fli,flc");
 
-      GIMP_PROC_ARG_INT (procedure, "from-frame",
-                         _("_From frame"),
-                         _("Load beginning from this frame"),
-                         -1, G_MAXINT, -1,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "from-frame",
+                                       _("_From frame"),
+                                       _("Load beginning from this frame"),
+                                       -1, G_MAXINT, -1,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "to-frame",
-                         _("_To frame"),
-                         _("End loading with this frame"),
-                         -1, G_MAXINT, -1,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "to-frame",
+                                       _("_To frame"),
+                                       _("End loading with this frame"),
+                                       -1, G_MAXINT, -1,
+                                       G_PARAM_READWRITE);
     }
-  else if (! strcmp (name, SAVE_PROC))
+  else if (! strcmp (name, EXPORT_PROC))
     {
-      procedure = gimp_save_procedure_new (plug_in, name,
-                                           GIMP_PDB_PROC_TYPE_PLUGIN,
-                                           FALSE, fli_save, NULL, NULL);
+      procedure = gimp_export_procedure_new (plug_in, name,
+                                             GIMP_PDB_PROC_TYPE_PLUGIN,
+                                             FALSE, fli_export, NULL, NULL);
 
       gimp_procedure_set_image_types (procedure, "INDEXED, GRAY");
 
@@ -236,18 +237,25 @@ fli_create_procedure (GimpPlugIn  *plug_in,
       gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
                                           "fli,flc");
 
-      GIMP_PROC_ARG_INT (procedure, "from-frame",
-                         _("_From frame"),
-                         _("Export beginning from this frame"),
-                         -1, G_MAXINT, -1,
-                         G_PARAM_READWRITE);
+      gimp_export_procedure_set_capabilities (GIMP_EXPORT_PROCEDURE (procedure),
+                                              GIMP_EXPORT_CAN_HANDLE_INDEXED |
+                                              GIMP_EXPORT_CAN_HANDLE_GRAY    |
+                                              GIMP_EXPORT_CAN_HANDLE_ALPHA   |
+                                              GIMP_EXPORT_CAN_HANDLE_LAYERS,
+                                              NULL, NULL, NULL);
 
-      GIMP_PROC_ARG_INT (procedure, "to-frame",
-                         _("_To frame"),
-                         _("End exporting with this frame "
-                           "(or -1 for all frames)"),
-                         -1, G_MAXINT, -1,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "from-frame",
+                                       _("_From frame"),
+                                       _("Export beginning from this frame"),
+                                       -1, G_MAXINT, -1,
+                                       G_PARAM_READWRITE);
+
+      gimp_procedure_add_int_argument (procedure, "to-frame",
+                                       _("_To frame"),
+                                       _("End exporting with this frame "
+                                         "(or -1 for all frames)"),
+                                       -1, G_MAXINT, -1,
+                                       G_PARAM_READWRITE);
     }
   else if (! strcmp (name, INFO_PROC))
     {
@@ -265,28 +273,29 @@ fli_create_procedure (GimpPlugIn  *plug_in,
                                       "Jens Ch. Restemeier",
                                       "1997");
 
-      GIMP_PROC_ARG_FILE (procedure, "file",
-                          "File",
-                          "The local file to get info about",
-                          G_PARAM_READWRITE);
+      gimp_procedure_add_file_argument (procedure, "file", "File",
+                                        "The local file to get info about",
+                                        GIMP_FILE_CHOOSER_ACTION_OPEN,
+                                        FALSE, NULL,
+                                        G_PARAM_READWRITE);
 
-      GIMP_PROC_VAL_INT (procedure, "width",
-                         "Width",
-                         "Width of one frame",
-                         0, GIMP_MAX_IMAGE_SIZE, 0,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_return_value (procedure, "width",
+                                           "Width",
+                                           "Width of one frame",
+                                           0, GIMP_MAX_IMAGE_SIZE, 0,
+                                           G_PARAM_READWRITE);
 
-      GIMP_PROC_VAL_INT (procedure, "height",
-                         "Height",
-                         "Height of one frame",
-                         0, GIMP_MAX_IMAGE_SIZE, 0,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_return_value (procedure, "height",
+                                           "Height",
+                                           "Height of one frame",
+                                           0, GIMP_MAX_IMAGE_SIZE, 0,
+                                           G_PARAM_READWRITE);
 
-      GIMP_PROC_VAL_INT (procedure, "frames",
-                         "Frames",
-                         "Number of frames",
-                         0, G_MAXINT, 0,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_return_value (procedure, "frames",
+                                           "Frames",
+                                           "Number of frames",
+                                           0, G_MAXINT, 0,
+                                           G_PARAM_READWRITE);
     }
 
   return procedure;
@@ -332,65 +341,46 @@ fli_load (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
-fli_save (GimpProcedure        *procedure,
-          GimpRunMode           run_mode,
-          GimpImage            *image,
-          gint                  n_drawables,
-          GimpDrawable        **drawables,
-          GFile                *file,
-          GimpMetadata         *metadata,
-          GimpProcedureConfig  *config,
-          gpointer              run_data)
+fli_export (GimpProcedure        *procedure,
+            GimpRunMode           run_mode,
+            GimpImage            *image,
+            GFile                *file,
+            GimpExportOptions    *options,
+            GimpMetadata         *metadata,
+            GimpProcedureConfig  *config,
+            gpointer              run_data)
 {
   GimpPDBStatusType  status = GIMP_PDB_SUCCESS;
-  GimpExportReturn   export = GIMP_EXPORT_CANCEL;
+  GimpExportReturn   export = GIMP_EXPORT_IGNORE;
+  GList             *drawables;
   GError            *error  = NULL;
 
   gegl_init (NULL, NULL);
 
-  switch (run_mode)
-    {
-    case GIMP_RUN_INTERACTIVE:
-    case GIMP_RUN_WITH_LAST_VALS:
-      gimp_ui_init (PLUG_IN_BINARY);
-
-      export = gimp_export_image (&image, &n_drawables, &drawables, "FLI",
-                                  GIMP_EXPORT_CAN_HANDLE_INDEXED |
-                                  GIMP_EXPORT_CAN_HANDLE_GRAY    |
-                                  GIMP_EXPORT_CAN_HANDLE_ALPHA   |
-                                  GIMP_EXPORT_CAN_HANDLE_LAYERS);
-
-      if (export == GIMP_EXPORT_CANCEL)
-        return gimp_procedure_new_return_values (procedure,
-                                                 GIMP_PDB_CANCEL,
-                                                 NULL);
-      break;
-
-    default:
-      break;
-    }
-
   if (run_mode == GIMP_RUN_INTERACTIVE)
     {
+      gimp_ui_init (PLUG_IN_BINARY);
+
       if (! save_dialog (image, procedure, G_OBJECT (config)))
         status = GIMP_PDB_CANCEL;
     }
 
+  export = gimp_export_options_get_image (options, &image);
+  drawables = gimp_image_list_layers (image);
+
   if (status == GIMP_PDB_SUCCESS)
     {
-      if (! save_image (file, image, G_OBJECT (config),
-                        &error))
+      if (! export_image (file, image, G_OBJECT (config),
+                          &error))
         {
           status = GIMP_PDB_EXECUTION_ERROR;
         }
     }
 
   if (export == GIMP_EXPORT_EXPORT)
-    {
-      gimp_image_delete (image);
-      g_free (drawables);
-    }
+    gimp_image_delete (image);
 
+  g_list_free (drawables);
   return gimp_procedure_new_return_values (procedure, status, error);
 }
 
@@ -637,7 +627,7 @@ load_image (GFile    *file,
         gimp_progress_update ((double) cnt + 1 / (double)(to_frame - from_frame));
     }
 
-  gimp_image_set_colormap (image, cm, 256);
+  gimp_palette_set_colormap (gimp_image_get_palette (image), babl_format ("R'G'B' u8"), cm, 256 * 3);
 
   fclose (fp);
 
@@ -657,10 +647,10 @@ load_image (GFile    *file,
  * (some code was taken from the GIF plugin.)
  */
 static gboolean
-save_image (GFile      *file,
-            GimpImage  *image,
-            GObject    *config,
-            GError    **error)
+export_image (GFile      *file,
+              GimpImage  *image,
+              GObject    *config,
+              GError    **error)
 {
   FILE         *fp;
   GList        *framelist;
@@ -739,7 +729,7 @@ save_image (GFile      *file,
     case GIMP_INDEXED:
       max = MAXDIFF;
       bg = 0;
-      cmap = gimp_image_get_colormap (image, NULL, &colors);
+      cmap = gimp_palette_get_colormap (gimp_image_get_palette (image), babl_format ("R'G'B' u8"), &colors, NULL);
       for (i = 0; i < MIN (colors, 256); i++)
         {
           cm[i*3+0] = cmap[i*3+0];
@@ -957,20 +947,22 @@ save_dialog (GimpImage     *image,
              GimpProcedure *procedure,
              GObject       *config)
 {
-  GtkWidget *dialog;
-  gint       n_frames;
-  gboolean   run;
+  GtkWidget  *dialog;
+  GimpLayer **layers;
+  gint        n_frames;
+  gboolean    run;
 
-  g_free (gimp_image_get_layers (image, &n_frames));
+  layers   = gimp_image_get_layers (image);
+  n_frames = gimp_core_object_array_get_length ((GObject **) layers);
 
   g_object_set (config,
                 "from-frame", 1,
                 "to-frame",   n_frames,
                 NULL);
 
-  dialog = gimp_save_procedure_dialog_new (GIMP_SAVE_PROCEDURE (procedure),
-                                           GIMP_PROCEDURE_CONFIG (config),
-                                           image);
+  dialog = gimp_export_procedure_dialog_new (GIMP_EXPORT_PROCEDURE (procedure),
+                                             GIMP_PROCEDURE_CONFIG (config),
+                                             image);
   /*
    * Maybe I add on-the-fly RGB conversion, to keep palettechanges...
    * But for now you can set a start- and a end-frame:

@@ -197,33 +197,31 @@ selection_float_invoker (GimpProcedure         *procedure,
 {
   gboolean success = TRUE;
   GimpValueArray *return_vals;
-  gint num_drawables;
-  const GimpItem **drawables;
+  const GimpDrawable **drawables;
   gint offx;
   gint offy;
   GimpLayer *layer = NULL;
 
-  num_drawables = g_value_get_int (gimp_value_array_index (args, 0));
-  drawables = (const GimpItem **) gimp_value_get_object_array (gimp_value_array_index (args, 1));
-  offx = g_value_get_int (gimp_value_array_index (args, 2));
-  offy = g_value_get_int (gimp_value_array_index (args, 3));
+  drawables = g_value_get_boxed (gimp_value_array_index (args, 0));
+  offx = g_value_get_int (gimp_value_array_index (args, 1));
+  offy = g_value_get_int (gimp_value_array_index (args, 2));
 
   if (success)
     {
       GimpImage *image = NULL;
       gint       i;
 
-      if (num_drawables < 1)
+      if (drawables == NULL || drawables[0] == NULL)
         {
           success = FALSE;
         }
       else
         {
-          for (i = 0; i < num_drawables; i++)
+          for (i = 0; drawables[i] != NULL; i++)
             {
               if (! gimp_pdb_item_is_attached (GIMP_ITEM (drawables[i]), NULL,
-                                               GIMP_PDB_ITEM_CONTENT, error) ||
-                  gimp_pdb_item_is_group (GIMP_ITEM (drawables[i]), error)   ||
+                                               GIMP_PDB_ITEM_CONTENT, error)     ||
+                  ! gimp_pdb_item_is_not_group (GIMP_ITEM (drawables[i]), error) ||
                   (image && image != gimp_item_get_image (GIMP_ITEM (drawables[i]))))
                 {
                   success = FALSE;
@@ -240,7 +238,7 @@ selection_float_invoker (GimpProcedure         *procedure,
         {
           GList *drawable_list = NULL;
 
-          for (i = 0; i < num_drawables; i++)
+          for (i = 0; drawables[i] != NULL; i++)
             drawable_list = g_list_prepend (drawable_list, (gpointer) drawables[i]);
 
           layer = gimp_selection_float (GIMP_SELECTION (gimp_image_get_mask (image)),
@@ -524,7 +522,7 @@ register_selection_procs (GimpPDB *pdb)
   /*
    * gimp-selection-bounds
    */
-  procedure = gimp_procedure_new (selection_bounds_invoker);
+  procedure = gimp_procedure_new (selection_bounds_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-selection-bounds");
   gimp_procedure_set_static_help (procedure,
@@ -577,7 +575,7 @@ register_selection_procs (GimpPDB *pdb)
   /*
    * gimp-selection-value
    */
-  procedure = gimp_procedure_new (selection_value_invoker);
+  procedure = gimp_procedure_new (selection_value_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-selection-value");
   gimp_procedure_set_static_help (procedure,
@@ -618,7 +616,7 @@ register_selection_procs (GimpPDB *pdb)
   /*
    * gimp-selection-is-empty
    */
-  procedure = gimp_procedure_new (selection_is_empty_invoker);
+  procedure = gimp_procedure_new (selection_is_empty_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-selection-is-empty");
   gimp_procedure_set_static_help (procedure,
@@ -647,7 +645,7 @@ register_selection_procs (GimpPDB *pdb)
   /*
    * gimp-selection-translate
    */
-  procedure = gimp_procedure_new (selection_translate_invoker);
+  procedure = gimp_procedure_new (selection_translate_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-selection-translate");
   gimp_procedure_set_static_help (procedure,
@@ -682,7 +680,7 @@ register_selection_procs (GimpPDB *pdb)
   /*
    * gimp-selection-float
    */
-  procedure = gimp_procedure_new (selection_float_invoker);
+  procedure = gimp_procedure_new (selection_float_invoker, TRUE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-selection-float");
   gimp_procedure_set_static_help (procedure,
@@ -694,17 +692,11 @@ register_selection_procs (GimpPDB *pdb)
                                          "Spencer Kimball & Peter Mattis",
                                          "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               g_param_spec_int ("num-drawables",
-                                                 "num drawables",
-                                                 "The number of drawables",
-                                                 1, G_MAXINT32, 1,
-                                                 GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_object_array ("drawables",
-                                                             "drawables",
-                                                             "The drawables from which to float selection",
-                                                             GIMP_TYPE_ITEM,
-                                                             GIMP_PARAM_READWRITE | GIMP_PARAM_NO_VALIDATE));
+                               gimp_param_spec_core_object_array ("drawables",
+                                                                  "drawables",
+                                                                  "The drawables from which to float selection",
+                                                                  GIMP_TYPE_DRAWABLE,
+                                                                  GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_int ("offx",
                                                  "offx",
@@ -729,7 +721,7 @@ register_selection_procs (GimpPDB *pdb)
   /*
    * gimp-selection-invert
    */
-  procedure = gimp_procedure_new (selection_invert_invoker);
+  procedure = gimp_procedure_new (selection_invert_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-selection-invert");
   gimp_procedure_set_static_help (procedure,
@@ -752,7 +744,7 @@ register_selection_procs (GimpPDB *pdb)
   /*
    * gimp-selection-sharpen
    */
-  procedure = gimp_procedure_new (selection_sharpen_invoker);
+  procedure = gimp_procedure_new (selection_sharpen_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-selection-sharpen");
   gimp_procedure_set_static_help (procedure,
@@ -775,7 +767,7 @@ register_selection_procs (GimpPDB *pdb)
   /*
    * gimp-selection-all
    */
-  procedure = gimp_procedure_new (selection_all_invoker);
+  procedure = gimp_procedure_new (selection_all_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-selection-all");
   gimp_procedure_set_static_help (procedure,
@@ -798,7 +790,7 @@ register_selection_procs (GimpPDB *pdb)
   /*
    * gimp-selection-none
    */
-  procedure = gimp_procedure_new (selection_none_invoker);
+  procedure = gimp_procedure_new (selection_none_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-selection-none");
   gimp_procedure_set_static_help (procedure,
@@ -821,7 +813,7 @@ register_selection_procs (GimpPDB *pdb)
   /*
    * gimp-selection-feather
    */
-  procedure = gimp_procedure_new (selection_feather_invoker);
+  procedure = gimp_procedure_new (selection_feather_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-selection-feather");
   gimp_procedure_set_static_help (procedure,
@@ -850,7 +842,7 @@ register_selection_procs (GimpPDB *pdb)
   /*
    * gimp-selection-border
    */
-  procedure = gimp_procedure_new (selection_border_invoker);
+  procedure = gimp_procedure_new (selection_border_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-selection-border");
   gimp_procedure_set_static_help (procedure,
@@ -879,7 +871,7 @@ register_selection_procs (GimpPDB *pdb)
   /*
    * gimp-selection-grow
    */
-  procedure = gimp_procedure_new (selection_grow_invoker);
+  procedure = gimp_procedure_new (selection_grow_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-selection-grow");
   gimp_procedure_set_static_help (procedure,
@@ -908,7 +900,7 @@ register_selection_procs (GimpPDB *pdb)
   /*
    * gimp-selection-shrink
    */
-  procedure = gimp_procedure_new (selection_shrink_invoker);
+  procedure = gimp_procedure_new (selection_shrink_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-selection-shrink");
   gimp_procedure_set_static_help (procedure,
@@ -937,7 +929,7 @@ register_selection_procs (GimpPDB *pdb)
   /*
    * gimp-selection-flood
    */
-  procedure = gimp_procedure_new (selection_flood_invoker);
+  procedure = gimp_procedure_new (selection_flood_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-selection-flood");
   gimp_procedure_set_static_help (procedure,
@@ -960,7 +952,7 @@ register_selection_procs (GimpPDB *pdb)
   /*
    * gimp-selection-save
    */
-  procedure = gimp_procedure_new (selection_save_invoker);
+  procedure = gimp_procedure_new (selection_save_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-selection-save");
   gimp_procedure_set_static_help (procedure,

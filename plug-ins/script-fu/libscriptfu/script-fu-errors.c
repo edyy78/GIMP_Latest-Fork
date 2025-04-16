@@ -40,7 +40,7 @@
     "T_STRING",    "T_NUMBER",     "T_SYMBOL",       "T_PROC",
     "T_PAIR",      "T_CLOSURE",    "T_CONTINUATION", "T_FOREIGN",
     "T_CHARACTER", "T_PORT",       "T_VECTOR",       "T_MACRO",
-    "T_PROMISE",   "T_ENVIRONMENT","T_ARRAY"
+    "T_PROMISE",   "T_ENVIRONMENT","T_ARRAY",        "T_ARG_SLOT"
   };
 
 
@@ -149,6 +149,44 @@ script_length_error_in_vector (scheme       *sc,
   return script_error (sc, error_message, 0);
 }
 
+/* Arg of type int is out of range in call to PDB. */
+pointer
+script_int_range_error (scheme       *sc,
+                        const guint   arg_index,
+                        const gchar  *proc_name,
+                        const gint    expected_min,
+                        const gint    expected_max,
+                        const gint    value)
+{
+  gchar error_message[1024];
+
+  g_snprintf (error_message, sizeof (error_message),
+              "argument %d in call to %s has value %d out of range: "
+              "%d to %d",
+              arg_index+1, proc_name,
+              value, expected_min, expected_max);
+  return script_error (sc, error_message, 0);
+}
+
+/* Arg of type double is out of range in call to PDB. */
+pointer
+script_float_range_error (scheme       *sc,
+                          const guint   arg_index,
+                          const gchar  *proc_name,
+                          const double  expected_min,
+                          const double  expected_max,
+                          const double  value)
+{
+  gchar error_message[1024];
+
+  g_snprintf (error_message, sizeof (error_message),
+              "argument %d in call to %s has value %f out of range: "
+              "%f to %f",
+              arg_index+1, proc_name,
+              value, expected_min, expected_max);
+  return script_error (sc, error_message, 0);
+}
+
 
 /* Thin wrapper around foreign_error.
  * Does logging.
@@ -234,10 +272,18 @@ debug_in_arg (scheme           *sc,
               const guint       arg_index,
               const gchar      *type_name )
 {
-  g_debug ("param %d - expecting type %s", arg_index + 1, type_name );
-  g_debug ("actual arg is type %s (%d)",
-           ts_types[ type(sc->vptr->pair_car (a)) ],
-           type(sc->vptr->pair_car (a)));
+  pointer arg_val;
+
+  if (sc->vptr->is_pair (a))
+    arg_val = sc->vptr->pair_car (a);
+  else
+    arg_val = a;
+
+  g_debug ("param:%d, formal C type:%s, actual scheme type:%s (%d)",
+           arg_index + 1,
+           type_name,
+           ts_types[ type (arg_val) ],
+           type (arg_val));
 }
 
 /* Log GValue: its value and its GType

@@ -767,12 +767,12 @@ gimp_context_set_line_width (gdouble line_width)
  *
  * Since: 2.10
  **/
-GimpUnit
+GimpUnit *
 gimp_context_get_line_width_unit (void)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
-  GimpUnit line_width_unit = GIMP_UNIT_PIXEL;
+  GimpUnit *line_width_unit = NULL;
 
   args = gimp_value_array_new_from_types (NULL,
                                           G_TYPE_NONE);
@@ -783,7 +783,7 @@ gimp_context_get_line_width_unit (void)
   gimp_value_array_unref (args);
 
   if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
-    line_width_unit = GIMP_VALUES_GET_INT (return_vals, 1);
+    line_width_unit = GIMP_VALUES_GET_UNIT (return_vals, 1);
 
   gimp_value_array_unref (return_vals);
 
@@ -807,7 +807,7 @@ gimp_context_get_line_width_unit (void)
  * Since: 2.10
  **/
 gboolean
-gimp_context_set_line_width_unit (GimpUnit line_width_unit)
+gimp_context_set_line_width_unit (GimpUnit *line_width_unit)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
@@ -1137,7 +1137,7 @@ gimp_context_set_line_dash_offset (gdouble dash_offset)
  * Since: 2.10
  **/
 gboolean
-gimp_context_get_line_dash_pattern (gint     *num_dashes,
+gimp_context_get_line_dash_pattern (gsize    *num_dashes,
                                     gdouble **dashes)
 {
   GimpValueArray *args;
@@ -1159,8 +1159,7 @@ gimp_context_get_line_dash_pattern (gint     *num_dashes,
 
   if (success)
     {
-      *num_dashes = GIMP_VALUES_GET_INT (return_vals, 1);
-      *dashes = GIMP_VALUES_DUP_FLOAT_ARRAY (return_vals, 2);
+      *dashes = GIMP_VALUES_DUP_DOUBLE_ARRAY (return_vals, 1, num_dashes);
     }
 
   gimp_value_array_unref (return_vals);
@@ -1190,7 +1189,7 @@ gimp_context_get_line_dash_pattern (gint     *num_dashes,
  * Since: 2.10
  **/
 gboolean
-gimp_context_set_line_dash_pattern (gint           num_dashes,
+gimp_context_set_line_dash_pattern (gsize          num_dashes,
                                     const gdouble *dashes)
 {
   GimpValueArray *args;
@@ -1198,10 +1197,9 @@ gimp_context_set_line_dash_pattern (gint           num_dashes,
   gboolean success = TRUE;
 
   args = gimp_value_array_new_from_types (NULL,
-                                          G_TYPE_INT, num_dashes,
-                                          GIMP_TYPE_FLOAT_ARRAY, NULL,
+                                          GIMP_TYPE_DOUBLE_ARRAY, NULL,
                                           G_TYPE_NONE);
-  gimp_value_set_float_array (gimp_value_array_index (args, 1), dashes, num_dashes);
+  gimp_value_set_double_array (gimp_value_array_index (args, 0), dashes, num_dashes);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
                                                "gimp-context-set-line-dash-pattern",
@@ -1806,7 +1804,7 @@ gimp_context_set_brush_force (gdouble force)
 }
 
 /**
- * gimp_context_get_dynamics:
+ * gimp_context_get_dynamics_name:
  *
  * Get the currently active paint dynamics.
  *
@@ -1823,7 +1821,7 @@ gimp_context_set_brush_force (gdouble force)
  * Since: 2.8
  **/
 gchar *
-gimp_context_get_dynamics (void)
+gimp_context_get_dynamics_name (void)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
@@ -1833,7 +1831,7 @@ gimp_context_get_dynamics (void)
                                           G_TYPE_NONE);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
-                                               "gimp-context-get-dynamics",
+                                               "gimp-context-get-dynamics-name",
                                                args);
   gimp_value_array_unref (args);
 
@@ -1846,7 +1844,7 @@ gimp_context_get_dynamics (void)
 }
 
 /**
- * gimp_context_set_dynamics:
+ * gimp_context_set_dynamics_name:
  * @name: A name of a paint dynamics.
  *
  * Set the active paint dynamics.
@@ -1861,7 +1859,7 @@ gimp_context_get_dynamics (void)
  * Since: 2.8
  **/
 gboolean
-gimp_context_set_dynamics (const gchar *name)
+gimp_context_set_dynamics_name (const gchar *name)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
@@ -1872,7 +1870,7 @@ gimp_context_set_dynamics (const gchar *name)
                                           G_TYPE_NONE);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
-                                               "gimp-context-set-dynamics",
+                                               "gimp-context-set-dynamics-name",
                                                args);
   gimp_value_array_unref (args);
 
@@ -1945,6 +1943,78 @@ gimp_context_enable_dynamics (gboolean enable)
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
                                                "gimp-context-enable-dynamics",
+                                               args);
+  gimp_value_array_unref (args);
+
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
+
+  return success;
+}
+
+/**
+ * gimp_context_get_emulate_brush_dynamics:
+ *
+ * Retrieve the currently active stroke option's emulate brush dynamics
+ * setting.
+ *
+ * This procedure returns the emulate brush dynamics property of the
+ * currently active stroke options.
+ *
+ * Returns: The emulate brush dynamics setting.
+ *
+ * Since: 3.0
+ **/
+gboolean
+gimp_context_get_emulate_brush_dynamics (void)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean emulate_dynamics = FALSE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-emulate-brush-dynamics",
+                                               args);
+  gimp_value_array_unref (args);
+
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    emulate_dynamics = GIMP_VALUES_GET_BOOLEAN (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
+
+  return emulate_dynamics;
+}
+
+/**
+ * gimp_context_set_emulate_brush_dynamics:
+ * @emulate_dynamics: The new emulate brush dynamics setting.
+ *
+ * Set the stroke option's emulate brush dynamics setting.
+ *
+ * This procedure sets the specified emulate brush dynamics setting.
+ * The new method will be used in all subsequent stroke operations.
+ *
+ * Returns: TRUE on success.
+ *
+ * Since: 3.0
+ **/
+gboolean
+gimp_context_set_emulate_brush_dynamics (gboolean emulate_dynamics)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean success = TRUE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_BOOLEAN, emulate_dynamics,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-emulate-brush-dynamics",
                                                args);
   gimp_value_array_unref (args);
 

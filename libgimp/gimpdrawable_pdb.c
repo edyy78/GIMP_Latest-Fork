@@ -677,6 +677,146 @@ gimp_drawable_mask_intersect (GimpDrawable *drawable,
 }
 
 /**
+ * _gimp_drawable_append_filter_private:
+ * @drawable: The drawable.
+ * @filter: The drawable filter to append.
+ *
+ * Append the specified effect to the top of the list of drawable
+ * effects.
+ *
+ * This procedure adds the specified drawable effect at the top of the
+ * effect list of @drawable.
+ * The @drawable argument must be the same as the one used when you
+ * created the effect with [ctor@Gimp.DrawableFilter.new].
+ * Some effects may be slower than others to render. In order to
+ * minimize processing time, it is preferred to customize the
+ * operation's arguments as received with
+ * [method@Gimp.DrawableFilter.get_config] then sync them to the
+ * application with [method@Gimp.DrawableFilter.update] before adding
+ * the effect.
+ * This function is private and should not be used. Use
+ * [method@Gimp.Drawable.append_filter] instead.
+ *
+ * Returns: TRUE on success.
+ *
+ * Since: 3.0
+ **/
+gboolean
+_gimp_drawable_append_filter_private (GimpDrawable       *drawable,
+                                      GimpDrawableFilter *filter)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean success = TRUE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_DRAWABLE, drawable,
+                                          GIMP_TYPE_DRAWABLE_FILTER, filter,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-drawable-append-filter-private",
+                                               args);
+  gimp_value_array_unref (args);
+
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
+
+  return success;
+}
+
+/**
+ * _gimp_drawable_merge_filter_private:
+ * @drawable: The drawable.
+ * @filter: The drawable filter to merge.
+ *
+ * Apply the specified effect directly to the drawable.
+ *
+ * This procedure applies the specified drawable effect on @drawable
+ * and merge it (therefore before non-destructive effects are
+ * computed).
+ * The @drawable argument must be the same as the one used when you
+ * created the effect with [ctor@Gimp.DrawableFilter.new].
+ * Once this is run, @filter is not valid anymore and you should not
+ * try to do anything with it. In particular, you must customize the
+ * operation's arguments as received with
+ * [method@Gimp.DrawableFilter.get_config] then sync them to the
+ * application with [method@Gimp.DrawableFilter.update] before merging
+ * the effect.
+ * This function is private and should not be used. Use
+ * [method@Gimp.Drawable.merge_filter] instead.
+ *
+ * Returns: TRUE on success.
+ *
+ * Since: 3.0
+ **/
+gboolean
+_gimp_drawable_merge_filter_private (GimpDrawable       *drawable,
+                                     GimpDrawableFilter *filter)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean success = TRUE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_DRAWABLE, drawable,
+                                          GIMP_TYPE_DRAWABLE_FILTER, filter,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-drawable-merge-filter-private",
+                                               args);
+  gimp_value_array_unref (args);
+
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
+
+  return success;
+}
+
+/**
+ * gimp_drawable_get_filters:
+ * @drawable: The drawable.
+ *
+ * Returns the list of filters applied to the drawable.
+ *
+ * This procedure returns the list of filters which are currently
+ * applied non-destructively to @drawable. The order of filters is from
+ * topmost to bottommost.
+ *
+ * Returns: (element-type GimpDrawableFilter) (array zero-terminated=1) (transfer container):
+ *          The list of filters on the drawable.
+ *          The returned value must be freed with g_free().
+ *
+ * Since: 3.0
+ **/
+GimpDrawableFilter **
+gimp_drawable_get_filters (GimpDrawable *drawable)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpDrawableFilter **filters = NULL;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_DRAWABLE, drawable,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-drawable-get-filters",
+                                               args);
+  gimp_value_array_unref (args);
+
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    filters = g_value_dup_boxed (gimp_value_array_index (return_vals, 1));
+
+  gimp_value_array_unref (return_vals);
+
+  return filters;
+}
+
+/**
  * gimp_drawable_merge_filters:
  * @drawable: The drawable.
  *
@@ -886,6 +1026,7 @@ gimp_drawable_fill (GimpDrawable *drawable,
  * @drawable: The drawable to offset.
  * @wrap_around: wrap image around or fill vacated regions.
  * @fill_type: fill vacated regions of drawable with background or transparent.
+ * @color: fills in the background color when fill_type is set to OFFSET-COLOR.
  * @offset_x: offset by this amount in X direction.
  * @offset_y: offset by this amount in Y direction.
  *
@@ -905,6 +1046,7 @@ gboolean
 gimp_drawable_offset (GimpDrawable   *drawable,
                       gboolean        wrap_around,
                       GimpOffsetType  fill_type,
+                      GeglColor      *color,
                       gint            offset_x,
                       gint            offset_y)
 {
@@ -916,6 +1058,7 @@ gimp_drawable_offset (GimpDrawable   *drawable,
                                           GIMP_TYPE_DRAWABLE, drawable,
                                           G_TYPE_BOOLEAN, wrap_around,
                                           GIMP_TYPE_OFFSET_TYPE, fill_type,
+                                          GEGL_TYPE_COLOR, color,
                                           G_TYPE_INT, offset_x,
                                           G_TYPE_INT, offset_y,
                                           G_TYPE_NONE);

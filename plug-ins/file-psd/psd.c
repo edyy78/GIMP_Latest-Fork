@@ -27,7 +27,7 @@
 
 #include "psd.h"
 #include "psd-load.h"
-#include "psd-save.h"
+#include "psd-export.h"
 #include "psd-thumb-load.h"
 
 #include "libgimp/stdplugins-intl.h"
@@ -68,12 +68,11 @@ static GimpValueArray * psd_load_thumb       (GimpProcedure         *procedure,
                                               gint                   size,
                                               GimpProcedureConfig   *config,
                                               gpointer               run_data);
-static GimpValueArray * psd_save             (GimpProcedure         *procedure,
+static GimpValueArray * psd_export           (GimpProcedure         *procedure,
                                               GimpRunMode            run_mode,
                                               GimpImage             *image,
-                                              gint                   n_drawables,
-                                              GimpDrawable         **drawables,
                                               GFile                 *file,
+                                              GimpExportOptions     *options,
                                               GimpMetadata          *metadata,
                                               GimpProcedureConfig   *config,
                                               gpointer               run_data);
@@ -115,7 +114,7 @@ psd_query_procedures (GimpPlugIn *plug_in)
   list = g_list_append (list, g_strdup (LOAD_THUMB_PROC));
   list = g_list_append (list, g_strdup (LOAD_PROC));
   list = g_list_append (list, g_strdup (LOAD_MERGED_PROC));
-  list = g_list_append (list, g_strdup (SAVE_PROC));
+  list = g_list_append (list, g_strdup (EXPORT_PROC));
   list = g_list_append (list, g_strdup (LOAD_METADATA_PROC));
 
   return list;
@@ -136,10 +135,10 @@ psd_create_procedure (GimpPlugIn  *plug_in,
       gimp_procedure_set_menu_label (procedure, _("Photoshop image"));
 
       gimp_procedure_set_documentation (procedure,
-                                        "Loads images from the Photoshop "
-                                        "PSD and PSB file formats",
-                                        "This plug-in loads images in Adobe "
-                                        "Photoshop (TM) native PSD and PSB format.",
+                                        _("Loads images from the Photoshop "
+                                          "PSD and PSB file formats"),
+                                        _("This plug-in loads images in Adobe "
+                                          "Photoshop (TM) native PSD and PSB format."),
                                         name);
       gimp_procedure_set_attribution (procedure,
                                       "John Marshall",
@@ -165,11 +164,11 @@ psd_create_procedure (GimpPlugIn  *plug_in,
       gimp_procedure_set_menu_label (procedure, _("Photoshop image (merged)"));
 
       gimp_procedure_set_documentation (procedure,
-                                        "Loads images from the Photoshop "
-                                        "PSD and PSB file formats",
-                                        "This plug-in loads the merged image "
-                                        "data in Adobe Photoshop (TM) native "
-                                        "PSD and PSB format.",
+                                        _("Loads images from the Photoshop "
+                                          "PSD and PSB file formats"),
+                                        _("This plug-in loads the merged image "
+                                          "data in Adobe Photoshop (TM) native "
+                                          "PSD and PSB format."),
                                         name);
       gimp_procedure_set_attribution (procedure,
                                       "Ell",
@@ -194,36 +193,38 @@ psd_create_procedure (GimpPlugIn  *plug_in,
                                                 psd_load_thumb, NULL, NULL);
 
       gimp_procedure_set_documentation (procedure,
-                                        "Loads thumbnails from the "
-                                        "Photoshop PSD file format",
-                                        "This plug-in loads thumbnail images "
-                                        "from Adobe Photoshop (TM) native "
-                                        "PSD format files.",
+                                        _("Loads thumbnails from the "
+                                          "Photoshop PSD file format"),
+                                        _("This plug-in loads thumbnail images "
+                                          "from Adobe Photoshop (TM) native "
+                                          "PSD format files."),
                                         name);
       gimp_procedure_set_attribution (procedure,
                                       "John Marshall",
                                       "John Marshall",
                                       "2007");
     }
-  else if (! strcmp (name, SAVE_PROC))
+  else if (! strcmp (name, EXPORT_PROC))
     {
-      procedure = gimp_save_procedure_new (plug_in, name,
-                                           GIMP_PDB_PROC_TYPE_PLUGIN,
-                                           TRUE, psd_save, NULL, NULL);
+      procedure = gimp_export_procedure_new (plug_in, name,
+                                             GIMP_PDB_PROC_TYPE_PLUGIN,
+                                             TRUE, psd_export, NULL, NULL);
 
       gimp_procedure_set_image_types (procedure, "*");
 
       gimp_procedure_set_menu_label (procedure, _("Photoshop image"));
+      gimp_file_procedure_set_format_name (GIMP_FILE_PROCEDURE (procedure),
+                                           _("Photoshop image"));
 
       gimp_procedure_set_documentation (procedure,
-                                        "Saves files in the Photoshop(tm) "
-                                        "PSD file format",
-                                        "This filter saves files of Adobe "
-                                        "Photoshop(tm) native PSD format. "
-                                        "These files may be of any image type "
-                                        "supported by GIMP, with or without "
-                                        "layers, layer masks, aux channels "
-                                        "and guides.",
+                                        _("Saves files in the Photoshop (TM) "
+                                          "PSD file format"),
+                                        _("This plug-in saves files of Adobe "
+                                          "Photoshop (TM) native PSD format. "
+                                          "These files may be of any image type "
+                                          "supported by GIMP, with or without "
+                                          "layers, layer masks, aux channels "
+                                          "and guides."),
                                         name);
       gimp_procedure_set_attribution (procedure,
                                       "Monigotes",
@@ -235,39 +236,54 @@ psd_create_procedure (GimpPlugIn  *plug_in,
       gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
                                           "psd");
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "clippingpath",
-                             _("Assign a Clipping _Path"),
-                             _("Select a path to be the "
-                             "clipping path"),
-                             FALSE,
-                             G_PARAM_READWRITE);
+      gimp_export_procedure_set_capabilities (GIMP_EXPORT_PROCEDURE (procedure),
+                                              GIMP_EXPORT_CAN_HANDLE_RGB     |
+                                              GIMP_EXPORT_CAN_HANDLE_GRAY    |
+                                              GIMP_EXPORT_CAN_HANDLE_INDEXED |
+                                              GIMP_EXPORT_CAN_HANDLE_ALPHA   |
+                                              GIMP_EXPORT_CAN_HANDLE_LAYERS  |
+                                              GIMP_EXPORT_CAN_HANDLE_LAYER_MASKS,
+                                              NULL, NULL, NULL);
 
-      GIMP_PROC_ARG_STRING (procedure, "clippingpathname",
-                            _("Clipping Path _Name"),
-                            _("Clipping path name\n"
-                            "(ignored if no clipping path)"),
-                            NULL,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "clippingpath",
+                                           _("Assign a Clipping _Path"),
+                                           _("Select a path to be the "
+                                           "clipping path"),
+                                           FALSE,
+                                           G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "clippingpathflatness",
-                            _("Path _Flatness"),
-                            _("Clipping path flatness in device pixels\n"
-                            "(ignored if no clipping path)"),
-                            0.0, 100.0, 0.2,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_string_argument (procedure, "clippingpathname",
+                                          _("Clipping Path _Name"),
+                                          _("Clipping path name\n"
+                                            "(ignored if no clipping path)"),
+                                          NULL,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "cmyk",
-                             _("Export as _CMYK"),
-                             _("Export a CMYK PSD image using the soft-proofing color profile"),
-                             FALSE,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "clippingpathflatness",
+                                          _("Path _Flatness"),
+                                          _("Clipping path flatness in device pixels\n"
+                                            "(ignored if no clipping path)"),
+                                          0.0, 100.0, 0.2,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "duotone",
-                             _("Export as _Duotone"),
-                             _("Export as a Duotone PSD file if Duotone color space information "
-                             "was attached to the image when originally imported."),
-                             FALSE,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "cmyk",
+                                           _("Export as _CMYK"),
+                                           _("Export a CMYK PSD image using the soft-proofing color profile"),
+                                           FALSE,
+                                           G_PARAM_READWRITE);
+
+      gimp_procedure_add_boolean_argument (procedure, "duotone",
+                                           _("Export as _Duotone"),
+                                           _("Export as a Duotone PSD file if Duotone color space information "
+                                           "was attached to the image when originally imported."),
+                                           FALSE,
+                                           G_PARAM_READWRITE);
+
+      gimp_export_procedure_set_support_exif      (GIMP_EXPORT_PROCEDURE (procedure), TRUE);
+      gimp_export_procedure_set_support_iptc      (GIMP_EXPORT_PROCEDURE (procedure), TRUE);
+      gimp_export_procedure_set_support_xmp       (GIMP_EXPORT_PROCEDURE (procedure), TRUE);
+      gimp_export_procedure_set_support_profile   (GIMP_EXPORT_PROCEDURE (procedure), TRUE);
+      gimp_export_procedure_set_support_thumbnail (GIMP_EXPORT_PROCEDURE (procedure), TRUE);
     }
   else if (! strcmp (name, LOAD_METADATA_PROC))
     {
@@ -285,29 +301,27 @@ psd_create_procedure (GimpPlugIn  *plug_in,
                                       "John Marshall",
                                       "John Marshall",
                                       "2007");
-      GIMP_PROC_ARG_INT (procedure, "size",
-                         "Metadata size",
-                         NULL,
-                         0, G_MAXINT, 0,
-                         G_PARAM_READWRITE);
-      gimp_procedure_add_argument (procedure,
-                                   gimp_param_spec_image ("image",
-                                                          "image",
-                                                          "The image",
-                                                          FALSE,
-                                                          GIMP_PARAM_READWRITE));
-      GIMP_PROC_ARG_BOOLEAN (procedure, "metadata-type",
-                             "Metadata type",
-                             "If the metadata contains image or "
-                             "layer PSD resources.",
-                             FALSE,
-                             G_PARAM_READWRITE);
-      GIMP_PROC_ARG_BOOLEAN (procedure, "cmyk",
-                             "CMYK",
-                             "If the layer metadata needs to be "
-                             "converted from CMYK colorspace.",
-                             FALSE,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "size",
+                                       "Metadata size",
+                                       NULL,
+                                       0, G_MAXINT, 0,
+                                       G_PARAM_READWRITE);
+      gimp_procedure_add_image_argument (procedure, "image",
+                                         "image", "The image",
+                                         FALSE,
+                                         GIMP_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "metadata-type",
+                                           "Metadata type",
+                                           "If the metadata contains image or "
+                                           "layer PSD resources.",
+                                           FALSE,
+                                           G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "cmyk",
+                                           "CMYK",
+                                           "If the layer metadata needs to be "
+                                           "converted from CMYK colorspace.",
+                                           FALSE,
+                                           G_PARAM_READWRITE);
     }
 
   return procedure;
@@ -421,53 +435,35 @@ psd_load_thumb (GimpProcedure       *procedure,
 }
 
 static GimpValueArray *
-psd_save (GimpProcedure        *procedure,
-          GimpRunMode           run_mode,
-          GimpImage            *image,
-          gint                  n_drawables,
-          GimpDrawable        **drawables,
-          GFile                *file,
-          GimpMetadata         *metadata,
-          GimpProcedureConfig  *config,
-          gpointer              run_data)
+psd_export (GimpProcedure        *procedure,
+            GimpRunMode           run_mode,
+            GimpImage            *image,
+            GFile                *file,
+            GimpExportOptions    *options,
+            GimpMetadata         *metadata,
+            GimpProcedureConfig  *config,
+            gpointer              run_data)
 {
   GimpPDBStatusType  status = GIMP_PDB_SUCCESS;
   GimpExportReturn   export = GIMP_EXPORT_IGNORE;
-  GError            *error = NULL;
+  GList             *drawables;
+  GError            *error  = NULL;
 
   gegl_init (NULL, NULL);
 
-  switch (run_mode)
-    {
-    case GIMP_RUN_INTERACTIVE:
-    case GIMP_RUN_WITH_LAST_VALS:
-      gimp_ui_init (PLUG_IN_BINARY);
-
-      export = gimp_export_image (&image, &n_drawables, &drawables, "PSD",
-                                  GIMP_EXPORT_CAN_HANDLE_RGB     |
-                                  GIMP_EXPORT_CAN_HANDLE_GRAY    |
-                                  GIMP_EXPORT_CAN_HANDLE_INDEXED |
-                                  GIMP_EXPORT_CAN_HANDLE_ALPHA   |
-                                  GIMP_EXPORT_CAN_HANDLE_LAYERS  |
-                                  GIMP_EXPORT_CAN_HANDLE_LAYER_MASKS);
-
-      if (export == GIMP_EXPORT_CANCEL)
-        return gimp_procedure_new_return_values (procedure, GIMP_PDB_CANCEL,
-                                                 NULL);
-      break;
-
-    default:
-      break;
-    }
-
   if (run_mode == GIMP_RUN_INTERACTIVE)
     {
+      gimp_ui_init (PLUG_IN_BINARY);
+
       if (! save_dialog (image, procedure, G_OBJECT (config)))
         return gimp_procedure_new_return_values (procedure, GIMP_PDB_CANCEL,
                                                  NULL);
     }
 
-  if (save_image (file, image, G_OBJECT (config), &error))
+  export    = gimp_export_options_get_image (options, &image);
+  drawables = gimp_image_list_layers (image);
+
+  if (export_image (file, image, G_OBJECT (config), &error))
     {
       if (metadata)
         gimp_metadata_set_bits_per_sample (metadata, 8);
@@ -478,11 +474,9 @@ psd_save (GimpProcedure        *procedure,
     }
 
   if (export == GIMP_EXPORT_EXPORT)
-    {
-      gimp_image_delete (image);
-      g_free (drawables);
-    }
+    gimp_image_delete (image);
 
+  g_list_free (drawables);
   return gimp_procedure_new_return_values (procedure, status, error);
 }
 
@@ -540,7 +534,7 @@ psd_load_metadata (GimpProcedure         *procedure,
         default:
           g_printerr ("[%s] %s\n", "file-psd-load-metadata",
                       _("Metadata fill layers are not supported "
-                        "and will be dropped."));
+                        "and will show up as empty layers."));
           break;
         }
 
@@ -556,6 +550,8 @@ psd_load_metadata (GimpProcedure         *procedure,
                                                   NULL);
 
   GIMP_VALUES_SET_IMAGE (return_vals, 1, image);
+
+  g_object_unref (image);
 
   return return_vals;
 }

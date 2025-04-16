@@ -43,13 +43,19 @@
 
 
 /* Interpret a command.
+ * A command is a string for a Scheme call to a script plugin's run function.
  *
  * When errors during interpretation:
  * 1) set the error message from tinyscheme into GError at given handle.
  * 2) return FALSE
- * otherwise, return TRUE and discard any result of interpretation
+ * Otherwise, return TRUE and discard any result of interpretation.
  * ScriptFu return values only have a GimpPDBStatus,
  * since ScriptFu plugin scripts can only be declared returning void.
+ *
+ * In v2, we captured output from a script (calls to Scheme:display)
+ * and they were a prefix of any error message.
+ * In v3, output from a script is shown in any stdout/terminal in which Gimp was started.
+ * And any error msg is retrieved from the inner interpreter.
  *
  * While interpreting, any errors from further calls to the PDB
  * can show error dialogs in any GIMP gui,
@@ -63,50 +69,32 @@ gboolean
 script_fu_run_command (const gchar  *command,
                        GError      **error)
 {
-  GString  *output;
-  gboolean  success = FALSE;
-
   g_debug ("script_fu_run_command: %s", command);
-  output = g_string_new (NULL);
-  script_fu_redirect_output_to_gstr (output);
 
   if (script_fu_interpret_string (command))
     {
-      g_set_error (error, GIMP_PLUG_IN_ERROR, 0, "%s", output->str);
+      *error = script_fu_get_gerror ();
+      return FALSE;
     }
   else
     {
-      success = TRUE;
+      return TRUE;
     }
-
-  g_string_free (output, TRUE);
-
-  return success;
 }
 
-
-
-/* Interpret a script that defines a GimpImageProcedure.
- *
- * Similar to v2 code in script-fu-interface.c, except:
- * 1) builds a command from a GValueArray from a GimpConfig,
- *    instead of from local array of SFArg.
- * 2) adds actual args image, drawable, etc. for GimpImageProcedure
+/* Wrap a run_command in error handler.
+ * Returns the result of running the command.
+ * The result is a PDB call result whose only value is the success.
+ * Since no SF command returns more values i.e. scripts return type void.
  */
-GimpValueArray *
-script_fu_interpret_image_proc (GimpProcedure        *procedure,
-                                SFScript             *script,
-                                GimpImage            *image,
-                                guint                 n_drawables,
-                                GimpDrawable        **drawables,
-                                GimpProcedureConfig  *config)
+static GimpValueArray *
+sf_wrap_run_command (GimpProcedure *procedure,
+                     SFScript      *script,
+                     gchar         *command)
 {
-  gchar          *command;
   GimpValueArray *result = NULL;
   gboolean        interpretation_result;
   GError         *error = NULL;
-
-  command = script_fu_script_get_command_for_image_proc (script, image, n_drawables, drawables, config);
 
   /* Take responsibility for handling errors from the scripts further calls to PDB.
    * ScriptFu does not show an error dialog, but forwards errors back to GIMP.
@@ -119,7 +107,7 @@ script_fu_interpret_image_proc (GimpProcedure        *procedure,
                                       GIMP_PDB_ERROR_HANDLER_PLUGIN);
 
   interpretation_result = script_fu_run_command (command, &error);
-  g_free (command);
+
   if (! interpretation_result)
     {
       /* This is to the console.
@@ -145,5 +133,43 @@ script_fu_interpret_image_proc (GimpProcedure        *procedure,
   gimp_plug_in_set_pdb_error_handler (gimp_get_plug_in (),
                                       GIMP_PDB_ERROR_HANDLER_INTERNAL);
 
+  return result;
+}
+
+/* Interpret a script that defines a GimpImageProcedure.
+ *
+ * Similar to v2 code in script-fu-interface.c, except:
+ * 1) builds a command from a GValueArray from a GimpConfig,
+ *    instead of from local array of SFArg.
+ * 2) adds actual args image, drawable, etc. for GimpImageProcedure
+ */
+GimpValueArray *
+script_fu_interpret_image_proc (GimpProcedure        *procedure,
+                                SFScript             *script,
+                                GimpImage            *image,
+                                GimpDrawable        **drawables,
+                                GimpProcedureConfig  *config)
+{
+  gchar          *command;
+  GimpValueArray *result = NULL;
+
+  command = script_fu_script_get_command_for_image_proc (script, image, drawables, config);
+  result = sf_wrap_run_command (procedure, script, command);
+  g_free (command);
+  return result;
+}
+
+/* Interpret a script that defines a GimpProcedure. */
+GimpValueArray *
+script_fu_interpret_regular_proc (GimpProcedure        *procedure,
+                                  SFScript             *script,
+                                  GimpProcedureConfig  *config)
+{
+  gchar          *command;
+  GimpValueArray *result = NULL;
+
+  command = script_fu_script_get_command_for_regular_proc (script, config);
+  result = sf_wrap_run_command (procedure, script, command);
+  g_free (command);
   return result;
 }

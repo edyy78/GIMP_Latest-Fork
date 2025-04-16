@@ -67,6 +67,11 @@ static GParamSpec * check_param_spec_w                  (GObject     *object,
                                                          const gchar *property_name,
                                                          GType        type,
                                                          const gchar *strloc);
+static GParamSpec * check_param_specs_w                 (GObject     *object,
+                                                         const gchar *property_name,
+                                                         GType        type1,
+                                                         GType        type2,
+                                                         const gchar *strloc);
 
 static gboolean     get_numeric_values                  (GObject     *object,
                                                          GParamSpec  *param_spec,
@@ -117,6 +122,7 @@ gimp_prop_check_button_new (GObject     *config,
   GParamSpec  *param_spec;
   GtkWidget   *button;
   const gchar *blurb;
+  GtkWidget   *label_widget;
 
   g_return_val_if_fail (G_IS_OBJECT (config), NULL);
   g_return_val_if_fail (property_name != NULL, NULL);
@@ -130,7 +136,26 @@ gimp_prop_check_button_new (GObject     *config,
     label = g_param_spec_get_nick (param_spec);
 
   button = gtk_check_button_new_with_mnemonic (label);
-  gtk_widget_show (button);
+  gtk_widget_set_visible (button, TRUE);
+
+  /* Resize the label to its bold size to avoid a GUI twitch */
+  label_widget = gtk_bin_get_child (GTK_BIN (button));
+  if (label_widget)
+    {
+      GtkWidget      *temp_label = gtk_label_new (label);
+      GtkRequisition  natural_size;
+
+      gtk_widget_set_visible (temp_label, TRUE);
+
+      gimp_label_set_attributes (GTK_LABEL (temp_label),
+                                 PANGO_ATTR_WEIGHT, PANGO_WEIGHT_BOLD,
+                                 -1);
+
+      gtk_widget_get_preferred_size (temp_label, NULL, &natural_size);
+      gtk_widget_destroy (temp_label);
+
+      gtk_widget_set_size_request (label_widget, natural_size.width, -1);
+    }
 
   blurb = g_param_spec_get_blurb (param_spec);
   if (blurb)
@@ -419,35 +444,10 @@ gimp_prop_int_combo_box_new (GObject      *config,
   g_return_val_if_fail (property_name != NULL, NULL);
 
   /* Require property is integer valued type: INT or ENUM, and is writeable. */
-  param_spec = check_param_spec_quiet (config, property_name,
-                                       G_TYPE_PARAM_INT, G_STRFUNC);
-  if (param_spec)
-    {
-      param_spec = check_param_spec_w (config, property_name,
-                                     G_TYPE_PARAM_INT, G_STRFUNC);
-      if (! param_spec)
-        return NULL;
-    }
-  else
-    {
-      param_spec = check_param_spec_quiet (config, property_name,
-                                          G_TYPE_PARAM_ENUM, G_STRFUNC);
-      if (param_spec)
-        {
-          param_spec = check_param_spec_w (config, property_name,
-                                           G_TYPE_PARAM_ENUM, G_STRFUNC);
-          if (! param_spec)
-            return NULL;
-        }
-      else
-        {
-          g_warning ("%s: property '%s' of %s is not integer valued.",
-                     G_STRFUNC,
-                     param_spec->name,
-                     g_type_name (param_spec->owner_type));
-          return NULL;
-        }
-    }
+  param_spec = check_param_specs_w (config, property_name, G_TYPE_PARAM_INT,
+                                    G_TYPE_PARAM_ENUM, G_STRFUNC);
+  if (! param_spec)
+    return NULL;
 
   combo_box = g_object_new (GIMP_TYPE_INT_COMBO_BOX,
                             "model", store,
@@ -2617,19 +2617,17 @@ gimp_prop_string_combo_box_new (GObject      *config,
  * specified property.
  *
  * Returns: (transfer full): The newly created #GimpStringComboBox widget.
- *
- * Since: 2.4
  */
 GtkWidget *
 gimp_prop_choice_combo_box_new (GObject     *config,
                                 const gchar *property_name)
 {
-  GParamSpec          *param_spec;
-  GimpParamSpecChoice *cspec;
-  GtkWidget           *combo_box;
-  GtkListStore        *store;
-  GList               *values;
-  GList               *iter;
+  GParamSpec   *param_spec;
+  GimpChoice   *choice;
+  GtkWidget    *combo_box;
+  GtkListStore *store;
+  GList        *values;
+  GList        *iter;
 
   g_return_val_if_fail (G_IS_OBJECT (config), NULL);
   g_return_val_if_fail (property_name != NULL, NULL);
@@ -2639,14 +2637,14 @@ gimp_prop_choice_combo_box_new (GObject     *config,
   if (! param_spec)
     return NULL;
 
-  cspec  = GIMP_PARAM_SPEC_CHOICE (param_spec);
-  values = gimp_choice_list_nicks (cspec->choice);
+  choice = gimp_param_spec_choice_get_choice (param_spec);
+  values = gimp_choice_list_nicks (choice);
   store  = gtk_list_store_new (2, G_TYPE_STRING, G_TYPE_STRING);
 
   for (iter = values; iter; iter = iter->next)
     {
       const gchar *nick  = iter->data;
-      const gchar *label = gimp_choice_get_label (cspec->choice, nick);
+      const gchar *label = gimp_choice_get_label (choice, nick);
 
       gtk_list_store_insert_with_values (store, NULL, -1,
                                          0, nick,
@@ -2660,8 +2658,8 @@ gimp_prop_choice_combo_box_new (GObject     *config,
 
   gimp_string_combo_box_set_sensitivity (GIMP_STRING_COMBO_BOX (combo_box),
                                          (GimpStringSensitivityFunc) gimp_prop_choice_combo_box_is_sensitive,
-                                         cspec->choice, NULL);
-  g_signal_connect_swapped (cspec->choice, "sensitivity-changed",
+                                         choice, NULL);
+  g_signal_connect_swapped (choice, "sensitivity-changed",
                             G_CALLBACK (gtk_widget_queue_draw),
                             combo_box);
 
@@ -2732,6 +2730,156 @@ gimp_prop_choice_combo_box_is_sensitive (const gchar *nick,
 
 
 /*************************/
+/*  choice radio frame   */
+/*************************/
+
+static gboolean
+gimp_prop_widget_choice_is_sensitive  (gint          value,
+                                       gpointer      user_data,
+                                       gint         *new_value,
+                                       gpointer      data);
+static gboolean
+gimp_prop_widget_choice_string_to_int (GBinding     *binding,
+                                       const GValue *from_value,
+                                       GValue       *to_value,
+                                       gpointer      user_data);
+static gboolean
+gimp_prop_widget_choice_int_to_string (GBinding     *binding,
+                                       const GValue *from_value,
+                                       GValue       *to_value,
+                                       gpointer      user_data);
+
+
+/**
+ * gimp_prop_choice_radio_frame_new:
+ * @config:        Object to which property is attached.
+ * @property_name: Name of %GimpChoice property controlled by radio buttons.
+ *
+ * Creates a [class@GimpUi.IntRadioFrame] widget to display and set the
+ * specified [class@Gimp.Choice] property.
+ *
+ * Returns: (transfer full): The newly created #GimpIntRadioFrame widget.
+ */
+GtkWidget *
+gimp_prop_choice_radio_frame_new (GObject     *config,
+                                  const gchar *property_name)
+{
+  GParamSpec   *param_spec;
+  GimpChoice   *choice;
+  GtkWidget    *frame;
+  GimpIntStore *store;
+  GList        *values;
+  GList        *iter;
+
+  g_return_val_if_fail (G_IS_OBJECT (config), NULL);
+  g_return_val_if_fail (property_name != NULL, NULL);
+
+  param_spec = check_param_spec_w (config, property_name,
+                                   GIMP_TYPE_PARAM_CHOICE, G_STRFUNC);
+  if (! param_spec)
+    return NULL;
+
+  choice = gimp_param_spec_choice_get_choice (param_spec);
+  values = gimp_choice_list_nicks (choice);
+  store = g_object_new (GIMP_TYPE_INT_STORE, NULL);
+
+  for (iter = values; iter; iter = iter->next)
+    {
+      const gchar *nick  = iter->data;
+      const gchar *label = gimp_choice_get_label (choice, nick);
+      gint         id    = gimp_choice_get_id (choice, nick);
+
+      gtk_list_store_insert_with_values (GTK_LIST_STORE (store), NULL, -1,
+                                         GIMP_INT_STORE_VALUE, id,
+                                         GIMP_INT_STORE_LABEL, label,
+                                         -1);
+
+    }
+
+  frame = gimp_int_radio_frame_new_from_store (NULL, store);
+  gimp_int_radio_frame_set_title (GIMP_INT_RADIO_FRAME (frame), g_param_spec_get_nick (param_spec), TRUE);
+  gimp_help_set_help_data (frame, g_param_spec_get_blurb (param_spec), NULL);
+  g_object_unref (store);
+
+  gimp_int_radio_frame_set_sensitivity (GIMP_INT_RADIO_FRAME (frame),
+                                        (GimpIntRadioFrameSensitivityFunc) gimp_prop_widget_choice_is_sensitive,
+                                        choice, NULL);
+
+  g_object_bind_property_full (config,  property_name,
+                               frame,   "value",
+                               G_BINDING_BIDIRECTIONAL | G_BINDING_SYNC_CREATE,
+                               gimp_prop_widget_choice_string_to_int,
+                               gimp_prop_widget_choice_int_to_string,
+                               choice, NULL);
+
+  gimp_widget_set_bound_property (frame, config, property_name);
+
+  gtk_widget_show (frame);
+
+  return frame;
+}
+
+static gboolean
+gimp_prop_widget_choice_is_sensitive (gint      value,
+                                      gpointer  user_data,
+                                      gint     *new_value,
+                                      gpointer  data)
+{
+  GimpChoice *choice = GIMP_CHOICE (data);
+  GList      *values;
+  GList      *iter;
+
+  values = gimp_choice_list_nicks (choice);
+
+  for (iter = values; iter; iter = iter->next)
+    {
+      if (gimp_choice_get_id (choice, iter->data) == value)
+        return gimp_choice_is_valid (choice, iter->data);
+    }
+
+  return FALSE;
+}
+
+static gboolean
+gimp_prop_widget_choice_string_to_int (GBinding     *binding,
+                                       const GValue *from_value,
+                                       GValue       *to_value,
+                                       gpointer      user_data)
+{
+  GimpChoice  *choice = GIMP_CHOICE (user_data);
+  const gchar *val = g_value_get_string (from_value);
+
+  g_value_set_int (to_value, gimp_choice_get_id (choice, val));
+
+  return TRUE;
+}
+
+static gboolean
+gimp_prop_widget_choice_int_to_string (GBinding     *binding,
+                                       const GValue *from_value,
+                                       GValue       *to_value,
+                                       gpointer      user_data)
+{
+  GimpChoice *choice = GIMP_CHOICE (user_data);
+  gint        val    = g_value_get_int (from_value);
+  GList      *values;
+  GList      *iter;
+
+  values = gimp_choice_list_nicks (choice);
+
+  for (iter = values; iter; iter = iter->next)
+    {
+      if (gimp_choice_get_id (choice, iter->data) == val)
+        {
+          g_value_set_string (to_value, iter->data);
+          break;
+        }
+    }
+
+  return (iter != NULL);
+}
+
+/*************************/
 /*  file chooser button  */
 /*************************/
 
@@ -2744,6 +2892,84 @@ static void        gimp_prop_file_chooser_button_notify   (GObject        *confi
                                                            GParamSpec     *param_spec,
                                                            GtkFileChooser *button);
 
+
+/**
+ * gimp_prop_file_chooser_new:
+ * @config:            Object to which property is attached.
+ * @property_name:     Name of a %GimpParamSpecFile property.
+ * @label: (nullable): Label of the widget.
+ * @title: (nullable): Title of the file dialog.
+ *
+ * Creates a [class@GimpUi.FileChooser] to edit the specified file
+ * property. @property_name must be a %GimpParamSpecFile with an action
+ * other than [enum@Gimp.FileChooserAction.ANY].
+ *
+ * If @label is %NULL, @property_name's `nick` text will be used
+ * instead.
+ *
+ * Returns: (transfer full): A new #GtkFileChooserButton.
+ *
+ * Since: 3.0
+ */
+GtkWidget *
+gimp_prop_file_chooser_new (GObject     *config,
+                            const gchar *property_name,
+                            const gchar *label,
+                            const gchar *title)
+{
+  GimpFileChooserAction  action;
+  GParamSpec            *pspec;
+  GtkWidget             *widget;
+  GFile                 *file = NULL;
+  const gchar           *tooltip;
+
+  g_return_val_if_fail (G_IS_OBJECT (config), NULL);
+  g_return_val_if_fail (property_name != NULL, NULL);
+
+  pspec = find_param_spec (config, property_name, G_STRFUNC);
+  if (! pspec)
+    {
+      g_warning ("%s: %s has no property named '%s'",
+                 G_STRFUNC, g_type_name (G_TYPE_FROM_INSTANCE (config)),
+                 property_name);
+      return NULL;
+    }
+
+  if (! GIMP_IS_PARAM_SPEC_FILE (pspec))
+    {
+      g_warning ("%s: property '%s' of %s is not a GIMP_PARAM_SPEC_FILE.",
+                 G_STRFUNC, pspec->name, g_type_name (pspec->owner_type));
+      return NULL;
+    }
+
+  action = gimp_param_spec_file_get_action (pspec);
+  if (action == GIMP_FILE_CHOOSER_ACTION_ANY)
+    {
+      g_warning ("%s: property '%s' of %s must not use action GIMP_FILE_CHOOSER_ACTION_ANY.",
+                 G_STRFUNC, pspec->name, g_type_name (pspec->owner_type));
+      return NULL;
+    }
+
+  if (! label)
+    label = g_param_spec_get_nick (pspec);
+
+  g_object_get (config,
+                property_name, &file,
+                NULL);
+
+  widget = gimp_file_chooser_new (action, label, title, file);
+
+  tooltip = g_param_spec_get_blurb (pspec);
+  gimp_help_set_help_data (widget, tooltip, NULL);
+
+  g_object_bind_property (config, property_name,
+                          widget, "file",
+                          G_BINDING_BIDIRECTIONAL);
+
+  g_clear_object (&file);
+
+  return widget;
+}
 
 /**
  * gimp_prop_file_chooser_button_new:
@@ -2894,7 +3120,7 @@ gimp_prop_file_chooser_button_setup (GtkWidget  *button,
                   G_CALLBACK (gimp_prop_file_chooser_button_notify),
                   button);
 
-  gtk_widget_show (button);
+  gtk_widget_set_visible (button, TRUE);
 
   return button;
 }
@@ -2920,7 +3146,6 @@ gimp_prop_file_chooser_button_callback (GtkFileChooser *button,
       if (file)
         {
           value = gimp_file_get_config_path (file, NULL);
-          g_object_unref (file);
         }
 
       g_object_get (config, param_spec->name, &v, NULL);
@@ -2969,17 +3194,27 @@ gimp_prop_file_chooser_button_notify (GObject        *config,
                                       GParamSpec     *param_spec,
                                       GtkFileChooser *button)
 {
-  gchar *value;
   GFile *file = NULL;
 
-  g_object_get (config,
-                param_spec->name, &value,
-                NULL);
-
-  if (value)
+  if (GIMP_IS_PARAM_SPEC_CONFIG_PATH (param_spec))
     {
-      file = gimp_file_new_for_config_path (value, NULL);
-      g_free (value);
+      gchar *value = NULL;
+
+      g_object_get (config,
+                    param_spec->name, &value,
+                    NULL);
+
+      if (value)
+        {
+          file = gimp_file_new_for_config_path (value, NULL);
+          g_free (value);
+        }
+    }
+  else
+    {
+      g_object_get (config,
+                    param_spec->name, &file,
+                    NULL);
     }
 
   g_signal_handlers_block_by_func (button,
@@ -3314,8 +3549,8 @@ gimp_prop_size_entry_new (GObject                   *config,
   gdouble     value;
   gdouble     lower;
   gdouble     upper;
-  GimpUnit    unit_value;
-  gint        scaled_resolution;
+  GimpUnit   *unit_value;
+  gint        entry_width;
 
   param_spec = find_param_spec (config, property_name, G_STRFUNC);
   if (! param_spec)
@@ -3336,11 +3571,11 @@ gimp_prop_size_entry_new (GObject                   *config,
 
       g_value_init (&value, unit_param_spec->value_type);
 
-      g_value_set_int (&value, GIMP_UNIT_PIXEL);
+      g_value_set_object (&value, gimp_unit_pixel ());
       show_pixels = (g_param_value_validate (unit_param_spec,
                                              &value) == FALSE);
 
-      g_value_set_int (&value, GIMP_UNIT_PERCENT);
+      g_value_set_object (&value, gimp_unit_percent ());
       show_percent = (g_param_value_validate (unit_param_spec,
                                               &value) == FALSE);
 
@@ -3353,20 +3588,18 @@ gimp_prop_size_entry_new (GObject                   *config,
   else
     {
       unit_param_spec = NULL;
-      unit_value      = GIMP_UNIT_INCH;
+      unit_value      = gimp_unit_inch ();
       show_pixels     = FALSE;
       show_percent    = FALSE;
     }
 
-  if (unit_value != GIMP_UNIT_PIXEL)
-    scaled_resolution = gimp_unit_get_scaled_digits (unit_value, resolution);
-  else
-    scaled_resolution = (gint) resolution;
+  entry_width = gimp_prop_size_entry_num_chars (lower, upper) + 1 +
+                gimp_unit_get_scaled_digits (unit_value, resolution);
+  entry_width = MAX (entry_width, 7);
 
   entry = gimp_size_entry_new (1, unit_value, unit_format,
                                show_pixels, show_percent, FALSE,
-                               gimp_prop_size_entry_num_chars (lower, upper) + 1 +
-                               scaled_resolution, update_policy);
+                               entry_width, update_policy);
 
   set_param_spec (NULL,
                   gimp_size_entry_get_help_widget (GIMP_SIZE_ENTRY (entry), 0),
@@ -3437,7 +3670,7 @@ gimp_prop_size_entry_callback (GimpSizeEntry *entry,
   GParamSpec *unit_param_spec;
   gdouble     value;
   gboolean    value_is_pixel;
-  GimpUnit    unit_value;
+  GimpUnit   *unit_value;
 
   param_spec = g_object_get_data (G_OBJECT (entry), "gimp-config-param-spec");
   if (! param_spec)
@@ -3458,7 +3691,7 @@ gimp_prop_size_entry_callback (GimpSizeEntry *entry,
 
   if (unit_param_spec)
     {
-      GimpUnit  old_unit;
+      GimpUnit *old_unit;
 
       g_object_get (config,
                     unit_param_spec->name, &old_unit,
@@ -3546,7 +3779,7 @@ gimp_prop_size_entry_notify_unit (GObject       *config,
                                   GParamSpec    *param_spec,
                                   GimpSizeEntry *entry)
 {
-  GimpUnit value;
+  GimpUnit *value;
 
   g_object_get (config,
                 param_spec->name, &value,
@@ -3636,7 +3869,7 @@ gimp_prop_coordinates_new (GObject                   *config,
   GtkWidget *entry;
   GtkWidget *chainbutton = NULL;
 
-  entry = gimp_size_entry_new (2, GIMP_UNIT_INCH, unit_format,
+  entry = gimp_size_entry_new (2, gimp_unit_inch (), unit_format,
                                FALSE, FALSE, TRUE, 10,
                                update_policy);
 
@@ -3682,7 +3915,7 @@ gimp_prop_coordinates_connect (GObject     *config,
   GParamSpec *unit_param_spec;
   gdouble     x_value, x_lower, x_upper;
   gdouble     y_value, y_lower, y_upper;
-  GimpUnit    unit_value;
+  GimpUnit   *unit_value;
   gdouble    *old_x_value;
   gdouble    *old_y_value;
   GimpUnit   *old_unit_value;
@@ -3722,7 +3955,7 @@ gimp_prop_coordinates_connect (GObject     *config,
   else
     {
       unit_param_spec = NULL;
-      unit_value      = GIMP_UNIT_INCH;
+      unit_value      = gimp_unit_inch ();
     }
 
   set_param_spec (NULL,
@@ -3810,11 +4043,10 @@ gimp_prop_coordinates_connect (GObject     *config,
       g_object_set_data (G_OBJECT (entry), "gimp-config-param-spec-unit",
                          unit_param_spec);
 
-      old_unit_value  = g_new0 (GimpUnit, 1);
-      *old_unit_value = unit_value;
+      old_unit_value = unit_value;
       g_object_set_data_full (G_OBJECT (entry), "old-unit-value",
                               old_unit_value,
-                              (GDestroyNotify) g_free);
+                              (GDestroyNotify) NULL);
 
       g_signal_connect (entry, "unit-changed",
                         G_CALLBACK (gimp_prop_coordinates_callback),
@@ -3837,7 +4069,7 @@ gimp_prop_coordinates_callback (GimpSizeEntry *entry,
   GParamSpec *unit_param_spec;
   gdouble     x_value;
   gdouble     y_value;
-  GimpUnit    unit_value;
+  GimpUnit   *unit_value;
   gdouble    *old_x_value;
   gdouble    *old_y_value;
   GimpUnit   *old_unit_value;
@@ -3891,14 +4123,14 @@ gimp_prop_coordinates_callback (GimpSizeEntry *entry,
 
   if (*old_x_value == x_value &&
       *old_y_value == y_value &&
-      (old_unit_value == NULL || *old_unit_value == unit_value))
+      (old_unit_value == NULL || old_unit_value == unit_value))
     return;
 
   *old_x_value = x_value;
   *old_y_value = y_value;
 
   if (old_unit_value)
-    *old_unit_value = unit_value;
+    old_unit_value = unit_value;
 
   if (unit_param_spec)
     g_object_set (config,
@@ -4035,7 +4267,7 @@ gimp_prop_coordinates_notify_unit (GObject       *config,
                                    GParamSpec    *param_spec,
                                    GimpSizeEntry *entry)
 {
-  GimpUnit value;
+  GimpUnit *value;
 
   g_object_get (config,
                 param_spec->name, &value,
@@ -4092,8 +4324,8 @@ gimp_prop_color_area_new (GObject           *config,
   GtkWidget  *area;
   GeglColor  *color = NULL;
 
-  param_spec = check_param_spec_w (config, property_name,
-                                   GEGL_TYPE_PARAM_COLOR, G_STRFUNC);
+  param_spec = check_param_specs_w (config, property_name, GEGL_TYPE_PARAM_COLOR,
+                                    GIMP_TYPE_PARAM_COLOR, G_STRFUNC);
   if (! param_spec)
     return NULL;
 
@@ -4200,8 +4432,8 @@ gimp_prop_color_select_new (GObject           *config,
   GtkWidget  *button;
   GeglColor  *value = NULL;
 
-  param_spec = check_param_spec_w (config, property_name,
-                                   GEGL_TYPE_PARAM_COLOR, G_STRFUNC);
+  param_spec = check_param_specs_w (config, property_name, GEGL_TYPE_PARAM_COLOR,
+                                    GIMP_TYPE_PARAM_COLOR, G_STRFUNC);
   if (! param_spec)
     return NULL;
 
@@ -4248,8 +4480,8 @@ gimp_prop_label_color_new (GObject     *config,
   const gchar *label;
   GeglColor   *value;
 
-  param_spec = check_param_spec_w (config, property_name,
-                                   GEGL_TYPE_PARAM_COLOR, G_STRFUNC);
+  param_spec = check_param_specs_w (config, property_name, GEGL_TYPE_PARAM_COLOR,
+                                    GIMP_TYPE_PARAM_COLOR, G_STRFUNC);
   if (! param_spec)
     return NULL;
 
@@ -4302,7 +4534,7 @@ gimp_prop_unit_combo_box_new (GObject     *config,
   GParamSpec   *param_spec;
   GtkWidget    *combo;
   GtkTreeModel *model;
-  GimpUnit      unit;
+  GimpUnit     *unit;
   GValue        value = G_VALUE_INIT;
   gboolean      show_pixels;
   gboolean      show_percent;
@@ -4314,10 +4546,10 @@ gimp_prop_unit_combo_box_new (GObject     *config,
 
   g_value_init (&value, param_spec->value_type);
 
-  g_value_set_int (&value, GIMP_UNIT_PIXEL);
+  g_value_set_object (&value, gimp_unit_pixel ());
   show_pixels = (g_param_value_validate (param_spec, &value) == FALSE);
 
-  g_value_set_int (&value, GIMP_UNIT_PERCENT);
+  g_value_set_object (&value, gimp_unit_percent ());
   show_percent = (g_param_value_validate (param_spec, &value) == FALSE);
 
   g_value_unset (&value);
@@ -4355,8 +4587,8 @@ gimp_prop_unit_combo_box_callback (GtkWidget *combo,
                                    GObject   *config)
 {
   GParamSpec *param_spec;
-  GimpUnit    value;
-  GimpUnit    v;
+  GimpUnit   *value;
+  GimpUnit   *v;
 
   param_spec = get_param_spec (G_OBJECT (combo));
   if (! param_spec)
@@ -4387,7 +4619,7 @@ gimp_prop_unit_combo_box_notify (GObject    *config,
                                  GParamSpec *param_spec,
                                  GtkWidget  *combo)
 {
-  GimpUnit  unit;
+  GimpUnit *unit;
 
   g_object_get (config,
                 param_spec->name, &unit,
@@ -4713,6 +4945,44 @@ check_param_spec_w (GObject     *object,
                  g_type_name (param_spec->owner_type));
       return NULL;
     }
+
+  return param_spec;
+}
+
+static GParamSpec *
+check_param_specs_w (GObject     *object,
+                     const gchar *property_name,
+                     GType        type1,
+                     GType        type2,
+                     const gchar *strloc)
+{
+  GParamSpec *param_spec;
+
+  param_spec = check_param_spec_quiet (object, property_name, type1, strloc);
+  if (param_spec)
+    {
+      param_spec = check_param_spec_w (object, property_name, type1, strloc);
+
+      if (! param_spec)
+        return NULL;
+    }
+  else
+    {
+      param_spec = check_param_spec_quiet (object, property_name, type2, strloc);
+      if (param_spec)
+        {
+          param_spec = check_param_spec_w (object, property_name, type2, strloc);
+          if (! param_spec)
+            return NULL;
+        }
+    }
+
+  if (! param_spec)
+    g_warning ("%s: property '%s' of %s must be of type %s or %s.",
+               strloc, property_name,
+               g_type_name (G_TYPE_FROM_INSTANCE (object)),
+               g_type_name (type1),
+               g_type_name (type2));
 
   return param_spec;
 }

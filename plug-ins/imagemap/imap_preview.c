@@ -31,6 +31,8 @@
 #include "imap_menu.h"
 #include "imap_preview.h"
 
+#include "libgimp/stdplugins-intl.h"
+
 #define PREVIEW_MASK  (GDK_EXPOSURE_MASK       | \
                        GDK_POINTER_MOTION_MASK | \
                        GDK_BUTTON_PRESS_MASK   | \
@@ -176,15 +178,17 @@ preview_unset_tmp_obj (Object_t *obj)
 }
 
 void
-preview_zoom(Preview_t *preview, gint zoom_factor)
+preview_zoom (Preview_t *preview,
+              gfloat     zoom_factor)
 {
-   preview->widget_width = preview->width * zoom_factor;
-   preview->widget_height = preview->height * zoom_factor;
-   gtk_widget_set_size_request (preview->preview, preview->widget_width,
-                                preview->widget_height);
-   gtk_widget_queue_resize(preview->window);
-   render_preview(preview, preview->drawable);
-   preview_redraw();
+  preview->widget_width  = ceil (preview->width * zoom_factor);
+  preview->widget_height = ceil (preview->height * zoom_factor);
+
+  gtk_widget_set_size_request (preview->preview, preview->widget_width,
+                               preview->widget_height);
+  gtk_widget_queue_resize (preview->window);
+  render_preview (preview, preview->drawable);
+  preview_redraw ();
 }
 
 GdkCursorType
@@ -306,6 +310,7 @@ make_preview (GimpDrawable *drawable,
    /* Create button with arrow */
    button = gtk_button_new ();
    gtk_widget_set_can_focus (button, FALSE);
+   gtk_widget_set_tooltip_text (button, _("Shortcut Menu"));
    gtk_grid_attach (GTK_GRID (grid), button, 0, 0, 1, 1);
                      // GTK_FILL, GTK_FILL, 0, 0);
    gtk_widget_set_events (button,

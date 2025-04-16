@@ -111,6 +111,182 @@ CODE
     );
 }
 
+sub drawable_append_filter_private {
+    $blurb = 'Append the specified effect to the top of the list of drawable effects.';
+
+    $help = <<'HELP';
+This procedure adds the specified drawable effect at the top of the effect list of @drawable.
+
+The @drawable argument must be the same as the one used when you created
+the effect with [ctor@Gimp.DrawableFilter.new].
+
+Some effects may be slower than others to render. In order to minimize
+processing time, it is preferred to customize the operation's arguments
+as received with [method@Gimp.DrawableFilter.get_config] then sync them
+to the application with [method@Gimp.DrawableFilter.update] before
+adding the effect.
+
+This function is private and should not be used. Use
+[method@Gimp.Drawable.append_filter] instead.
+HELP
+
+    &jehan_pdb_misc('2024', '3.0');
+
+    $lib_private = 1;
+
+    @inargs = (
+        { name => 'drawable', type => 'drawable',
+          desc => 'The drawable' },
+        { name => 'filter', type => 'filter',
+          desc => 'The drawable filter to append' }
+    );
+
+    $invoke{code} = <<'CODE';
+{
+  GeglNode *node;
+
+  if (gimp_drawable_filter_get_drawable (filter) != drawable)
+    {
+      g_set_error (error, GIMP_PDB_ERROR, GIMP_PDB_ERROR_INVALID_ARGUMENT,
+                   "%s: the filter was not created for this drawable.",
+                   G_STRFUNC);
+      success = FALSE;
+    }
+  else if (! GIMP_IS_LAYER (drawable))
+    {
+      g_set_error (error, GIMP_PDB_ERROR, GIMP_PDB_ERROR_INVALID_ARGUMENT,
+                   "%s: only drawables of type GimpLayer can have non-destructive effects.",
+                   G_STRFUNC);
+      success = FALSE;
+    }
+
+  node = gimp_drawable_filter_get_operation (filter);
+  if (success && gegl_node_has_pad (node, "aux"))
+    {
+      /* Filters with aux input should not be NDE. See: gimp_filter_tool_create_filter(). */
+      g_set_error (error, GIMP_PDB_ERROR, GIMP_PDB_ERROR_INVALID_ARGUMENT,
+                   "%s: effects with an 'aux' pad cannot be applied non-destructively.",
+                   G_STRFUNC);
+      success = FALSE;
+    }
+
+  if (success)
+    {
+      GimpImage *image = gimp_item_get_image (GIMP_ITEM (drawable));
+
+      gimp_image_undo_push_filter_add (image, _("Add filter"), drawable, filter);
+      gimp_drawable_filter_apply (filter, NULL);
+      gimp_drawable_filter_commit (filter, TRUE, NULL, FALSE);
+      gimp_drawable_filter_layer_mask_freeze (filter);
+
+      g_object_unref (filter);
+    }
+}
+CODE
+}
+
+sub drawable_merge_filter_private {
+    $blurb = 'Apply the specified effect directly to the drawable.';
+
+    $help = <<'HELP';
+This procedure applies the specified drawable effect on @drawable and merge it
+(therefore before non-destructive effects are computed).
+
+The @drawable argument must be the same as the one used when you created
+the effect with [ctor@Gimp.DrawableFilter.new].
+
+Once this is run, @filter is not valid anymore and you should not try to
+do anything with it. In particular, you must customize the operation's
+arguments as received with [method@Gimp.DrawableFilter.get_config] then
+sync them to the application with [method@Gimp.DrawableFilter.update]
+before merging the effect.
+
+This function is private and should not be used. Use
+[method@Gimp.Drawable.merge_filter] instead.
+HELP
+
+    &jehan_pdb_misc('2024', '3.0');
+
+    $lib_private = 1;
+
+    @inargs = (
+        { name => 'drawable', type => 'drawable',
+          desc => 'The drawable' },
+        { name => 'filter', type => 'filter',
+          desc => 'The drawable filter to merge' }
+    );
+
+    $invoke{code} = <<'CODE';
+{
+  if (gimp_drawable_filter_get_drawable (filter) != drawable)
+    {
+      g_set_error (error, GIMP_PDB_ERROR, GIMP_PDB_ERROR_INVALID_ARGUMENT,
+                   "%s: the filter was not created for this drawable.",
+                   G_STRFUNC);
+      success = FALSE;
+    }
+
+  if (success)
+    {
+      GimpContainer *filters;
+      gint           count;
+
+      gimp_drawable_filter_apply (filter, NULL);
+
+      filters = gimp_drawable_get_filters (drawable);
+      count   = gimp_container_get_n_children (filters);
+      if (count > 1)
+        gimp_container_reorder (filters, GIMP_OBJECT (filter), count - 1);
+
+      gimp_drawable_filter_layer_mask_freeze (filter);
+      gimp_drawable_filter_commit (filter, FALSE, NULL, FALSE);
+
+      g_object_unref (filter);
+    }
+}
+CODE
+}
+
+sub drawable_get_filters {
+    $blurb = 'Returns the list of filters applied to the drawable.';
+
+    $help = <<'HELP';
+This procedure returns the list of filters which are currently applied non-destructively to @drawable.
+The order of filters is from topmost to bottommost.
+HELP
+
+    &jehan_pdb_misc('2024', '3.0');
+
+    @inargs = (
+        { name => 'drawable', type => 'drawable',
+          desc => 'The drawable' }
+    );
+
+    @outargs = (
+        { name => 'filters', type => 'filterarray',
+          desc => 'The list of filters on the drawable.' }
+    );
+
+    %invoke = (
+        code => <<'CODE'
+{
+  GimpContainer *container;
+  GList         *iter;
+  gsize          num_filters;
+  gint           i;
+
+  container   = gimp_drawable_get_filters (drawable);
+  num_filters = gimp_container_get_n_children (container);
+  filters     = g_new0 (GimpDrawableFilter *, num_filters + 1);
+
+  iter = GIMP_LIST (container)->queue->head;
+  for (i = 0; i < num_filters; i++, iter = iter->next)
+    filters[i] = iter->data;
+}
+CODE
+    );
+}
+
 sub drawable_merge_filters {
     $blurb = 'Merge the layer effect filters to the specified drawable.';
 
@@ -130,12 +306,8 @@ HELP
 	headers => [ qw("core/gimpdrawable-filters.h") ],
 	code    => <<'CODE'
 {
-  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
-                                 GIMP_PDB_ITEM_CONTENT, error) &&
-      gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error))
-    {
-      gimp_drawable_merge_filters (drawable);
-    }
+  if (gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error))
+    gimp_drawable_merge_filters (drawable);
   else
     success = FALSE;
 }
@@ -940,6 +1112,9 @@ HELP
 	{ name => 'fill_type', type => 'enum GimpOffsetType',
 	  desc => 'fill vacated regions of drawable with background or
 		   transparent' },
+    { name => 'color', type => 'geglcolor',
+      desc => 'fills in the background color when fill_type is
+           set to OFFSET-COLOR' },
 	{ name => 'offset_x', type => 'int32',
 	  desc => 'offset by this amount in X direction' },
 	{ name => 'offset_y', type => 'int32',
@@ -953,7 +1128,7 @@ HELP
                                  GIMP_PDB_ITEM_CONTENT, error) &&
       gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error))
     gimp_drawable_offset (drawable, context, wrap_around, fill_type,
-                          offset_x, offset_y);
+                          color, offset_x, offset_y);
   else
     success = FALSE;
 }
@@ -1025,13 +1200,19 @@ CODE
               "gegl/gimp-babl.h"
               "gegl/gimp-babl-compat.h"
               "core/gimp.h"
+              "core/gimpcontainer.h"
               "core/gimpchannel-select.h"
+              "core/gimpdrawablefilter.h"
               "core/gimpdrawable-filters.h"
               "core/gimpdrawable-offset.h"
               "core/gimpimage.h"
+              "core/gimpimage-undo-push.h"
+              "core/gimplayer.h"
+              "core/gimplist.h"
               "core/gimptempbuf.h"
               "gimppdb-utils.h"
               "gimppdbcontext.h"
+              "gimppdberror.h"
               "gimp-intl.h");
 
 @procs = qw(drawable_get_format
@@ -1050,6 +1231,9 @@ CODE
             drawable_get_offsets
             drawable_mask_bounds
             drawable_mask_intersect
+            drawable_append_filter_private
+            drawable_merge_filter_private
+            drawable_get_filters
             drawable_merge_filters
             drawable_merge_shadow
             drawable_free_shadow

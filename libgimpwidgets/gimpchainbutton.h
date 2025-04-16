@@ -37,43 +37,9 @@
 G_BEGIN_DECLS
 
 
-#define GIMP_TYPE_CHAIN_BUTTON            (gimp_chain_button_get_type ())
-#define GIMP_CHAIN_BUTTON(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_CHAIN_BUTTON, GimpChainButton))
-#define GIMP_CHAIN_BUTTON_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_CHAIN_BUTTON, GimpChainButtonClass))
-#define GIMP_IS_CHAIN_BUTTON(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_CHAIN_BUTTON))
-#define GIMP_IS_CHAIN_BUTTON_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_CHAIN_BUTTON))
-#define GIMP_CHAIN_BUTTON_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_CHAIN_BUTTON, GimpChainButtonClass))
+#define GIMP_TYPE_CHAIN_BUTTON (gimp_chain_button_get_type ())
+G_DECLARE_FINAL_TYPE (GimpChainButton, gimp_chain_button, GIMP, CHAIN_BUTTON, GtkGrid)
 
-
-typedef struct _GimpChainButtonPrivate GimpChainButtonPrivate;
-typedef struct _GimpChainButtonClass   GimpChainButtonClass;
-
-struct _GimpChainButton
-{
-  GtkGrid                 parent_instance;
-
-  GimpChainButtonPrivate *priv;
-};
-
-struct _GimpChainButtonClass
-{
-  GtkGridClass  parent_class;
-
-  void (* toggled)  (GimpChainButton *button);
-
-  /* Padding for future expansion */
-  void (* _gimp_reserved1) (void);
-  void (* _gimp_reserved2) (void);
-  void (* _gimp_reserved3) (void);
-  void (* _gimp_reserved4) (void);
-  void (* _gimp_reserved5) (void);
-  void (* _gimp_reserved6) (void);
-  void (* _gimp_reserved7) (void);
-  void (* _gimp_reserved8) (void);
-};
-
-
-GType         gimp_chain_button_get_type      (void) G_GNUC_CONST;
 
 GtkWidget   * gimp_chain_button_new           (GimpChainPosition  position);
 

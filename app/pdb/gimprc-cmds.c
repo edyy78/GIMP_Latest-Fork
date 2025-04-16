@@ -142,12 +142,12 @@ get_default_unit_invoker (GimpProcedure         *procedure,
                           GError               **error)
 {
   GimpValueArray *return_vals;
-  GimpUnit unit_id = GIMP_UNIT_PIXEL;
+  GimpUnit *unit = NULL;
 
-  unit_id = gimp_get_default_unit ();
+  unit = gimp_get_default_unit ();
 
   return_vals = gimp_procedure_get_return_values (procedure, TRUE, NULL);
-  g_value_set_int (gimp_value_array_index (return_vals, 1), unit_id);
+  g_value_set_object (gimp_value_array_index (return_vals, 1), unit);
 
   return return_vals;
 }
@@ -221,7 +221,7 @@ register_gimprc_procs (GimpPDB *pdb)
   /*
    * gimp-gimprc-query
    */
-  procedure = gimp_procedure_new (gimprc_query_invoker);
+  procedure = gimp_procedure_new (gimprc_query_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-gimprc-query");
   gimp_procedure_set_static_help (procedure,
@@ -252,7 +252,7 @@ register_gimprc_procs (GimpPDB *pdb)
   /*
    * gimp-gimprc-set
    */
-  procedure = gimp_procedure_new (gimprc_set_invoker);
+  procedure = gimp_procedure_new (gimprc_set_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-gimprc-set");
   gimp_procedure_set_static_help (procedure,
@@ -283,7 +283,7 @@ register_gimprc_procs (GimpPDB *pdb)
   /*
    * gimp-get-default-comment
    */
-  procedure = gimp_procedure_new (get_default_comment_invoker);
+  procedure = gimp_procedure_new (get_default_comment_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-get-default-comment");
   gimp_procedure_set_static_help (procedure,
@@ -307,24 +307,24 @@ register_gimprc_procs (GimpPDB *pdb)
   /*
    * gimp-get-default-unit
    */
-  procedure = gimp_procedure_new (get_default_unit_invoker);
+  procedure = gimp_procedure_new (get_default_unit_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-get-default-unit");
   gimp_procedure_set_static_help (procedure,
                                   "Get the default unit (taken from the user's locale).",
-                                  "Returns the default unit's integer ID.",
+                                  "Returns the default unit.",
                                   NULL);
   gimp_procedure_set_static_attribution (procedure,
                                          "Spencer Kimball & Peter Mattis",
                                          "Spencer Kimball & Peter Mattis",
                                          "1995-1996");
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_unit ("unit-id",
-                                                         "unit id",
+                                   gimp_param_spec_unit ("unit",
+                                                         "unit",
                                                          "Default unit",
-                                                         TRUE,
                                                          FALSE,
-                                                         GIMP_UNIT_PIXEL,
+                                                         FALSE,
+                                                         gimp_unit_inch (),
                                                          GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
@@ -332,7 +332,7 @@ register_gimprc_procs (GimpPDB *pdb)
   /*
    * gimp-get-monitor-resolution
    */
-  procedure = gimp_procedure_new (get_monitor_resolution_invoker);
+  procedure = gimp_procedure_new (get_monitor_resolution_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-get-monitor-resolution");
   gimp_procedure_set_static_help (procedure,
@@ -361,7 +361,7 @@ register_gimprc_procs (GimpPDB *pdb)
   /*
    * gimp-get-color-configuration
    */
-  procedure = gimp_procedure_new (get_color_configuration_invoker);
+  procedure = gimp_procedure_new (get_color_configuration_invoker, TRUE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-get-color-configuration");
   gimp_procedure_set_static_help (procedure,
@@ -385,7 +385,7 @@ register_gimprc_procs (GimpPDB *pdb)
   /*
    * gimp-get-module-load-inhibit
    */
-  procedure = gimp_procedure_new (get_module_load_inhibit_invoker);
+  procedure = gimp_procedure_new (get_module_load_inhibit_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-get-module-load-inhibit");
   gimp_procedure_set_static_help (procedure,

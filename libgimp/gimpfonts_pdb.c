@@ -82,6 +82,8 @@ gimp_fonts_refresh (void)
  *
  * Returns: (transfer full): config path.
  *          The returned value must be freed with g_free().
+ *
+ * Since: 3.0
  **/
 gchar *
 _gimp_fonts_get_custom_configs (gchar  **sysconfig,
@@ -115,22 +117,25 @@ _gimp_fonts_get_custom_configs (gchar  **sysconfig,
 
 /**
  * gimp_fonts_get_list:
- * @filter: An optional regular expression used to filter the list.
+ * @filter: (nullable): An optional regular expression used to filter the list.
  *
  * Retrieve the list of loaded fonts.
  *
  * This procedure returns a list of the fonts that are currently
  * available.
+ * Each font returned can be used as input to
+ * [func@Gimp.context_set_font].
  *
- * Returns: (array zero-terminated=1) (transfer full): The list of font names.
- *          The returned value must be freed with g_strfreev().
+ * Returns: (element-type GimpFont) (array zero-terminated=1) (transfer container):
+ *          The list of fonts.
+ *          The returned value must be freed with g_free().
  **/
-gchar **
+GimpFont **
 gimp_fonts_get_list (const gchar *filter)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
-  gchar **font_list = NULL;
+  GimpFont **font_list = NULL;
 
   args = gimp_value_array_new_from_types (NULL,
                                           G_TYPE_STRING, filter,
@@ -142,7 +147,7 @@ gimp_fonts_get_list (const gchar *filter)
   gimp_value_array_unref (args);
 
   if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
-    font_list = GIMP_VALUES_DUP_STRV (return_vals, 1);
+    font_list = g_value_dup_boxed (gimp_value_array_index (return_vals, 1));
 
   gimp_value_array_unref (return_vals);
 

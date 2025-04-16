@@ -21,6 +21,8 @@
 
 #include <gtk/gtk.h>
 
+#include "libgimpcolor/gimpcolor-private.h"
+
 #include <libgimp/gimp.h>
 
 #include "ppmtool.h"
@@ -62,7 +64,6 @@ static GimpProcedure  * gimpressionist_create_procedure (GimpPlugIn           *p
 static GimpValueArray * gimpressionist_run              (GimpProcedure        *procedure,
                                                          GimpRunMode           run_mode,
                                                          GimpImage            *image,
-                                                         gint                  n_drawables,
                                                          GimpDrawable        **drawables,
                                                          GimpProcedureConfig  *config,
                                                          gpointer              run_data);
@@ -132,16 +133,16 @@ gimpressionist_create_procedure (GimpPlugIn  *plug_in,
                                       "Vidar Madsen",
                                       PLUG_IN_VERSION);
 
-      GIMP_PROC_ARG_STRING (procedure, "preset",
-                            _("Preset"),
-                            _("Preset Name"),
-                            NULL,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_string_argument (procedure, "preset",
+                                          _("Preset"),
+                                          _("Preset Name"),
+                                          NULL,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_AUX_ARG_BYTES (procedure, "settings-data",
-                               "Settings data",
-                               "TODO: eventually we must implement proper args for every settings",
-                               GIMP_PARAM_READWRITE);
+      gimp_procedure_add_bytes_aux_argument (procedure, "settings-data",
+                                             "Settings data",
+                                             "TODO: eventually we must implement proper args for every settings",
+                                             GIMP_PARAM_READWRITE);
     }
 
   return procedure;
@@ -166,7 +167,6 @@ static GimpValueArray *
 gimpressionist_run (GimpProcedure        *procedure,
                     GimpRunMode           run_mode,
                     GimpImage            *image,
-                    gint                  n_drawables,
                     GimpDrawable        **drawables,
                     GimpProcedureConfig  *config,
                     gpointer              run_data)
@@ -176,7 +176,7 @@ gimpressionist_run (GimpProcedure        *procedure,
 
   gegl_init (NULL, NULL);
 
-  if (n_drawables != 1)
+  if (gimp_core_object_array_get_length ((GObject **) drawables) != 1)
     {
       GError *error = NULL;
 

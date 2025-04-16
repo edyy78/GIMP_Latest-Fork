@@ -24,6 +24,7 @@
 #include "libgimpwidgets/gimpwidgets.h"
 
 #include "gimp.h"
+#include "gimpresourceselect-private.h"
 
 #include "gimpuitypes.h"
 #include "gimpresourcechooser.h"
@@ -146,6 +147,7 @@ gimp_resource_chooser_class_init (GimpResourceChooserClass *klass)
   object_class->get_property = gimp_resource_chooser_get_property;
 
   klass->resource_set        = NULL;
+  klass->draw_interior       = NULL;
 
   /**
    * GimpResourceChooser:title:
@@ -188,7 +190,10 @@ gimp_resource_chooser_class_init (GimpResourceChooserClass *klass)
     gimp_param_spec_resource ("resource",
                               "Resource",
                               "The currently selected resource",
+                              GIMP_TYPE_RESOURCE,
                               TRUE,  /* none_ok */
+                              NULL,  /* no default for this property. */
+                              FALSE,
                               GIMP_PARAM_READWRITE);
 
   g_object_class_install_properties (object_class,
@@ -228,6 +233,7 @@ gimp_resource_chooser_init (GimpResourceChooser *self)
   gtk_box_set_spacing (GTK_BOX (self), 6);
 
   priv->label_widget = gtk_label_new (NULL);
+  gtk_label_set_xalign (GTK_LABEL (priv->label_widget), 0.0);
   gtk_box_pack_start (GTK_BOX (self), priv->label_widget, FALSE, FALSE, 0);
 }
 
@@ -295,7 +301,7 @@ gimp_resource_chooser_finalize (GObject *object)
 }
 
 /**
- * gimp_resource_chooser_set_drag_target:
+ * _gimp_resource_chooser_set_drag_target:
  * @chooser:            A [class@ResourceChooser]
  * @drag_region_widget: An interior widget to be a droppable region
  *                      and emit "drag-data-received" signal
@@ -310,9 +316,9 @@ gimp_resource_chooser_finalize (GObject *object)
  * Since: 3.0
  **/
 void
-gimp_resource_chooser_set_drag_target (GimpResourceChooser  *chooser,
-                                       GtkWidget            *drag_region_widget,
-                                       const GtkTargetEntry *drag_target)
+_gimp_resource_chooser_set_drag_target (GimpResourceChooser  *chooser,
+                                        GtkWidget            *drag_region_widget,
+                                        const GtkTargetEntry *drag_target)
 {
   g_return_if_fail (GIMP_IS_RESOURCE_CHOOSER (chooser));
   g_return_if_fail (drag_target != NULL);
@@ -332,7 +338,7 @@ gimp_resource_chooser_set_drag_target (GimpResourceChooser  *chooser,
 }
 
 /**
- * gimp_resource_chooser_set_clickable:
+ * _gimp_resource_chooser_set_clickable:
  * @chooser: A [class@ResourceChooser]
  * @widget:  An interior widget that emits "clicked" signal
  *
@@ -345,8 +351,8 @@ gimp_resource_chooser_set_drag_target (GimpResourceChooser  *chooser,
  * Since: 3.0
  **/
 void
-gimp_resource_chooser_set_clickable (GimpResourceChooser *chooser,
-                                     GtkWidget           *widget)
+_gimp_resource_chooser_set_clickable (GimpResourceChooser *chooser,
+                                      GtkWidget           *widget)
 {
   g_return_if_fail (GIMP_IS_RESOURCE_CHOOSER (chooser));
   g_return_if_fail (widget != NULL);
@@ -479,7 +485,7 @@ gimp_resource_chooser_set_property (GObject      *object,
       break;
 
     case PROP_RESOURCE:
-      priv->resource = g_value_get_object (gvalue);
+      gimp_resource_chooser_set_resource (self, g_value_get_object (gvalue));
       break;
 
     default:

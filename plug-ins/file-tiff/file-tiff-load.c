@@ -91,66 +91,70 @@ typedef enum
 
 /* Declare some local functions */
 
-static GimpColorProfile * load_profile     (TIFF              *tif);
+static GimpColorProfile * load_profile     (TIFF                *tif);
 
-static void               load_rgba        (TIFF              *tif,
-                                            ChannelData       *channel);
-static void               load_contiguous  (TIFF              *tif,
-                                            ChannelData       *channel,
-                                            const Babl        *type,
-                                            gushort            bps,
-                                            gushort            spp,
-                                            TiffColorMode      tiff_mode,
-                                            gboolean           is_signed,
-                                            gint               extra);
-static void               load_separate    (TIFF              *tif,
-                                            ChannelData       *channel,
-                                            const Babl        *type,
-                                            gushort            bps,
-                                            gushort            spp,
-                                            TiffColorMode      tiff_mode,
-                                            gboolean           is_signed,
-                                            gint               extra);
+static void               load_rgba        (TIFF                *tif,
+                                            ChannelData         *channel);
+static void               load_contiguous  (TIFF                *tif,
+                                            ChannelData         *channel,
+                                            const Babl          *type,
+                                            gushort              bps,
+                                            gushort              spp,
+                                            TiffColorMode        tiff_mode,
+                                            gboolean             is_signed,
+                                            gint                 extra);
+static void               load_separate    (TIFF                *tif,
+                                            ChannelData         *channel,
+                                            const Babl          *type,
+                                            gushort              bps,
+                                            gushort              spp,
+                                            TiffColorMode        tiff_mode,
+                                            gboolean             is_signed,
+                                            gint                 extra);
 
-static gboolean   is_non_conformant_tiff   (gushort            photomet,
-                                            gushort            spp);
-static gushort    get_extra_channels_count (gushort            photomet,
-                                            gushort            spp,
-                                            gboolean           alpha);
+static void       load_sketchbook_layers   (TIFF                *tif,
+                                            GimpImage           *image);
 
-static void               fill_bit2byte    (TiffColorMode      tiff_mode);
-static void               fill_2bit2byte   (TiffColorMode      tiff_mode);
-static void               fill_4bit2byte   (TiffColorMode      tiff_mode);
-static void               convert_bit2byte (const guchar      *src,
-                                            guchar            *dest,
-                                            gint               width,
-                                            gint               height);
-static void              convert_2bit2byte (const guchar      *src,
-                                            guchar            *dest,
-                                            gint               width,
-                                            gint               height);
-static void              convert_4bit2byte (const guchar      *src,
-                                            guchar            *dest,
-                                            gint               width,
-                                            gint               height);
+static gboolean   is_non_conformant_tiff   (gushort              photomet,
+                                            gushort              spp);
+static gushort    get_extra_channels_count (gushort              photomet,
+                                            gushort              spp,
+                                            gboolean             alpha);
 
-static void             convert_miniswhite (guchar            *buffer,
-                                            gint               width,
-                                            gint               height);
-static void               convert_int2uint (guchar            *buffer,
-                                            gint               bps,
-                                            gint               spp,
-                                            gint               width,
-                                            gint               height,
-                                            gint               stride);
+static void               fill_bit2byte    (TiffColorMode        tiff_mode);
+static void               fill_2bit2byte   (TiffColorMode        tiff_mode);
+static void               fill_4bit2byte   (TiffColorMode        tiff_mode);
+static void               convert_bit2byte (const guchar        *src,
+                                            guchar              *dest,
+                                            gint                 width,
+                                            gint                 height);
+static void              convert_2bit2byte (const guchar        *src,
+                                            guchar              *dest,
+                                            gint                 width,
+                                            gint                 height);
+static void              convert_4bit2byte (const guchar        *src,
+                                            guchar              *dest,
+                                            gint                 width,
+                                            gint                 height);
 
-static gboolean           load_dialog      (const gchar       *help_id,
-                                            TiffSelectedPages *pages,
-                                            const gchar       *extra_message,
-                                            DefaultExtra      *default_extra);
+static void             convert_miniswhite (guchar              *buffer,
+                                            gint                 width,
+                                            gint                 height);
+static void               convert_int2uint (guchar              *buffer,
+                                            gint                 bps,
+                                            gint                 spp,
+                                            gint                 width,
+                                            gint                 height,
+                                            gint                 stride);
 
-static void       tiff_dialog_show_reduced (GtkWidget         *toggle,
-                                            gpointer           data);
+static gboolean           load_dialog      (GimpProcedure       *procedure,
+                                            GimpProcedureConfig *config,
+                                            TiffSelectedPages   *pages,
+                                            const gchar         *extra_message,
+                                            DefaultExtra        *default_extra);
+
+static void       tiff_dialog_show_reduced (GtkWidget           *toggle,
+                                            gpointer             data);
 
 
 
@@ -259,7 +263,8 @@ get_extra_channels_count (gushort photomet, gushort spp, gboolean alpha)
 }
 
 GimpPDBStatusType
-load_image (GFile                *file,
+load_image (GimpProcedure        *procedure,
+            GFile                *file,
             GimpRunMode           run_mode,
             GimpImage           **image,
             gboolean             *resolution_loaded,
@@ -286,6 +291,9 @@ load_image (GFile                *file,
   gchar             *photoshop_data;
   gint32             photoshop_len;
   gboolean           is_cmyk            = FALSE;
+  gchar             *sketchbook_info;
+  gint               sketchbook_len;
+  gboolean           sketchbook_layers  = FALSE;
 
   *image = NULL;
   gimp_progress_init_printf (_("Opening '%s'"),
@@ -478,16 +486,20 @@ load_image (GFile                *file,
     }
   TIFFSetDirectory (tif, 0);
 
+  /* Check if there exist layers saved from Alias/AutoDesk Sketchbook */
+  sketchbook_layers = TIFFGetField (tif, TIFFTAG_ALIAS_LAYER_METADATA,
+                                    &sketchbook_info, &sketchbook_len);
+
   pages.show_reduced = FALSE;
   if (pages.n_reducedimage_pages - pages.n_filtered_pages > 1)
     pages.show_reduced = TRUE;
 
   pages.tif = tif;
 
-  if (run_mode == GIMP_RUN_INTERACTIVE &&
+  if (run_mode == GIMP_RUN_INTERACTIVE     &&
       (pages.n_pages > 1 || extra_message) &&
-      ! load_dialog (LOAD_PROC, &pages,
-                     extra_message, &default_extra))
+      ! load_dialog (procedure, config, &pages, extra_message,
+                     &default_extra))
     {
       TIFFClose (tif);
       g_clear_pointer (&pages.pages, g_free);
@@ -1291,10 +1303,10 @@ load_image (GFile                *file,
 
       /* any resolution info in the file? */
       {
-        gdouble   xres = 72.0;
-        gdouble   yres = 72.0;
-        gushort  read_unit;
-        GimpUnit unit = GIMP_UNIT_PIXEL; /* invalid unit */
+        gfloat    xres      = 72.0;
+        gfloat    yres      = 72.0;
+        gushort   read_unit = RESUNIT_NONE;
+        GimpUnit *unit      = gimp_unit_pixel (); /* invalid unit */
 
         if (TIFFGetField (tif, TIFFTAG_XRESOLUTION, &xres))
           {
@@ -1310,13 +1322,13 @@ load_image (GFile                *file,
                         break;
 
                       case RESUNIT_INCH:
-                        unit = GIMP_UNIT_INCH;
+                        unit = gimp_unit_inch ();
                         break;
 
                       case RESUNIT_CENTIMETER:
                         xres *= 2.54;
                         yres *= 2.54;
-                        unit = GIMP_UNIT_MM; /* this is our default metric unit */
+                        unit = gimp_unit_mm (); /* this is our default metric unit */
                         break;
 
                       default:
@@ -1348,6 +1360,7 @@ load_image (GFile                *file,
              * the resolution at all. Gimp will then use the default
              * set by the user
              */
+
             if (read_unit != RESUNIT_NONE)
               {
                 if (! isfinite (xres) ||
@@ -1355,16 +1368,22 @@ load_image (GFile                *file,
                     ! isfinite (yres) ||
                     yres < GIMP_MIN_RESOLUTION || yres > GIMP_MAX_RESOLUTION)
                   {
+                    gdouble default_xres = 0.0;
+                    gdouble default_yres = 0.0;
+
                     g_message (_("Invalid image resolution info, using default"));
                     /* We need valid xres and yres for computing
                      * layer_offset_x_pixel and layer_offset_y_pixel.
                      */
-                    gimp_image_get_resolution (*image, &xres, &yres);
+                    gimp_image_get_resolution (*image,
+                                               &default_xres, &default_yres);
+                    xres = (gfloat) default_xres;
+                    yres = (gfloat) default_yres;
                   }
                 else
                   {
                     gimp_image_set_resolution (*image, xres, yres);
-                    if (unit != GIMP_UNIT_PIXEL)
+                    if (unit != gimp_unit_pixel ())
                       gimp_image_set_unit (*image, unit);
 
                     *resolution_loaded = TRUE;
@@ -1492,7 +1511,9 @@ load_image (GFile                *file,
                 }
             }
 
-          gimp_image_set_colormap (*image, cmap, (1 << bps));
+          gimp_palette_set_colormap (gimp_image_get_palette (*image),
+                                     babl_format ("R'G'B' u8"),
+                                     cmap, (1 << bps) * 3);
         }
 
       if (extra > 99)
@@ -1505,6 +1526,11 @@ load_image (GFile                *file,
           g_message (_("Suspicious number of extra channels: %d. Possibly corrupt image."), extra);
           extra = 99;
         }
+
+      /* Stop here if we have Alias/AutoDesk Sketchbook layers, as this
+       * would just be the composite image */
+      if (sketchbook_layers)
+        break;
 
       /* Allocate ChannelData for all channels, even the background layer */
       channel = g_new0 (ChannelData, extra + 1);
@@ -1689,6 +1715,11 @@ load_image (GFile                *file,
 
       gimp_progress_update (1.0);
     }
+
+  /* If this TIF was created in Alias/AutoDesk Sketchbook, it may have layers. */
+  if (sketchbook_layers)
+    load_sketchbook_layers (tif, *image);
+
   g_clear_object (&first_profile);
 
   if (pages.target == GIMP_PAGE_SELECTOR_TARGET_IMAGES)
@@ -1730,9 +1761,10 @@ load_image (GFile                *file,
         }
 
       /* resize image to bounding box of all layers */
-      gimp_image_resize (*image,
-                         max_col - min_col, max_row - min_row,
-                         -min_col, -min_row);
+      if (! sketchbook_layers)
+        gimp_image_resize (*image,
+                           max_col - min_col, max_row - min_row,
+                           -min_col, -min_row);
 
       gimp_image_undo_enable (*image);
     }
@@ -1804,8 +1836,12 @@ load_image (GFile                *file,
 
       procedure   = gimp_pdb_lookup_procedure (gimp_get_pdb (),
                                                "file-psd-load-metadata");
+      /* We would like to use run_mode below. That way we could show a dialog
+       * when unsupported Photoshop data is detected in interactive mode.
+       * However, in interactive mode saved config values take precedence over
+       * these values set below, so that won't work. */
       return_vals = gimp_procedure_run (procedure,
-                                        "run-mode",      run_mode,
+                                        "run-mode",      GIMP_RUN_NONINTERACTIVE,
                                         "file",          temp_file,
                                         "size",          photoshop_len,
                                         "image",         *image,
@@ -1884,7 +1920,7 @@ load_rgba (TIFF        *tif,
       guint32 i;
 
       for (i = row_start; i < row_end; i++)
-        buffer[i] = GUINT32_TO_LE (buffer[i]);
+        buffer[i] = GUINT32_FROM_LE (buffer[i]);
 #endif
 
       gegl_buffer_set (channel[0].buffer,
@@ -2267,6 +2303,202 @@ load_separate (TIFF         *tif,
   g_free (bw_buffer);
 }
 
+/* Loads layers stored by the Alias/AutoDesk Sketchbook program */
+static void
+load_sketchbook_layers (TIFF      *tif,
+                        GimpImage *image)
+{
+  gchar          *alias_layer_info;
+  gint            alias_data_len;
+  guint32         image_height = gimp_image_get_height (image);
+  guint32         image_width  = gimp_image_get_width (image);
+  GeglColor      *fill_color;
+  GeglColor      *foreground_color;
+  GimpLayer      *background_layer;
+  GimpLayerMode   default_mode;
+  const Babl     *format = NULL;
+  gchar         **image_settings;
+  gchar          *hex_color;
+  gint            layer_count = 0;
+  gint            sub_len;
+  void           *ptr;
+  gchar          *endptr = NULL;
+
+  default_mode = gimp_image_get_default_new_layer_mode (image);
+
+  TIFFSetDirectory (tif, 0);
+
+  TIFFGetField (tif, TIFFTAG_ALIAS_LAYER_METADATA, &alias_data_len,
+                &alias_layer_info);
+  if (! g_utf8_validate (alias_layer_info, -1, NULL))
+    return;
+
+  /* Create background layer. Fill it with the hex color from
+   * the image-level ALIAS_LAYER_METADATA tag. The hex color
+   * is in AGBR format so we need to reverse it */
+  image_settings = g_strsplit (alias_layer_info, ", ", 15);
+
+  if (image_settings[0] != NULL)
+    layer_count = g_ascii_strtoll (image_settings[0], &endptr, 10);
+
+  if (image_settings[2] != NULL && strlen (image_settings[2]) >= 8)
+    hex_color =
+      g_strdup_printf ("#%s%s%s%s", g_utf8_substring (image_settings[2], 6, 8),
+                                    g_utf8_substring (image_settings[2], 4, 6),
+                                    g_utf8_substring (image_settings[2], 2, 4),
+                                    g_utf8_substring (image_settings[2], 0, 2));
+  else
+    hex_color = g_strdup ("transparent");
+
+  fill_color = gegl_color_new (hex_color);
+  g_free (hex_color);
+
+  foreground_color = gegl_color_duplicate (gimp_context_get_foreground ());
+  gimp_context_set_foreground (fill_color);
+
+  background_layer = gimp_layer_new (image, _("Background"),
+                                     image_width, image_height,
+                                     GIMP_RGBA_IMAGE, 100, default_mode);
+
+  gimp_image_insert_layer (image, background_layer, NULL, -1);
+  gimp_drawable_fill (GIMP_DRAWABLE (background_layer), GIMP_FILL_FOREGROUND);
+
+  g_object_unref (fill_color);
+  gimp_context_set_foreground (foreground_color);
+  g_object_unref (foreground_color);
+
+  /* The layers are stored in BGRA format */
+  format = babl_format_new (babl_model ("R~G~B~A"),
+                                        babl_type ("u8"),
+                                        babl_component ("B~"),
+                                        babl_component ("G~"),
+                                        babl_component ("R~"),
+                                        babl_component ("A"),
+                                        NULL);
+
+  /* Layers are stored in SubIFDs of the first directory */
+  if (TIFFGetField (tif, TIFFTAG_SUBIFD, &sub_len, &ptr))
+    {
+      toff_t offsets[sub_len];
+      gint   count = 0;
+
+      memcpy (offsets, ptr, sub_len * sizeof (offsets[0]));
+
+      for (gint i = 0; i < sub_len; i++)
+        {
+          gchar  *alias_sublayer_info = NULL;
+          gint32  alias_sublayer_len  = 0;
+
+          if (! TIFFSetSubDirectory (tif, offsets[i]))
+            break;
+
+          if (TIFFGetField (tif, TIFFTAG_ALIAS_LAYER_METADATA, &alias_sublayer_len, &alias_sublayer_info) &&
+              g_utf8_validate (alias_sublayer_info, -1, NULL))
+            {
+              gchar       **layer_settings;
+              GimpLayer    *layer;
+              GeglBuffer   *buffer;
+              const gchar  *layer_name;
+              guint32       layer_width = 0;
+              guint32       layer_height = 0;
+              gfloat        x_pos   = 0;
+              gfloat        y_pos   = 0;
+              gfloat        opacity = 100;
+              gboolean      visible = TRUE;
+              gboolean      locked  = FALSE;
+              guint32      *pixels;
+              guint32       row;
+
+              layer_settings = g_strsplit (alias_sublayer_info, ", ", 10);
+
+              if (layer_settings[0] != NULL)
+                {
+                  opacity = (gfloat) g_ascii_strtod (layer_settings[0], &endptr);
+                  opacity *= 100.0f;
+                }
+              if (layer_settings[2] != NULL)
+                visible = g_ascii_strtoll (layer_settings[2], &endptr, 10);
+
+              if (layer_settings[3] != NULL)
+                locked  = g_ascii_strtoll (layer_settings[3], &endptr, 10);
+
+              /* Additional tags in SubIFD */
+              layer_name = tiff_get_page_name (tif);
+
+              TIFFGetField (tif, TIFFTAG_IMAGEWIDTH, &layer_width);
+              TIFFGetField (tif, TIFFTAG_IMAGELENGTH, &layer_height);
+
+              if (! TIFFGetField (tif, TIFFTAG_XPOSITION, &x_pos))
+                x_pos = 0.0f;
+
+              if (! TIFFGetField (tif, TIFFTAG_YPOSITION, &y_pos))
+                y_pos = 0.0f;
+
+              layer = gimp_layer_new (image, layer_name, layer_width,
+                                      layer_height, GIMP_RGBA_IMAGE, opacity,
+                                      default_mode);
+
+              gimp_image_insert_layer (image, layer, NULL, -1);
+
+              /* Loading pixel data */
+              pixels = g_new (uint32_t, layer_width * layer_height);
+              if (! TIFFReadRGBAImage (tif, layer_width, layer_height, pixels, 0))
+                {
+                  g_free (pixels);
+                  continue;
+                }
+
+              buffer = gimp_drawable_get_buffer (GIMP_DRAWABLE (layer));
+
+              for (row = 0; row < layer_height; row++)
+                {
+#if G_BYTE_ORDER != G_LITTLE_ENDIAN
+                  guint32 row_start = row * layer_width;
+                  guint32 row_end   = row_start + layer_width;
+                  guint32 i;
+
+                  /* Make sure our channels are in the right order */
+                  for (i = row_start; i < row_end; i++)
+                    pixels[i] = GUINT32_FROM_LE (pixels[i]);
+#endif
+                  gegl_buffer_set (buffer,
+                                   GEGL_RECTANGLE (0, layer_height - row - 1,
+                                                   layer_width, 1),
+                                   0, format,
+                                   ((guchar *) pixels) + row * layer_width * 4,
+                                   GEGL_AUTO_ROWSTRIDE);
+                }
+              g_object_unref (buffer);
+              g_free (pixels);
+
+              /* The layers seem to have excessive padding that affects the
+               * offset, since it's calculated from the bottom-left corner
+               * of the layer. We can crop the layers to fix the y position
+               * offset. Since the layer width can also shrink due to the
+               * crop, we calculate the before and after difference and
+               * adjust the x offset too. */
+              (void) gimp_image_autocrop (image, GIMP_DRAWABLE (layer));
+
+
+              x_pos += (layer_width - gimp_drawable_get_width (GIMP_DRAWABLE (layer)));
+              y_pos = image_height - gimp_drawable_get_height (GIMP_DRAWABLE (layer)) - y_pos;
+
+              gimp_layer_set_offsets (layer, ROUND (x_pos), ROUND (y_pos));
+              /* In Alias/Autodesk Sketchbook, the layers are the same size as the canvas */
+              gimp_layer_resize_to_image_size (layer);
+
+              gimp_item_set_visible (GIMP_ITEM (layer), visible);
+              /* Set locks after copying pixel data over */
+              gimp_item_set_lock_content (GIMP_ITEM (layer), locked);
+              gimp_layer_set_lock_alpha (layer, locked);
+
+              count++;
+              gimp_progress_update ((gdouble) count / (gdouble) layer_count);
+            }
+        }
+    }
+}
+
 static void
 fill_bit2byte (TiffColorMode tiff_mode)
 {
@@ -2526,47 +2758,38 @@ convert_int2uint (guchar *buffer,
 }
 
 static gboolean
-load_dialog (const gchar       *help_id,
-             TiffSelectedPages *pages,
-             const gchar       *extra_message,
-             DefaultExtra      *default_extra)
+load_dialog (GimpProcedure       *procedure,
+             GimpProcedureConfig *config,
+             TiffSelectedPages   *pages,
+             const gchar         *extra_message,
+             DefaultExtra        *default_extra)
 {
   GtkWidget  *dialog;
   GtkWidget  *vbox;
-  GtkWidget  *show_reduced = NULL;
-  GtkWidget  *crop_option  = NULL;
-  GtkWidget  *extra_radio  = NULL;
+  GtkWidget  *toggle      = NULL;
+  GtkWidget  *extra_radio = NULL;
   gboolean    run;
 
   pages->selector = NULL;
 
-  dialog = gimp_dialog_new (_("Import from TIFF"), PLUG_IN_ROLE,
-                            NULL, 0,
-                            gimp_standard_help_func, help_id,
+  dialog = gimp_procedure_dialog_new (procedure,
+                                      GIMP_PROCEDURE_CONFIG (config),
+                                      _("Import from TIFF"));
 
-                            _("_Cancel"), GTK_RESPONSE_CANCEL,
-                            _("_Import"), GTK_RESPONSE_OK,
+  vbox = gimp_procedure_dialog_fill_box (GIMP_PROCEDURE_DIALOG (dialog), "tiff-vbox",
+                                         "keep-empty-space", NULL);
 
-                            NULL);
+  gimp_procedure_dialog_fill (GIMP_PROCEDURE_DIALOG (dialog),
+                              "tiff-vbox", NULL);
 
-  gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
-                                           GTK_RESPONSE_OK,
-                                           GTK_RESPONSE_CANCEL,
-                                           -1);
-
-  gimp_window_set_transient (GTK_WINDOW (dialog));
-
-  vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
-  gtk_container_set_border_width (GTK_CONTAINER (vbox), 12);
-  gtk_box_pack_start (GTK_BOX (gtk_dialog_get_content_area (GTK_DIALOG (dialog))),
-                      vbox, TRUE, TRUE, 0);
-
-  show_reduced = gtk_check_button_new_with_mnemonic (_("_Show reduced images"));
-  gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (show_reduced),
+  toggle = gtk_check_button_new_with_mnemonic (_("_Show reduced images"));
+  gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (toggle),
                                 pages->show_reduced);
-  gtk_box_pack_start (GTK_BOX (vbox), show_reduced, TRUE, TRUE, 0);
+  gtk_widget_set_margin_bottom (toggle, 6);
+  gtk_box_pack_start (GTK_BOX (vbox), toggle, TRUE, TRUE, 0);
+  gtk_widget_set_visible (toggle, TRUE);
 
-  g_signal_connect (show_reduced, "toggled",
+  g_signal_connect (toggle, "toggled",
                     G_CALLBACK (tiff_dialog_show_reduced),
                     pages);
 
@@ -2576,6 +2799,7 @@ load_dialog (const gchar       *help_id,
       pages->selector = gimp_page_selector_new ();
       gtk_widget_set_size_request (pages->selector, 300, 200);
       gtk_box_pack_start (GTK_BOX (vbox), pages->selector, TRUE, TRUE, 0);
+      gtk_widget_set_visible (pages->selector, TRUE);
 
       gimp_page_selector_set_n_pages (GIMP_PAGE_SELECTOR (pages->selector),
                                       pages->n_filtered_pages);
@@ -2585,20 +2809,11 @@ load_dialog (const gchar       *help_id,
       /* Load a set number of pages, based on whether "Show Reduced Images"
        * is checked
        */
-      tiff_dialog_show_reduced (show_reduced, pages);
+      tiff_dialog_show_reduced (toggle, pages);
 
       g_signal_connect_swapped (pages->selector, "activate",
                                 G_CALLBACK (gtk_window_activate_default),
                                 dialog);
-
-      /* Option to shrink the loaded image to its bounding box
-         or keep as much empty space as possible.
-         Note that there seems to be no way to keep the empty
-         space on the right and bottom. */
-      crop_option = gtk_check_button_new_with_mnemonic (_("_Keep empty space around imported layers"));
-      gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (crop_option),
-                                    pages->keep_empty_space);
-      gtk_box_pack_start (GTK_BOX (vbox), crop_option, TRUE, TRUE, 0);
     }
 
   if (extra_message)
@@ -2610,7 +2825,7 @@ load_dialog (const gchar       *help_id,
                              "hint",      extra_message,
                              NULL);
       gtk_box_pack_start (GTK_BOX (vbox), warning, TRUE, TRUE, 0);
-      gtk_widget_show (warning);
+      gtk_widget_set_visible (warning, TRUE);
 
       extra_radio = gimp_int_radio_group_new (TRUE, _("Process extra channel as:"),
                                               (GCallback) gimp_radio_button_update,
@@ -2620,28 +2835,35 @@ load_dialog (const gchar       *help_id,
                                               _("Channe_l"),                 GIMP_TIFF_LOAD_CHANNEL,    NULL,
                                               NULL);
       gtk_box_pack_start (GTK_BOX (vbox), extra_radio, TRUE, TRUE, 0);
-      gtk_widget_show (extra_radio);
+      gtk_widget_set_visible (extra_radio, TRUE);
     }
 
+  toggle = gimp_procedure_dialog_get_widget (GIMP_PROCEDURE_DIALOG (dialog),
+                                             "keep-empty-space", G_TYPE_NONE);
+  gtk_widget_set_margin_top (toggle, 6);
+  gtk_widget_set_margin_bottom (toggle, 6);
+  gtk_box_reorder_child (GTK_BOX (vbox), toggle, -1);
+
   /* Setup done; display the dialog */
-  gtk_widget_show_all (dialog);
+  gtk_widget_set_visible (dialog, TRUE);
 
   /* run the dialog */
-  run = (gimp_dialog_run (GIMP_DIALOG (dialog)) == GTK_RESPONSE_OK);
+  run = gimp_procedure_dialog_run (GIMP_PROCEDURE_DIALOG (dialog));
 
   if (run)
     {
       if (pages->n_pages > 1)
         {
+          g_object_get (config,
+                        "keep-empty-space", &pages->keep_empty_space,
+                        NULL);
+
           pages->target =
             gimp_page_selector_get_target (GIMP_PAGE_SELECTOR (pages->selector));
 
           pages->pages =
             gimp_page_selector_get_selected_pages (GIMP_PAGE_SELECTOR (pages->selector),
                                                    &pages->n_pages);
-
-          pages->keep_empty_space =
-            gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (crop_option));
 
           /* select all if none selected */
           if (pages->n_pages == 0)

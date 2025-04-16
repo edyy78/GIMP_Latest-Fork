@@ -328,9 +328,17 @@ gimp_eek (const gchar *reason,
            * takes precedence over the command line argument.
            */
 #ifdef G_OS_WIN32
-          const gchar *gimpdebug = "gimp-debug-tool-" GIMP_TOOL_VERSION ".exe";
+#ifdef ENABLE_RELOCATABLE_RESOURCES
+          const gchar *gimpdebug = g_build_filename (gimp_installation_directory (), "bin",
+                                                     "gimp-debug-tool-" GIMP_TOOL_VERSION ".exe", NULL);
+#else
+          const gchar *gimpdebug = BINDIR "/gimp-debug-tool-" GIMP_TOOL_VERSION ".exe";
+#endif
 #elif defined (PLATFORM_OSX)
           const gchar *gimpdebug = "gimp-debug-tool-" GIMP_TOOL_VERSION;
+#elif !defined (G_OS_WIN32) && !defined (PLATFORM_OSX) && defined ENABLE_RELOCATABLE_RESOURCES
+          const gchar *gimpdebug = g_build_filename (gimp_installation_directory (),
+                                                     "libexec", "gimp-debug-tool-" GIMP_TOOL_VERSION, NULL);
 #else
           const gchar *gimpdebug = LIBEXECDIR "/gimp-debug-tool-" GIMP_TOOL_VERSION;
 #endif
@@ -471,11 +479,10 @@ gimp_eek (const gchar *reason,
                                               gimp_get_user_context (the_errors_gimp),
                                               NULL, NULL,
                                               "gimp-xcf-save",
-                                              GIMP_TYPE_RUN_MODE,     GIMP_RUN_NONINTERACTIVE,
-                                              GIMP_TYPE_IMAGE,        image,
-                                              G_TYPE_INT,             0,
-                                              GIMP_TYPE_OBJECT_ARRAY, NULL,
-                                              G_TYPE_FILE,            backup_file,
+                                              GIMP_TYPE_RUN_MODE,          GIMP_RUN_NONINTERACTIVE,
+                                              GIMP_TYPE_IMAGE,             image,
+                                              GIMP_TYPE_CORE_OBJECT_ARRAY, NULL,
+                                              G_TYPE_FILE,                 backup_file,
                                               G_TYPE_NONE);
           g_rename (g_file_peek_path (backup_file), backup_path);
           i++;

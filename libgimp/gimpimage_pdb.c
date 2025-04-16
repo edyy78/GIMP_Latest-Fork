@@ -75,19 +75,18 @@ gimp_image_id_is_valid (gint image_id)
 }
 
 /**
- * gimp_get_images: (skip)
- * @num_images: (out): The number of images currently open.
+ * gimp_get_images:
  *
  * Returns the list of images currently open.
  *
  * This procedure returns the list of images currently open in GIMP.
  *
- * Returns: (array length=num_images) (element-type GimpImage) (transfer container):
+ * Returns: (element-type GimpImage) (array zero-terminated=1) (transfer container):
  *          The list of images currently open.
  *          The returned value must be freed with g_free().
  **/
 GimpImage **
-gimp_get_images (gint *num_images)
+gimp_get_images (void)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
@@ -101,13 +100,8 @@ gimp_get_images (gint *num_images)
                                                args);
   gimp_value_array_unref (args);
 
-  *num_images = 0;
-
   if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
-    {
-      *num_images = GIMP_VALUES_GET_INT (return_vals, 1);
-      { GimpObjectArray *a = g_value_get_boxed (gimp_value_array_index (return_vals, 2)); if (a) images = g_memdup2 (a->data, a->length * sizeof (gpointer)); };
-    }
+    images = g_value_dup_boxed (gimp_value_array_index (return_vals, 1));
 
   gimp_value_array_unref (return_vals);
 
@@ -129,9 +123,9 @@ gimp_get_images (gint *num_images)
  * gimp_layer_new() commands. They can be added to an image using the
  * gimp_image_insert_layer() command.
  *
- * If your image's type if INDEXED, a colormap must also be added with
- * gimp_image_set_colormap(). An indexed image without a colormap will
- * output unexpected colors.
+ * If your image's type if INDEXED, a palette must also be set with
+ * [method@Gimp.Image.set_palette]. An indexed image without a palette
+ * will output unexpected colors.
  *
  * Returns: (transfer none): The newly created image.
  **/
@@ -463,9 +457,8 @@ gimp_image_get_height (GimpImage *image)
 }
 
 /**
- * gimp_image_get_layers: (skip)
+ * gimp_image_get_layers:
  * @image: The image.
- * @num_layers: (out): The number of root layers contained in the image.
  *
  * Returns the list of root layers contained in the specified image.
  *
@@ -478,13 +471,12 @@ gimp_image_get_height (GimpImage *image)
  * with gimp_item_get_children() (possibly recursively checking if
  * these have children too).
  *
- * Returns: (array length=num_layers) (element-type GimpLayer) (transfer container):
+ * Returns: (element-type GimpLayer) (array zero-terminated=1) (transfer container):
  *          The list of layers contained in the image.
  *          The returned value must be freed with g_free().
  **/
 GimpLayer **
-gimp_image_get_layers (GimpImage *image,
-                       gint      *num_layers)
+gimp_image_get_layers (GimpImage *image)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
@@ -499,13 +491,8 @@ gimp_image_get_layers (GimpImage *image,
                                                args);
   gimp_value_array_unref (args);
 
-  *num_layers = 0;
-
   if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
-    {
-      *num_layers = GIMP_VALUES_GET_INT (return_vals, 1);
-      { GimpObjectArray *a = g_value_get_boxed (gimp_value_array_index (return_vals, 2)); if (a) layers = g_memdup2 (a->data, a->length * sizeof (gpointer)); };
-    }
+    layers = g_value_dup_boxed (gimp_value_array_index (return_vals, 1));
 
   gimp_value_array_unref (return_vals);
 
@@ -513,9 +500,8 @@ gimp_image_get_layers (GimpImage *image,
 }
 
 /**
- * gimp_image_get_channels: (skip)
+ * gimp_image_get_channels:
  * @image: The image.
- * @num_channels: (out): The number of channels contained in the image.
  *
  * Returns the list of channels contained in the specified image.
  *
@@ -525,13 +511,12 @@ gimp_image_get_layers (GimpImage *image,
  * \"channels\" are custom channels and do not include the image's
  * color components.
  *
- * Returns: (array length=num_channels) (element-type GimpChannel) (transfer container):
+ * Returns: (element-type GimpChannel) (array zero-terminated=1) (transfer container):
  *          The list of channels contained in the image.
  *          The returned value must be freed with g_free().
  **/
 GimpChannel **
-gimp_image_get_channels (GimpImage *image,
-                         gint      *num_channels)
+gimp_image_get_channels (GimpImage *image)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
@@ -546,13 +531,8 @@ gimp_image_get_channels (GimpImage *image,
                                                args);
   gimp_value_array_unref (args);
 
-  *num_channels = 0;
-
   if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
-    {
-      *num_channels = GIMP_VALUES_GET_INT (return_vals, 1);
-      { GimpObjectArray *a = g_value_get_boxed (gimp_value_array_index (return_vals, 2)); if (a) channels = g_memdup2 (a->data, a->length * sizeof (gpointer)); };
-    }
+    channels = g_value_dup_boxed (gimp_value_array_index (return_vals, 1));
 
   gimp_value_array_unref (return_vals);
 
@@ -560,49 +540,42 @@ gimp_image_get_channels (GimpImage *image,
 }
 
 /**
- * gimp_image_get_vectors: (skip)
+ * gimp_image_get_paths:
  * @image: The image.
- * @num_vectors: (out): The number of vectors contained in the image.
  *
- * Returns the list of vectors contained in the specified image.
+ * Returns the list of paths contained in the specified image.
  *
- * This procedure returns the list of vectors contained in the
- * specified image.
+ * This procedure returns the list of paths contained in the specified
+ * image.
  *
- * Returns: (array length=num_vectors) (element-type GimpVectors) (transfer container):
- *          The list of vectors contained in the image.
+ * Returns: (element-type GimpPath) (array zero-terminated=1) (transfer container):
+ *          The list of paths contained in the image.
  *          The returned value must be freed with g_free().
  *
  * Since: 2.4
  **/
-GimpVectors **
-gimp_image_get_vectors (GimpImage *image,
-                        gint      *num_vectors)
+GimpPath **
+gimp_image_get_paths (GimpImage *image)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
-  GimpVectors **vectors = NULL;
+  GimpPath **paths = NULL;
 
   args = gimp_value_array_new_from_types (NULL,
                                           GIMP_TYPE_IMAGE, image,
                                           G_TYPE_NONE);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
-                                               "gimp-image-get-vectors",
+                                               "gimp-image-get-paths",
                                                args);
   gimp_value_array_unref (args);
 
-  *num_vectors = 0;
-
   if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
-    {
-      *num_vectors = GIMP_VALUES_GET_INT (return_vals, 1);
-      { GimpObjectArray *a = g_value_get_boxed (gimp_value_array_index (return_vals, 2)); if (a) vectors = g_memdup2 (a->data, a->length * sizeof (gpointer)); };
-    }
+    paths = g_value_dup_boxed (gimp_value_array_index (return_vals, 1));
 
   gimp_value_array_unref (return_vals);
 
-  return vectors;
+  return paths;
 }
 
 /**
@@ -716,8 +689,7 @@ gimp_image_floating_sel_attached_to (GimpImage *image)
 /**
  * gimp_image_pick_color:
  * @image: The image.
- * @num_drawables: The number of drawables.
- * @drawables: (array length=num_drawables) (element-type GimpItem): The drawables to pick from.
+ * @drawables: (element-type GimpDrawable) (array zero-terminated=1): The drawables to pick from.
  * @x: x coordinate of upper-left corner of rectangle.
  * @y: y coordinate of upper-left corner of rectangle.
  * @sample_merged: Use the composite image, not the drawables.
@@ -746,15 +718,14 @@ gimp_image_floating_sel_attached_to (GimpImage *image)
  * Returns: TRUE on success.
  **/
 gboolean
-gimp_image_pick_color (GimpImage       *image,
-                       gint             num_drawables,
-                       const GimpItem **drawables,
-                       gdouble          x,
-                       gdouble          y,
-                       gboolean         sample_merged,
-                       gboolean         sample_average,
-                       gdouble          average_radius,
-                       GeglColor      **color)
+gimp_image_pick_color (GimpImage           *image,
+                       const GimpDrawable **drawables,
+                       gdouble              x,
+                       gdouble              y,
+                       gboolean             sample_merged,
+                       gboolean             sample_average,
+                       gdouble              average_radius,
+                       GeglColor          **color)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
@@ -762,15 +733,13 @@ gimp_image_pick_color (GimpImage       *image,
 
   args = gimp_value_array_new_from_types (NULL,
                                           GIMP_TYPE_IMAGE, image,
-                                          G_TYPE_INT, num_drawables,
-                                          GIMP_TYPE_OBJECT_ARRAY, NULL,
+                                          GIMP_TYPE_CORE_OBJECT_ARRAY, drawables,
                                           G_TYPE_DOUBLE, x,
                                           G_TYPE_DOUBLE, y,
                                           G_TYPE_BOOLEAN, sample_merged,
                                           G_TYPE_BOOLEAN, sample_average,
                                           G_TYPE_DOUBLE, average_radius,
                                           G_TYPE_NONE);
-  gimp_value_set_object_array (gimp_value_array_index (args, 2), GIMP_TYPE_ITEM, (GObject **) drawables, num_drawables);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
                                                "gimp-image-pick-color",
@@ -1171,28 +1140,28 @@ gimp_image_thaw_channels (GimpImage *image)
 }
 
 /**
- * gimp_image_insert_vectors:
+ * gimp_image_insert_path:
  * @image: The image.
- * @vectors: The vectors.
- * @parent: (nullable): The parent vectors.
- * @position: The vectors position.
+ * @path: The path.
+ * @parent: (nullable): The parent path.
+ * @position: The path position.
  *
- * Add the specified vectors to the image.
+ * Add the specified path to the image.
  *
- * This procedure adds the specified vectors to the image at the given
- * position. Since vectors groups are not currently supported, the
- * parent argument must always be 0. The position argument specifies
- * the location of the vectors inside the stack, starting from the top
- * (0) and increasing. If the position is specified as -1, then the
- * vectors is inserted above the active vectors.
+ * This procedure adds the specified path to the image at the given
+ * position. Since path groups are not currently supported, the parent
+ * argument must always be 0. The position argument specifies the
+ * location of the path inside the stack, starting from the top (0) and
+ * increasing. If the position is specified as -1, then the path is
+ * inserted above the active path.
  *
  * Returns: TRUE on success.
  **/
 gboolean
-gimp_image_insert_vectors (GimpImage   *image,
-                           GimpVectors *vectors,
-                           GimpVectors *parent,
-                           gint         position)
+gimp_image_insert_path (GimpImage *image,
+                        GimpPath  *path,
+                        GimpPath  *parent,
+                        gint       position)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
@@ -1200,13 +1169,13 @@ gimp_image_insert_vectors (GimpImage   *image,
 
   args = gimp_value_array_new_from_types (NULL,
                                           GIMP_TYPE_IMAGE, image,
-                                          GIMP_TYPE_VECTORS, vectors,
-                                          GIMP_TYPE_VECTORS, parent,
+                                          GIMP_TYPE_PATH, path,
+                                          GIMP_TYPE_PATH, parent,
                                           G_TYPE_INT, position,
                                           G_TYPE_NONE);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
-                                               "gimp-image-insert-vectors",
+                                               "gimp-image-insert-path",
                                                args);
   gimp_value_array_unref (args);
 
@@ -1218,9 +1187,9 @@ gimp_image_insert_vectors (GimpImage   *image,
 }
 
 /**
- * gimp_image_remove_vectors:
+ * gimp_image_remove_path:
  * @image: The image.
- * @vectors: The vectors object.
+ * @path: The path object.
  *
  * Remove the specified path from the image.
  *
@@ -1232,8 +1201,8 @@ gimp_image_insert_vectors (GimpImage   *image,
  * Since: 2.4
  **/
 gboolean
-gimp_image_remove_vectors (GimpImage   *image,
-                           GimpVectors *vectors)
+gimp_image_remove_path (GimpImage *image,
+                        GimpPath  *path)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
@@ -1241,11 +1210,11 @@ gimp_image_remove_vectors (GimpImage   *image,
 
   args = gimp_value_array_new_from_types (NULL,
                                           GIMP_TYPE_IMAGE, image,
-                                          GIMP_TYPE_VECTORS, vectors,
+                                          GIMP_TYPE_PATH, path,
                                           G_TYPE_NONE);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
-                                               "gimp-image-remove-vectors",
+                                               "gimp-image-remove-path",
                                                args);
   gimp_value_array_unref (args);
 
@@ -1257,26 +1226,221 @@ gimp_image_remove_vectors (GimpImage   *image,
 }
 
 /**
- * gimp_image_freeze_vectors:
+ * gimp_image_import_paths_from_file:
+ * @image: The image.
+ * @file: The SVG file to import.
+ * @merge: Merge paths into a single path object.
+ * @scale: Scale the SVG to image dimensions.
+ * @paths: (out) (element-type GimpPath) (array zero-terminated=1) (transfer container): The list of newly created paths.
+ *
+ * Import paths from an SVG file.
+ *
+ * This procedure imports paths from an SVG file. SVG elements other
+ * than paths and basic shapes are ignored.
+ *
+ * Returns: TRUE on success.
+ *
+ * Since: 2.4
+ **/
+gboolean
+gimp_image_import_paths_from_file (GimpImage   *image,
+                                   GFile       *file,
+                                   gboolean     merge,
+                                   gboolean     scale,
+                                   GimpPath  ***paths)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean success = TRUE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_FILE, file,
+                                          G_TYPE_BOOLEAN, merge,
+                                          G_TYPE_BOOLEAN, scale,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-import-paths-from-file",
+                                               args);
+  gimp_value_array_unref (args);
+
+  *paths = NULL;
+
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  if (success)
+    *paths = g_value_dup_boxed (gimp_value_array_index (return_vals, 1));
+
+  gimp_value_array_unref (return_vals);
+
+  return success;
+}
+
+/**
+ * gimp_image_import_paths_from_string:
+ * @image: The image.
+ * @string: A string that must be a complete and valid SVG document.
+ * @length: Number of bytes in string or -1 if the string is NULL terminated.
+ * @merge: Merge paths into a single path object.
+ * @scale: Scale the SVG to image dimensions.
+ * @paths: (out) (element-type GimpPath) (array zero-terminated=1) (transfer container): The list of newly created paths.
+ *
+ * Import paths from an SVG string.
+ *
+ * This procedure works like [method@Gimp.Image.import_paths_from_file]
+ * but takes a string rather than reading the SVG from a file. This
+ * allows you to write scripts that generate SVG and feed it to GIMP.
+ *
+ * Returns: TRUE on success.
+ *
+ * Since: 2.4
+ **/
+gboolean
+gimp_image_import_paths_from_string (GimpImage     *image,
+                                     const gchar   *string,
+                                     gint           length,
+                                     gboolean       merge,
+                                     gboolean       scale,
+                                     GimpPath    ***paths)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean success = TRUE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_STRING, string,
+                                          G_TYPE_INT, length,
+                                          G_TYPE_BOOLEAN, merge,
+                                          G_TYPE_BOOLEAN, scale,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-import-paths-from-string",
+                                               args);
+  gimp_value_array_unref (args);
+
+  *paths = NULL;
+
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  if (success)
+    *paths = g_value_dup_boxed (gimp_value_array_index (return_vals, 1));
+
+  gimp_value_array_unref (return_vals);
+
+  return success;
+}
+
+/**
+ * gimp_image_export_path_to_file:
+ * @image: The image.
+ * @file: The SVG file to create.
+ * @path: (nullable): The path object to export, or %NULL for all in the image.
+ *
+ * save a path as an SVG file.
+ *
+ * This procedure creates an SVG file to save a Path object, that is, a
+ * path. The resulting file can be edited using a vector graphics
+ * application, or later reloaded into GIMP. Pass %NULL as the 'path'
+ * argument to export all paths in the image.
+ *
+ * Returns: TRUE on success.
+ *
+ * Since: 2.6
+ **/
+gboolean
+gimp_image_export_path_to_file (GimpImage *image,
+                                GFile     *file,
+                                GimpPath  *path)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean success = TRUE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_FILE, file,
+                                          GIMP_TYPE_PATH, path,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-export-path-to-file",
+                                               args);
+  gimp_value_array_unref (args);
+
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
+
+  return success;
+}
+
+/**
+ * gimp_image_export_path_to_string:
+ * @image: The image.
+ * @path: (nullable): The path object to export, or %NULL for all in the image.
+ *
+ * Save a path as an SVG string.
+ *
+ * This procedure works like [method@Gimp.Image.export_path_to_file]
+ * but creates a string rather than a file. The string is
+ * NULL-terminated and holds a complete XML document. Pass %NULL as the
+ * 'path' argument to export all paths in the image.
+ *
+ * Returns: (transfer full):
+ *          A string whose contents are a complete SVG document.
+ *          The returned value must be freed with g_free().
+ *
+ * Since: 2.6
+ **/
+gchar *
+gimp_image_export_path_to_string (GimpImage *image,
+                                  GimpPath  *path)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gchar *string = NULL;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          GIMP_TYPE_PATH, path,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-export-path-to-string",
+                                               args);
+  gimp_value_array_unref (args);
+
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    string = GIMP_VALUES_DUP_STRING (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
+
+  return string;
+}
+
+/**
+ * gimp_image_freeze_paths:
  * @image: The image.
  *
- * Freeze the image's vectors list.
+ * Freeze the image's path list.
  *
- * This procedure freezes the vectors list of the image, suppressing
- * any updates to the Paths dialog in response to changes to the
- * image's vectors. This can significantly improve performance while
- * applying changes affecting the vectors list.
+ * This procedure freezes the path list of the image, suppressing any
+ * updates to the Paths dialog in response to changes to the image's
+ * path. This can significantly improve performance while applying
+ * changes affecting the path list.
  *
- * Each call to gimp_image_freeze_vectors() should be matched by a
- * corresponding call to gimp_image_thaw_vectors(), undoing its
- * effects.
+ * Each call to gimp_image_freeze_paths() should be matched by a
+ * corresponding call to gimp_image_thaw_paths (), undoing its effects.
  *
  * Returns: TRUE on success.
  *
  * Since: 2.10.2
  **/
 gboolean
-gimp_image_freeze_vectors (GimpImage *image)
+gimp_image_freeze_paths (GimpImage *image)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
@@ -1287,7 +1451,7 @@ gimp_image_freeze_vectors (GimpImage *image)
                                           G_TYPE_NONE);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
-                                               "gimp-image-freeze-vectors",
+                                               "gimp-image-freeze-paths",
                                                args);
   gimp_value_array_unref (args);
 
@@ -1299,23 +1463,23 @@ gimp_image_freeze_vectors (GimpImage *image)
 }
 
 /**
- * gimp_image_thaw_vectors:
+ * gimp_image_thaw_paths:
  * @image: The image.
  *
- * Thaw the image's vectors list.
+ * Thaw the image's path list.
  *
- * This procedure thaws the vectors list of the image, re-enabling
- * updates to the Paths dialog.
+ * This procedure thaws the path list of the image, re-enabling updates
+ * to the Paths dialog.
  *
  * This procedure should match a corresponding call to
- * gimp_image_freeze_vectors().
+ * gimp_image_freeze_paths().
  *
  * Returns: TRUE on success.
  *
  * Since: 2.10.2
  **/
 gboolean
-gimp_image_thaw_vectors (GimpImage *image)
+gimp_image_thaw_paths (GimpImage *image)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
@@ -1326,7 +1490,7 @@ gimp_image_thaw_vectors (GimpImage *image)
                                           G_TYPE_NONE);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
-                                               "gimp-image-thaw-vectors",
+                                               "gimp-image-thaw-paths",
                                                args);
   gimp_value_array_unref (args);
 
@@ -1545,7 +1709,17 @@ gimp_image_lower_item_to_bottom (GimpImage *image,
  *
  * Reorder the specified item within its item tree
  *
- * This procedure reorders the specified item within its item tree.
+ * Reorders or moves item within an item tree. Requires parent is %NULL
+ * or a GroupLayer, else returns error. When parent is not %NULL and
+ * item is in parent, reorders item within parent group. When parent is
+ * not %NULL and item is not in parent, moves item into parent group.
+ * When parent is %NULL, moves item from current parent to top level.
+ *
+ * Requires item is in same tree as not %NULL parent, else returns
+ * error. Layers, Channels, and Paths are in separate trees.
+ *
+ * Requires item is not ancestor of parent, else returns error, to
+ * preclude cycles.
  *
  * Returns: TRUE on success.
  *
@@ -1706,133 +1880,15 @@ gimp_image_merge_down (GimpImage     *image,
 }
 
 /**
- * gimp_image_merge_layer_group:
- * @image: The image.
- * @layer_group: The layer group to merge.
- *
- * Merge the passed layer group's layers into one normal layer.
- *
- * This procedure combines the layers of the passed layer group into a
- * single normal layer, replacing the group.
- *
- * Returns: (transfer none): The resulting layer.
- *
- * Since: 2.10.14
- **/
-GimpLayer *
-gimp_image_merge_layer_group (GimpImage *image,
-                              GimpLayer *layer_group)
-{
-  GimpValueArray *args;
-  GimpValueArray *return_vals;
-  GimpLayer *layer = NULL;
-
-  args = gimp_value_array_new_from_types (NULL,
-                                          GIMP_TYPE_IMAGE, image,
-                                          GIMP_TYPE_LAYER, layer_group,
-                                          G_TYPE_NONE);
-
-  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
-                                               "gimp-image-merge-layer-group",
-                                               args);
-  gimp_value_array_unref (args);
-
-  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
-    layer = GIMP_VALUES_GET_LAYER (return_vals, 1);
-
-  gimp_value_array_unref (return_vals);
-
-  return layer;
-}
-
-/**
- * _gimp_image_get_colormap:
- * @image: The image.
- *
- * Returns the image's colormap
- *
- * This procedure returns an actual pointer to the image's colormap, as
- * well as the number of bytes contained in the colormap. The actual
- * number of colors in the transmitted colormap will be 'num-bytes' /
- * 3. If the image is not in Indexed color mode, no colormap is
- * returned.
- *
- * Returns: (transfer full): The image's colormap.
- **/
-GBytes *
-_gimp_image_get_colormap (GimpImage *image)
-{
-  GimpValueArray *args;
-  GimpValueArray *return_vals;
-  GBytes *colormap = NULL;
-
-  args = gimp_value_array_new_from_types (NULL,
-                                          GIMP_TYPE_IMAGE, image,
-                                          G_TYPE_NONE);
-
-  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
-                                               "gimp-image-get-colormap",
-                                               args);
-  gimp_value_array_unref (args);
-
-  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
-    colormap = GIMP_VALUES_DUP_BYTES (return_vals, 1);
-
-  gimp_value_array_unref (return_vals);
-
-  return colormap;
-}
-
-/**
- * _gimp_image_set_colormap:
- * @image: The image.
- * @colormap: The new colormap values.
- *
- * Sets the entries in the image's colormap.
- *
- * This procedure sets the entries in the specified image's colormap.
- * The number of entries is specified by the 'num-bytes' parameter and
- * corresponds to the number of INT8 triples that must be contained in
- * the 'colormap' array. The actual number of colors in the transmitted
- * colormap is 'num-bytes' / 3.
- *
- * Returns: TRUE on success.
- **/
-gboolean
-_gimp_image_set_colormap (GimpImage *image,
-                          GBytes    *colormap)
-{
-  GimpValueArray *args;
-  GimpValueArray *return_vals;
-  gboolean success = TRUE;
-
-  args = gimp_value_array_new_from_types (NULL,
-                                          GIMP_TYPE_IMAGE, image,
-                                          G_TYPE_BYTES, colormap,
-                                          G_TYPE_NONE);
-
-  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
-                                               "gimp-image-set-colormap",
-                                               args);
-  gimp_value_array_unref (args);
-
-  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
-
-  gimp_value_array_unref (return_vals);
-
-  return success;
-}
-
-/**
  * gimp_image_get_palette:
  * @image: The image.
  *
  * Returns the image's colormap
  *
- * This procedure returns the image's colormap as a GimpPalette. If the
- * image is not in Indexed color mode, %NULL is returned.
+ * This procedure returns the image's colormap as a %GimpPalette. If
+ * the image is not in Indexed color mode, %NULL is returned.
  *
- * Returns: (transfer none): The image's colormap.
+ * Returns: (transfer none): The image's colormap palette.
  *
  * Since: 3.0
  **/
@@ -1841,7 +1897,7 @@ gimp_image_get_palette (GimpImage *image)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
-  GimpPalette *colormap = NULL;
+  GimpPalette *palette = NULL;
 
   args = gimp_value_array_new_from_types (NULL,
                                           GIMP_TYPE_IMAGE, image,
@@ -1853,11 +1909,53 @@ gimp_image_get_palette (GimpImage *image)
   gimp_value_array_unref (args);
 
   if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
-    colormap = GIMP_VALUES_GET_PALETTE (return_vals, 1);
+    palette = GIMP_VALUES_GET_PALETTE (return_vals, 1);
 
   gimp_value_array_unref (return_vals);
 
-  return colormap;
+  return palette;
+}
+
+/**
+ * gimp_image_set_palette:
+ * @image: The image.
+ * @new_palette: The palette to copy from.
+ *
+ * Set the image's colormap to a copy of @palette
+ *
+ * This procedure changes the image's colormap to an exact copy of
+ * @palette and returns the palette of @image.
+ * If the image is not in Indexed color mode, nothing happens and %NULL
+ * is returned.
+ *
+ * Returns: (transfer none): The image's colormap palette.
+ *
+ * Since: 3.0
+ **/
+GimpPalette *
+gimp_image_set_palette (GimpImage   *image,
+                        GimpPalette *new_palette)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpPalette *palette = NULL;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          GIMP_TYPE_PALETTE, new_palette,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-set-palette",
+                                               args);
+  gimp_value_array_unref (args);
+
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    palette = GIMP_VALUES_GET_PALETTE (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
+
+  return palette;
 }
 
 /**
@@ -2070,24 +2168,22 @@ _gimp_image_thumbnail (GimpImage  *image,
 }
 
 /**
- * gimp_image_get_selected_layers: (skip)
+ * gimp_image_get_selected_layers:
  * @image: The image.
- * @num_layers: (out): The number of selected layers in the image.
  *
  * Returns the specified image's selected layers.
  *
  * This procedure returns the list of selected layers in the specified
  * image.
  *
- * Returns: (array length=num_layers) (element-type GimpLayer) (transfer container):
+ * Returns: (element-type GimpLayer) (array zero-terminated=1) (transfer container):
  *          The list of selected layers in the image.
  *          The returned value must be freed with g_free().
  *
  * Since: 3.0.0
  **/
 GimpLayer **
-gimp_image_get_selected_layers (GimpImage *image,
-                                gint      *num_layers)
+gimp_image_get_selected_layers (GimpImage *image)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
@@ -2102,13 +2198,8 @@ gimp_image_get_selected_layers (GimpImage *image,
                                                args);
   gimp_value_array_unref (args);
 
-  *num_layers = 0;
-
   if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
-    {
-      *num_layers = GIMP_VALUES_GET_INT (return_vals, 1);
-      { GimpObjectArray *a = g_value_get_boxed (gimp_value_array_index (return_vals, 2)); if (a) layers = g_memdup2 (a->data, a->length * sizeof (gpointer)); };
-    }
+    layers = g_value_dup_boxed (gimp_value_array_index (return_vals, 1));
 
   gimp_value_array_unref (return_vals);
 
@@ -2118,8 +2209,7 @@ gimp_image_get_selected_layers (GimpImage *image,
 /**
  * gimp_image_set_selected_layers:
  * @image: The image.
- * @num_layers: The number of layers to select.
- * @layers: (array length=num_layers) (element-type GimpLayer): The list of layers to select.
+ * @layers: (element-type GimpLayer) (array zero-terminated=1): The list of layers to select.
  *
  * Sets the specified image's selected layers.
  *
@@ -2134,7 +2224,6 @@ gimp_image_get_selected_layers (GimpImage *image,
  **/
 gboolean
 gimp_image_set_selected_layers (GimpImage        *image,
-                                gint              num_layers,
                                 const GimpLayer **layers)
 {
   GimpValueArray *args;
@@ -2143,10 +2232,8 @@ gimp_image_set_selected_layers (GimpImage        *image,
 
   args = gimp_value_array_new_from_types (NULL,
                                           GIMP_TYPE_IMAGE, image,
-                                          G_TYPE_INT, num_layers,
-                                          GIMP_TYPE_OBJECT_ARRAY, NULL,
+                                          GIMP_TYPE_CORE_OBJECT_ARRAY, layers,
                                           G_TYPE_NONE);
-  gimp_value_set_object_array (gimp_value_array_index (args, 2), GIMP_TYPE_LAYER, (GObject **) layers, num_layers);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
                                                "gimp-image-set-selected-layers",
@@ -2161,24 +2248,22 @@ gimp_image_set_selected_layers (GimpImage        *image,
 }
 
 /**
- * gimp_image_get_selected_channels: (skip)
+ * gimp_image_get_selected_channels:
  * @image: The image.
- * @num_channels: (out): The number of selected channels in the image.
  *
  * Returns the specified image's selected channels.
  *
  * This procedure returns the list of selected channels in the
  * specified image.
  *
- * Returns: (array length=num_channels) (element-type GimpChannel) (transfer container):
+ * Returns: (element-type GimpChannel) (array zero-terminated=1) (transfer container):
  *          The list of selected channels in the image.
  *          The returned value must be freed with g_free().
  *
  * Since: 3.0.0
  **/
 GimpChannel **
-gimp_image_get_selected_channels (GimpImage *image,
-                                  gint      *num_channels)
+gimp_image_get_selected_channels (GimpImage *image)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
@@ -2193,13 +2278,8 @@ gimp_image_get_selected_channels (GimpImage *image,
                                                args);
   gimp_value_array_unref (args);
 
-  *num_channels = 0;
-
   if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
-    {
-      *num_channels = GIMP_VALUES_GET_INT (return_vals, 1);
-      { GimpObjectArray *a = g_value_get_boxed (gimp_value_array_index (return_vals, 2)); if (a) channels = g_memdup2 (a->data, a->length * sizeof (gpointer)); };
-    }
+    channels = g_value_dup_boxed (gimp_value_array_index (return_vals, 1));
 
   gimp_value_array_unref (return_vals);
 
@@ -2209,8 +2289,7 @@ gimp_image_get_selected_channels (GimpImage *image,
 /**
  * gimp_image_set_selected_channels:
  * @image: The image.
- * @num_channels: The number of channels to select.
- * @channels: (array length=num_channels) (element-type GimpChannel): The list of channels to select.
+ * @channels: (element-type GimpChannel) (array zero-terminated=1): The list of channels to select.
  *
  * Sets the specified image's selected channels.
  *
@@ -2225,7 +2304,6 @@ gimp_image_get_selected_channels (GimpImage *image,
  **/
 gboolean
 gimp_image_set_selected_channels (GimpImage          *image,
-                                  gint                num_channels,
                                   const GimpChannel **channels)
 {
   GimpValueArray *args;
@@ -2234,10 +2312,8 @@ gimp_image_set_selected_channels (GimpImage          *image,
 
   args = gimp_value_array_new_from_types (NULL,
                                           GIMP_TYPE_IMAGE, image,
-                                          G_TYPE_INT, num_channels,
-                                          GIMP_TYPE_OBJECT_ARRAY, NULL,
+                                          GIMP_TYPE_CORE_OBJECT_ARRAY, channels,
                                           G_TYPE_NONE);
-  gimp_value_set_object_array (gimp_value_array_index (args, 2), GIMP_TYPE_CHANNEL, (GObject **) channels, num_channels);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
                                                "gimp-image-set-selected-channels",
@@ -2252,69 +2328,60 @@ gimp_image_set_selected_channels (GimpImage          *image,
 }
 
 /**
- * gimp_image_get_selected_vectors: (skip)
+ * gimp_image_get_selected_paths:
  * @image: The image.
- * @num_vectors: (out): The number of selected vectors in the image.
  *
- * Returns the specified image's selected vectors.
+ * Returns the specified image's selected paths.
  *
- * This procedure returns the list of selected vectors in the specified
+ * This procedure returns the list of selected paths in the specified
  * image.
  *
- * Returns: (array length=num_vectors) (element-type GimpVectors) (transfer container):
- *          The list of selected vectors in the image.
+ * Returns: (element-type GimpPath) (array zero-terminated=1) (transfer container):
+ *          The list of selected paths in the image.
  *          The returned value must be freed with g_free().
  *
  * Since: 3.0.0
  **/
-GimpVectors **
-gimp_image_get_selected_vectors (GimpImage *image,
-                                 gint      *num_vectors)
+GimpPath **
+gimp_image_get_selected_paths (GimpImage *image)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
-  GimpVectors **vectors = NULL;
+  GimpPath **paths = NULL;
 
   args = gimp_value_array_new_from_types (NULL,
                                           GIMP_TYPE_IMAGE, image,
                                           G_TYPE_NONE);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
-                                               "gimp-image-get-selected-vectors",
+                                               "gimp-image-get-selected-paths",
                                                args);
   gimp_value_array_unref (args);
 
-  *num_vectors = 0;
-
   if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
-    {
-      *num_vectors = GIMP_VALUES_GET_INT (return_vals, 1);
-      { GimpObjectArray *a = g_value_get_boxed (gimp_value_array_index (return_vals, 2)); if (a) vectors = g_memdup2 (a->data, a->length * sizeof (gpointer)); };
-    }
+    paths = g_value_dup_boxed (gimp_value_array_index (return_vals, 1));
 
   gimp_value_array_unref (return_vals);
 
-  return vectors;
+  return paths;
 }
 
 /**
- * gimp_image_set_selected_vectors:
+ * gimp_image_set_selected_paths:
  * @image: The image.
- * @num_vectors: The number of vectors to select.
- * @vectors: (array length=num_vectors) (element-type GimpVectors): The list of vectors to select.
+ * @paths: (element-type GimpPath) (array zero-terminated=1): The list of paths to select.
  *
- * Sets the specified image's selected vectors.
+ * Sets the specified image's selected paths.
  *
- * The vectors are set as the selected vectors in the image.
+ * The paths are set as the selected paths in the image.
  *
  * Returns: TRUE on success.
  *
  * Since: 3.0.0
  **/
 gboolean
-gimp_image_set_selected_vectors (GimpImage          *image,
-                                 gint                num_vectors,
-                                 const GimpVectors **vectors)
+gimp_image_set_selected_paths (GimpImage       *image,
+                               const GimpPath **paths)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
@@ -2322,13 +2389,11 @@ gimp_image_set_selected_vectors (GimpImage          *image,
 
   args = gimp_value_array_new_from_types (NULL,
                                           GIMP_TYPE_IMAGE, image,
-                                          G_TYPE_INT, num_vectors,
-                                          GIMP_TYPE_OBJECT_ARRAY, NULL,
+                                          GIMP_TYPE_CORE_OBJECT_ARRAY, paths,
                                           G_TYPE_NONE);
-  gimp_value_set_object_array (gimp_value_array_index (args, 2), GIMP_TYPE_VECTORS, (GObject **) vectors, num_vectors);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
-                                               "gimp-image-set-selected-vectors",
+                                               "gimp-image-set-selected-paths",
                                                args);
   gimp_value_array_unref (args);
 
@@ -2342,7 +2407,6 @@ gimp_image_set_selected_vectors (GimpImage          *image,
 /**
  * gimp_image_get_selected_drawables:
  * @image: The image.
- * @num_drawables: (out): The number of selected drawables in the image.
  *
  * Get the image's selected drawables
  *
@@ -2354,19 +2418,18 @@ gimp_image_set_selected_vectors (GimpImage          *image,
  * has a layer mask and the layer mask is in edit mode, then the layer
  * mask is the active drawable.
  *
- * Returns: (array length=num_drawables) (element-type GimpItem) (transfer container):
+ * Returns: (element-type GimpDrawable) (array zero-terminated=1) (transfer container):
  *          The list of selected drawables in the image.
  *          The returned value must be freed with g_free().
  *
  * Since: 3.0.0
  **/
-GimpItem **
-gimp_image_get_selected_drawables (GimpImage *image,
-                                   gint      *num_drawables)
+GimpDrawable **
+gimp_image_get_selected_drawables (GimpImage *image)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
-  GimpItem **drawables = NULL;
+  GimpDrawable **drawables = NULL;
 
   args = gimp_value_array_new_from_types (NULL,
                                           GIMP_TYPE_IMAGE, image,
@@ -2377,13 +2440,8 @@ gimp_image_get_selected_drawables (GimpImage *image,
                                                args);
   gimp_value_array_unref (args);
 
-  *num_drawables = 0;
-
   if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
-    {
-      *num_drawables = GIMP_VALUES_GET_INT (return_vals, 1);
-      { GimpObjectArray *a = g_value_get_boxed (gimp_value_array_index (return_vals, 2)); if (a) drawables = g_memdup2 (a->data, a->length * sizeof (gpointer)); };
-    }
+    drawables = g_value_dup_boxed (gimp_value_array_index (return_vals, 1));
 
   gimp_value_array_unref (return_vals);
 
@@ -2927,12 +2985,12 @@ gimp_image_set_resolution (GimpImage *image,
  *
  * Returns: (transfer none): The unit.
  **/
-GimpUnit
+GimpUnit *
 gimp_image_get_unit (GimpImage *image)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
-  GimpUnit unit = GIMP_UNIT_PIXEL;
+  GimpUnit *unit = NULL;
 
   args = gimp_value_array_new_from_types (NULL,
                                           GIMP_TYPE_IMAGE, image,
@@ -2944,7 +3002,7 @@ gimp_image_get_unit (GimpImage *image)
   gimp_value_array_unref (args);
 
   if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
-    unit = GIMP_VALUES_GET_INT (return_vals, 1);
+    unit = GIMP_VALUES_GET_UNIT (return_vals, 1);
 
   gimp_value_array_unref (return_vals);
 
@@ -2968,7 +3026,7 @@ gimp_image_get_unit (GimpImage *image)
  **/
 gboolean
 gimp_image_set_unit (GimpImage *image,
-                     GimpUnit   unit)
+                     GimpUnit  *unit)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
@@ -3151,26 +3209,26 @@ gimp_image_get_channel_by_tattoo (GimpImage *image,
 }
 
 /**
- * gimp_image_get_vectors_by_tattoo:
+ * gimp_image_get_path_by_tattoo:
  * @image: The image.
- * @tattoo: The tattoo of the vectors to find.
+ * @tattoo: The tattoo of the path to find.
  *
- * Find a vectors with a given tattoo in an image.
+ * Find a path with a given tattoo in an image.
  *
- * This procedure returns the vectors with the given tattoo in the
+ * This procedure returns the path with the given tattoo in the
  * specified image.
  *
- * Returns: (transfer none): The vectors with the specified tattoo.
+ * Returns: (transfer none): The path with the specified tattoo.
  *
  * Since: 2.6
  **/
-GimpVectors *
-gimp_image_get_vectors_by_tattoo (GimpImage *image,
-                                  guint      tattoo)
+GimpPath *
+gimp_image_get_path_by_tattoo (GimpImage *image,
+                               guint      tattoo)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
-  GimpVectors *vectors = NULL;
+  GimpPath *path = NULL;
 
   args = gimp_value_array_new_from_types (NULL,
                                           GIMP_TYPE_IMAGE, image,
@@ -3178,16 +3236,16 @@ gimp_image_get_vectors_by_tattoo (GimpImage *image,
                                           G_TYPE_NONE);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
-                                               "gimp-image-get-vectors-by-tattoo",
+                                               "gimp-image-get-path-by-tattoo",
                                                args);
   gimp_value_array_unref (args);
 
   if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
-    vectors = GIMP_VALUES_GET_VECTORS (return_vals, 1);
+    path = GIMP_VALUES_GET_PATH (return_vals, 1);
 
   gimp_value_array_unref (return_vals);
 
-  return vectors;
+  return path;
 }
 
 /**
@@ -3271,26 +3329,26 @@ gimp_image_get_channel_by_name (GimpImage   *image,
 }
 
 /**
- * gimp_image_get_vectors_by_name:
+ * gimp_image_get_path_by_name:
  * @image: The image.
- * @name: The name of the vectors to find.
+ * @name: The name of the path to find.
  *
- * Find a vectors with a given name in an image.
+ * Find a path with a given name in an image.
  *
- * This procedure returns the vectors with the given name in the
- * specified image.
+ * This procedure returns the path with the given name in the specified
+ * image.
  *
- * Returns: (transfer none): The vectors with the specified name.
+ * Returns: (transfer none): The path with the specified name.
  *
  * Since: 2.8
  **/
-GimpVectors *
-gimp_image_get_vectors_by_name (GimpImage   *image,
-                                const gchar *name)
+GimpPath *
+gimp_image_get_path_by_name (GimpImage   *image,
+                             const gchar *name)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
-  GimpVectors *vectors = NULL;
+  GimpPath *path = NULL;
 
   args = gimp_value_array_new_from_types (NULL,
                                           GIMP_TYPE_IMAGE, image,
@@ -3298,16 +3356,16 @@ gimp_image_get_vectors_by_name (GimpImage   *image,
                                           G_TYPE_NONE);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
-                                               "gimp-image-get-vectors-by-name",
+                                               "gimp-image-get-path-by-name",
                                                args);
   gimp_value_array_unref (args);
 
   if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
-    vectors = GIMP_VALUES_GET_VECTORS (return_vals, 1);
+    path = GIMP_VALUES_GET_PATH (return_vals, 1);
 
   gimp_value_array_unref (return_vals);
 
-  return vectors;
+  return path;
 }
 
 /**

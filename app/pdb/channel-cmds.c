@@ -57,17 +57,17 @@ channel_new_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
+  const gchar *name;
   gint width;
   gint height;
-  const gchar *name;
   gdouble opacity;
   GeglColor *color;
   GimpChannel *channel = NULL;
 
   image = g_value_get_object (gimp_value_array_index (args, 0));
-  width = g_value_get_int (gimp_value_array_index (args, 1));
-  height = g_value_get_int (gimp_value_array_index (args, 2));
-  name = g_value_get_string (gimp_value_array_index (args, 3));
+  name = g_value_get_string (gimp_value_array_index (args, 1));
+  width = g_value_get_int (gimp_value_array_index (args, 2));
+  height = g_value_get_int (gimp_value_array_index (args, 3));
   opacity = g_value_get_double (gimp_value_array_index (args, 4));
   color = g_value_get_object (gimp_value_array_index (args, 5));
 
@@ -377,13 +377,17 @@ register_channel_procs (GimpPDB *pdb)
   /*
    * gimp-channel-new
    */
-  procedure = gimp_procedure_new (channel_new_invoker);
+  procedure = gimp_procedure_new (channel_new_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-channel-new");
   gimp_procedure_set_static_help (procedure,
                                   "Create a new channel.",
-                                  "This procedure creates a new channel with the specified width, height, name, opacity and color.\n"
-                                  "The new channel still needs to be added to the image, as this is not automatic. Add the new channel with 'gimp-image-insert-channel'. Other attributes, such as channel visibility, should be set with explicit procedure calls.\n"
+                                  "This procedure creates a new channel with the specified @width, @height, @name, @opacity and @color.\n"
+                                  "\n"
+                                  "Other attributes, such as channel visibility, should be set with explicit procedure calls.\n"
+                                  "\n"
+                                  "The new channel still needs to be added to the image, as this is not automatic. Add the new channel with [method@Gimp.Image.insert_channel].\n"
+                                  "\n"
                                   "The channel's contents are undefined initially.",
                                   NULL);
   gimp_procedure_set_static_attribution (procedure,
@@ -397,6 +401,13 @@ register_channel_procs (GimpPDB *pdb)
                                                       FALSE,
                                                       GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_string ("name",
+                                                       "name",
+                                                       "The channel name",
+                                                       FALSE, FALSE, FALSE,
+                                                       NULL,
+                                                       GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
                                g_param_spec_int ("width",
                                                  "width",
                                                  "The channel width",
@@ -409,22 +420,16 @@ register_channel_procs (GimpPDB *pdb)
                                                  1, GIMP_MAX_IMAGE_SIZE, 1,
                                                  GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_string ("name",
-                                                       "name",
-                                                       "The channel name",
-                                                       FALSE, FALSE, FALSE,
-                                                       NULL,
-                                                       GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
                                g_param_spec_double ("opacity",
                                                     "opacity",
                                                     "The channel opacity",
                                                     0, 100, 0,
                                                     GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gegl_param_spec_color ("color",
+                               gimp_param_spec_color ("color",
                                                       "color",
                                                       "The channel compositing color",
+                                                      FALSE,
                                                       NULL,
                                                       GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
@@ -439,7 +444,7 @@ register_channel_procs (GimpPDB *pdb)
   /*
    * gimp-channel-new-from-component
    */
-  procedure = gimp_procedure_new (channel_new_from_component_invoker);
+  procedure = gimp_procedure_new (channel_new_from_component_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-channel-new-from-component");
   gimp_procedure_set_static_help (procedure,
@@ -483,7 +488,7 @@ register_channel_procs (GimpPDB *pdb)
   /*
    * gimp-channel-copy
    */
-  procedure = gimp_procedure_new (channel_copy_invoker);
+  procedure = gimp_procedure_new (channel_copy_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-channel-copy");
   gimp_procedure_set_static_help (procedure,
@@ -513,7 +518,7 @@ register_channel_procs (GimpPDB *pdb)
   /*
    * gimp-channel-combine-masks
    */
-  procedure = gimp_procedure_new (channel_combine_masks_invoker);
+  procedure = gimp_procedure_new (channel_combine_masks_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-channel-combine-masks");
   gimp_procedure_set_static_help (procedure,
@@ -561,7 +566,7 @@ register_channel_procs (GimpPDB *pdb)
   /*
    * gimp-channel-get-show-masked
    */
-  procedure = gimp_procedure_new (channel_get_show_masked_invoker);
+  procedure = gimp_procedure_new (channel_get_show_masked_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-channel-get-show-masked");
   gimp_procedure_set_static_help (procedure,
@@ -590,7 +595,7 @@ register_channel_procs (GimpPDB *pdb)
   /*
    * gimp-channel-set-show-masked
    */
-  procedure = gimp_procedure_new (channel_set_show_masked_invoker);
+  procedure = gimp_procedure_new (channel_set_show_masked_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-channel-set-show-masked");
   gimp_procedure_set_static_help (procedure,
@@ -619,7 +624,7 @@ register_channel_procs (GimpPDB *pdb)
   /*
    * gimp-channel-get-opacity
    */
-  procedure = gimp_procedure_new (channel_get_opacity_invoker);
+  procedure = gimp_procedure_new (channel_get_opacity_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-channel-get-opacity");
   gimp_procedure_set_static_help (procedure,
@@ -648,7 +653,7 @@ register_channel_procs (GimpPDB *pdb)
   /*
    * gimp-channel-set-opacity
    */
-  procedure = gimp_procedure_new (channel_set_opacity_invoker);
+  procedure = gimp_procedure_new (channel_set_opacity_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-channel-set-opacity");
   gimp_procedure_set_static_help (procedure,
@@ -677,7 +682,7 @@ register_channel_procs (GimpPDB *pdb)
   /*
    * gimp-channel-get-color
    */
-  procedure = gimp_procedure_new (channel_get_color_invoker);
+  procedure = gimp_procedure_new (channel_get_color_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-channel-get-color");
   gimp_procedure_set_static_help (procedure,
@@ -695,9 +700,10 @@ register_channel_procs (GimpPDB *pdb)
                                                         FALSE,
                                                         GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gegl_param_spec_color ("color",
+                                   gimp_param_spec_color ("color",
                                                           "color",
                                                           "The channel compositing color",
+                                                          FALSE,
                                                           NULL,
                                                           GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
@@ -706,7 +712,7 @@ register_channel_procs (GimpPDB *pdb)
   /*
    * gimp-channel-set-color
    */
-  procedure = gimp_procedure_new (channel_set_color_invoker);
+  procedure = gimp_procedure_new (channel_set_color_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-channel-set-color");
   gimp_procedure_set_static_help (procedure,
@@ -724,9 +730,10 @@ register_channel_procs (GimpPDB *pdb)
                                                         FALSE,
                                                         GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gegl_param_spec_color ("color",
+                               gimp_param_spec_color ("color",
                                                       "color",
                                                       "The new channel compositing color",
+                                                      FALSE,
                                                       NULL,
                                                       GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);

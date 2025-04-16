@@ -638,7 +638,7 @@ gimp_edit_selection_tool_draw (GimpDrawTool *draw_tool)
   GimpDisplay           *display      = GIMP_TOOL (draw_tool)->display;
   GimpImage             *image        = gimp_display_get_image (display);
   GimpDisplayShell      *shell        = gimp_display_get_shell (display);
-  GimpUnit               unit         = gimp_display_shell_get_unit (shell);
+  GimpUnit              *unit         = gimp_display_shell_get_unit (shell);
   const gchar           *abbreviation = gimp_unit_get_abbreviation (unit);
   GList                 *selected_items;
   GList                 *iter;
@@ -946,7 +946,7 @@ gimp_edit_selection_tool_get_selected_items (GimpEditSelectionTool *edit_select,
   switch (edit_select->edit_mode)
     {
     case GIMP_TRANSLATE_MODE_VECTORS:
-      selected_items = g_list_copy (gimp_image_get_selected_vectors (image));
+      selected_items = g_list_copy (gimp_image_get_selected_paths (image));
       break;
 
     case GIMP_TRANSLATE_MODE_LAYER:
@@ -1264,7 +1264,7 @@ gimp_edit_selection_tool_translate (GimpTool          *tool,
       break;
 
     case GIMP_TRANSFORM_TYPE_PATH:
-      selected_items = gimp_image_get_selected_vectors (image);
+      selected_items = gimp_image_get_selected_paths (image);
       selected_items = g_list_copy (selected_items);
 
       edit_mode = GIMP_TRANSLATE_MODE_VECTORS;

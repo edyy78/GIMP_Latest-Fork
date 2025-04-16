@@ -26,6 +26,8 @@ from gi.repository import Gio
 import time
 import sys
 
+def N_(message): return message
+def _(message): return GLib.dgettext(None, message)
 
 '''
 A Python plugin.
@@ -92,7 +94,7 @@ def process_args(brush, font, gradient, palette, pattern):
     return
 
 
-def test_dialog(procedure, run_mode, image, n_drawables, drawables, config, data):
+def test_dialog(procedure, run_mode, image, drawables, config, data):
     '''
     Just a standard shell for a plugin.
     '''
@@ -103,7 +105,6 @@ def test_dialog(procedure, run_mode, image, n_drawables, drawables, config, data
         dialog.fill(None)
         if not dialog.run():
             dialog.destroy()
-            config.end_run(Gimp.PDBStatusType.CANCEL)
             return procedure.new_return_values(Gimp.PDBStatusType.CANCEL, GLib.Error())
         else:
             dialog.destroy()
@@ -126,25 +127,6 @@ def test_dialog(procedure, run_mode, image, n_drawables, drawables, config, data
 
 
 class TestDialogPlugin (Gimp.PlugIn):
-    ## Parameters ##
-    # See comments about this in foggify.py, from which we borrowed
-
-    brush    = GObject.Property(type  = Gimp.Brush,
-                                nick  = "_Brush",
-                                blurb = "Brush")
-    font     = GObject.Property(type  = Gimp.Font,
-                                nick  = "_Font",
-                                blurb = "Font")
-    gradient = GObject.Property(type  = Gimp.Gradient,
-                                nick  = "_Gradient",
-                                blurb = "Gradient")
-    palette  = GObject.Property(type  = Gimp.Palette,
-                                nick  = "_Palette",
-                                blurb = "Palette")
-    pattern  = GObject.Property(type  = Gimp.Pattern,
-                                nick  = "Pa_ttern",
-                                blurb = "Pattern")
-
     # FUTURE all other Gimp classes that have GimpParamSpecs
 
     ## GimpPlugIn virtual methods ##
@@ -167,13 +149,31 @@ class TestDialogPlugin (Gimp.PlugIn):
                                   "Lloyd Konneker",
                                   "2022")
         # Top level menu "Test"
-        procedure.add_menu_path ("<Image>/Test")
+        procedure.add_menu_path ("<Image>/Filters/Development/Demos")
 
-        procedure.add_argument_from_property(self, "brush")
-        procedure.add_argument_from_property(self, "font")
-        procedure.add_argument_from_property(self, "gradient")
-        procedure.add_argument_from_property(self, "palette")
-        procedure.add_argument_from_property(self, "pattern")
+        procedure.add_brush_argument ("brush", "_Brush", "Brush", True,
+                                      Gimp.Brush.get_by_name ("2. Hardness 025"),
+                                      False,
+                                      GObject.ParamFlags.READWRITE)
+        procedure.add_font_argument ("font", "_Font", "Font", True,
+                                     Gimp.Font.get_by_name ("Serif"),
+                                     False,
+                                     GObject.ParamFlags.READWRITE)
+        procedure.add_gradient_argument ("gradient", "_Gradient",
+                                         "Gradient", True,
+                                         Gimp.Gradient.get_by_name ("Incandescent"),
+                                         False,
+                                         GObject.ParamFlags.READWRITE)
+        procedure.add_palette_argument ("palette", "_Palette",
+                                        "Palette", True,
+                                        Gimp.Palette.get_by_name ("Default"),
+                                        False,
+                                        GObject.ParamFlags.READWRITE)
+        procedure.add_pattern_argument ("pattern", "Pa_ttern",
+                                        "Pattern", True,
+                                        Gimp.Pattern.get_by_name ("Paper"),
+                                        False,
+                                        GObject.ParamFlags.READWRITE)
 
         return procedure
 

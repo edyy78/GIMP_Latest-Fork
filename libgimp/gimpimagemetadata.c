@@ -38,38 +38,6 @@ static void        gimp_image_metadata_rotate               (GimpImage         *
 
 /*  public functions  */
 
-/**
- * gimp_image_metadata_load_prepare:
- * @image:     The image
- * @mime_type: The loaded file's mime-type
- * @file:      The file to load the metadata from
- * @error:     Return location for error
- *
- * Loads and returns metadata from @file to be passed into
- * gimp_image_metadata_load_finish().
- *
- * Returns: (transfer full): The file's metadata.
- *
- * Since: 2.10
- */
-GimpMetadata *
-gimp_image_metadata_load_prepare (GimpImage    *image,
-                                  const gchar  *mime_type,
-                                  GFile        *file,
-                                  GError      **error)
-{
-  GimpMetadata *metadata;
-
-  g_return_val_if_fail (GIMP_IS_IMAGE (image), NULL);
-  g_return_val_if_fail (mime_type != NULL, NULL);
-  g_return_val_if_fail (G_IS_FILE (file), NULL);
-  g_return_val_if_fail (error == NULL || *error == NULL, NULL);
-
-  metadata = gimp_metadata_load_from_file (file, error);
-
-  return metadata;
-}
-
 static gchar *
 gimp_image_metadata_interpret_comment (gchar *comment)
 {
@@ -99,133 +67,6 @@ gimp_image_metadata_interpret_comment (gchar *comment)
     }
 
   return comment;
-}
-
-/**
- * gimp_image_metadata_load_finish:
- * @image:       The image
- * @mime_type:   The loaded file's mime-type
- * @metadata:    The metadata to set on the image
- * @flags:       Flags to specify what of the metadata to apply to the image
- *
- * Applies the @metadata previously loaded with
- * gimp_image_metadata_load_prepare() to the image, taking into account
- * the passed @flags.
- *
- * Since: 3.0
- */
-void
-gimp_image_metadata_load_finish (GimpImage             *image,
-                                 const gchar           *mime_type,
-                                 GimpMetadata          *metadata,
-                                 GimpMetadataLoadFlags  flags)
-{
-  g_return_if_fail (GIMP_IS_IMAGE (image));
-  g_return_if_fail (GEXIV2_IS_METADATA (metadata));
-
-  if (flags & GIMP_METADATA_LOAD_COMMENT)
-    {
-      gchar  *comment;
-      GError *error = NULL;
-
-      comment = gexiv2_metadata_try_get_tag_interpreted_string (GEXIV2_METADATA (metadata),
-                                                                "Exif.Photo.UserComment",
-                                                                &error);
-      if (error)
-        {
-          /* XXX. Should this be rather a user-facing error? */
-          g_printerr ("%s: unreadable '%s' metadata tag: %s\n",
-                      G_STRFUNC, "Exif.Photo.UserComment", error->message);
-          g_clear_error (&error);
-        }
-      else if (comment)
-        {
-          comment = gimp_image_metadata_interpret_comment (comment);
-        }
-
-      if (! comment)
-        {
-          comment = gexiv2_metadata_try_get_tag_interpreted_string (GEXIV2_METADATA (metadata),
-                                                                    "Exif.Image.ImageDescription",
-                                                                    &error);
-          if (error)
-            {
-              g_printerr ("%s: unreadable '%s' metadata tag: %s\n",
-                          G_STRFUNC, "Exif.Image.ImageDescription", error->message);
-              g_clear_error (&error);
-            }
-        }
-
-      if (comment)
-        {
-          GimpParasite *parasite;
-
-          parasite = gimp_parasite_new ("gimp-comment",
-                                        GIMP_PARASITE_PERSISTENT,
-                                        strlen (comment) + 1,
-                                        comment);
-          g_free (comment);
-
-          gimp_image_attach_parasite (image, parasite);
-          gimp_parasite_free (parasite);
-        }
-    }
-
-  if (flags & GIMP_METADATA_LOAD_RESOLUTION)
-    {
-      gdouble   xres;
-      gdouble   yres;
-      GimpUnit  unit;
-
-      if (gimp_metadata_get_resolution (metadata, &xres, &yres, &unit))
-        {
-          gimp_image_set_resolution (image, xres, yres);
-          gimp_image_set_unit (image, unit);
-        }
-    }
-
-  if (! (flags & GIMP_METADATA_LOAD_ORIENTATION))
-    {
-      gexiv2_metadata_try_set_orientation (GEXIV2_METADATA (metadata),
-                                           GEXIV2_ORIENTATION_NORMAL,
-                                           NULL);
-    }
-
-  if (flags & GIMP_METADATA_LOAD_COLORSPACE)
-    {
-      GimpColorProfile *profile = gimp_image_get_color_profile (image);
-
-      /* only look for colorspace information from metadata if the
-       * image didn't contain an embedded color profile
-       */
-      if (! profile)
-        {
-          GimpMetadataColorspace colorspace;
-
-          colorspace = gimp_metadata_get_colorspace (metadata);
-
-          switch (colorspace)
-            {
-            case GIMP_METADATA_COLORSPACE_UNSPECIFIED:
-            case GIMP_METADATA_COLORSPACE_UNCALIBRATED:
-            case GIMP_METADATA_COLORSPACE_SRGB:
-              /* use sRGB, a NULL profile will do the right thing  */
-              break;
-
-            case GIMP_METADATA_COLORSPACE_ADOBERGB:
-              profile = gimp_color_profile_new_rgb_adobe ();
-              break;
-            }
-
-          if (profile)
-            gimp_image_set_color_profile (image, profile);
-        }
-
-      if (profile)
-        g_object_unref (profile);
-    }
-
-  gimp_image_set_metadata (image, metadata);
 }
 
 /**
@@ -296,6 +137,182 @@ gimp_image_metadata_load_thumbnail (GFile   *file,
   g_object_unref (metadata);
 
   return image;
+}
+
+
+/*  Internal functions  */
+
+/**
+ * _gimp_image_metadata_load_finish:
+ * @image:       The image
+ * @mime_type:   The loaded file's mime-type
+ * @metadata:    The metadata to set on the image
+ * @flags:       Flags to specify what of the metadata to apply to the image
+ *
+ * Applies the @metadata previously loaded with
+ * gimp_metadata_load_from_file() to the image, taking into account
+ * the passed @flags.
+ *
+ * Since: 3.0
+ */
+void
+_gimp_image_metadata_load_finish (GimpImage             *image,
+                                  const gchar           *mime_type,
+                                  GimpMetadata          *metadata,
+                                  GimpMetadataLoadFlags  flags)
+{
+  g_return_if_fail (GIMP_IS_IMAGE (image));
+  g_return_if_fail (GEXIV2_IS_METADATA (metadata));
+
+  if (flags & GIMP_METADATA_LOAD_COMMENT)
+    {
+      gchar  *comment;
+      GError *error = NULL;
+
+      comment = gexiv2_metadata_try_get_tag_interpreted_string (GEXIV2_METADATA (metadata),
+                                                                "Exif.Photo.UserComment",
+                                                                &error);
+      if (error)
+        {
+          /* XXX. Should this be rather a user-facing error? */
+          g_printerr ("%s: unreadable '%s' metadata tag: %s\n",
+                      G_STRFUNC, "Exif.Photo.UserComment", error->message);
+          g_clear_error (&error);
+        }
+      else if (comment)
+        {
+          if (g_str_has_prefix (comment, "charset=InvalidCharsetId "))
+            {
+              GBytes *bytes = NULL;
+
+              /* The Exif metadata writer forgot to add the charset.
+               * Read the raw data and assume it's UTF-8. */
+              g_printerr ("Invalid charset for tag %s. Using raw data.\n",
+                          "Exif.Photo.UserComment");
+
+              bytes = gexiv2_metadata_try_get_tag_raw (GEXIV2_METADATA (metadata),
+                                                       "Exif.Photo.UserComment",
+                                                       NULL);
+              if (bytes)
+                {
+                  gsize        size, strsize;
+                  const gchar *data;
+                  gchar       *raw_comment;
+
+                  data = g_bytes_get_data (bytes, &size);
+                  raw_comment = g_new (gchar, size + 1 );
+                  strsize = g_strlcpy (raw_comment, data, size + 1);
+                  g_bytes_unref (bytes);
+                  g_free (comment);
+
+                  if (raw_comment && strsize > 0 &&
+                      g_utf8_validate (raw_comment, size, NULL))
+                    {
+                      comment = raw_comment;
+                    }
+                  else
+                    {
+                      g_free (raw_comment);
+                      comment = NULL;
+                    }
+
+                  /* Fix the tag in our metadata too, that way we don't have to
+                   * check for this in other places. */
+                  gexiv2_metadata_try_set_tag_string (GEXIV2_METADATA (metadata),
+                                                      "Exif.Photo.UserComment",
+                                                      comment,
+                                                      NULL);
+                }
+            }
+          else
+            {
+              comment = gimp_image_metadata_interpret_comment (comment);
+            }
+        }
+
+      if (! comment)
+        {
+          comment = gexiv2_metadata_try_get_tag_interpreted_string (GEXIV2_METADATA (metadata),
+                                                                    "Exif.Image.ImageDescription",
+                                                                    &error);
+          if (error)
+            {
+              g_printerr ("%s: unreadable '%s' metadata tag: %s\n",
+                          G_STRFUNC, "Exif.Image.ImageDescription", error->message);
+              g_clear_error (&error);
+            }
+        }
+
+      if (comment)
+        {
+          GimpParasite *parasite;
+
+          parasite = gimp_parasite_new ("gimp-comment",
+                                        GIMP_PARASITE_PERSISTENT,
+                                        strlen (comment) + 1,
+                                        comment);
+          g_free (comment);
+
+          gimp_image_attach_parasite (image, parasite);
+          gimp_parasite_free (parasite);
+        }
+    }
+
+  if (flags & GIMP_METADATA_LOAD_RESOLUTION)
+    {
+      gdouble   xres;
+      gdouble   yres;
+      GimpUnit *unit;
+
+      if (gimp_metadata_get_resolution (metadata, &xres, &yres, &unit))
+        {
+          gimp_image_set_resolution (image, xres, yres);
+          gimp_image_set_unit (image, unit);
+        }
+    }
+
+  if (! (flags & GIMP_METADATA_LOAD_ORIENTATION))
+    {
+      gexiv2_metadata_try_set_orientation (GEXIV2_METADATA (metadata),
+                                           GEXIV2_ORIENTATION_NORMAL,
+                                           NULL);
+    }
+
+  if (flags & GIMP_METADATA_LOAD_COLORSPACE)
+    {
+      GimpColorProfile *profile = gimp_image_get_color_profile (image);
+
+      /* only look for colorspace information from metadata if the
+       * image didn't contain an embedded color profile
+       */
+      if (! profile)
+        {
+          GimpMetadataColorspace colorspace;
+
+          colorspace = gimp_metadata_get_colorspace (metadata);
+
+          switch (colorspace)
+            {
+            case GIMP_METADATA_COLORSPACE_UNSPECIFIED:
+            case GIMP_METADATA_COLORSPACE_UNCALIBRATED:
+            case GIMP_METADATA_COLORSPACE_SRGB:
+              /* use sRGB, a NULL profile will do the right thing  */
+              break;
+
+            case GIMP_METADATA_COLORSPACE_ADOBERGB:
+              profile = gimp_color_profile_new_rgb_adobe ();
+              break;
+            }
+
+          if (profile)
+            gimp_image_set_color_profile (image, profile);
+        }
+
+      if (profile)
+        g_object_unref (profile);
+    }
+
+  gimp_image_set_metadata (image, metadata);
 }
 
 

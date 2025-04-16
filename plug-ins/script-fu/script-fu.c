@@ -52,9 +52,6 @@ static GimpValueArray * script_fu_batch_run        (GimpProcedure        *proced
 static void             script_fu_run_init         (GimpProcedure        *procedure,
                                                     GimpRunMode           run_mode);
 static void             script_fu_extension_init   (GimpPlugIn           *plug_in);
-static GimpValueArray * script_fu_refresh_proc     (GimpProcedure        *procedure,
-                                                    GimpProcedureConfig  *config,
-                                                    gpointer              run_data);
 
 
 G_DEFINE_TYPE (ScriptFu, script_fu, GIMP_TYPE_PLUG_IN)
@@ -100,7 +97,7 @@ script_fu_create_procedure (GimpPlugIn  *plug_in,
   if (! strcmp (name, "extension-script-fu"))
     {
       procedure = gimp_procedure_new (plug_in, name,
-                                      GIMP_PDB_PROC_TYPE_EXTENSION,
+                                      GIMP_PDB_PROC_TYPE_PERSISTENT,
                                       script_fu_run, NULL, NULL);
 
       gimp_procedure_set_documentation (procedure,
@@ -134,16 +131,16 @@ script_fu_create_procedure (GimpPlugIn  *plug_in,
                                       "Spencer Kimball & Peter Mattis",
                                       "1997");
 
-      GIMP_PROC_ARG_ENUM (procedure, "run-mode",
-                          "Run mode",
-                          "The run mode",
-                          GIMP_TYPE_RUN_MODE,
-                          GIMP_RUN_INTERACTIVE,
-                          G_PARAM_READWRITE);
-      GIMP_PROC_AUX_ARG_STRV (procedure, "history",
-                              "Command history",
-                              "History",
-                              G_PARAM_READWRITE);
+      gimp_procedure_add_enum_argument (procedure, "run-mode",
+                                        "Run mode",
+                                        "The run mode",
+                                        GIMP_TYPE_RUN_MODE,
+                                        GIMP_RUN_INTERACTIVE,
+                                        G_PARAM_READWRITE);
+      gimp_procedure_add_string_array_aux_argument (procedure, "history",
+                                                    "Command history",
+                                                    "History",
+                                                    G_PARAM_READWRITE);
     }
   else if (! strcmp (name, "plug-in-script-fu-text-console"))
     {
@@ -162,12 +159,12 @@ script_fu_create_procedure (GimpPlugIn  *plug_in,
                                       "Spencer Kimball & Peter Mattis",
                                       "1997");
 
-      GIMP_PROC_ARG_ENUM (procedure, "run-mode",
-                          "Run mode",
-                          "The run mode",
-                          GIMP_TYPE_RUN_MODE,
-                          GIMP_RUN_INTERACTIVE,
-                          G_PARAM_READWRITE);
+      gimp_procedure_add_enum_argument (procedure, "run-mode",
+                                        "Run mode",
+                                        "The run mode",
+                                        GIMP_TYPE_RUN_MODE,
+                                        GIMP_RUN_INTERACTIVE,
+                                        G_PARAM_READWRITE);
     }
   else if (! strcmp (name, "plug-in-script-fu-eval"))
     {
@@ -205,16 +202,24 @@ script_fu_run (GimpProcedure        *procedure,
 
   if (strcmp (name, "extension-script-fu") == 0)
     {
-      /*
-       *  The main script-fu extension.
+      /* Simultaneously poll both reads of commands from gimp app, and GUI events.
+       * extension-script-fu periodically has GUI: dialogs for sequential commands.
        */
 
       /*  Acknowledge that the extension is properly initialized  */
-      gimp_procedure_extension_ready (procedure);
+      gimp_procedure_persistent_ready (procedure);
 
-      /*  Go into an endless loop  */
-      while (TRUE)
-        gimp_plug_in_extension_process (plug_in, 0);
+      /* Hang async read from gimp app. */
+      gimp_plug_in_persistent_enable (plug_in);
+
+      /* Process both async reads of commands and GUI events. */
+      g_main_loop_run (g_main_loop_new (NULL, FALSE));
+
+      /* The loop does not return because no command or event calls gimp_quit.
+       * Gimp app does not orderly shutdown extension-script-fu.
+       * When orderly, need to free the GMainLoop.
+       */
+      g_assert_not_reached ();
     }
   else if (strcmp (name, "plug-in-script-fu-text-console") == 0)
     {
@@ -293,12 +298,12 @@ script_fu_run_init (GimpProcedure *procedure,
       script_fu_extension_init (plug_in);
 
       /*  Init the interpreter, allow register scripts */
-      script_fu_init_embedded_interpreter (path, TRUE, run_mode);
+      script_fu_init_embedded_interpreter (path, TRUE, run_mode, TRUE);
     }
   else
     {
       /*  Init the interpreter, not allow register scripts */
-      script_fu_init_embedded_interpreter (path, FALSE, run_mode);
+      script_fu_init_embedded_interpreter (path, FALSE, run_mode, FALSE);
     }
 
   script_fu_find_and_register_scripts (plug_in, path);
@@ -309,8 +314,6 @@ script_fu_run_init (GimpProcedure *procedure,
 static void
 script_fu_extension_init (GimpPlugIn *plug_in)
 {
-  GimpProcedure *procedure;
-
   gimp_plug_in_add_menu_branch (plug_in, "<Image>/Help", N_("_GIMP Online"));
   gimp_plug_in_add_menu_branch (plug_in, "<Image>/Help", N_("_User Manual"));
 
@@ -338,58 +341,7 @@ script_fu_extension_init (GimpPlugIn *plug_in)
   gimp_plug_in_add_menu_branch (plug_in, "<Image>/Filters",
                                 N_("Alpha to _Logo"));
 
-  procedure = gimp_procedure_new (plug_in, "script-fu-refresh",
-                                  GIMP_PDB_PROC_TYPE_TEMPORARY,
-                                  script_fu_refresh_proc, NULL, NULL);
-
-  gimp_procedure_set_menu_label (procedure, _("_Refresh Scripts"));
-  gimp_procedure_add_menu_path (procedure,
-                                "<Image>/Filters/Development/Script-Fu");
-
-  gimp_procedure_set_documentation (procedure,
-                                    _("Re-read all available Script-Fu scripts"),
-                                    "Re-read all available Script-Fu scripts",
-                                    "script-fu-refresh");
-  gimp_procedure_set_attribution (procedure,
-                                  "Spencer Kimball & Peter Mattis",
-                                  "Spencer Kimball & Peter Mattis",
-                                  "1997");
-
-  GIMP_PROC_ARG_ENUM (procedure, "run-mode",
-                      "Run mode",
-                      "The run mode",
-                      GIMP_TYPE_RUN_MODE,
-                      GIMP_RUN_INTERACTIVE,
-                      G_PARAM_READWRITE);
-
-  gimp_plug_in_add_temp_procedure (plug_in, procedure);
-  g_object_unref (procedure);
-}
-
-static GimpValueArray *
-script_fu_refresh_proc (GimpProcedure        *procedure,
-                        GimpProcedureConfig  *config,
-                        gpointer              run_data)
-{
-  if (script_fu_extension_is_busy ())
-    {
-      g_message (_("You can not use \"Refresh Scripts\" while a "
-                   "Script-Fu dialog box is open.  Please close "
-                   "all Script-Fu windows and try again."));
-
-      return gimp_procedure_new_return_values (procedure,
-                                               GIMP_PDB_EXECUTION_ERROR,
-                                               NULL);
-    }
-  else
-    {
-      /*  Reload all of the available scripts  */
-      GList *path = script_fu_search_path ();
-
-      script_fu_find_and_register_scripts (gimp_procedure_get_plug_in (procedure), path);
-
-      g_list_free_full (path, (GDestroyNotify) g_object_unref);
-    }
-
-  return gimp_procedure_new_return_values (procedure, GIMP_PDB_SUCCESS, NULL);
+  /* Commented out until fixed or replaced.
+   * script_fu_register_refresh_procedure (plug_in);
+   */
 }

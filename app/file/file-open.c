@@ -32,6 +32,8 @@
 #include "core/gimp.h"
 #include "core/gimpcontext.h"
 #include "core/gimpdocumentlist.h"
+#include "core/gimpdrawable-filters.h"
+#include "core/gimpdrawablefilter.h"
 #include "core/gimpimage.h"
 #include "core/gimpimage-merge.h"
 #include "core/gimpimage-undo.h"
@@ -71,6 +73,8 @@ file_open_image (Gimp                *gimp,
                  GimpContext         *context,
                  GimpProgress        *progress,
                  GFile               *file,
+                 gint                 vector_width,
+                 gint                 vector_height,
                  gboolean             as_new,
                  GimpPlugInProcedure *file_proc,
                  GimpRunMode          run_mode,
@@ -117,8 +121,7 @@ file_open_image (Gimp                *gimp,
     }
 
   /* FIXME enable these tests for remote files again, needs testing */
-  if (g_file_is_native (file) &&
-      g_file_query_exists (file, NULL))
+  if (g_file_is_native (file))
     {
       GFileInfo *info;
 
@@ -127,27 +130,35 @@ file_open_image (Gimp                *gimp,
                                 G_FILE_ATTRIBUTE_ACCESS_CAN_READ,
                                 G_FILE_QUERY_INFO_NONE,
                                 NULL, error);
-      if (! info)
-        return NULL;
 
-      if (g_file_info_get_attribute_uint32 (info, G_FILE_ATTRIBUTE_STANDARD_TYPE) != G_FILE_TYPE_REGULAR)
+      if (info != NULL)
         {
-          g_set_error_literal (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
-                               _("Not a regular file"));
+          if (g_file_info_get_attribute_uint32 (info, G_FILE_ATTRIBUTE_STANDARD_TYPE) != G_FILE_TYPE_REGULAR)
+            {
+              g_set_error_literal (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                                   _("Not a regular file"));
+              g_object_unref (info);
+              return NULL;
+            }
+
+          if (! g_file_info_get_attribute_boolean (info,
+                                                   G_FILE_ATTRIBUTE_ACCESS_CAN_READ))
+            {
+              g_set_error_literal (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                                   _("Permission denied"));
+              g_object_unref (info);
+              return NULL;
+            }
+
           g_object_unref (info);
+        }
+      else
+        {
+          /* File likely does not exists. error will already have a more
+           * accurate reason.
+           */
           return NULL;
         }
-
-      if (! g_file_info_get_attribute_boolean (info,
-                                               G_FILE_ATTRIBUTE_ACCESS_CAN_READ))
-        {
-          g_set_error_literal (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
-                               _("Permission denied"));
-          g_object_unref (info);
-          return NULL;
-        }
-
-      g_object_unref (info);
     }
 
   if (! file_proc)
@@ -204,13 +215,30 @@ file_open_image (Gimp                *gimp,
   if (progress)
     g_object_add_weak_pointer (G_OBJECT (progress), (gpointer) &progress);
 
-  return_vals =
-    gimp_pdb_execute_procedure_by_name (gimp->pdb,
-                                        context, progress, error,
-                                        gimp_object_get_name (file_proc),
-                                        GIMP_TYPE_RUN_MODE, run_mode,
-                                        G_TYPE_FILE,        file,
-                                        G_TYPE_NONE);
+  if (file_proc->handles_vector)
+    {
+      return_vals =
+        gimp_pdb_execute_procedure_by_name (gimp->pdb,
+                                            context, progress, error,
+                                            gimp_object_get_name (file_proc),
+                                            GIMP_TYPE_RUN_MODE, run_mode,
+                                            G_TYPE_FILE,        file,
+                                            G_TYPE_INT,         vector_width,
+                                            G_TYPE_INT,         vector_height,
+                                            G_TYPE_BOOLEAN,     TRUE,
+                                            G_TYPE_BOOLEAN,     vector_width && vector_height ? FALSE : TRUE,
+                                            G_TYPE_NONE);
+    }
+  else
+    {
+      return_vals =
+        gimp_pdb_execute_procedure_by_name (gimp->pdb,
+                                            context, progress, error,
+                                            gimp_object_get_name (file_proc),
+                                            GIMP_TYPE_RUN_MODE, run_mode,
+                                            G_TYPE_FILE,        file,
+                                            G_TYPE_NONE);
+    }
 
   if (progress)
     g_object_remove_weak_pointer (G_OBJECT (progress), (gpointer) &progress);
@@ -504,7 +532,7 @@ file_open_with_proc_and_display (Gimp                *gimp,
     run_mode = GIMP_RUN_NONINTERACTIVE;
 
   image = file_open_image (gimp, context, progress,
-                           file,
+                           file, 0, 0,
                            as_new,
                            file_proc,
                            run_mode,
@@ -540,7 +568,7 @@ file_open_with_proc_and_display (Gimp                *gimp,
           g_free (basename);
         }
 
-      if (gimp_create_display (image->gimp, image, GIMP_UNIT_PIXEL, 1.0,
+      if (gimp_create_display (image->gimp, image, gimp_unit_pixel (), 1.0,
                                monitor))
         {
           /*  the display owns the image now  */
@@ -604,7 +632,10 @@ file_open_layers (Gimp                *gimp,
   g_return_val_if_fail (error == NULL || *error == NULL, NULL);
 
   new_image = file_open_image (gimp, context, progress,
-                               file, FALSE,
+                               file,
+                               gimp_image_get_width (dest_image),
+                               gimp_image_get_height (dest_image),
+                               FALSE,
                                file_proc,
                                run_mode,
                                status, &mime_type, error);
@@ -754,10 +785,44 @@ file_open_convert_items (GimpImage   *dest_image,
 
   for (list = items; list; list = g_list_next (list))
     {
-      GimpItem *src = list->data;
-      GimpItem *item;
+      GimpItem      *src     = list->data;
+      GimpContainer *filters = NULL;
+      GimpItem      *item;
 
       item = gimp_item_convert (src, dest_image, G_TYPE_FROM_INSTANCE (src));
+
+      /* Import any attached layer effects */
+      if (GIMP_IS_DRAWABLE (item))
+        filters = gimp_drawable_get_filters (GIMP_DRAWABLE (src));
+
+      if (filters != NULL &&
+          gimp_container_get_n_children (filters) > 0)
+        {
+          GList *filter_list;
+
+          for (filter_list = GIMP_LIST (filters)->queue->tail; filter_list;
+               filter_list = g_list_previous (filter_list))
+            {
+              if (GIMP_IS_DRAWABLE_FILTER (filter_list->data))
+                {
+                  GimpDrawableFilter *old_filter = filter_list->data;
+                  GimpDrawableFilter *filter;
+
+                  filter =
+                    gimp_drawable_filter_duplicate (GIMP_DRAWABLE (item),
+                                                    old_filter);
+
+                  if (filter != NULL)
+                    {
+                      gimp_drawable_filter_apply (filter, NULL);
+                      gimp_drawable_filter_commit (filter, TRUE, NULL, FALSE);
+
+                      gimp_drawable_filter_layer_mask_freeze (filter);
+                      g_object_unref (filter);
+                    }
+                }
+            }
+        }
 
       if (g_list_length (items) == 1)
         {

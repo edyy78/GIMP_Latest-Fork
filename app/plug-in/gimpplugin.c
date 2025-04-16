@@ -43,6 +43,10 @@
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <gegl.h>
 
+#ifdef __APPLE__
+#include <sys/ioctl.h>
+#endif
+
 #if defined(G_OS_WIN32) || defined(G_WITH_CYGWIN)
 
 #define STRICT
@@ -75,6 +79,7 @@
 #include "plug-in-types.h"
 
 #include "core/gimp.h"
+#include "core/gimpdisplay.h"
 #include "core/gimp-spawn.h"
 #include "core/gimpprogress.h"
 
@@ -94,26 +99,30 @@
 #include "gimp-intl.h"
 
 
-static void       gimp_plug_in_finalize      (GObject      *object);
+static void       gimp_plug_in_finalize               (GObject      *object);
 
-static gboolean   gimp_plug_in_recv_message  (GIOChannel   *channel,
-                                              GIOCondition  cond,
-                                              gpointer      data);
-static gboolean   gimp_plug_in_write         (GIOChannel   *channel,
-                                              const guint8 *buf,
-                                              gulong        count,
-                                              gpointer      data);
-static gboolean   gimp_plug_in_flush         (GIOChannel   *channel,
-                                              gpointer      data);
+static gboolean   gimp_plug_in_recv_message           (GIOChannel   *channel,
+                                                       GIOCondition  cond,
+                                                       gpointer      data);
+static gboolean   gimp_plug_in_write                  (GIOChannel   *channel,
+                                                       const guint8 *buf,
+                                                       gulong        count,
+                                                       gpointer      data);
+static gboolean   gimp_plug_in_flush                  (GIOChannel   *channel,
+                                                       gpointer      data);
 
 #if defined G_OS_WIN32 && defined WIN32_32BIT_DLL_FOLDER
-static void       gimp_plug_in_set_dll_directory (const gchar *path);
+static void       gimp_plug_in_set_dll_directory      (const gchar  *path);
 #endif
 
 #ifndef G_OS_WIN32
-static void       gimp_plug_in_close_waitpid     (GPid         pid,
-                                                  gint         status,
-                                                  GimpPlugIn  *plug_in);
+static void       gimp_plug_in_close_waitpid          (GPid          pid,
+                                                       gint          status,
+                                                       GimpPlugIn   *plug_in);
+#endif
+
+#ifdef __APPLE__
+static guint      gimp_plug_in_wire_count_bytes_ready (GIOChannel   *channel);
 #endif
 
 
@@ -142,6 +151,7 @@ gimp_plug_in_init (GimpPlugIn *plug_in)
 {
   plug_in->manager            = NULL;
   plug_in->file               = NULL;
+  plug_in->display            = NULL;
 
   plug_in->call_mode          = GIMP_PLUG_IN_CALL_NONE;
   plug_in->open               = FALSE;
@@ -171,12 +181,17 @@ gimp_plug_in_finalize (GObject *object)
   GimpPlugIn *plug_in = GIMP_PLUG_IN (object);
 
   g_clear_object (&plug_in->file);
+  g_clear_weak_pointer (&plug_in->display);
 
   gimp_plug_in_proc_frame_dispose (&plug_in->main_proc_frame, plug_in);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
 
+/* Always returns TRUE.
+ * This is of type GIOFunc, for which returning TRUE
+ * means the IO event source should not be removed.
+ */
 static gboolean
 gimp_plug_in_recv_message (GIOChannel   *channel,
                            GIOCondition  cond,
@@ -190,6 +205,18 @@ gimp_plug_in_recv_message (GIOChannel   *channel,
    * reason...
    */
   if (cond == 0)
+    return TRUE;
+#endif
+
+#ifdef __APPLE__
+  /* Workaround for #12711:
+   * sometimes we get an IO event of type G_IO_IN when the pipe is empty.
+   *
+   * There must be at least 4 bytes of message type
+   * else reads will hang, and the app appear non-responsive.
+   */
+
+  if (gimp_plug_in_wire_count_bytes_ready (channel) < 4)
     return TRUE;
 #endif
 
@@ -388,6 +415,43 @@ gimp_plug_in_close_waitpid (GPid        pid,
 }
 #endif
 
+#ifdef __APPLE__
+/* Returns the count of bytes in the channel.
+ * Bytes that can be read without blocking.
+ *
+ * Returns zero on an IO error.
+ * Also may return zero if the channel is empty.
+ *
+ * Requires channel is a pipe open for reading.
+ *
+ * This should only be used in extraordinary situations.
+ * It is only for UNIX-like platforms; might not be portable to MSWindows.
+ * It can also be used for debugging the protocol, to know message lengths.
+ *
+ * Used on MacOS for a seeming bug in IO events.
+ * Usually, on an IO event on condition G_IO_IN,
+ * you can assume the pipe is not empty and a read will not block.
+ */
+static guint
+gimp_plug_in_wire_count_bytes_ready (GIOChannel *channel)
+{
+  int   err = 0;
+  guint result;
+  int   fd;
+
+  fd  = g_io_channel_unix_get_fd (channel);
+  err = ioctl (fd, FIONREAD, &result);
+  if (err < 0)
+    {
+      g_warning ("%s ioctl failed.", G_STRFUNC);
+      result = 0;
+    }
+
+  g_debug ("%s bytes ready: %d", G_STRFUNC, result);
+  return result;
+}
+#endif
+
 
 /*  public functions  */
 
@@ -396,7 +460,8 @@ gimp_plug_in_new (GimpPlugInManager   *manager,
                   GimpContext         *context,
                   GimpProgress        *progress,
                   GimpPlugInProcedure *procedure,
-                  GFile               *file)
+                  GFile               *file,
+                  GimpDisplay         *display)
 {
   GimpPlugIn *plug_in;
 
@@ -406,6 +471,7 @@ gimp_plug_in_new (GimpPlugInManager   *manager,
   g_return_val_if_fail (procedure == NULL ||
                         GIMP_IS_PLUG_IN_PROCEDURE (procedure), NULL);
   g_return_val_if_fail (file == NULL || G_IS_FILE (file), NULL);
+  g_return_val_if_fail (display == NULL || GIMP_IS_DISPLAY (display), NULL);
   g_return_val_if_fail ((procedure != NULL || file != NULL) &&
                         ! (procedure != NULL && file != NULL), NULL);
 
@@ -419,6 +485,7 @@ gimp_plug_in_new (GimpPlugInManager   *manager,
 
   plug_in->manager = manager;
   plug_in->file    = g_object_ref (file);
+  g_set_weak_pointer (&plug_in->display, display);
 
   gimp_plug_in_proc_frame_init (&plug_in->main_proc_frame,
                                 context, progress, procedure);
@@ -764,7 +831,7 @@ gimp_plug_in_close (GimpPlugIn *plug_in,
     {
       GimpPlugInProcFrame *proc_frame = plug_in->temp_proc_frames->data;
 
-#ifdef GIMP_UNSTABLE
+#ifndef GIMP_RELEASE
       g_printerr ("plug-in '%s' aborted before sending its "
                   "temporary procedure return values\n",
                   gimp_object_get_name (plug_in));
@@ -786,10 +853,11 @@ gimp_plug_in_close (GimpPlugIn *plug_in,
   if (plug_in->main_proc_frame.main_loop &&
       g_main_loop_is_running (plug_in->main_proc_frame.main_loop))
     {
-#ifdef GIMP_UNSTABLE
-      g_printerr ("plug-in '%s' aborted before sending its "
-                  "procedure return values\n",
-                  gimp_object_get_name (plug_in));
+#ifndef GIMP_RELEASE
+      if (! kill_it)
+        g_printerr ("plug-in '%s' aborted before sending its "
+                    "procedure return values\n",
+                    gimp_object_get_name (plug_in));
 #endif
 
       g_main_loop_quit (plug_in->main_proc_frame.main_loop);
@@ -798,7 +866,7 @@ gimp_plug_in_close (GimpPlugIn *plug_in,
   if (plug_in->ext_main_loop &&
       g_main_loop_is_running (plug_in->ext_main_loop))
     {
-#ifdef GIMP_UNSTABLE
+#ifndef GIMP_RELEASE
       g_printerr ("extension '%s' aborted before sending its "
                   "extension_ack message\n",
                   gimp_object_get_name (plug_in));

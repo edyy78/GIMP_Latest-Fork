@@ -1030,12 +1030,12 @@ gimp_widget_set_accel_help (GtkWidget  *widget,
       g_signal_handlers_disconnect_by_func (prev_action,
                                             gimp_widget_accels_changed,
                                             widget);
-      g_object_weak_unref (G_OBJECT (action),
+      g_object_weak_unref (G_OBJECT (prev_action),
                            gimp_accel_help_accel_group_weak_notify,
                            widget);
       g_object_weak_unref (G_OBJECT (widget),
                            gimp_accel_help_widget_weak_notify,
-                           action);
+                           prev_action);
       g_object_set_data (G_OBJECT (widget), "gimp-accel-help-action", NULL);
     }
 
@@ -1096,7 +1096,7 @@ gimp_get_message_icon_name (GimpMessageSeverity severity)
 
 gboolean
 gimp_get_color_tag_color (GimpColorTag  color_tag,
-                          GimpRGB      *color,
+                          GeglColor    *color,
                           gboolean      inherited)
 {
   static const struct
@@ -1123,16 +1123,25 @@ gimp_get_color_tag_color (GimpColorTag  color_tag,
 
   if (color_tag > GIMP_COLOR_TAG_NONE)
     {
-      gimp_rgba_set_uchar (color,
-                           colors[color_tag].r,
-                           colors[color_tag].g,
-                           colors[color_tag].b,
-                           255);
-
       if (inherited)
         {
-          gimp_rgb_composite (color, &(GimpRGB) {1.0, 1.0, 1.0, 0.2},
-                              GIMP_RGB_COMPOSITE_NORMAL);
+          /* Composite color on top of white (20% opacity) */
+          gdouble opacity = 0.2f;
+          gdouble factor  = 1.0f - opacity;
+
+          gegl_color_set_rgba (color,
+                               (colors[color_tag].r / 255.0f) * factor + opacity,
+                               (colors[color_tag].g / 255.0f) * factor + opacity,
+                               (colors[color_tag].b / 255.0f) * factor + opacity,
+                               1.0f);
+        }
+      else
+        {
+          gegl_color_set_rgba (color,
+                               colors[color_tag].r / 255.0f,
+                               colors[color_tag].g / 255.0f,
+                               colors[color_tag].b / 255.0f,
+                               1.0f);
         }
 
       return TRUE;
@@ -2642,12 +2651,11 @@ gimp_window_set_transient_cb (GtkWidget   *window,
 #endif
 }
 
+#ifdef G_OS_WIN32
 void
 gimp_window_set_title_bar_theme (Gimp      *gimp,
-                                 GtkWidget *dialog,
-                                 gboolean   is_main_window)
+                                 GtkWidget *dialog)
 {
-#ifdef G_OS_WIN32
   HWND           hwnd;
   GdkWindow     *window        = NULL;
   gboolean       use_dark_mode = FALSE;
@@ -2687,13 +2695,6 @@ gimp_window_set_title_bar_theme (Gimp      *gimp,
         hwnd = (HWND) gdk_win32_window_get_handle (window);
         DwmSetWindowAttribute (hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE,
                                &use_dark_mode, sizeof (use_dark_mode));
-
-        if (! is_main_window)
-          {
-            /* Toggle the window's visibility so the title bar change appears */
-            gdk_window_hide (window);
-            gdk_window_show (window);
-          }
     }
-#endif
 }
+#endif

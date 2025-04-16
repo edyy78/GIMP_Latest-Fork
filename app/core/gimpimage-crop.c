@@ -96,7 +96,7 @@ gimp_image_crop (GimpImage    *image,
     }
 
   /*  Resize all vectors  */
-  for (list = gimp_image_get_vectors_iter (image);
+  for (list = gimp_image_get_path_iter (image);
        list;
        list = g_list_next (list))
     {
@@ -138,6 +138,8 @@ gimp_image_crop (GimpImage    *image,
 
           width  = lx2 - lx1;
           height = ly2 - ly1;
+
+          gimp_drawable_enable_resize_undo (GIMP_DRAWABLE (item));
 
           if (width > 0 && height > 0)
             {

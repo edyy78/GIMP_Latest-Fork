@@ -54,31 +54,23 @@ HELP
 
     &std_pdb_misc;
 
-    $skip_gi = 1;
-
     @outargs = (
         { name => 'images', type => 'imagearray',
-          desc => 'The list of images currently open.',
-          array => { name => 'num_images',
-                     desc => 'The number of images currently open' } }
+          desc => 'The list of images currently open.' }
     );
 
     %invoke = (
         code => <<CODE
 {
   GList *list = gimp_get_image_iter (gimp);
+  gsize  num_images;
+  gint   i;
 
   num_images = g_list_length (list);
+  images     = g_new0 (GimpImage *, num_images + 1);
 
-  if (num_images)
-    {
-      gint i;
-
-      images = g_new (GimpImage *, num_images);
-
-      for (i = 0; i < num_images; i++, list = g_list_next (list))
-        images[i] = g_object_ref (list->data);
-    }
+  for (i = 0; i < num_images; i++, list = g_list_next (list))
+    images[i] = list->data;
 }
 CODE
     );
@@ -96,8 +88,8 @@ gimp_layer_new() commands. They can be added to an image using the
 gimp_image_insert_layer() command.
 
 
-If your image's type if INDEXED, a colormap must also be added with
-gimp_image_set_colormap(). An indexed image without a colormap will
+If your image's type if INDEXED, a palette must also be set with
+[method@Gimp.Image.set_palette]. An indexed image without a palette will
 output unexpected colors.
 HELP
 
@@ -256,8 +248,6 @@ HELP
 
     &std_pdb_misc;
 
-    $skip_gi = 1;
-
     @inargs = (
         { name => 'image', type => 'image',
           desc => 'The image' }
@@ -265,27 +255,22 @@ HELP
 
     @outargs = (
         { name => 'layers', type => 'layerarray',
-          desc => 'The list of layers contained in the image.',
-          array => { name => 'num_layers',
-                     desc => 'The number of root layers contained in the image' } }
+          desc => 'The list of layers contained in the image.' }
     );
 
     %invoke = (
         code => <<'CODE'
 {
   GList *list = gimp_image_get_layer_iter (image);
+  gsize  num_layers;
+  gint   i;
 
   num_layers = g_list_length (list);
 
-  if (num_layers)
-    {
-      gint i;
+  layers = g_new0 (GimpLayer *, num_layers + 1);
 
-      layers = g_new (GimpLayer *, num_layers);
-
-      for (i = 0; i < num_layers; i++, list = g_list_next (list))
-        layers[i] = g_object_ref (list->data);
-    }
+  for (i = 0; i < num_layers; i++, list = g_list_next (list))
+    layers[i] = list->data;
 }
 CODE
     );
@@ -303,8 +288,6 @@ HELP
 
     &std_pdb_misc;
 
-    $skip_gi = 1;
-
     @inargs = (
         { name => 'image', type => 'image',
           desc => 'The image' }
@@ -312,42 +295,34 @@ HELP
 
     @outargs = (
         { name => 'channels', type => 'channelarray',
-          desc => 'The list of channels contained in the image.',
-          array => { name => 'num_channels',
-                     desc => 'The number of channels contained in the image' } }
+          desc => 'The list of channels contained in the image.' }
     );
 
     %invoke = (
         code => <<'CODE'
 {
   GList *list = gimp_image_get_channel_iter (image);
+  gsize  num_channels;
+  gint   i;
 
   num_channels = g_list_length (list);
+  channels = g_new0 (GimpChannel *, num_channels + 1);
 
-  if (num_channels)
-    {
-      gint i;
-
-      channels = g_new (GimpChannel *, num_channels);
-
-      for (i = 0; i < num_channels; i++, list = g_list_next (list))
-        channels[i] = g_object_ref (list->data);
-    }
+  for (i = 0; i < num_channels; i++, list = g_list_next (list))
+    channels[i] = list->data;
 }
 CODE
     );
 }
 
-sub image_get_vectors {
-    $blurb = 'Returns the list of vectors contained in the specified image.';
+sub image_get_paths {
+    $blurb = 'Returns the list of paths contained in the specified image.';
 
     $help = <<HELP;
-This procedure returns the list of vectors contained in the specified image.
+This procedure returns the list of paths contained in the specified image.
 HELP
 
     &simon_pdb_misc('2005', '2.4');
-
-    $skip_gi = 1;
 
     @inargs = (
         { name => 'image', type => 'image',
@@ -355,28 +330,22 @@ HELP
     );
 
     @outargs = (
-        { name => 'vectors', type => 'vectorarray',
-          desc => 'The list of vectors contained in the image.',
-          array => { name => 'num_vectors',
-                     desc => 'The number of vectors contained in the image' } }
+        { name => 'paths', type => 'patharray',
+          desc => 'The list of paths contained in the image.' }
     );
 
     %invoke = (
         code => <<'CODE'
 {
-  GList *list = gimp_image_get_vectors_iter (image);
+  GList *list = gimp_image_get_path_iter (image);
+  gsize  num_paths;
+  gint   i;
 
-  num_vectors = g_list_length (list);
+  num_paths = g_list_length (list);
+  paths     = g_new0 (GimpPath *, num_paths + 1);
 
-  if (num_vectors)
-    {
-      gint i;
-
-      vectors = g_new (GimpVectors *, num_vectors);
-
-      for (i = 0; i < num_vectors; i++, list = g_list_next (list))
-        vectors[i] = g_object_ref (list->data);
-    }
+  for (i = 0; i < num_paths; i++, list = g_list_next (list))
+    paths[i] = g_object_ref (list->data);
 }
 CODE
     );
@@ -437,22 +406,18 @@ HELP
     @inargs = (
         { name => 'image', type => 'image',
           desc => 'The image' },
-        { name => 'drawables', type => 'itemarray',
-          desc => 'The drawables to pick from',
-          no_validate => 1,
-          array => { name => 'num_drawables',
-                     type => '1 <= int32',
-                     desc => "The number of drawables" } },
-        { name => 'x', type => 'float',
+        { name => 'drawables', type => 'drawablearray',
+          desc => 'The drawables to pick from' },
+        { name => 'x', type => 'double',
           desc => 'x coordinate of upper-left corner of rectangle' },
-        { name => 'y', type => 'float',
+        { name => 'y', type => 'double',
           desc => 'y coordinate of upper-left corner of rectangle' },
         { name => 'sample_merged', type => 'boolean',
           desc => 'Use the composite image, not the drawables' },
         { name => 'sample_average', type => 'boolean',
           desc => 'Average the color of all the pixels in a specified
                    radius' },
-        { name => 'average_radius', type => '0 < float', no_validate => 1,
+        { name => 'average_radius', type => '0 < double', no_validate => 1,
           desc => 'The radius of pixels to average' }
     );
 
@@ -469,13 +434,13 @@ HELP
 
   if (! sample_merged)
     {
-      if (num_drawables == 0)
+      if (drawables == NULL || drawables[0] == NULL)
         {
           success = FALSE;
         }
       else
         {
-          for (i = 0; i < num_drawables; i++)
+          for (i = 0; drawables[i] != NULL; i++)
             if (gimp_item_get_image (GIMP_ITEM (drawables[i])) != image)
               {
                 success = FALSE;
@@ -494,7 +459,7 @@ HELP
     {
       GList *drawable_list = NULL;
 
-      for (i = 0; i < num_drawables; i++)
+      for (i = 0; drawables[i] != NULL; i++)
         {
           GimpPickable *pickable = (GimpPickable *) drawables[i];
 
@@ -722,7 +687,20 @@ sub image_reorder_item {
     $blurb = "Reorder the specified item within its item tree";
 
     $help = <<'HELP';
-This procedure reorders the specified item within its item tree.
+Reorders or moves item within an item tree.
+Requires parent is %NULL or a GroupLayer, else returns error.
+When parent is not %NULL and item is in parent,
+reorders item within parent group.
+When parent is not %NULL and item is not in parent,
+moves item into parent group.
+When parent is %NULL, moves item from current parent to top level.
+
+
+Requires item is in same tree as not %NULL parent, else returns error.
+Layers, Channels, and Paths are in separate trees.
+
+
+Requires item is not ancestor of parent, else returns error, to preclude cycles.
 HELP
 
     &mitch_pdb_misc('2010', '2.8');
@@ -855,48 +833,6 @@ HELP
         layer = layers->data;
 
       g_list_free (layers);
-    }
-  else
-    success = FALSE;
-}
-CODE
-    );
-}
-
-sub image_merge_layer_group {
-    $blurb = 'Merge the passed layer group\'s layers into one normal layer.';
-
-    $help = <<'HELP';
-This procedure combines the layers of the passed layer group into
-a single normal layer, replacing the group.
-HELP
-
-    &ell_pdb_misc('2019', '2.10.14');
-
-    @inargs = (
-        { name => 'image', type => 'image',
-          desc => 'The image' },
-        { name => 'layer_group', type => 'layer',
-          desc => 'The layer group to merge' },
-    );
-
-    @outargs = (
-        { name => 'layer', type => 'layer',
-          desc => 'The resulting layer' }
-    );
-
-    %invoke = (
-        headers => [ qw("core/gimpgrouplayer.h" "core/gimpimage-merge.h") ],
-        code => <<'CODE'
-{
-  if (gimp_pdb_item_is_attached (GIMP_ITEM (layer_group), image, 0, error) &&
-      gimp_pdb_item_is_group (GIMP_ITEM (layer_group), error))
-    {
-      layer = gimp_image_merge_group_layer (image,
-                                            GIMP_GROUP_LAYER (layer_group));
-
-      if (! layer)
-        success = FALSE;
     }
   else
     success = FALSE;
@@ -1258,16 +1194,16 @@ CODE
     );
 }
 
-sub image_insert_vectors {
-    $blurb = 'Add the specified vectors to the image.';
+sub image_insert_path {
+    $blurb = 'Add the specified path to the image.';
 
     $help = <<'HELP';
-This procedure adds the specified vectors to the image at the given
-position. Since vectors groups are not currently supported, the parent
+This procedure adds the specified path to the image at the given
+position. Since path groups are not currently supported, the parent
 argument must always be 0. The position argument specifies the
-location of the vectors inside the stack, starting from the top (0) and
-increasing. If the position is specified as -1, then the vectors is
-inserted above the active vectors.
+location of the path inside the stack, starting from the top (0) and
+increasing. If the position is specified as -1, then the path is
+inserted above the active path.
 HELP
 
     &std_pdb_misc;
@@ -1275,17 +1211,17 @@ HELP
     @inargs = (
         { name => 'image', type => 'image',
           desc => 'The image' },
-        { name => 'vectors', type => 'vectors',
-          desc => 'The vectors' },
-        { name => 'parent', type => 'vectors', none_ok => 1,
-          desc => 'The parent vectors' },
+        { name => 'path', type => 'path',
+          desc => 'The path' },
+        { name => 'parent', type => 'path', none_ok => 1,
+          desc => 'The parent path' },
         { name => 'position', type => 'int32',
-          desc => 'The vectors position' }
+          desc => 'The path position' }
     );
 
     $invoke{code} = <<'CODE';
 {
-  if (gimp_pdb_item_is_floating (GIMP_ITEM (vectors), image, error) &&
+  if (gimp_pdb_item_is_floating (GIMP_ITEM (path), image, error) &&
       (parent == NULL ||
        (gimp_pdb_item_is_in_tree (GIMP_ITEM (parent), image, 0, error) &&
         gimp_pdb_item_is_group (GIMP_ITEM (parent), error))))
@@ -1293,8 +1229,8 @@ HELP
       if (position == -1 && parent == NULL)
         parent = GIMP_IMAGE_ACTIVE_PARENT;
 
-      success = gimp_image_add_vectors (image, vectors,
-                                        parent, MAX (position, -1), TRUE);
+      success = gimp_image_add_path (image, path,
+                                     parent, MAX (position, -1), TRUE);
     }
   else
     {
@@ -1304,7 +1240,7 @@ HELP
 CODE
 }
 
-sub image_remove_vectors {
+sub image_remove_path {
     $blurb = 'Remove the specified path from the image.';
 
     $help = <<'HELP';
@@ -1317,15 +1253,15 @@ HELP
     @inargs = (
         { name => 'image', type => 'image',
           desc => 'The image' },
-        { name => 'vectors', type => 'vectors',
-          desc => 'The vectors object' }
+        { name => 'path', type => 'path',
+          desc => 'The path object' }
     );
 
     %invoke = (
         code => <<'CODE'
 {
-  if (gimp_pdb_item_is_attached (GIMP_ITEM (vectors), image, 0, error))
-    gimp_image_remove_vectors (image, vectors, TRUE, NULL);
+  if (gimp_pdb_item_is_attached (GIMP_ITEM (path), image, 0, error))
+    gimp_image_remove_path (image, path, TRUE, NULL);
   else
     success = FALSE;
 }
@@ -1333,20 +1269,224 @@ CODE
     );
 }
 
-sub image_freeze_vectors {
-    $blurb = "Freeze the image's vectors list.";
+sub image_import_paths_from_file {
+    $blurb = 'Import paths from an SVG file.';
+
+    $help = <<'HELP';
+This procedure imports paths from an SVG file. SVG elements other than
+paths and basic shapes are ignored.
+HELP
+
+    &simon_pdb_misc('2006', '2.4');
+
+    @inargs = (
+        { name => 'image', type => 'image',
+          desc => 'The image' },
+        { name => 'file', type => 'file',
+          desc => 'The SVG file to import.' },
+        { name => 'merge', type => 'boolean',
+          desc => 'Merge paths into a single path object.' },
+        { name => 'scale', type => 'boolean',
+          desc => 'Scale the SVG to image dimensions.' }
+    );
+
+    @outargs = (
+        { name => 'paths', type => 'patharray', void_ret => 1,
+          desc => 'The list of newly created paths' }
+    );
+
+    %invoke = (
+        headers => [ qw("vectors/gimppath-import.h") ],
+        code    => <<'CODE'
+{
+  GList *path_list = NULL;
+
+  /* FIXME tree */
+  success = gimp_path_import_file (image, file,
+                                   merge, scale, NULL, -1,
+                                   &path_list, error);
+
+  if (success)
+    {
+      gsize  num_paths = g_list_length (path_list);
+      GList *list;
+      gint   i;
+
+      paths = g_new0 (GimpPath *, num_paths + 1);
+
+      for (i = 0, list = path_list;
+           i < num_paths;
+           i++, list = g_list_next (list))
+        {
+          paths[i] = list->data;
+        }
+
+      g_list_free (path_list);
+    }
+}
+CODE
+    );
+}
+
+sub image_import_paths_from_string {
+    $blurb = 'Import paths from an SVG string.';
+
+    $help = <<'HELP';
+This procedure works like [method@Gimp.Image.import_paths_from_file] but takes a string
+rather than reading the SVG from a file. This allows you to write scripts that
+generate SVG and feed it to GIMP.
+HELP
+
+    &simon_pdb_misc('2006', '2.4');
+
+    @inargs = (
+        { name => 'image', type => 'image',
+          desc => 'The image' },
+        { name => 'string', type => 'string', allow_non_utf8 => 1,
+          desc => 'A string that must be a complete and valid SVG document.' },
+        { name => 'length', type => 'int32',
+          desc => 'Number of bytes in string or -1 if the string is NULL
+                   terminated.' },
+        { name => 'merge', type => 'boolean',
+          desc => 'Merge paths into a single path object.' },
+        { name => 'scale', type => 'boolean',
+          desc => 'Scale the SVG to image dimensions.' }
+    );
+
+    @outargs = (
+        { name => 'paths', type => 'patharray', void_ret => 1,
+          desc => 'The list of newly created paths' }
+    );
+
+    %invoke = (
+        headers => [ qw("vectors/gimppath-import.h") ],
+        code    => <<'CODE'
+{
+  GList *path_list = NULL;
+
+  /* FIXME tree */
+  success = gimp_path_import_buffer (image, string, length,
+                                     merge, scale, NULL, -1,
+                                     &path_list, error);
+
+  if (success)
+    {
+      GList *list;
+      gsize  num_paths = g_list_length (path_list);
+      gint   i;
+
+      paths = g_new0 (GimpPath *, num_paths + 1);
+
+      for (i = 0, list = path_list;
+           i < num_paths;
+           i++, list = g_list_next (list))
+        {
+          paths[i] = list->data;
+        }
+
+      g_list_free (path_list);
+    }
+}
+CODE
+    );
+}
+
+sub image_export_path_to_file {
+    $blurb = 'save a path as an SVG file.';
+
+    $help = <<'HELP';
+This procedure creates an SVG file to save a Path object, that is,
+a path.  The resulting file can be edited using a vector graphics
+application, or later reloaded into GIMP.  Pass %NULL as the 'path'
+argument to export all paths in the image.
+HELP
+
+    &bill_pdb_misc('2007', '2.6');
+
+    @inargs = (
+        { name => 'image', type => 'image',
+          desc => 'The image' },
+        { name => 'file', type => 'file',
+          desc => 'The SVG file to create.' },
+        { name => 'path', type => 'path',
+          no_validate => 1, none_ok => 1,
+          desc => 'The path object to export, or %NULL for all in the image' }
+    );
+
+    %invoke = (
+        headers => [ qw("vectors/gimppath-export.h") ],
+        code    => <<'CODE'
+{
+  GList *path_list = NULL;
+
+  if (path != NULL)
+    path_list = g_list_prepend (path_list, path);
+
+  success = gimp_path_export_file (image, path_list, file, error);
+
+  g_list_free (path_list);
+}
+CODE
+    );
+}
+
+sub image_export_path_to_string {
+    $blurb = 'Save a path as an SVG string.';
+
+    $help = <<'HELP';
+This procedure works like [method@Gimp.Image.export_path_to_file] but creates a string
+rather than a file. The string is NULL-terminated and holds a
+complete XML document.  Pass %NULL as the 'path' argument to export
+all paths in the image.
+HELP
+
+    &bill_pdb_misc('2007', '2.6');
+
+    @inargs = (
+        { name => 'image', type => 'image',
+          desc => 'The image' },
+        { name => 'path', type => 'path',
+          no_validate => 1, none_ok => 1,
+          desc => 'The path object to export, or %NULL for all in the image' }
+    );
+
+    @outargs = (
+        { name => 'string', type => 'string',
+          desc => 'A string whose contents are a complete SVG document.' }
+    );
+
+    %invoke = (
+        headers => [ qw("vectors/gimppath-export.h") ],
+        code    => <<'CODE'
+{
+  GList *path_list = NULL;
+
+  if (path != NULL)
+    path_list = g_list_prepend (path_list, path);
+
+  string = gimp_path_export_string (image, path_list);
+  g_list_free (path_list);
+
+  success = (string != NULL);
+}
+CODE
+    );
+}
+
+sub image_freeze_paths {
+    $blurb = "Freeze the image's path list.";
 
     &ell_pdb_misc('2018', '2.10.2');
 
     $help = <<'HELP';
-This procedure freezes the vectors list of the image, suppressing any
+This procedure freezes the path list of the image, suppressing any
 updates to the Paths dialog in response to changes to the image's
-vectors.  This can significantly improve performance while applying
-changes affecting the vectors list.
+path.  This can significantly improve performance while applying
+changes affecting the path list.
 
 
-Each call to gimp_image_freeze_vectors() should be matched by a
-corresponding call to gimp_image_thaw_vectors(), undoing its
+Each call to gimp_image_freeze_paths() should be matched by a
+corresponding call to gimp_image_thaw_paths (), undoing its
 effects.
 HELP
 
@@ -1359,10 +1499,10 @@ HELP
     code => <<'CODE'
 {
   GimpPlugIn    *plug_in   = gimp->plug_in_manager->current_plug_in;
-  GimpContainer *container = gimp_image_get_vectors (image);
+  GimpContainer *container = gimp_image_get_paths (image);
 
   if (plug_in)
-    success = gimp_plug_in_cleanup_vectors_freeze (plug_in, image);
+    success = gimp_plug_in_cleanup_paths_freeze (plug_in, image);
 
   if (success)
     gimp_container_freeze (container);
@@ -1371,18 +1511,18 @@ CODE
     );
 }
 
-sub image_thaw_vectors {
-    $blurb = "Thaw the image's vectors list.";
+sub image_thaw_paths {
+    $blurb = "Thaw the image's path list.";
 
     &ell_pdb_misc('2018', '2.10.2');
 
     $help = <<'HELP';
-This procedure thaws the vectors list of the image, re-enabling
+This procedure thaws the path list of the image, re-enabling
 updates to the Paths dialog.
 
 
 This procedure should match a corresponding call to
-gimp_image_freeze_vectors().
+gimp_image_freeze_paths().
 HELP
 
     @inargs = (
@@ -1394,10 +1534,10 @@ HELP
     code => <<'CODE'
 {
   GimpPlugIn    *plug_in   = gimp->plug_in_manager->current_plug_in;
-  GimpContainer *container = gimp_image_get_vectors (image);
+  GimpContainer *container = gimp_image_get_paths (image);
 
   if (plug_in)
-    success = gimp_plug_in_cleanup_vectors_thaw (plug_in, image);
+    success = gimp_plug_in_cleanup_paths_thaw (plug_in, image);
 
   if (success)
     success = gimp_container_frozen (container);
@@ -1492,83 +1632,11 @@ CODE
     );
 }
 
-sub image_get_colormap {
-    $blurb = "Returns the image's colormap";
-
-    $help = <<'HELP';
-This procedure returns an actual pointer to the image's colormap, as well as
-the number of bytes contained in the colormap. The actual number of colors in
-the transmitted colormap will be 'num-bytes' / 3. If the image is not in
-Indexed color mode, no colormap is returned.
-HELP
-
-    &std_pdb_misc;
-
-    $lib_private = 1;
-
-    @inargs = (
-        { name => 'image', type => 'image',
-          desc => 'The image' }
-    );
-
-    @outargs = (
-        { name => 'colormap', type => 'bytes',
-          desc => "The image's colormap." }
-    );
-
-    %invoke = (
-        headers => [ qw("core/gimpimage-colormap.h") ],
-        code => <<'CODE'
-{
-  guchar *colormap_data;
-  gint    n_colors;
-
-  colormap_data = _gimp_image_get_colormap (image, &n_colors);
-  colormap = g_bytes_new_take (colormap_data, 3 * n_colors);
-}
-CODE
-    );
-}
-
-sub image_set_colormap {
-    $blurb = "Sets the entries in the image's colormap.";
-
-    $help = <<'HELP';
-This procedure sets the entries in the specified image's colormap. The number
-of entries is specified by the 'num-bytes' parameter and corresponds to the
-number of INT8 triples that must be contained in the 'colormap' array. The
-actual number of colors in the transmitted colormap is 'num-bytes' / 3.
-HELP
-
-    &std_pdb_misc;
-
-    $lib_private = 1;
-
-    @inargs = (
-        { name => 'image', type => 'image',
-          desc => 'The image' },
-        { name => 'colormap', type => 'bytes',
-          desc => 'The new colormap values' }
-    );
-
-    %invoke = (
-        headers => [ qw("core/gimpimage-colormap.h") ],
-        code => <<'CODE'
-{
-  _gimp_image_set_colormap (image,
-                            g_bytes_get_data (colormap, NULL),
-                            g_bytes_get_size (colormap) / 3,
-                            TRUE);
-}
-CODE
-    );
-}
-
 sub image_get_palette {
     $blurb = "Returns the image's colormap";
 
     $help = <<'HELP';
-This procedure returns the image's colormap as a GimpPalette.
+This procedure returns the image's colormap as a %GimpPalette.
 If the image is not in Indexed color mode, %NULL is returned.
 HELP
 
@@ -1580,15 +1648,55 @@ HELP
     );
 
     @outargs = (
-        { name => 'colormap', type => 'palette',
-          desc => "The image's colormap." }
+        { name => 'palette', type => 'palette',
+          desc => "The image's colormap palette." }
     );
 
     %invoke = (
         headers => [ qw("core/gimpimage-colormap.h") ],
         code => <<'CODE'
 {
-  colormap = gimp_image_get_colormap_palette (image);
+  palette = gimp_image_get_colormap_palette (image);
+}
+CODE
+    );
+}
+
+sub image_set_palette {
+    $blurb = 'Set the image\'s colormap to a copy of @palette';
+
+    $help = <<'HELP';
+This procedure changes the image's colormap to an exact copy of @palette
+and returns the palette of @image.
+
+If the image is not in Indexed color mode, nothing happens and %NULL is
+returned.
+HELP
+
+    &jehan_pdb_misc('2024', '3.0');
+
+    @inargs = (
+        { name => 'image', type => 'image',
+          desc => 'The image' },
+        { name => 'new_palette', type => 'palette',
+          desc => "The palette to copy from." }
+    );
+
+    @outargs = (
+        { name => 'palette', type => 'palette',
+          desc => "The image's colormap palette." }
+    );
+
+    %invoke = (
+        headers => [ qw("core/gimpimage-colormap.h") ],
+        code => <<'CODE'
+{
+  palette = gimp_image_get_colormap_palette (image);
+
+  if (palette == NULL || new_palette == NULL)
+    success = FALSE;
+  else if (new_palette != palette)
+    gimp_image_set_colormap_palette (image, new_palette, TRUE);
 }
 CODE
     );
@@ -1842,8 +1950,6 @@ HELP
 
     &jehan_pdb_misc('2020', '3.0.0');
 
-    $skip_gi = 1;
-
     @inargs = (
         { name => 'image', type => 'image',
           desc => 'The image' }
@@ -1851,27 +1957,21 @@ HELP
 
     @outargs = (
         { name => 'layers', type => 'layerarray',
-          desc => 'The list of selected layers in the image.',
-          array => { name => 'num_layers',
-                     desc => 'The number of selected layers in the image' } }
+          desc => 'The list of selected layers in the image.' }
     );
 
     %invoke = (
         code => <<'CODE'
 {
   GList *list = gimp_image_get_selected_layers (image);
+  gsize  num_layers;
+  gint   i;
 
   num_layers = g_list_length (list);
+  layers = g_new0 (GimpLayer *, num_layers + 1);
 
-  if (num_layers)
-    {
-      gint i;
-
-      layers = g_new (GimpLayer *, num_layers);
-
-      for (i = 0; i < num_layers; i++, list = g_list_next (list))
-        layers[i] = g_object_ref (list->data);
-    }
+  for (i = 0; i < num_layers; i++, list = g_list_next (list))
+    layers[i] = list->data;
 }
 CODE
     );
@@ -1893,11 +1993,7 @@ HELP
         { name => 'image', type => 'image',
           desc => 'The image' },
         { name => 'layers', type => 'layerarray',
-          desc => 'The list of layers to select',
-          no_validate => 1,
-          array => { name => 'num_layers',
-                     type => '0 <= int32',
-                     desc => 'The number of layers to select' } }
+          desc => 'The list of layers to select' }
     );
 
     %invoke = (
@@ -1906,9 +2002,9 @@ HELP
   GList *selected_layers = NULL;
   gint   i;
 
-  for (i = 0; i < num_layers; i++)
-    selected_layers = g_list_prepend (selected_layers,
-                                      GIMP_LAYER (layers[i]));
+  if (layers)
+    for (i = 0; layers[i] != NULL; i++)
+      selected_layers = g_list_prepend (selected_layers, (gpointer) layers[i]);
 
   gimp_image_set_selected_layers (image, selected_layers);
   g_list_free (selected_layers);
@@ -1926,8 +2022,6 @@ HELP
 
     &jehan_pdb_misc('2022', '3.0.0');
 
-    $skip_gi = 1;
-
     @inargs = (
         { name => 'image', type => 'image',
           desc => 'The image' }
@@ -1935,27 +2029,21 @@ HELP
 
     @outargs = (
         { name => 'channels', type => 'channelarray',
-          desc => 'The list of selected channels in the image.',
-          array => { name => 'num_channels',
-                     desc => 'The number of selected channels in the image' } }
+          desc => 'The list of selected channels in the image.' }
     );
 
     %invoke = (
         code => <<'CODE'
 {
   GList *list = gimp_image_get_selected_channels (image);
+  gsize  num_channels;
+  gint   i;
 
   num_channels = g_list_length (list);
+  channels = g_new0 (GimpChannel *, num_channels + 1);
 
-  if (num_channels)
-    {
-      gint i;
-
-      channels = g_new (GimpChannel *, num_channels);
-
-      for (i = 0; i < num_channels; i++, list = g_list_next (list))
-        channels[i] = g_object_ref (list->data);
-    }
+  for (i = 0; i < num_channels; i++, list = g_list_next (list))
+    channels[i] = list->data;
 }
 CODE
     );
@@ -1977,11 +2065,7 @@ HELP
         { name => 'image', type => 'image',
           desc => 'The image' },
         { name => 'channels', type => 'channelarray',
-          desc => 'The list of channels to select',
-          no_validate => 1,
-          array => { name => 'num_channels',
-                     type => '0 <= int32',
-                     desc => 'The number of channels to select' } }
+          desc => 'The list of channels to select' }
     );
 
     %invoke = (
@@ -1990,9 +2074,9 @@ HELP
   GList *selected_channels = NULL;
   gint   i;
 
-  for (i = 0; i < num_channels; i++)
-    selected_channels = g_list_prepend (selected_channels,
-                                        GIMP_CHANNEL (channels[i]));
+  if (channels)
+    for (i = 0; channels[i] != NULL; i++)
+      selected_channels = g_list_prepend (selected_channels, (gpointer) channels[i]);
 
   gimp_image_set_selected_channels (image, selected_channels);
   g_list_free (selected_channels);
@@ -2001,16 +2085,14 @@ CODE
     );
 }
 
-sub image_get_selected_vectors {
-    $blurb = "Returns the specified image's selected vectors.";
+sub image_get_selected_paths {
+    $blurb = "Returns the specified image's selected paths.";
 
     $help = <<'HELP';
-This procedure returns the list of selected vectors in the specified image.
+This procedure returns the list of selected paths in the specified image.
 HELP
 
     &jehan_pdb_misc('2022', '3.0.0');
-
-    $skip_gi = 1;
 
     @inargs = (
         { name => 'image', type => 'image',
@@ -2018,38 +2100,32 @@ HELP
     );
 
     @outargs = (
-        { name => 'vectors', type => 'vectorarray',
-          desc => 'The list of selected vectors in the image.',
-          array => { name => 'num_vectors',
-                     desc => 'The number of selected vectors in the image' } }
+        { name => 'paths', type => 'patharray',
+          desc => 'The list of selected paths in the image.' }
     );
 
     %invoke = (
         code => <<'CODE'
 {
-  GList *list = gimp_image_get_selected_vectors (image);
+  GList *list = gimp_image_get_selected_paths (image);
+  gsize  num_paths;
+  gint   i;
 
-  num_vectors = g_list_length (list);
+  num_paths = g_list_length (list);
+  paths     = g_new0 (GimpPath *, num_paths + 1);
 
-  if (num_vectors)
-    {
-      gint i;
-
-      vectors = g_new (GimpVectors *, num_vectors);
-
-      for (i = 0; i < num_vectors; i++, list = g_list_next (list))
-        vectors[i] = g_object_ref (list->data);
-    }
+  for (i = 0; i < num_paths; i++, list = g_list_next (list))
+    paths[i] = g_object_ref (list->data);
 }
 CODE
     );
 }
 
-sub image_set_selected_vectors {
-    $blurb = "Sets the specified image's selected vectors.";
+sub image_set_selected_paths {
+    $blurb = "Sets the specified image's selected paths.";
 
     $help = <<'HELP';
-The vectors are set as the selected vectors in the image.
+The paths are set as the selected paths in the image.
 HELP
 
     &jehan_pdb_misc('2022', '3.0.0');
@@ -2057,26 +2133,21 @@ HELP
     @inargs = (
         { name => 'image', type => 'image',
           desc => 'The image' },
-        { name => 'vectors', type => 'vectorarray',
-          desc => 'The list of vectors to select',
-          no_validate => 1,
-          array => { name => 'num_vectors',
-                     type => '0 <= int32',
-                     desc => 'The number of vectors to select' } }
+        { name => 'paths', type => 'patharray',
+          desc => 'The list of paths to select' }
     );
 
     %invoke = (
         code => <<'CODE'
 {
-  GList *selected_vectors = NULL;
+  GList *selected_paths = NULL;
   gint   i;
 
-  for (i = 0; i < num_vectors; i++)
-    selected_vectors = g_list_prepend (selected_vectors,
-                                       GIMP_LAYER (vectors[i]));
+  for (i = 0; paths[i] != NULL; i++)
+    selected_paths = g_list_prepend (selected_paths, (gpointer) paths[i]);
 
-  gimp_image_set_selected_vectors (image, selected_vectors);
-  g_list_free (selected_vectors);
+  gimp_image_set_selected_paths (image, selected_paths);
+  g_list_free (selected_paths);
 }
 CODE
     );
@@ -2103,28 +2174,22 @@ HELP
     );
 
     @outargs = (
-        { name => 'drawables', type => 'itemarray',
-          desc => 'The list of selected drawables in the image.',
-          array => { name => 'num_drawables',
-                     desc => 'The number of selected drawables in the image' } }
+        { name => 'drawables', type => 'drawablearray',
+          desc => 'The list of selected drawables in the image.' }
     );
 
     %invoke = (
         code => <<'CODE'
 {
   GList *list = gimp_image_get_selected_drawables (image);
+  gsize  num_drawables;
+  gint   i;
 
   num_drawables = g_list_length (list);
+  drawables     = g_new0 (GimpDrawable *, num_drawables + 1);
 
-  if (num_drawables)
-    {
-      gint i;
-
-      drawables = g_new (GimpItem *, num_drawables);
-
-      for (i = 0; i < num_drawables; i++, list = g_list_next (list))
-        drawables[i] = g_object_ref (list->data);
-    }
+  for (i = 0; i < num_drawables; i++, list = g_list_next (list))
+    drawables[i] = list->data;
 }
 CODE
     );
@@ -2379,23 +2444,21 @@ HELP
 {
   gchar *uri;
   gchar *folded_uri;
-  gchar *folded_ext;
 
   uri        = g_file_get_uri (file);
   folded_uri = g_utf8_casefold (uri, -1);
-  folded_ext = g_utf8_casefold (".xcf", -1);
 
-  if (! g_str_has_suffix (folded_uri, folded_ext))
+  if (! g_regex_match_simple ("\\.xcf(\\.?(gz|bz2|xz))?$", uri, G_REGEX_CASELESS, 0))
     {
       gchar *dot = g_strrstr (uri, ".");
 
       if (dot != NULL && strstr (dot + 1, G_DIR_SEPARATOR_S) == NULL)
         g_printerr ("%s: failure to set file '%s' with extension '%s'. "
-                    "The extension must be '.xcf'.\n",
+                    "The extension must be '.xcf' (or a compressed variant).\n",
                     "gimp_image_set_file", uri, dot + 1);
       else
         g_printerr ("%s: failure to set file '%s' without extension. "
-                    "The extension must be '.xcf'.\n",
+                    "The extension must be '.xcf' (or a compressed variant).\n",
                     "gimp_image_set_file", uri);
 
       success = FALSE;
@@ -2405,7 +2468,6 @@ HELP
 
   g_free (uri);
   g_free (folded_uri);
-  g_free (folded_ext);
 }
 CODE
     );
@@ -2559,9 +2621,9 @@ HELP
     );
 
     @outargs = (
-        { name => 'xresolution', type => 'float', void_ret => 1,
+        { name => 'xresolution', type => 'double', void_ret => 1,
           desc => 'The resolution in the x-axis, in dots per inch' },
-        { name => 'yresolution', type => 'float',
+        { name => 'yresolution', type => 'double',
           desc => 'The resolution in the y-axis, in dots per inch' }
     );
 
@@ -2588,9 +2650,9 @@ HELP
     @inargs = (
         { name => 'image', type => 'image',
           desc => 'The image' },
-        { name => 'xresolution', type => 'float',
+        { name => 'xresolution', type => 'double',
           desc => 'The new image resolution in the x-axis, in dots per inch' },
-        { name => 'yresolution', type => 'float',
+        { name => 'yresolution', type => 'double',
           desc => 'The new image resolution in the y-axis, in dots per inch' }
     );
 
@@ -2663,7 +2725,7 @@ HELP
     @inargs = (
         { name => 'image', type => 'image',
           desc => 'The image' },
-        { name => 'unit', type => 'unit (min GIMP_UNIT_INCH)',
+        { name => 'unit', type => 'unit',
           desc => 'The new image unit' }
     );
 
@@ -2801,11 +2863,11 @@ CODE
     );
 }
 
-sub image_get_vectors_by_tattoo {
-    $blurb = 'Find a vectors with a given tattoo in an image.';
+sub image_get_path_by_tattoo {
+    $blurb = 'Find a path with a given tattoo in an image.';
 
     $help = <<'HELP';
-This procedure returns the vectors with the given tattoo in the
+This procedure returns the path with the given tattoo in the
 specified image.
 HELP
 
@@ -2815,18 +2877,18 @@ HELP
         { name => 'image', type => 'image',
           desc => 'The image' },
         { name => 'tattoo', type => 'tattoo',
-          desc => 'The tattoo of the vectors to find' }
+          desc => 'The tattoo of the path to find' }
     );
 
     @outargs = (
-        { name => 'vectors', type => 'vectors',
-          desc => 'The vectors with the specified tattoo' }
+        { name => 'path', type => 'path',
+          desc => 'The path with the specified tattoo' }
     );
 
     %invoke = (
         code => <<'CODE'
 {
-  vectors = gimp_image_get_vectors_by_tattoo (image, tattoo);
+  path = gimp_image_get_path_by_tattoo (image, tattoo);
 }
 CODE
     );
@@ -2892,11 +2954,11 @@ CODE
     );
 }
 
-sub image_get_vectors_by_name {
-    $blurb = 'Find a vectors with a given name in an image.';
+sub image_get_path_by_name {
+    $blurb = 'Find a path with a given name in an image.';
 
     $help = <<'HELP';
-This procedure returns the vectors with the given name in the
+This procedure returns the path with the given name in the
 specified image.
 HELP
 
@@ -2906,18 +2968,18 @@ HELP
         { name => 'image', type => 'image',
           desc => 'The image' },
         { name => 'name', type => 'string', non_empty => 1,
-          desc => 'The name of the vectors to find' }
+          desc => 'The name of the path to find' }
     );
 
     @outargs = (
-        { name => 'vectors', type => 'vectors',
-          desc => 'The vectors with the specified name' }
+        { name => 'path', type => 'path',
+          desc => 'The path with the specified name' }
     );
 
     %invoke = (
         code => <<'CODE'
 {
-  vectors = gimp_image_get_vectors_by_name (image, name);
+  path = gimp_image_get_path_by_name (image, name);
 }
 CODE
     );
@@ -3219,7 +3281,7 @@ CODE
             image_get_width image_get_height
             image_get_layers
             image_get_channels
-            image_get_vectors
+            image_get_paths
             image_unset_active_channel
             image_get_floating_sel
             image_floating_sel_attached_to
@@ -3229,22 +3291,24 @@ CODE
             image_freeze_layers image_thaw_layers
             image_insert_channel image_remove_channel
             image_freeze_channels image_thaw_channels
-            image_insert_vectors image_remove_vectors
-            image_freeze_vectors image_thaw_vectors
+            image_insert_path image_remove_path
+            image_import_paths_from_file
+            image_import_paths_from_string
+            image_export_path_to_file
+            image_export_path_to_string
+            image_freeze_paths image_thaw_paths
             image_get_item_position
             image_raise_item image_lower_item
             image_raise_item_to_top image_lower_item_to_bottom
             image_reorder_item
             image_flatten image_merge_visible_layers image_merge_down
-            image_merge_layer_group
-            image_get_colormap image_set_colormap
-            image_get_palette
+            image_get_palette image_set_palette
             image_get_metadata image_set_metadata
             image_clean_all image_is_dirty
             image_thumbnail
             image_get_selected_layers image_set_selected_layers
             image_get_selected_channels image_set_selected_channels
-            image_get_selected_vectors image_set_selected_vectors
+            image_get_selected_paths image_set_selected_paths
             image_get_selected_drawables
             image_get_selection
             image_get_component_active image_set_component_active
@@ -3260,10 +3324,10 @@ CODE
             image_get_tattoo_state image_set_tattoo_state
             image_get_layer_by_tattoo
             image_get_channel_by_tattoo
-            image_get_vectors_by_tattoo
+            image_get_path_by_tattoo
             image_get_layer_by_name
             image_get_channel_by_name
-            image_get_vectors_by_name
+            image_get_path_by_name
             image_attach_parasite image_detach_parasite
             image_get_parasite
             image_get_parasite_list

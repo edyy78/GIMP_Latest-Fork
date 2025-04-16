@@ -98,14 +98,12 @@ static const gchar dversion[] = "v1.17  19-Sep-2004";
 #define LOAD_PS_PROC       "file-ps-load"
 #define LOAD_EPS_PROC      "file-eps-load"
 #define LOAD_PS_THUMB_PROC "file-ps-load-thumb"
-#define SAVE_PS_PROC       "file-ps-save"
-#define SAVE_EPS_PROC      "file-eps-save"
+#define EXPORT_PS_PROC     "file-ps-export"
+#define EXPORT_EPS_PROC    "file-eps-export"
 #define PLUG_IN_BINARY     "file-ps"
 #define PLUG_IN_ROLE       "gimp-file-ps"
 
 #define STR_LENGTH     64
-#define MIN_RESOLUTION 5
-#define MAX_RESOLUTION 8192
 
 
 typedef struct _PostScript      PostScript;
@@ -131,32 +129,45 @@ static GList          * ps_query_procedures (GimpPlugIn            *plug_in);
 static GimpProcedure  * ps_create_procedure (GimpPlugIn            *plug_in,
                                              const gchar           *name);
 
-static GimpValueArray * ps_load             (GimpProcedure         *procedure,
+static gboolean         ps_extract          (GimpProcedure         *procedure,
                                              GimpRunMode            run_mode,
                                              GFile                 *file,
                                              GimpMetadata          *metadata,
+                                             GimpProcedureConfig   *config,
+                                             GimpVectorLoadData    *extracted_dimensions,
+                                             gpointer              *data_for_run,
+                                             GDestroyNotify        *data_for_run_destroy,
+                                             gpointer               extract_data,
+                                             GError               **error);
+static GimpValueArray * ps_load             (GimpProcedure         *procedure,
+                                             GimpRunMode            run_mode,
+                                             GFile                 *file,
+                                             gint                   width,
+                                             gint                   height,
+                                             GimpVectorLoadData     extracted_data,
+                                             GimpMetadata          *metadata,
                                              GimpMetadataLoadFlags *flags,
                                              GimpProcedureConfig   *config,
+                                             gpointer               data_from_extract,
                                              gpointer               run_data);
 static GimpValueArray * ps_load_thumb       (GimpProcedure         *procedure,
                                              GFile                 *file,
                                              gint                   size,
                                              GimpProcedureConfig   *config,
                                              gpointer               run_data);
-static GimpValueArray * ps_save             (GimpProcedure         *procedure,
+static GimpValueArray * ps_export           (GimpProcedure         *procedure,
                                              GimpRunMode            run_mode,
                                              GimpImage             *image,
-                                             gint                   n_drawables,
-                                             GimpDrawable         **drawables,
                                              GFile                 *file,
+                                             GimpExportOptions     *options,
                                              GimpMetadata          *metadata,
                                              GimpProcedureConfig   *config,
                                              gpointer               run_data);
 
 static GimpImage      * load_image          (GFile                 *file,
-                                             GObject               *config,
+                                             GimpProcedureConfig   *config,
                                              GError               **error);
-static gboolean         save_image          (GFile                 *file,
+static gboolean         export_image        (GFile                 *file,
                                              GObject               *config,
                                              GimpImage             *image,
                                              GimpDrawable          *drawable,
@@ -217,29 +228,41 @@ static GimpImage * create_new_image (GFile             *file,
                                      GimpImageBaseType  type,
                                      GimpLayer        **layer);
 
-static void      check_load_vals  (GObject *config);
-static void      check_save_vals  (GObject *config);
+static void      check_load_vals  (GimpProcedureConfig *config);
+static void      check_save_vals  (GimpProcedureConfig *config);
 
-static gint      page_in_list     (gchar             *list,
-                                   guint              pagenum);
+static gint      page_in_list     (gchar               *list,
+                                   guint                pagenum);
 
-static gint      get_bbox         (GFile             *file,
-                                   gint              *x0,
-                                   gint              *y0,
-                                   gint              *x1,
-                                   gint              *y1);
+static gint      get_bbox         (GFile               *file,
+                                   gint                *x0,
+                                   gint                *y0,
+                                   gint                *x1,
+                                   gint                *y1);
 
-static FILE    * ps_open          (GFile             *file,
-                                   GObject           *config,
-                                   gint              *llx,
-                                   gint              *lly,
-                                   gint              *urx,
-                                   gint              *ury,
-                                   gboolean          *is_epsf,
-                                   gchar            **tmp_filename);
+static gboolean  ps_read_header   (GFile               *file,
+                                   GimpProcedureConfig *config,
+                                   gboolean            *is_pdf,
+                                   gboolean            *is_epsf,
+                                   gint                *bbox_x0,
+                                   gint                *bbox_y0,
+                                   gint                *bbox_x1,
+                                   gint                *bbox_y1);
+static FILE    * ps_open          (GFile               *file,
+                                   GimpProcedureConfig *config,
+                                   gint                *llx,
+                                   gint                *lly,
+                                   gint                *urx,
+                                   gint                *ury,
+                                   gboolean            *is_epsf,
+                                   gchar              **tmp_filename);
 
 static void      ps_close         (FILE              *ifp,
                                    gchar             *tmp_filename);
+static gint      read_pnmraw_type (FILE              *ifp,
+                                   gint              *width,
+                                   gint              *height,
+                                   gint              *maxval);
 
 static gboolean  skip_ps          (FILE              *ifp);
 
@@ -259,13 +282,12 @@ static void      dither_grey      (const guchar      *grey,
 
 /* Dialog-handling */
 
-static gint32    count_ps_pages             (GFile         *file);
-static gboolean  load_dialog                (GFile         *file,
-                                             GimpProcedure *procedure,
-                                             GObject       *config);
+static gint32    count_ps_pages   (GFile              *file);
+static gboolean  load_dialog      (GFile              *file,
+                                   GimpVectorLoadData  extracted_data,
+                                   GimpProcedure      *procedure,
+                                   GObject            *config);
 
-static gboolean  resolution_change_callback (GtkWidget *adjustment,
-                                             gpointer   data);
 
 typedef struct
 {
@@ -273,11 +295,11 @@ typedef struct
   gint           level;
 } SaveDialogVals;
 
-static gboolean  save_dialog              (GimpProcedure *procedure,
-                                           GObject       *config,
-                                           GimpImage     *image);
-static void      save_unit_toggle_update  (GtkWidget     *widget,
-                                           gpointer       data);
+static gboolean  save_dialog               (GimpProcedure *procedure,
+                                            GObject       *config,
+                                            GimpImage     *image);
+static void      save_unit_changed_update  (GtkWidget     *widget,
+                                            gpointer       data);
 
 
 G_DEFINE_TYPE (PostScript, ps, GIMP_TYPE_PLUG_IN)
@@ -315,8 +337,8 @@ ps_query_procedures (GimpPlugIn *plug_in)
   list = g_list_append (list, g_strdup (LOAD_PS_THUMB_PROC));
   list = g_list_append (list, g_strdup (LOAD_PS_PROC));
   list = g_list_append (list, g_strdup (LOAD_EPS_PROC));
-  list = g_list_append (list, g_strdup (SAVE_PS_PROC));
-  list = g_list_append (list, g_strdup (SAVE_EPS_PROC));
+  list = g_list_append (list, g_strdup (EXPORT_PS_PROC));
+  list = g_list_append (list, g_strdup (EXPORT_EPS_PROC));
 
   return list;
 }
@@ -330,19 +352,22 @@ ps_create_procedure (GimpPlugIn  *plug_in,
   if (! strcmp (name, LOAD_PS_PROC) ||
       ! strcmp (name, LOAD_EPS_PROC))
     {
-      procedure = gimp_load_procedure_new (plug_in, name,
-                                           GIMP_PDB_PROC_TYPE_PLUGIN,
-                                           ps_load, NULL, NULL);
+      procedure = gimp_vector_load_procedure_new (plug_in, name,
+                                                  GIMP_PDB_PROC_TYPE_PLUGIN,
+                                                  ps_extract, NULL, NULL,
+                                                  ps_load, NULL, NULL);
 
       if (! strcmp (name, LOAD_PS_PROC))
         {
           gimp_procedure_set_menu_label (procedure, _("PostScript document"));
 
           gimp_procedure_set_documentation (procedure,
-                                            "Load PostScript documents",
-                                            "Load PostScript documents",
+                                            _("Load PostScript documents"),
+                                            _("Load PostScript documents"),
                                             name);
 
+          gimp_file_procedure_set_format_name (GIMP_FILE_PROCEDURE (procedure),
+                                               _("PostScript"));
           gimp_file_procedure_set_mime_types (GIMP_FILE_PROCEDURE (procedure),
                                               "application/postscript");
           gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
@@ -356,10 +381,12 @@ ps_create_procedure (GimpPlugIn  *plug_in,
                                          _("Encapsulated PostScript image"));
 
           gimp_procedure_set_documentation (procedure,
-                                            "load Encapsulated PostScript images",
-                                            "load Encapsulated PostScript images",
+                                            _("Load Encapsulated PostScript images"),
+                                            _("Load Encapsulated PostScript images"),
                                             name);
 
+          gimp_file_procedure_set_format_name (GIMP_FILE_PROCEDURE (procedure),
+                                               _("Encapsulated PostScript"));
           gimp_file_procedure_set_mime_types (GIMP_FILE_PROCEDURE (procedure),
                                               "image/x-eps");
           gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
@@ -376,53 +403,45 @@ ps_create_procedure (GimpPlugIn  *plug_in,
       gimp_load_procedure_set_thumbnail_loader (GIMP_LOAD_PROCEDURE (procedure),
                                                 LOAD_PS_THUMB_PROC);
 
-      GIMP_PROC_ARG_INT (procedure, "resolution",
-                         _("Resol_ution"),
-                         _("Resolution to interpret image (dpi)"),
-                         MIN_RESOLUTION, MAX_RESOLUTION, 100,
-                         GIMP_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "check-bbox",
+                                           _("Try _Bounding Box"),
+                                           _("FALSE: Use width/height, TRUE: Use BoundingBox"),
+                                           TRUE,
+                                           GIMP_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "width",
-                         _("_Width"),
-                         _("Desired width"),
-                         1, GIMP_MAX_IMAGE_SIZE, 826,
-                         GIMP_PARAM_READWRITE);
+      gimp_procedure_add_string_argument (procedure, "pages",
+                                          _("_Pages"),
+                                          _("Pages to load (e.g.: 1,3,5-7)"),
+                                          "1",
+                                          GIMP_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "height",
-                         _("_Height"),
-                         _("Desired height"),
-                         1, GIMP_MAX_IMAGE_SIZE, 1170,
-                         GIMP_PARAM_READWRITE);
+      gimp_procedure_add_choice_argument (procedure, "coloring",
+                                          _("Colorin_g"),
+                                          _("Import color format"),
+                                          gimp_choice_new_with_values ("bw",        4, _("B/W"),        NULL,
+                                                                       "grayscale", 5, _("Gray"),       NULL,
+                                                                       "rgb",       6, _("Color"),      NULL,
+                                                                       "automatic", 7, _("Automatic"),  NULL,
+                                                                       NULL),
+                                          "rgb", G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "check-bbox",
-                             _("Try _Bounding Box"),
-                             _("FALSE: Use width/height, TRUE: Use BoundingBox"),
-                             TRUE,
-                             GIMP_PARAM_READWRITE);
+      gimp_procedure_add_choice_argument (procedure, "text-alpha-bits",
+                                          _("Te_xt anti-aliasing"),
+                                          _("Text anti-aliasing strength"),
+                                          gimp_choice_new_with_values ("none",   1, _("None"),   NULL,
+                                                                       "weak",   2, _("Weak"),   NULL,
+                                                                       "strong", 4, _("Strong"), NULL,
+                                                                       NULL),
+                                          "none", G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_STRING (procedure, "pages",
-                            _("_Pages"),
-                            _("Pages to load (e.g.: 1,3,5-7)"),
-                            "1",
-                            GIMP_PARAM_READWRITE);
-
-      GIMP_PROC_ARG_INT (procedure, "coloring",
-                         _("Coloring"),
-                         _("4: b/w, 5: grey, 6: color image, 7: automatic"),
-                         4, 7, 6,
-                         GIMP_PARAM_READWRITE);
-
-      GIMP_PROC_ARG_INT (procedure, "text-alpha-bits",
-                         _("Text antialiasing"),
-                         _("1, 2 or 4"),
-                         1, 4, 1,
-                         GIMP_PARAM_READWRITE);
-
-      GIMP_PROC_ARG_INT (procedure, "graphoc-alpha-bits",
-                         _("Graphic antialiasing"),
-                         _("1, 2 or 4"),
-                         1, 4, 1,
-                         GIMP_PARAM_READWRITE);
+      gimp_procedure_add_choice_argument (procedure, "graphic-alpha-bits",
+                                          _("Gra_phic anti-aliasing"),
+                                          _("Graphic anti-aliasing strength"),
+                                          gimp_choice_new_with_values ("none",   1, _("None"),   NULL,
+                                                                       "weak",   2, _("Weak"),   NULL,
+                                                                       "strong", 4, _("Strong"), NULL,
+                                                                       NULL),
+                                          "none", G_PARAM_READWRITE);
     }
   else if (! strcmp (name, LOAD_PS_THUMB_PROC))
     {
@@ -431,8 +450,8 @@ ps_create_procedure (GimpPlugIn  *plug_in,
                                                 ps_load_thumb, NULL, NULL);
 
       gimp_procedure_set_documentation (procedure,
-                                        "Loads a small preview from a "
-                                        "PostScript or PDF document",
+                                        _("Loads a small preview from a "
+                                          "PostScript or PDF document"),
                                         "",
                                         name);
       gimp_procedure_set_attribution (procedure,
@@ -440,22 +459,22 @@ ps_create_procedure (GimpPlugIn  *plug_in,
                                       "Peter Kirchgessner",
                                       dversion);
     }
-  else if (! strcmp (name, SAVE_PS_PROC) ||
-           ! strcmp (name, SAVE_EPS_PROC))
+  else if (! strcmp (name, EXPORT_PS_PROC) ||
+           ! strcmp (name, EXPORT_EPS_PROC))
     {
-      procedure = gimp_save_procedure_new (plug_in, name,
-                                           GIMP_PDB_PROC_TYPE_PLUGIN,
-                                           FALSE, ps_save, NULL, NULL);
+      procedure = gimp_export_procedure_new (plug_in, name,
+                                             GIMP_PDB_PROC_TYPE_PLUGIN,
+                                             FALSE, ps_export, NULL, NULL);
 
-      if (! strcmp (name, SAVE_PS_PROC))
+      if (! strcmp (name, EXPORT_PS_PROC))
         {
           gimp_procedure_set_menu_label (procedure, _("PostScript document"));
 
           gimp_procedure_set_documentation (procedure,
-                                            "Export image as PostScript document",
-                                            "PostScript exporting handles all "
-                                            "image types except those with alpha "
-                                            "channels.",
+                                            _("Export image as PostScript document"),
+                                            _("PostScript exporting handles all "
+                                              "image types except those with alpha "
+                                              "channels."),
                                             name);
 
           gimp_file_procedure_set_format_name (GIMP_FILE_PROCEDURE (procedure),
@@ -471,11 +490,11 @@ ps_create_procedure (GimpPlugIn  *plug_in,
                                          _("Encapsulated PostScript"));
 
           gimp_procedure_set_documentation (procedure,
-                                            "Export image as Encapsulated "
-                                            "PostScript image",
-                                            "PostScript exporting handles all "
-                                            "image types except those with alpha "
-                                            "channels.",
+                                            _("Export image as Encapsulated "
+                                              "PostScript image"),
+                                            _("PostScript exporting handles all "
+                                              "image types except those with alpha "
+                                              "channels."),
                                             name);
 
           gimp_file_procedure_set_format_name (GIMP_FILE_PROCEDURE (procedure),
@@ -496,86 +515,141 @@ ps_create_procedure (GimpPlugIn  *plug_in,
       gimp_file_procedure_set_handles_remote (GIMP_FILE_PROCEDURE (procedure),
                                               TRUE);
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "width",
-                            _("_Width"),
-                            _("Width of the image in PostScript file "
-                              "(0: use input image size)"),
-                            0, GIMP_MAX_IMAGE_SIZE, 287.0,
-                            G_PARAM_READWRITE);
+      gimp_export_procedure_set_capabilities (GIMP_EXPORT_PROCEDURE (procedure),
+                                              GIMP_EXPORT_CAN_HANDLE_RGB  |
+                                              GIMP_EXPORT_CAN_HANDLE_GRAY |
+                                              GIMP_EXPORT_CAN_HANDLE_INDEXED,
+                                              NULL, NULL, NULL);
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "height",
-                            _("_Height"),
-                            _("Height of the image in PostScript file "
-                              "(0: use input image size)"),
-                            0, GIMP_MAX_IMAGE_SIZE, 200.0,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "width",
+                                          _("_Width"),
+                                          _("Width of the image in PostScript file "
+                                            "(0: use input image size)"),
+                                          0, GIMP_MAX_IMAGE_SIZE, 287.0,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "x-offset",
-                            _("_X offset"),
-                            _("X-offset to image from lower left corner"),
-                            -GIMP_MAX_IMAGE_SIZE, GIMP_MAX_IMAGE_SIZE, 5.0,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "height",
+                                          _("_Height"),
+                                          _("Height of the image in PostScript file "
+                                            "(0: use input image size)"),
+                                          0, GIMP_MAX_IMAGE_SIZE, 200.0,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "y-offset",
-                            _("Y o_ffset"),
-                            _("Y-offset to image from lower left corner"),
-                            -GIMP_MAX_IMAGE_SIZE, GIMP_MAX_IMAGE_SIZE, 5.0,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "x-offset",
+                                          _("_X offset"),
+                                          _("X-offset to image from lower left corner"),
+                                          -GIMP_MAX_IMAGE_SIZE, GIMP_MAX_IMAGE_SIZE, 5.0,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "unit",
-                         _("Unit"),
-                         _("Unit for width/height/offset. "
-                         "0: inches, 1: millimeters"),
-                         0, 1, 1,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "y-offset",
+                                          _("Y o_ffset"),
+                                          _("Y-offset to image from lower left corner"),
+                                          -GIMP_MAX_IMAGE_SIZE, GIMP_MAX_IMAGE_SIZE, 5.0,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "keep-ratio",
-                             _("_Keep aspect ratio"),
-                             _("FALSE: use width/height, TRUE: keep aspect ratio"),
-                             TRUE,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_choice_argument (procedure, "unit",
+                                          _("_Unit"),
+                                          _("Unit of measure for offset values"),
+                                          gimp_choice_new_with_values ("inch",       0, _("Inch"),        NULL,
+                                                                       "millimeter", 1, _("Millimeter"),   NULL,
+                                                                       NULL),
+                                          "inch", G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "rotation",
-                         _("Rotation"),
-                         "0, 90, 180, 270",
-                         0, 270, 0,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "keep-ratio",
+                                           _("_Keep aspect ratio"),
+                                           _("If enabled, aspect ratio will be maintained on export. "
+                                             "Otherwise, the width and height values will be used."),
+                                           TRUE,
+                                           G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "level",
-                             _("PostScript Level _2"),
-                             _("FALSE: PostScript Level 1, TRUE: PostScript Level 2"),
-                             TRUE,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "rotation",
+                                       _("Rotation"),
+                                       "0, 90, 180, 270",
+                                       0, 270, 0,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "eps-flag",
-                             _("Encapsula_ted PostScript"),
-                             _("FALSE: PostScript, TRUE: Encapsulated PostScript"),
-                             FALSE,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "level",
+                                           _("PostScript Level _2"),
+                                           _("If enabled, export in PostScript Level 2 format. "
+                                             "Otherwise, export in PostScript Level 1 format."),
+                                           TRUE,
+                                           G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "show-preview",
-                             _("_Preview"),
-                             _("Show Preview"),
-                             FALSE,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "eps-flag",
+                                           _("Encapsula_ted PostScript"),
+                                           _("If enabled, export as Encapsulated PostScript. "
+                                             "Otherwise, export as PostScript."),
+                                           FALSE,
+                                           G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "preview",
-                         _("Preview Si_ze"),
-                         _("0: no preview, >0: max. size of preview"),
-                         0, GIMP_MAX_IMAGE_SIZE, 256,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "show-preview",
+                                           _("_Preview"),
+                                           _("Show Preview"),
+                                           FALSE,
+                                           G_PARAM_READWRITE);
+
+      gimp_procedure_add_int_argument (procedure, "preview",
+                                       _("Preview Si_ze"),
+                                       _("Maximum size of preview. Set to 0 for no preview."),
+                                       0, GIMP_MAX_IMAGE_SIZE, 256,
+                                       G_PARAM_READWRITE);
     }
 
   return procedure;
+}
+
+static gboolean
+ps_extract (GimpProcedure        *procedure,
+            GimpRunMode           run_mode,
+            GFile                *file,
+            GimpMetadata         *metadata,
+            GimpProcedureConfig  *config,
+            GimpVectorLoadData   *extracted_dimensions,
+            gpointer             *data_for_run,
+            GDestroyNotify       *data_for_run_destroy,
+            gpointer              extract_data,
+            GError              **error)
+{
+  gboolean has_bbox;
+  gboolean is_pdf;
+  gboolean is_epsf;
+  gint     bbox_x0 = 0;
+  gint     bbox_y0 = 0;
+  gint     bbox_x1 = 0;
+  gint     bbox_y1 = 0;
+
+  has_bbox = ps_read_header (file, NULL, &is_pdf, &is_epsf,
+                             &bbox_x0, &bbox_y0, &bbox_x1, &bbox_y1);
+
+  if (has_bbox)
+    {
+      extracted_dimensions->width         = (gdouble) bbox_x1 - bbox_x0;
+      extracted_dimensions->height        = (gdouble) bbox_y1 - bbox_y0;
+      extracted_dimensions->width_unit    = gimp_unit_point ();
+      extracted_dimensions->height_unit   = gimp_unit_point ();
+      extracted_dimensions->exact_width   = TRUE;
+      extracted_dimensions->exact_height  = TRUE;
+      extracted_dimensions->correct_ratio = TRUE;
+
+      return TRUE;
+    }
+  else
+    {
+      return FALSE;
+    }
 }
 
 static GimpValueArray *
 ps_load (GimpProcedure         *procedure,
          GimpRunMode            run_mode,
          GFile                 *file,
+         gint                   width,
+         gint                   height,
+         GimpVectorLoadData     extracted_data,
          GimpMetadata          *metadata,
          GimpMetadataLoadFlags *flags,
          GimpProcedureConfig   *config,
+         gpointer               data_from_extract,
          gpointer               run_data)
 {
   GimpValueArray *return_vals;
@@ -586,10 +660,18 @@ ps_load (GimpProcedure         *procedure,
 
   l_run_mode = run_mode;
 
+  /* Why these values? No idea, they were the default until now, I just reuse
+   * them. XXX
+   */
+  if (width == 0)
+    g_object_set (config, "width", 826, NULL);
+  if (height == 0)
+    g_object_set (config, "height", 1170, NULL);
+
   switch (run_mode)
     {
     case GIMP_RUN_INTERACTIVE:
-      if (! load_dialog (file, procedure, G_OBJECT (config)))
+      if (! load_dialog (file, extracted_data, procedure, G_OBJECT (config)))
         return gimp_procedure_new_return_values (procedure,
                                                  GIMP_PDB_CANCEL,
                                                  NULL);
@@ -599,9 +681,9 @@ ps_load (GimpProcedure         *procedure,
       break;
     }
 
-  check_load_vals (G_OBJECT (config));
+  check_load_vals (config);
 
-  image = load_image (file, G_OBJECT (config), &error);
+  image = load_image (file, config, &error);
 
   if (! image)
     return gimp_procedure_new_return_values (procedure,
@@ -655,25 +737,25 @@ ps_load_thumb (GimpProcedure       *procedure,
 }
 
 static GimpValueArray *
-ps_save (GimpProcedure        *procedure,
-         GimpRunMode           run_mode,
-         GimpImage            *image,
-         gint                  n_drawables,
-         GimpDrawable        **drawables,
-         GFile                *file,
-         GimpMetadata         *metadata,
-         GimpProcedureConfig  *config,
-         gpointer              run_data)
+ps_export (GimpProcedure        *procedure,
+           GimpRunMode           run_mode,
+           GimpImage            *image,
+           GFile                *file,
+           GimpExportOptions    *options,
+           GimpMetadata         *metadata,
+           GimpProcedureConfig  *config,
+           gpointer              run_data)
 {
   GimpPDBStatusType  status   = GIMP_PDB_SUCCESS;
-  GimpExportReturn   export   = GIMP_EXPORT_CANCEL;
+  GimpExportReturn   export   = GIMP_EXPORT_IGNORE;
+  GList             *drawables;
   GimpImage         *orig_image;
   gboolean           eps_flag = FALSE;
   GError            *error    = NULL;
 
   gegl_init (NULL, NULL);
 
-  eps_flag = strcmp (gimp_procedure_get_name (procedure), SAVE_PS_PROC);
+  eps_flag = strcmp (gimp_procedure_get_name (procedure), EXPORT_PS_PROC);
   g_object_set (config,
                 "eps-flag", eps_flag ? 1 : 0,
                 NULL);
@@ -683,38 +765,7 @@ ps_save (GimpProcedure        *procedure,
   switch (run_mode)
     {
     case GIMP_RUN_INTERACTIVE:
-    case GIMP_RUN_WITH_LAST_VALS:
       gimp_ui_init (PLUG_IN_BINARY);
-
-      export = gimp_export_image (&image, &n_drawables, &drawables,
-                                  eps_flag ? "EPS" : "PostScript",
-                                  GIMP_EXPORT_CAN_HANDLE_RGB  |
-                                  GIMP_EXPORT_CAN_HANDLE_GRAY |
-                                  GIMP_EXPORT_CAN_HANDLE_INDEXED);
-
-      if (export == GIMP_EXPORT_CANCEL)
-        return gimp_procedure_new_return_values (procedure,
-                                                 GIMP_PDB_CANCEL,
-                                                 NULL);
-      break;
-
-    default:
-      break;
-    }
-
-  if (n_drawables != 1)
-    {
-      g_set_error (&error, G_FILE_ERROR, 0,
-                   _("PostScript plug-in does not support multiple layers."));
-
-      return gimp_procedure_new_return_values (procedure,
-                                               GIMP_PDB_CALLING_ERROR,
-                                               error);
-    }
-
-  switch (run_mode)
-    {
-    case GIMP_RUN_INTERACTIVE:
       ps_set_save_size (G_OBJECT (config), orig_image);
 
       if (! save_dialog (procedure, G_OBJECT (config), image))
@@ -728,6 +779,9 @@ ps_save (GimpProcedure        *procedure,
     default:
       break;
     }
+
+  export    = gimp_export_options_get_image (options, &image);
+  drawables = gimp_image_list_layers (image);
 
   if (status == GIMP_PDB_SUCCESS)
     {
@@ -743,18 +797,17 @@ ps_save (GimpProcedure        *procedure,
       if ((width == 0.0) || (height == 0.0))
         ps_set_save_size (G_OBJECT (config), orig_image);
 
-      check_save_vals (G_OBJECT (config));
+      check_save_vals (config);
 
-      if (! save_image (file, G_OBJECT (config), image, drawables[0], &error))
+      if (! export_image (file, G_OBJECT (config), image, drawables->data,
+                          &error))
         status = GIMP_PDB_EXECUTION_ERROR;
     }
 
   if (export == GIMP_EXPORT_EXPORT)
-    {
-      gimp_image_delete (image);
-      g_free (drawables);
-    }
+    gimp_image_delete (image);
 
+  g_list_free (drawables);
   return gimp_procedure_new_return_values (procedure, status, error);
 }
 
@@ -1045,20 +1098,19 @@ ps_end_data (GOutputStream  *output,
 }
 
 static GimpImage *
-load_image (GFile   *file,
-            GObject *config,
-            GError **error)
+load_image (GFile                *file,
+            GimpProcedureConfig  *config,
+            GError              **error)
 {
   GimpImage    *image = NULL;
   GimpImage   **image_list, **nl;
   const gchar  *filename;
   gint          width;
   gint          height;
-  guint         resolution;
-  gboolean      use_bbox;
-  gint          pnm_type;
-  gint          text_alpha;
-  gint          graphics_alpha;
+  gdouble       resolution;
+  gchar        *pnm_type = NULL;
+  gchar        *text_alpha = NULL;
+  gchar        *graphics_alpha = NULL;
   gchar        *pages;
   guint         page_count;
   FILE         *ifp;
@@ -1072,14 +1124,13 @@ load_image (GFile   *file,
   if (config)
     {
       g_object_get (config,
-                    "resolution",         &resolution,
+                    "pixel-density",      &resolution,
                     "width",              &width,
                     "height",             &height,
                     "pages",              &pages,
-                    "check-bbox",         &use_bbox,
                     "coloring",           &pnm_type,
                     "text-alpha-bits",    &text_alpha,
-                    "graphoc-alpha-bits", &graphics_alpha,
+                    "graphic-alpha-bits", &graphics_alpha,
                     NULL);
     }
   else
@@ -1088,12 +1139,11 @@ load_image (GFile   *file,
     }
 
 #ifdef PS_DEBUG
-  g_print ("load_image:\n resolution = %d\n", resolution);
+  g_print ("load_image:\n resolution = %f\n", resolution);
   g_print (" %dx%d pixels\n", width, height);
-  g_print (" BoundingBox: %d\n", use_bbox);
-  g_print (" Coloring: %d\n", pnm_type);
-  g_print (" TextAlphaBits: %d\n", text_alpha);
-  g_print (" GraphicsAlphaBits: %d\n", graphics_alpha);
+  g_print (" Coloring: %s\n", pnm_type);
+  g_print (" TextAlphaBits: %s\n", text_alpha);
+  g_print (" GraphicsAlphaBits: %s\n", graphics_alpha);
 #endif
 
   gimp_progress_init_printf (_("Opening '%s'"),
@@ -1112,7 +1162,8 @@ load_image (GFile   *file,
     }
   fclose (ifp);
 
-  ifp = ps_open (file, config, &llx, &lly, &urx, &ury, &is_epsf, &tmp_filename);
+  ifp = ps_open (file, config, &llx, &lly, &urx, &ury, &is_epsf,
+                 &tmp_filename);
   if (!ifp)
     {
       g_set_error (error, G_FILE_ERROR, G_FILE_ERROR,
@@ -1163,9 +1214,7 @@ load_image (GFile   *file,
           if (! image)
             break;
 
-          gimp_image_set_resolution (image,
-                                     (gdouble) resolution,
-                                     (gdouble) resolution);
+          gimp_image_set_resolution (image, resolution, resolution);
 
           if (n_images == max_images)
             {
@@ -1240,10 +1289,9 @@ load_image (GFile   *file,
             {
               GimpLayer     *current_layer;
               gchar         *name;
-              GimpItem     **tmp_drawables;
-              gint           n_drawables;
+              GimpDrawable **tmp_drawables;
 
-              tmp_drawables = gimp_image_get_selected_drawables (image_list[k], &n_drawables);
+              tmp_drawables = gimp_image_get_selected_drawables (image_list[k]);
 
               name = gimp_item_get_name (GIMP_ITEM (tmp_drawables[0]));
 
@@ -1284,11 +1332,11 @@ load_image (GFile   *file,
 
 
 static gboolean
-save_image (GFile         *file,
-            GObject       *config,
-            GimpImage     *image,
-            GimpDrawable  *drawable,
-            GError       **error)
+export_image (GFile         *file,
+              GObject       *config,
+              GimpImage     *image,
+              GimpDrawable  *drawable,
+              GError       **error)
 {
   GOutputStream *output;
   GCancellable  *cancellable;
@@ -1387,35 +1435,35 @@ save_image (GFile         *file,
 
 /* Check (and correct) the load values */
 static void
-check_load_vals (GObject *config)
+check_load_vals (GimpProcedureConfig *config)
 {
-  gint     resolution     = MIN_RESOLUTION;
-  gdouble  width          = 2;
-  gdouble  height         = 2;
+  gdouble  resolution     = GIMP_MIN_RESOLUTION;
+  gint     width          = 2;
+  gint     height         = 2;
   gboolean use_bbox       = FALSE;
   gint     pnm_type       = 6;
   gint     text_alpha     = 1;
   gint     graphics_alpha = 1;
-  gchar   *pages;
+  gchar   *pages          = NULL;
 
   if (config)
     {
       g_object_get (config,
-                    "resolution",         &resolution,
+                    "pixel-density",      &resolution,
                     "width",              &width,
                     "height",             &height,
-                    "check_bbox",         &use_bbox,
-                    "coloring",           &pnm_type,
+                    "check-bbox",         &use_bbox,
                     "pages",              &pages,
-                    "text-alpha-bits",    &text_alpha,
-                    "graphoc-alpha-bits", &graphics_alpha,
                     NULL);
+      pnm_type       = gimp_procedure_config_get_choice_id (config, "coloring");
+      text_alpha     = gimp_procedure_config_get_choice_id (config, "text-alpha-bits");
+      graphics_alpha = gimp_procedure_config_get_choice_id (config, "graphic-alpha-bits");
     }
 
-  if (resolution < MIN_RESOLUTION)
-    resolution = MIN_RESOLUTION;
-  else if (resolution > MAX_RESOLUTION)
-    resolution = MAX_RESOLUTION;
+  if (resolution < GIMP_MIN_RESOLUTION)
+    resolution = GIMP_MIN_RESOLUTION;
+  else if (resolution > GIMP_MAX_RESOLUTION)
+    resolution = GIMP_MAX_RESOLUTION;
 
   if (width < 2)
     width = 2;
@@ -1436,15 +1484,54 @@ check_load_vals (GObject *config)
   if (config)
     {
       g_object_set (config,
-                    "resolution",         resolution,
+                    "pixel-density",      resolution,
                     "width",              width,
                     "height",             height,
                     "check_bbox",         use_bbox ? 1 : 0,
-                    "coloring",           pnm_type,
                     "pages",              pages,
-                    "text-alpha-bits",    text_alpha,
-                    "graphoc-alpha-bits", graphics_alpha,
                     NULL);
+
+      switch (pnm_type)
+        {
+        case 4:
+          g_object_set (config, "coloring", "bw", NULL);
+          break;
+        case 5:
+          g_object_set (config, "coloring", "grayscale", NULL);
+          break;
+        case 6:
+          g_object_set (config, "coloring", "rgb", NULL);
+          break;
+        case 7:
+        default:
+          g_object_set (config, "coloring", "automatic", NULL);
+        }
+
+      switch (text_alpha)
+        {
+          case 2:
+            g_object_set (config, "text-alpha-bits", "weak", NULL);
+            break;
+          case 4:
+            g_object_set (config, "text-alpha-bits", "strong", NULL);
+            break;
+          case 1:
+          default:
+            g_object_set (config, "text-alpha-bits", "none", NULL);
+        }
+
+      switch (graphics_alpha)
+        {
+          case 2:
+            g_object_set (config, "graphic-alpha-bits", "weak", NULL);
+            break;
+          case 4:
+            g_object_set (config, "graphic-alpha-bits", "strong", NULL);
+            break;
+          case 1:
+          default:
+            g_object_set (config, "graphic-alpha-bits", "none", NULL);
+        }
     }
 
   g_free (pages);
@@ -1453,7 +1540,7 @@ check_load_vals (GObject *config)
 
 /* Check (and correct) the save values */
 static void
-check_save_vals (GObject *config)
+check_save_vals (GimpProcedureConfig *config)
 {
   gint     i            = 90;
   gint     preview_size = 0;
@@ -1481,10 +1568,10 @@ static void
 ps_set_save_size (GObject   *config,
                   GimpImage *image)
 {
-  gdouble  xres, yres, factor, iw, ih;
-  guint    width, height;
-  GimpUnit unit;
-  gboolean unit_mm = FALSE;
+  gdouble    xres, yres, factor, iw, ih;
+  guint      width, height;
+  GimpUnit  *unit;
+  gboolean   unit_mm = FALSE;
 
   gimp_image_get_resolution (image, &xres, &yres);
 
@@ -1515,7 +1602,7 @@ ps_set_save_size (GObject   *config,
     }
 
   g_object_set (config,
-                "unit",   unit_mm ? 1 : 0,
+                "unit",   unit_mm ? "millimeter" : "inch",
                 "width",  iw,
                 "height", ih,
                 NULL);
@@ -1737,70 +1824,37 @@ get_bbox (GFile *file,
   return retval;
 }
 
-/* Open the PostScript file. On failure, NULL is returned. */
-/* The filepointer returned will give a PNM-file generated */
-/* by the PostScript-interpreter. */
-static FILE *
-ps_open (GFile            *file,
-         GObject          *config,
-         gint             *llx,
-         gint             *lly,
-         gint             *urx,
-         gint             *ury,
-         gboolean         *is_epsf,
-         gchar           **tmp_filename)
+static gboolean
+ps_read_header (GFile               *file,
+                GimpProcedureConfig *config,
+                gboolean            *is_pdf,
+                gboolean            *is_epsf,
+                gint                *bbox_x0,
+                gint                *bbox_y0,
+                gint                *bbox_x1,
+                gint                *bbox_y1)
 {
-  const gchar  *filename;
-  const gchar  *driver;
-  GPtrArray    *cmdA;
-  gchar       **pcmdA;
-  FILE         *fd_popen = NULL;
-  FILE         *eps_file;
-  gint          width, height;
-  gint          resolution;
-  gboolean      use_bbox;
-  gint          pnm_type;
-  gint          text_alpha;
-  gint          graphics_alpha;
-  gint          x0, y0, x1, y1;
-  gint          offx = 0;
-  gint          offy = 0;
-  gboolean      is_pdf;
-  gboolean      maybe_epsf = FALSE;
-  int           code;
-  void         *instance = NULL;
+  FILE        *eps_file;
+  const gchar *filename;
+  gboolean     use_bbox   = TRUE;
+  gboolean     maybe_epsf = FALSE;
+  gboolean     has_bbox   = FALSE;
 
   if (config)
-    {
-      g_object_get (config,
-                    "width",              &width,
-                    "height",             &height,
-                    "resolution",         &resolution,
-                    "check-bbox",         &use_bbox,
-                    "coloring",           &pnm_type,
-                    "text-alpha-bits",    &text_alpha,
-                    "graphoc-alpha-bits", &graphics_alpha,
-                    NULL);
-    }
-  else
-    {
-      width = 256;
-      height = 256;
-      resolution = 256 / 4;
-    }
-
-  *llx = *lly = 0;
-  *urx = width - 1;
-  *ury = height - 1;
+    g_object_get (config, "check-bbox", &use_bbox, NULL);
 
   /* Check if the file is a PDF. For PDF, we can't set geometry */
-  is_pdf = FALSE;
+  *is_pdf = FALSE;
 
   /* Check if it is a EPS-file */
   *is_epsf = FALSE;
 
-  filename = gimp_file_get_utf8_name (file);
+  *bbox_x0 = 0.0;
+  *bbox_y0 = 0.0;
+  *bbox_x1 = 0.0;
+  *bbox_y1 = 0.0;
 
+  filename = gimp_file_get_utf8_name (file);
   eps_file = g_fopen (filename, "rb");
 
   if (eps_file)
@@ -1808,13 +1862,13 @@ ps_open (GFile            *file,
       gchar hdr[512];
 
       fread (hdr, 1, sizeof(hdr), eps_file);
-      is_pdf = (strncmp (hdr, "%PDF", 4) == 0);
+      *is_pdf = (strncmp (hdr, "%PDF", 4) == 0);
 
-      if (!is_pdf)  /* Check for EPSF */
+      if (!*is_pdf)  /* Check for EPSF */
         {
-          char *adobe, *epsf;
-          int ds = 0;
-          static unsigned char doseps[5] = { 0xc5, 0xd0, 0xd3, 0xc6, 0 };
+          char                 *adobe, *epsf;
+          int                   ds = 0;
+          static unsigned char  doseps[5] = { 0xc5, 0xd0, 0xd3, 0xc6, 0 };
 
           hdr[sizeof(hdr)-1] = '\0';
           adobe = strstr (hdr, "PS-Adobe-");
@@ -1838,31 +1892,97 @@ ps_open (GFile            *file,
       fclose (eps_file);
     }
 
-  if ((!is_pdf) && (use_bbox))    /* Try the BoundingBox ? */
+  if ((!*is_pdf) && (use_bbox))    /* Try the BoundingBox ? */
     {
-      if (get_bbox (file, &x0, &y0, &x1, &y1) == 0)
+      if (get_bbox (file, bbox_x0, bbox_y0, bbox_x1, bbox_y1) == 0)
         {
-          if (maybe_epsf && ((x0 < 0) || (y0 < 0)))
-            *is_epsf = 1;
+          has_bbox = TRUE;
 
-          if (*is_epsf)  /* Handle negative BoundingBox for EPSF */
-            {
-              offx = -x0; x1 += offx; x0 += offx;
-              offy = -y0; y1 += offy; y0 += offy;
-            }
-          if ((x0 >= 0) && (y0 >= 0) && (x1 > x0) && (y1 > y0))
-            {
-               *llx = (int)((x0/72.0) * resolution + 0.0001);
-               *lly = (int)((y0/72.0) * resolution + 0.0001);
-               /* Use upper bbox values as image size */
-               width = (int)((x1/72.0) * resolution + 0.5);
-               height = (int)((y1/72.0) * resolution + 0.5);
-               /* Pixel coordinates must be one less */
-               *urx = width - 1;
-               *ury = height - 1;
-               if (*urx < *llx) *urx = *llx;
-               if (*ury < *lly) *ury = *lly;
-            }
+          if (maybe_epsf && ((bbox_x0 < 0) || (bbox_y0 < 0)))
+            *is_epsf = 1;
+        }
+    }
+
+  return has_bbox;
+}
+
+/* Open the PostScript file. On failure, NULL is returned. */
+/* The filepointer returned will give a PNM-file generated */
+/* by the PostScript-interpreter. */
+static FILE *
+ps_open (GFile               *file,
+         GimpProcedureConfig *config,
+         gint                *llx,
+         gint                *lly,
+         gint                *urx,
+         gint                *ury,
+         gboolean            *is_epsf,
+         gchar              **tmp_filename)
+{
+  const gchar  *driver;
+  GPtrArray    *cmdA;
+  gchar       **pcmdA;
+  FILE         *fd_popen = NULL;
+  gint          width, height;
+  gdouble       resolution;
+  gint          pnm_type       = 0;
+  gint          text_alpha     = 0;
+  gint          graphics_alpha = 0;
+  gboolean      has_bbox;
+  gint          bbox_x0 = 0;
+  gint          bbox_y0 = 0;
+  gint          bbox_x1 = 0;
+  gint          bbox_y1 = 0;
+  gint          offx    = 0;
+  gint          offy    = 0;
+  gboolean      is_pdf;
+  int           code;
+  void         *instance = NULL;
+
+  if (config)
+    {
+      g_object_get (config,
+                    "width",              &width,
+                    "height",             &height,
+                    "pixel-density",      &resolution,
+                    NULL);
+      pnm_type       = gimp_procedure_config_get_choice_id (config, "coloring");
+      text_alpha     = gimp_procedure_config_get_choice_id (config, "text-alpha-bits");
+      graphics_alpha = gimp_procedure_config_get_choice_id (config, "graphic-alpha-bits");
+    }
+  else
+    {
+      width = 256;
+      height = 256;
+      resolution = 256.0 / 4.0;
+    }
+
+  *llx = *lly = 0;
+  *urx = width - 1;
+  *ury = height - 1;
+
+  has_bbox = ps_read_header (file, config, &is_pdf, is_epsf, &bbox_x0, &bbox_y0, &bbox_x1, &bbox_y1);
+
+  if (has_bbox)
+    {
+      if (*is_epsf)  /* Handle negative BoundingBox for EPSF */
+        {
+          offx = -bbox_x0; bbox_x1 += offx; bbox_x0 += offx;
+          offy = -bbox_y0; bbox_y1 += offy; bbox_y0 += offy;
+        }
+
+      if (bbox_x0 >= 0 && bbox_y0 >= 0 && bbox_x1 > bbox_x0 && bbox_y1 > bbox_y0)
+        {
+          *llx = (int) (bbox_x0 / 72.0 * resolution + 0.0001);
+          *lly = (int) (bbox_y0 / 72.0 * resolution + 0.0001);
+          /* Use upper bbox values as image size */
+          width = (int) (bbox_x1 / 72.0 * resolution + 0.5);
+          height = (int) (bbox_y1 / 72.0 * resolution + 0.5);
+          /* Pixel coordinates must be one less */
+          *urx = width - 1;
+          *ury = height - 1;
+          if (*urx < *llx) *urx = *llx;
+          if (*ury < *lly) *ury = *lly;
         }
     }
 
@@ -1901,7 +2021,7 @@ ps_open (GFile            *file,
 
   g_ptr_array_add (cmdA, g_strdup (g_get_prgname ()));
   g_ptr_array_add (cmdA, g_strdup_printf ("-sDEVICE=%s", driver));
-  g_ptr_array_add (cmdA, g_strdup_printf ("-r%d", resolution));
+  g_ptr_array_add (cmdA, g_strdup_printf ("-r%d", (gint) resolution));
 
   if (is_pdf)
     {
@@ -1945,7 +2065,7 @@ ps_open (GFile            *file,
 
   /* input file name */
   g_ptr_array_add (cmdA, g_strdup ("-f"));
-  g_ptr_array_add (cmdA, g_strdup (filename));
+  g_ptr_array_add (cmdA, g_strdup (gimp_file_get_utf8_name (file)));
 
   if (*is_epsf)
     {
@@ -2227,7 +2347,7 @@ load_ps (GFile *file,
     {
       const guchar BWColorMap[2*3] = { 255, 255, 255, 0, 0, 0 };
 
-      gimp_image_set_colormap (image, BWColorMap, 2);
+      gimp_palette_set_colormap (gimp_image_get_palette (image), babl_format ("R'G'B' u8"), (guint8 *) BWColorMap, 2 * 3);
 
       for (i = 0; i < height; i++)
         {
@@ -2411,13 +2531,14 @@ save_ps_setup (GOutputStream  *output,
                 "height",       &config_height,
                 "x-offset",     &x_offset,
                 "y-offset",     &y_offset,
-                "unit",         &unit_mm,
                 "keep-ratio",   &keep_ratio,
                 "level",        &level2,
                 "rotation",     &rotation,
                 "show-preview", &show_preview,
                 "preview",      &preview_size,
                 NULL);
+  unit_mm = gimp_procedure_config_get_choice_id (GIMP_PROCEDURE_CONFIG (config),
+                                                 "unit");
 
   dx = 0.0;
   dy = 0.0;
@@ -2701,9 +2822,8 @@ save_ps_preview (GOutputStream  *output,
       break;
 
     case GIMP_INDEXED_IMAGE:
-      cmap = gimp_image_get_colormap (gimp_item_get_image (GIMP_ITEM (drawable)),
-                                      NULL,
-                                      &ncols);
+      cmap = gimp_palette_get_colormap (gimp_image_get_palette (gimp_item_get_image (GIMP_ITEM (drawable))),
+                                        babl_format ("R'G'B' u8"), &ncols, NULL);
       format = gimp_drawable_get_format (drawable);
       break;
 
@@ -3016,7 +3136,7 @@ save_bw (GOutputStream  *output,
                 "level", &level2,
                 NULL);
 
-  cmap = gimp_image_get_colormap (image, NULL, &ncols);
+  cmap = gimp_palette_get_colormap (gimp_image_get_palette (image), babl_format ("R'G'B' u8"), &ncols, NULL);
 
   buffer = gimp_drawable_get_buffer (drawable);
   format = gimp_drawable_get_format (drawable);
@@ -3205,7 +3325,7 @@ save_index (GOutputStream  *output,
                 "level", &level2,
                 NULL);
 
-  cmap = cmap_start = gimp_image_get_colormap (image, NULL, &ncols);
+  cmap = cmap_start = gimp_palette_get_colormap (gimp_image_get_palette (image), babl_format ("R'G'B' u8"), &ncols, NULL);
 
   ct = coltab;
   bw = 1;
@@ -3640,15 +3760,14 @@ count_ps_pages (GFile *file)
 }
 
 static gboolean
-load_dialog (GFile         *file,
-             GimpProcedure *procedure,
-             GObject       *config)
+load_dialog (GFile              *file,
+             GimpVectorLoadData  extracted_data,
+             GimpProcedure      *procedure,
+             GObject            *config)
 {
   GtkWidget     *dialog;
-  GtkListStore  *store;
   GtkWidget     *hbox;
   GtkWidget     *vbox;
-  GtkWidget     *spinbutton;
   GtkWidget     *target   = NULL;
   GtkWidget     *selector = NULL;
   gint32         page_count;
@@ -3659,16 +3778,9 @@ load_dialog (GFile         *file,
 
   gimp_ui_init (PLUG_IN_BINARY);
 
-  dialog = gimp_procedure_dialog_new (GIMP_PROCEDURE (procedure),
-                                      GIMP_PROCEDURE_CONFIG (config),
-                                      NULL);
-
-  gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
-                                            GTK_RESPONSE_OK,
-                                            GTK_RESPONSE_CANCEL,
-                                            -1);
-
-  gimp_window_set_transient (GTK_WINDOW (dialog));
+  dialog = gimp_vector_load_procedure_dialog_new (GIMP_VECTOR_LOAD_PROCEDURE (procedure),
+                                                  GIMP_PROCEDURE_CONFIG (config),
+                                                  &extracted_data, NULL);
 
   if (page_count > 1)
     {
@@ -3680,70 +3792,15 @@ load_dialog (GFile         *file,
       gimp_page_selector_set_target (GIMP_PAGE_SELECTOR (selector),
                                      ps_pagemode);
 
-      gtk_widget_show (selector);
+      gtk_widget_set_visible (selector, TRUE);
 
       g_signal_connect_swapped (selector, "activate",
                                 G_CALLBACK (gtk_window_activate_default),
                                 dialog);
     }
 
-  /* Rendering */
-  /* Resolution / Width / Height */
-  gimp_procedure_dialog_fill_box (GIMP_PROCEDURE_DIALOG (dialog),
-                                  "rendering-options",
-                                  "resolution",
-                                  "width",
-                                  "height",
-                                  NULL);
-
-  spinbutton =
-    gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
-                                           "resolution", 1.0);
-  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
-                                         "width", 1.0);
-  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
-                                         "height", 1.0);
-
-  g_signal_connect (spinbutton, "value-changed",
-                    G_CALLBACK (resolution_change_callback),
-                    config);
-
-  gimp_procedure_dialog_get_label (GIMP_PROCEDURE_DIALOG (dialog),
-                                   "rendering-title", _("Rendering"),
-                                   FALSE, FALSE);
-
-  gimp_procedure_dialog_fill_frame (GIMP_PROCEDURE_DIALOG (dialog),
-                                    "rendering-frame", "rendering-title",
-                                    FALSE, "rendering-options");
-
-  /* Coloring */
-  store = gimp_int_store_new (_("B/W"),       4,
-                              _("Gray"),      5,
-                              _("Color"),     6,
-                              _("Automatic"), 7,
-                              NULL);
-  gimp_procedure_dialog_get_int_radio (GIMP_PROCEDURE_DIALOG (dialog),
-                                       "coloring", GIMP_INT_STORE (store));
-
-  /* Text antialiasing */
-  store = gimp_int_store_new (_("None"),      1,
-                              _("Weak"),      2,
-                              _("Strong"),    4,
-                              NULL);
-  gimp_procedure_dialog_get_int_radio (GIMP_PROCEDURE_DIALOG (dialog),
-                                       "text-alpha-bits", GIMP_INT_STORE (store));
-
-  /* Graphics antialiasing */
-  store = gimp_int_store_new (_("None"),      1,
-                              _("Weak"),      2,
-                              _("Strong"),    4,
-                              NULL);
-  gimp_procedure_dialog_get_int_radio (GIMP_PROCEDURE_DIALOG (dialog),
-                                       "graphoc-alpha-bits", GIMP_INT_STORE (store));
-
   vbox = gimp_procedure_dialog_fill_box (GIMP_PROCEDURE_DIALOG (dialog),
                                          "rendering-box",
-                                         "rendering-frame",
                                          "check-bbox",
                                          NULL);
 
@@ -3756,7 +3813,7 @@ load_dialog (GFile         *file,
       gtk_grid_set_row_spacing (GTK_GRID (grid), 6);
       gtk_grid_set_column_spacing (GTK_GRID (grid), 6);
       gtk_box_pack_start (GTK_BOX (vbox), grid, FALSE, FALSE, 0);
-      gtk_widget_show (grid);
+      gtk_widget_set_visible (grid, TRUE);
 
       entry = gimp_procedure_dialog_get_widget (GIMP_PROCEDURE_DIALOG (dialog),
                                                 "pages", GTK_TYPE_ENTRY);
@@ -3780,7 +3837,6 @@ load_dialog (GFile         *file,
   hbox = gimp_procedure_dialog_fill_box (GIMP_PROCEDURE_DIALOG (dialog),
                                          "ps-top-row",
                                          "rendering-box",
-                                         "coloring",
                                          NULL);
   gtk_box_set_spacing (GTK_BOX (hbox), 12);
   gtk_box_set_homogeneous (GTK_BOX (hbox), TRUE);
@@ -3788,23 +3844,22 @@ load_dialog (GFile         *file,
   gtk_orientable_set_orientation (GTK_ORIENTABLE (hbox),
                                   GTK_ORIENTATION_HORIZONTAL);
 
-  hbox = gimp_procedure_dialog_fill_box (GIMP_PROCEDURE_DIALOG (dialog),
+  vbox = gimp_procedure_dialog_fill_box (GIMP_PROCEDURE_DIALOG (dialog),
                                          "ps-bottom-row",
+                                         "coloring",
                                          "text-alpha-bits",
-                                         "graphoc-alpha-bits",
+                                         "graphic-alpha-bits",
                                          NULL);
-  gtk_box_set_spacing (GTK_BOX (hbox), 12);
-  gtk_box_set_homogeneous (GTK_BOX (hbox), TRUE);
-  gtk_widget_set_margin_bottom (hbox, 12);
-  gtk_orientable_set_orientation (GTK_ORIENTABLE (hbox),
-                                  GTK_ORIENTATION_HORIZONTAL);
+  gtk_box_set_spacing (GTK_BOX (vbox), 12);
+  gtk_box_set_homogeneous (GTK_BOX (vbox), TRUE);
+  gtk_widget_set_margin_bottom (vbox, 12);
 
   gimp_procedure_dialog_fill (GIMP_PROCEDURE_DIALOG (dialog),
                               "ps-top-row",
                               "ps-bottom-row",
                               NULL);
 
-  gtk_widget_show (dialog);
+  gtk_widget_set_visible (dialog, TRUE);
 
   run = gimp_procedure_dialog_run (GIMP_PROCEDURE_DIALOG (dialog));
 
@@ -3850,14 +3905,14 @@ save_dialog (GimpProcedure *procedure,
   GtkWidget      *dialog;
   GtkListStore   *store;
   GtkWidget      *toggle;
-  GtkWidget      *frame;
-  GList          *children;
+  GtkWidget      *combo;
+  GtkWidget      *widget;
   GtkWidget      *hbox, *vbox;
   gboolean        run;
 
-  dialog = gimp_save_procedure_dialog_new (GIMP_SAVE_PROCEDURE (procedure),
-                                           GIMP_PROCEDURE_CONFIG (config),
-                                           image);
+  dialog = gimp_export_procedure_dialog_new (GIMP_EXPORT_PROCEDURE (procedure),
+                                             GIMP_PROCEDURE_CONFIG (config),
+                                             image);
 
   /* Image Size */
   /* Width/Height/X-/Y-offset labels */
@@ -3883,17 +3938,11 @@ save_dialog (GimpProcedure *procedure,
                                     FALSE, "image-box");
 
   /* Unit */
-  store = gimp_int_store_new (_("_Inch"),       FALSE,
-                              _("_Millimeter"), TRUE,
-                              NULL);
-  frame = gimp_procedure_dialog_get_int_radio (GIMP_PROCEDURE_DIALOG (dialog),
-                                               "unit", GIMP_INT_STORE (store));
-  vbox = gtk_bin_get_child (GTK_BIN (frame));
-  children = gtk_container_get_children (GTK_CONTAINER (vbox));
-  children = g_list_next (children);
-  toggle = GTK_WIDGET (children->data);
-  g_signal_connect (GTK_TOGGLE_BUTTON (toggle), "toggled",
-                    G_CALLBACK (save_unit_toggle_update),
+  widget = gimp_procedure_dialog_get_widget (GIMP_PROCEDURE_DIALOG (dialog),
+                                             "unit", G_TYPE_NONE);
+  combo = gimp_label_string_widget_get_widget (GIMP_LABEL_STRING_WIDGET (widget));
+  g_signal_connect (combo, "changed",
+                    G_CALLBACK (save_unit_changed_update),
                     config);
 
   /* Rotation */
@@ -3943,7 +3992,7 @@ save_dialog (GimpProcedure *procedure,
                               "ps-hbox",
                               NULL);
 
-  gtk_widget_show (dialog);
+  gtk_widget_set_visible (dialog, TRUE);
 
   run = gimp_procedure_dialog_run (GIMP_PROCEDURE_DIALOG (dialog));
 
@@ -3953,8 +4002,8 @@ save_dialog (GimpProcedure *procedure,
 }
 
 static void
-save_unit_toggle_update (GtkWidget *widget,
-                         gpointer   data)
+save_unit_changed_update (GtkWidget *widget,
+                          gpointer   data)
 {
   GimpProcedureConfig *config = GIMP_PROCEDURE_CONFIG (data);
   gdouble              factor;
@@ -3970,8 +4019,7 @@ save_unit_toggle_update (GtkWidget *widget,
                 "x-offset", &x_offset,
                 "y-offset", &y_offset,
                 NULL);
-
-  unit_mm = gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (widget));
+  unit_mm = gimp_procedure_config_get_choice_id (config, "unit");
 
   if (unit_mm)
     factor = 25.4;
@@ -3984,36 +4032,4 @@ save_unit_toggle_update (GtkWidget *widget,
                 "x-offset", x_offset * factor,
                 "y-offset", y_offset * factor,
                 NULL);
-}
-
-static gboolean
-resolution_change_callback (GtkWidget *adjustment,
-                            gpointer   data)
-{
-  GimpProcedureConfig *config = GIMP_PROCEDURE_CONFIG (data);
-  gdouble              ratio  = 1.0;
-  gint                 old_resolution;
-  gdouble              resolution;
-  gint                 width;
-  gint                 height;
-
-  g_object_get (config,
-                "resolution", &old_resolution,
-                "width",      &width,
-                "height",     &height,
-                NULL);
-  resolution = gimp_label_spin_get_value (GIMP_LABEL_SPIN (adjustment));
-
-  if (old_resolution)
-    ratio = resolution / old_resolution;
-
-  width  *= ratio;
-  height *= ratio;
-
-  g_object_set (config,
-                "width",  width,
-                "height", height,
-                NULL);
-  return TRUE;
-
 }

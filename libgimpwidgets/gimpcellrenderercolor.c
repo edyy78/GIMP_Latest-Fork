@@ -36,9 +36,9 @@
 /**
  * SECTION: gimpcellrenderercolor
  * @title: GimpCellRendererColor
- * @short_description: A #GtkCellRenderer to display a #GimpRGB color.
+ * @short_description: A #GtkCellRenderer to display a #GeglColor color.
  *
- * A #GtkCellRenderer to display a #GimpRGB color.
+ * A #GtkCellRenderer to display a #GeglColor color.
  **/
 
 
@@ -54,17 +54,18 @@ enum
 };
 
 
-struct _GimpCellRendererColorPrivate
+struct _GimpCellRendererColor
 {
-  GimpRGB     color;
-  gboolean    opaque;
-  GtkIconSize size;
-  gint        border;
+  GtkCellRenderer  parent_instance;
+
+  GeglColor       *color;
+  gboolean         opaque;
+  GtkIconSize      size;
+  gint             border;
 };
 
-#define GET_PRIVATE(obj) (((GimpCellRendererColor *) (obj))->priv)
 
-
+static void gimp_cell_renderer_color_finalize     (GObject            *object);
 static void gimp_cell_renderer_color_get_property (GObject            *object,
                                                    guint               param_id,
                                                    GValue             *value,
@@ -89,8 +90,7 @@ static void gimp_cell_renderer_color_render       (GtkCellRenderer    *cell,
 
 
 
-G_DEFINE_TYPE_WITH_PRIVATE (GimpCellRendererColor, gimp_cell_renderer_color,
-                            GTK_TYPE_CELL_RENDERER)
+G_DEFINE_TYPE (GimpCellRendererColor, gimp_cell_renderer_color, GTK_TYPE_CELL_RENDERER)
 
 #define parent_class gimp_cell_renderer_color_parent_class
 
@@ -101,6 +101,7 @@ gimp_cell_renderer_color_class_init (GimpCellRendererColorClass *klass)
   GObjectClass         *object_class = G_OBJECT_CLASS (klass);
   GtkCellRendererClass *cell_class   = GTK_CELL_RENDERER_CLASS (klass);
 
+  object_class->finalize     = gimp_cell_renderer_color_finalize;
   object_class->get_property = gimp_cell_renderer_color_get_property;
   object_class->set_property = gimp_cell_renderer_color_set_property;
 
@@ -108,11 +109,12 @@ gimp_cell_renderer_color_class_init (GimpCellRendererColorClass *klass)
   cell_class->render         = gimp_cell_renderer_color_render;
 
   g_object_class_install_property (object_class, PROP_COLOR,
-                                   g_param_spec_boxed ("color",
-                                                       "Color",
-                                                       "The displayed color",
-                                                       GIMP_TYPE_RGB,
-                                                       GIMP_PARAM_READWRITE));
+                                   gimp_param_spec_color ("color",
+                                                          "Color",
+                                                          "The displayed color",
+                                                          TRUE, NULL,
+                                                          G_PARAM_READWRITE |
+                                                          G_PARAM_CONSTRUCT));
 
   g_object_class_install_property (object_class, PROP_OPAQUE,
                                    g_param_spec_boolean ("opaque",
@@ -135,9 +137,17 @@ gimp_cell_renderer_color_class_init (GimpCellRendererColorClass *klass)
 static void
 gimp_cell_renderer_color_init (GimpCellRendererColor *cell)
 {
-  cell->priv = gimp_cell_renderer_color_get_instance_private (cell);
+  cell->color = gegl_color_new ("black");
+}
 
-  gimp_rgba_set (&cell->priv->color, 0.0, 0.0, 0.0, 1.0);
+static void
+gimp_cell_renderer_color_finalize (GObject *object)
+{
+  GimpCellRendererColor *renderer = GIMP_CELL_RENDERER_COLOR (object);
+
+  g_clear_object (&renderer->color);
+
+  G_OBJECT_CLASS (parent_class)->finalize (object);
 }
 
 static void
@@ -146,18 +156,19 @@ gimp_cell_renderer_color_get_property (GObject    *object,
                                        GValue     *value,
                                        GParamSpec *pspec)
 {
-  GimpCellRendererColorPrivate *private = GET_PRIVATE (object);
+  GimpCellRendererColor *renderer = GIMP_CELL_RENDERER_COLOR (object);
 
   switch (param_id)
     {
     case PROP_COLOR:
-      g_value_set_boxed (value, &private->color);
+      g_clear_object (&renderer->color);
+      renderer->color = gegl_color_duplicate (g_value_get_object (value));
       break;
     case PROP_OPAQUE:
-      g_value_set_boolean (value, private->opaque);
+      g_value_set_boolean (value, renderer->opaque);
       break;
     case PROP_SIZE:
-      g_value_set_int (value, private->size);
+      g_value_set_int (value, renderer->size);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, param_id, pspec);
@@ -171,20 +182,18 @@ gimp_cell_renderer_color_set_property (GObject      *object,
                                        const GValue *value,
                                        GParamSpec   *pspec)
 {
-  GimpCellRendererColorPrivate *private = GET_PRIVATE (object);
-  GimpRGB                      *color;
+  GimpCellRendererColor *renderer = GIMP_CELL_RENDERER_COLOR (object);
 
   switch (param_id)
     {
     case PROP_COLOR:
-      color = g_value_get_boxed (value);
-      private->color = *color;
+      g_set_object (&renderer->color, g_value_get_object (value));
       break;
     case PROP_OPAQUE:
-      private->opaque = g_value_get_boolean (value);
+      renderer->opaque = g_value_get_boolean (value);
       break;
     case PROP_SIZE:
-      private->size = g_value_get_int (value);
+      renderer->size = g_value_get_int (value);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, param_id, pspec);
@@ -201,15 +210,15 @@ gimp_cell_renderer_color_get_size (GtkCellRenderer    *cell,
                                    gint               *width,
                                    gint               *height)
 {
-  GimpCellRendererColorPrivate *private = GET_PRIVATE (cell);
-  gint                          calc_width;
-  gint                          calc_height;
-  gfloat                        xalign;
-  gfloat                        yalign;
-  gint                          xpad;
-  gint                          ypad;
+  GimpCellRendererColor *renderer = GIMP_CELL_RENDERER_COLOR (cell);
+  gint                   calc_width;
+  gint                   calc_height;
+  gfloat                 xalign;
+  gfloat                 yalign;
+  gint                   xpad;
+  gint                   ypad;
 
-  gtk_icon_size_lookup (private->size, &calc_width, &calc_height);
+  gtk_icon_size_lookup (renderer->size, &calc_width, &calc_height);
   gtk_cell_renderer_get_alignment (cell, &xalign, &yalign);
   gtk_cell_renderer_get_padding (cell, &xpad, &ypad);
 
@@ -250,10 +259,10 @@ gimp_cell_renderer_color_render (GtkCellRenderer      *cell,
                                  const GdkRectangle   *cell_area,
                                  GtkCellRendererState  flags)
 {
-  GimpCellRendererColorPrivate *private = GET_PRIVATE (cell);
-  GdkRectangle                  rect;
-  gint                          xpad;
-  gint                          ypad;
+  GimpCellRendererColor *renderer = GIMP_CELL_RENDERER_COLOR (cell);
+  GdkRectangle           rect;
+  gint                   xpad;
+  gint                   ypad;
 
   gimp_cell_renderer_color_get_size (cell, widget, cell_area,
                                      &rect.x,
@@ -273,15 +282,18 @@ gimp_cell_renderer_color_render (GtkCellRenderer      *cell,
       GtkStyleContext *context = gtk_widget_get_style_context (widget);
       GtkStateFlags    state;
       GdkRGBA          color;
+      gdouble          rgba[4];
 
       cairo_rectangle (cr,
                        rect.x + 1, rect.y + 1,
                        rect.width - 2, rect.height - 2);
 
-      gimp_cairo_set_source_rgb (cr, &private->color);
+      gimp_cairo_set_source_color (cr, renderer->color, NULL, FALSE,
+                                   widget);
       cairo_fill (cr);
 
-      if (! private->opaque && private->color.a < 1.0)
+      gegl_color_get_pixel (renderer->color, babl_format ("R'G'B'A double"), rgba);
+      if (! renderer->opaque && rgba[3] < 1.0)
         {
           cairo_pattern_t *pattern;
 
@@ -298,7 +310,8 @@ gimp_cell_renderer_color_render (GtkCellRenderer      *cell,
 
           cairo_fill_preserve (cr);
 
-          gimp_cairo_set_source_rgba (cr, &private->color);
+          gimp_cairo_set_source_color (cr, renderer->color, NULL, FALSE,
+                                       widget);
           cairo_fill (cr);
         }
 

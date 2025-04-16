@@ -23,6 +23,7 @@
 #include <gtk/gtk.h>
 
 #include "libgimpconfig/gimpconfig.h"
+#include "libgimpwidgets/gimpwidgets.h"
 
 #include "tools-types.h"
 
@@ -720,14 +721,14 @@ tool_manager_tool_changed (GimpContext     *user_context,
   /* FIXME: gimp_busy HACK */
   if (user_context->gimp->busy)
     {
-      /*  there may be contexts waiting for the user_context's "tool-changed"
-       *  signal, so stop emitting it.
-       */
-      g_signal_stop_emission_by_name (user_context, "tool-changed");
-
       if (G_TYPE_FROM_INSTANCE (tool_manager->active_tool) !=
           tool_info->tool_type)
         {
+          /*  there may be contexts waiting for the user_context's "tool-changed"
+           *  signal, so stop emitting it.
+           */
+          g_signal_stop_emission_by_name (user_context, "tool-changed");
+
           g_signal_handlers_block_by_func (user_context,
                                            tool_manager_tool_changed,
                                            tool_manager);
@@ -776,8 +777,11 @@ tool_manager_tool_changed (GimpContext     *user_context,
 
   g_object_unref (new_tool);
 
-  /* ??? */
-  tool_manager_cast_spell (tool_info);
+  if (gimp_widget_animation_enabled ())
+    {
+      /* ??? */
+      tool_manager_cast_spell (tool_info);
+    }
 }
 
 static void

@@ -33,52 +33,6 @@ otherwise copies the given palette and returns it.
 """
 
 class PaletteOffset (Gimp.PlugIn):
-    ## Parameter: run-mode ##
-    @GObject.Property(type=Gimp.RunMode,
-                      default=Gimp.RunMode.NONINTERACTIVE,
-                      nick="Run mode", blurb="The run mode")
-    def run_mode(self):
-        """Read-write integer property."""
-        return self._run_mode
-
-    @run_mode.setter
-    def run_mode(self, run_mode):
-        self._run_mode = run_mode
-
-    ## Parameter: palette ##
-    @GObject.Property(type=Gimp.Palette,
-                      nick= _("Palette"),
-                      blurb= _("Palette"))
-    def palette(self):
-        return self._palette
-
-    @palette.setter
-    def palette(self, palette):
-        self._palette = palette
-
-    ## Parameter: amount ##
-    @GObject.Property(type=int,
-                      default=1,
-                      nick= _("Off_set"),
-                      blurb= _("Offset"))
-    def amount(self):
-        return self._amount
-
-    @amount.setter
-    def amount(self, amount):
-        self._amount = amount
-
-    ## Return: new-palette ##
-    @GObject.Property(type=Gimp.Palette,
-                      nick=_("The edited palette"),
-                      blurb=_("The newly created palette when read-only, otherwise the input palette"))
-    def new_palette(self):
-        return self.new_palette
-
-    @new_palette.setter
-    def new_palette(self, new_palette):
-        self.new_palette = new_palette
-
     ## GimpPlugIn virtual methods ##
     def do_set_i18n(self, procname):
         return True, 'gimp30-python', None
@@ -98,10 +52,19 @@ class PaletteOffset (Gimp.PlugIn):
             procedure.set_attribution("Joao S. O. Bueno Calligaris, Carol Spears",
                                       "(c) Joao S. O. Bueno Calligaris",
                                       "2004, 2006")
-            procedure.add_argument_from_property(self, "run-mode")
-            procedure.add_argument_from_property(self, "palette")
-            procedure.add_argument_from_property(self, "amount")
-            procedure.add_return_value_from_property(self, "new-palette")
+            procedure.add_enum_argument ("run-mode", _("Run mode"),
+                                         _("The run mode"), Gimp.RunMode,
+                                         Gimp.RunMode.NONINTERACTIVE,
+                                         GObject.ParamFlags.READWRITE)
+            procedure.add_palette_argument ("palette", _("_Palette"),
+                                            _("Palette"), True,
+                                            None, True, # Default to context.
+                                            GObject.ParamFlags.READWRITE)
+            procedure.add_int_argument ("amount", _("O_ffset"), _("Offset"),
+                                        1, GLib.MAXINT, 1, GObject.ParamFlags.READWRITE)
+            procedure.add_palette_return_value ("new-palette", _("The edited palette"),
+                                                _("The newly created palette when read-only, otherwise the input palette"),
+                                                GObject.ParamFlags.READWRITE)
             procedure.add_menu_path ('<Palettes>/Palettes Menu')
         else:
             procedure = None
@@ -128,34 +91,18 @@ class PaletteOffset (Gimp.PlugIn):
 
             GimpUi.init ("palette-offset.py")
 
-            use_header_bar = Gtk.Settings.get_default().get_property("gtk-dialogs-use-header")
-            dialog = GimpUi.Dialog(use_header_bar=use_header_bar,
-                                   title=_("Offset Palette..."))
+            dialog = GimpUi.ProcedureDialog(procedure=procedure, config=config)
 
-            dialog.add_button(_("_Cancel"), Gtk.ResponseType.CANCEL)
-            dialog.add_button(_("_OK"), Gtk.ResponseType.OK)
+            config.set_property("palette", None)
+            dialog.fill(["palette", "amount"])
+            if not dialog.run():
+                dialog.destroy()
+                return procedure.new_return_values(Gimp.PDBStatusType.CANCEL, GLib.Error())
+            else:
+                dialog.destroy()
 
-            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL,
-                          homogeneous=False, spacing=12)
-            dialog.get_content_area().add(box)
-            box.show()
-
-            label = Gtk.Label.new(_("Offset"))
-            box.pack_start(label, False, False, 1)
-            label.show()
-
-            amount = self.set_property("amount", amount)
-            spin = GimpUi.prop_spin_button_new(self, "amount", 1.0, 5.0, 0)
-            spin.set_activates_default(True)
-            box.pack_end(spin, False, False, 1)
-            spin.show()
-
-            dialog.show()
-            if dialog.run() != Gtk.ResponseType.OK:
-                return procedure.new_return_values(Gimp.PDBStatusType.CANCEL,
-                                                   GLib.Error("Canceled"))
-            amount = self.get_property("amount")
-            config.set_property("amount", amount)
+            amount = config.get_property("amount")
+            palette = config.get_property("palette")
 
         #If palette is read only, work on a copy:
         editable = palette.is_editable()
@@ -165,16 +112,16 @@ class PaletteOffset (Gimp.PlugIn):
         num_colors = palette.get_color_count()
         tmp_entry_array = []
         for i in range (num_colors):
-            tmp_entry_array.append  ((palette.entry_get_name(i)[1],
-                                      palette.entry_get_color(i)[1]))
+            tmp_entry_array.append  ((palette.get_entry_name(i)[1],
+                                      palette.get_entry_color(i)))
         for i in range (num_colors):
             target_index = i + amount
             if target_index >= num_colors:
                 target_index -= num_colors
             elif target_index < 0:
                 target_index += num_colors
-            palette.entry_set_name(target_index, tmp_entry_array[i][0])
-            palette.entry_set_color(target_index, tmp_entry_array[i][1])
+            palette.set_entry_name(target_index, tmp_entry_array[i][0])
+            palette.set_entry_color(target_index, tmp_entry_array[i][1])
 
         retval = procedure.new_return_values(Gimp.PDBStatusType.SUCCESS, GLib.Error())
         value = GObject.Value(Gimp.Palette, palette)

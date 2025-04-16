@@ -23,6 +23,7 @@
 #include <string.h>
 
 #include <gegl.h>
+#include <gio/gio.h>
 #include <glib-object.h>
 #include <gobject/gvaluecollector.h>
 
@@ -105,6 +106,14 @@ gimp_value_array_index (const GimpValueArray *value_array,
  * Return a pointer to the value at @index contained in @value_array. This value
  * is supposed to be a [type@ColorArray].
  *
+ * *Note*: most of the time, you should use the generic [method@Gimp.ValueArray.index]
+ * to retrieve a value, then the relevant `g_value_get_*()` function.
+ * This alternative function is mostly there for bindings because
+ * GObject-Introspection is [not able yet to process correctly known
+ * boxed array types](https://gitlab.gnome.org/GNOME/gobject-introspection/-/issues/492).
+ *
+ * There are no reasons to use this function in C code.
+ *
  * Returns: (transfer none) (array zero-terminated=1): the [type@ColorArray] stored at @index in @value_array.
  *
  * Since: 3.0
@@ -129,6 +138,44 @@ gimp_value_array_get_color_array (const GimpValueArray *value_array,
   colors = g_value_get_boxed (value);
 
   return colors;
+}
+
+/**
+ * gimp_value_array_get_core_object_array:
+ * @value_array: #GimpValueArray to get a value from
+ * @index: index of the value of interest
+ *
+ * Return a pointer to the value at @index contained in @value_array. This value
+ * is supposed to be a [type@CoreObjectArray].
+ *
+ * *Note*: most of the time, you should use the generic [method@Gimp.ValueArray.index]
+ * to retrieve a value, then the relevant `g_value_get_*()` function.
+ * This alternative function is mostly there for bindings because
+ * GObject-Introspection is [not able yet to process correctly known
+ * boxed array types](https://gitlab.gnome.org/GNOME/gobject-introspection/-/issues/492).
+ *
+ * There are no reasons to use this function in C code.
+ *
+ * Returns: (transfer none) (array zero-terminated=1): the [type@CoreObjectArray] stored at @index in @value_array.
+ *
+ * Since: 3.0
+ */
+GObject **
+gimp_value_array_get_core_object_array (const GimpValueArray *value_array,
+                                        gint                  index)
+{
+  GValue   *value;
+  GObject **objects;
+
+  g_return_val_if_fail (value_array != NULL, NULL);
+  g_return_val_if_fail (index < value_array->n_values, NULL);
+
+  value = value_array->values + index;
+  g_return_val_if_fail (GIMP_VALUE_HOLDS_CORE_OBJECT_ARRAY (value), NULL);
+
+  objects = g_value_get_boxed (value);
+
+  return objects;
 }
 
 static inline void
@@ -543,6 +590,26 @@ gimp_value_array_truncate (GimpValueArray *value_array,
  * GIMP_TYPE_PARAM_VALUE_ARRAY
  */
 
+#define GIMP_PARAM_SPEC_VALUE_ARRAY(pspec)    (G_TYPE_CHECK_INSTANCE_CAST ((pspec), GIMP_TYPE_PARAM_VALUE_ARRAY, GimpParamSpecValueArray))
+
+typedef struct _GimpParamSpecValueArray GimpParamSpecValueArray;
+
+/**
+ * GimpParamSpecValueArray:
+ * @parent_instance:  private #GParamSpec portion
+ * @element_spec:     the #GParamSpec of the array elements
+ * @fixed_n_elements: default length of the array
+ *
+ * A #GParamSpec derived structure that contains the meta data for
+ * value array properties.
+ **/
+struct _GimpParamSpecValueArray
+{
+  GParamSpec  parent_instance;
+  GParamSpec *element_spec;
+  gint        fixed_n_elements;
+};
+
 static void       gimp_param_value_array_class_init  (GParamSpecClass *klass);
 static void       gimp_param_value_array_init        (GParamSpec      *pspec);
 static void       gimp_param_value_array_finalize    (GParamSpec      *pspec);
@@ -801,4 +868,20 @@ gimp_param_spec_value_array (const gchar *name,
     }
 
   return G_PARAM_SPEC (aspec);
+}
+
+/**
+ * gimp_param_spec_value_array_get_element_spec:
+ * @pspec: a #GParamSpec to hold a #GimpParamSpecValueArray value.
+ *
+ * Returns: (transfer none): param spec for elements of the value array.
+ *
+ * Since: 3.0
+ **/
+GParamSpec *
+gimp_param_spec_value_array_get_element_spec (GParamSpec *pspec)
+{
+  g_return_val_if_fail (GIMP_IS_PARAM_SPEC_VALUE_ARRAY (pspec), NULL);
+
+  return GIMP_PARAM_SPEC_VALUE_ARRAY (pspec)->element_spec;
 }

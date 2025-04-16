@@ -31,7 +31,7 @@
 #include "libgimp/stdplugins-intl.h"
 
 
-#define SAVE_PROC      "file-csource-save"
+#define EXPORT_PROC    "file-csource-export"
 #define PLUG_IN_BINARY "file-csource"
 #define PLUG_IN_ROLE   "gimp-file-csource"
 
@@ -59,17 +59,16 @@ static GList          * csource_query_procedures (GimpPlugIn           *plug_in)
 static GimpProcedure  * csource_create_procedure (GimpPlugIn           *plug_in,
                                                   const gchar          *name);
 
-static GimpValueArray * csource_save             (GimpProcedure        *procedure,
+static GimpValueArray * csource_export           (GimpProcedure        *procedure,
                                                   GimpRunMode           run_mode,
                                                   GimpImage            *image,
-                                                  gint                  n_drawables,
-                                                  GimpDrawable        **drawables,
                                                   GFile                *file,
+                                                  GimpExportOptions    *options,
                                                   GimpMetadata         *metadata,
                                                   GimpProcedureConfig  *config,
                                                   gpointer              run_data);
 
-static gboolean         save_image               (GFile                *file,
+static gboolean         export_image             (GFile                *file,
                                                   GimpImage            *image,
                                                   GimpDrawable         *drawable,
                                                   GObject              *config,
@@ -103,7 +102,7 @@ csource_init (Csource *csource)
 static GList *
 csource_query_procedures (GimpPlugIn *plug_in)
 {
-  return g_list_append (NULL, g_strdup (SAVE_PROC));
+  return g_list_append (NULL, g_strdup (EXPORT_PROC));
 }
 
 static GimpProcedure *
@@ -112,11 +111,11 @@ csource_create_procedure (GimpPlugIn  *plug_in,
 {
   GimpProcedure *procedure = NULL;
 
-  if (! strcmp (name, SAVE_PROC))
+  if (! strcmp (name, EXPORT_PROC))
     {
-      procedure = gimp_save_procedure_new (plug_in, name,
-                                           GIMP_PDB_PROC_TYPE_PLUGIN,
-                                           FALSE, csource_save, NULL, NULL);
+      procedure = gimp_export_procedure_new (plug_in, name,
+                                             GIMP_PDB_PROC_TYPE_PLUGIN,
+                                             FALSE, csource_export, NULL, NULL);
 
       gimp_procedure_set_image_types (procedure, "*");
 
@@ -141,80 +140,85 @@ csource_create_procedure (GimpPlugIn  *plug_in,
       gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
                                           "c");
 
-      GIMP_PROC_AUX_ARG_STRING (procedure, "prefixed-name",
-                                _("_Prefixed name"),
-                                _("Prefixed name"),
-                                "gimp_image",
-                                GIMP_PARAM_READWRITE);
+      gimp_export_procedure_set_capabilities (GIMP_EXPORT_PROCEDURE (procedure),
+                                              GIMP_EXPORT_CAN_HANDLE_RGB   |
+                                              GIMP_EXPORT_CAN_HANDLE_ALPHA,
+                                              NULL, NULL, NULL);
 
-      GIMP_PROC_AUX_ARG_STRING (procedure, "gimp-comment",
-                                _("Comme_nt"),
-                                _("Comment"),
-                                gimp_get_default_comment (),
-                                GIMP_PARAM_READWRITE);
+      gimp_procedure_add_string_aux_argument (procedure, "prefixed-name",
+                                              _("_Prefixed name"),
+                                              _("Prefixed name"),
+                                              "gimp_image",
+                                              GIMP_PARAM_READWRITE);
+
+      gimp_procedure_add_string_aux_argument (procedure, "gimp-comment",
+                                              _("Comme_nt"),
+                                              _("Comment"),
+                                              gimp_get_default_comment (),
+                                              GIMP_PARAM_READWRITE);
 
       gimp_procedure_set_argument_sync (procedure, "gimp-comment",
                                         GIMP_ARGUMENT_SYNC_PARASITE);
 
-      GIMP_PROC_AUX_ARG_BOOLEAN (procedure, "save-comment",
-                                 _("Save comment to _file"),
-                                 _("Save comment"),
-                                 gimp_export_comment (),
-                                 GIMP_PARAM_READWRITE);
+      gimp_procedure_add_boolean_aux_argument (procedure, "include-comment",
+                                               _("Save comment to _file"),
+                                               _("Save comment"),
+                                               gimp_export_comment (),
+                                               GIMP_PARAM_READWRITE);
 
-      GIMP_PROC_AUX_ARG_BOOLEAN (procedure, "glib-types",
-                                 _("Use GLib types (guint_8*)"),
-                                 _("Use GLib types"),
-                                 TRUE,
-                                 GIMP_PARAM_READWRITE);
+      gimp_procedure_add_boolean_aux_argument (procedure, "glib-types",
+                                               _("Use GLib types (guint_8*)"),
+                                               _("Use GLib types"),
+                                               TRUE,
+                                               GIMP_PARAM_READWRITE);
 
-      GIMP_PROC_AUX_ARG_BOOLEAN (procedure, "save-alpha",
-                                 _("Save alpha channel (RG_BA/RGB)"),
-                                 _("Save the alpha channel"),
-                                 FALSE,
-                                 GIMP_PARAM_READWRITE);
+      gimp_procedure_add_boolean_aux_argument (procedure, "save-alpha",
+                                               _("Save alpha channel (RG_BA/RGB)"),
+                                               _("Save the alpha channel"),
+                                               FALSE,
+                                               GIMP_PARAM_READWRITE);
 
-      GIMP_PROC_AUX_ARG_BOOLEAN (procedure, "rgb565",
-                                 _("Save as RGB565 (1_6-bit)"),
-                                 _("Use RGB565 encoding"),
-                                 FALSE,
-                                 GIMP_PARAM_READWRITE);
+      gimp_procedure_add_boolean_aux_argument (procedure, "rgb565",
+                                               _("Save as RGB565 (1_6-bit)"),
+                                               _("Use RGB565 encoding"),
+                                               FALSE,
+                                               GIMP_PARAM_READWRITE);
 
-      GIMP_PROC_AUX_ARG_BOOLEAN (procedure, "use-macros",
-                                 _("_Use macros instead of struct"),
-                                 _("Use C macros"),
-                                 FALSE,
-                                 GIMP_PARAM_READWRITE);
+      gimp_procedure_add_boolean_aux_argument (procedure, "use-macros",
+                                               _("_Use macros instead of struct"),
+                                               _("Use C macros"),
+                                               FALSE,
+                                               GIMP_PARAM_READWRITE);
 
-      GIMP_PROC_AUX_ARG_BOOLEAN (procedure, "use-rle",
-                                 _("Use _1 bit Run-Length-Encoding"),
-                                 _("Use run-length-encoding"),
-                                 FALSE,
-                                 GIMP_PARAM_READWRITE);
+      gimp_procedure_add_boolean_aux_argument (procedure, "use-rle",
+                                               _("Use _1 bit Run-Length-Encoding"),
+                                               _("Use run-length-encoding"),
+                                               FALSE,
+                                               GIMP_PARAM_READWRITE);
 
-      GIMP_PROC_AUX_ARG_DOUBLE (procedure, "opacity",
-                                _("Opaci_ty"),
-                                _("Opacity"),
-                                0.0, 100.0, 100.0,
-                                GIMP_PARAM_READWRITE);
+      gimp_procedure_add_double_aux_argument (procedure, "opacity",
+                                              _("Opaci_ty"),
+                                              _("Opacity"),
+                                              0.0, 100.0, 100.0,
+                                              GIMP_PARAM_READWRITE);
     }
 
   return procedure;
 }
 
 static GimpValueArray *
-csource_save (GimpProcedure        *procedure,
-              GimpRunMode           run_mode,
-              GimpImage            *image,
-              gint                  n_drawables,
-              GimpDrawable        **drawables,
-              GFile                *file,
-              GimpMetadata         *metadata,
-              GimpProcedureConfig  *config,
-              gpointer              run_data)
+csource_export (GimpProcedure        *procedure,
+                GimpRunMode           run_mode,
+                GimpImage            *image,
+                GFile                *file,
+                GimpExportOptions    *options,
+                GimpMetadata         *metadata,
+                GimpProcedureConfig  *config,
+                gpointer              run_data)
 {
   GimpPDBStatusType  status = GIMP_PDB_SUCCESS;
-  GimpExportReturn   export = GIMP_EXPORT_CANCEL;
+  GimpExportReturn   export = GIMP_EXPORT_IGNORE;
+  GList             *drawables;
   gchar             *prefixed_name;
   gchar             *comment;
   GError            *error  = NULL;
@@ -228,28 +232,12 @@ csource_save (GimpProcedure        *procedure,
 
   gimp_ui_init (PLUG_IN_BINARY);
 
-  export = gimp_export_image (&image, &n_drawables, &drawables, "C Source",
-                              GIMP_EXPORT_CAN_HANDLE_RGB |
-                              GIMP_EXPORT_CAN_HANDLE_ALPHA);
-
-  if (n_drawables != 1)
-    {
-      g_set_error (&error, G_FILE_ERROR, 0,
-                   _("C source does not support multiple layers."));
-
-      return gimp_procedure_new_return_values (procedure,
-                                               GIMP_PDB_CALLING_ERROR,
-                                               error);
-    }
+  export = gimp_export_options_get_image (options, &image);
+  drawables = gimp_image_list_layers (image);
 
   g_object_set (config,
-                "save-alpha", gimp_drawable_has_alpha (drawables[0]),
+                "save-alpha", gimp_drawable_has_alpha (drawables->data),
                 NULL);
-
-  if (export == GIMP_EXPORT_CANCEL)
-    return gimp_procedure_new_return_values (procedure,
-                                             GIMP_PDB_CANCEL,
-                                             NULL);
 
   if (! save_dialog (image, procedure, G_OBJECT (config)))
     status = GIMP_PDB_CANCEL;
@@ -274,19 +262,17 @@ csource_save (GimpProcedure        *procedure,
 
   if (status == GIMP_PDB_SUCCESS)
     {
-      if (! save_image (file, image, drawables[0], G_OBJECT (config),
-                        &error))
+      if (! export_image (file, image, drawables->data, G_OBJECT (config),
+                          &error))
         {
           status = GIMP_PDB_EXECUTION_ERROR;
         }
     }
 
   if (export == GIMP_EXPORT_EXPORT)
-    {
-      gimp_image_delete (image);
-      g_free (drawables);
-    }
+    gimp_image_delete (image);
 
+  g_list_free (drawables);
   return gimp_procedure_new_return_values (procedure, status, error);
 }
 
@@ -506,11 +492,11 @@ save_uchar (GOutputStream  *output,
 }
 
 static gboolean
-save_image (GFile         *file,
-            GimpImage     *image,
-            GimpDrawable  *drawable,
-            GObject       *config,
-            GError       **error)
+export_image (GFile         *file,
+              GimpImage     *image,
+              GimpDrawable  *drawable,
+              GObject       *config,
+              GError       **error)
 {
   GOutputStream *output;
   GeglBuffer    *buffer;
@@ -538,15 +524,15 @@ save_image (GFile         *file,
   gdouble        config_opacity;
 
   g_object_get (config,
-                "prefixed-name", &config_prefixed_name,
-                "gimp-comment",  &config_comment,
-                "save-comment",  &config_save_comment,
-                "glib-types",    &config_glib_types,
-                "save-alpha",    &config_save_alpha,
-                "rgb565",        &config_rgb565,
-                "use-macros",    &config_use_macros,
-                "use-rle",       &config_use_rle,
-                "opacity",       &config_opacity,
+                "prefixed-name",   &config_prefixed_name,
+                "gimp-comment",    &config_comment,
+                "include-comment", &config_save_comment,
+                "glib-types",      &config_glib_types,
+                "save-alpha",      &config_save_alpha,
+                "rgb565",          &config_rgb565,
+                "use-macros",      &config_use_macros,
+                "use-rle",         &config_use_rle,
+                "opacity",         &config_opacity,
                 NULL);
 
   output = G_OUTPUT_STREAM (g_file_replace (file,
@@ -958,9 +944,9 @@ save_dialog (GimpImage     *image,
   GtkWidget *vbox;
   gboolean   run;
 
-  dialog = gimp_save_procedure_dialog_new (GIMP_SAVE_PROCEDURE (procedure),
-                                           GIMP_PROCEDURE_CONFIG (config),
-                                           image);
+  dialog = gimp_export_procedure_dialog_new (GIMP_EXPORT_PROCEDURE (procedure),
+                                             GIMP_PROCEDURE_CONFIG (config),
+                                             image);
 
   gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
                                          "opacity", 1.0);
@@ -972,7 +958,7 @@ save_dialog (GimpImage     *image,
   vbox = gimp_procedure_dialog_fill_box (GIMP_PROCEDURE_DIALOG (dialog),
                                          "csource-box",
                                          "prefixed-name", "gimp-comment",
-                                         "save-comment", "glib-types",
+                                         "include-comment", "glib-types",
                                          "use-macros", "use-rle", "save-alpha",
                                          "rgb565", "opacity",
                                          NULL);

@@ -32,7 +32,7 @@
 
 #include "ico.h"
 #include "ico-load.h"
-#include "ico-save.h"
+#include "ico-export.h"
 
 #include "libgimp/stdplugins-intl.h"
 
@@ -41,9 +41,9 @@
 #define LOAD_ANI_PROC       "file-ani-load"
 #define LOAD_THUMB_PROC     "file-ico-load-thumb"
 #define LOAD_ANI_THUMB_PROC "file-ani-load-thumb"
-#define SAVE_PROC           "file-ico-save"
-#define SAVE_CUR_PROC       "file-cur-save"
-#define SAVE_ANI_PROC       "file-ani-save"
+#define EXPORT_PROC         "file-ico-export"
+#define EXPORT_CUR_PROC     "file-cur-export"
+#define EXPORT_ANI_PROC     "file-ani-export"
 
 
 typedef struct _Ico      Ico;
@@ -93,30 +93,27 @@ static GimpValueArray * ani_load_thumb       (GimpProcedure        *procedure,
                                               gint                  size,
                                               GimpProcedureConfig  *config,
                                               gpointer              run_data);
-static GimpValueArray * ico_save             (GimpProcedure        *procedure,
+static GimpValueArray * ico_export           (GimpProcedure        *procedure,
                                               GimpRunMode           run_mode,
                                               GimpImage            *image,
-                                              gint                  n_drawables,
-                                              GimpDrawable        **drawables,
                                               GFile                *file,
+                                              GimpExportOptions    *options,
                                               GimpMetadata         *metadata,
                                               GimpProcedureConfig  *config,
                                               gpointer              run_data);
-static GimpValueArray * cur_save             (GimpProcedure        *procedure,
+static GimpValueArray * cur_export           (GimpProcedure        *procedure,
                                               GimpRunMode           run_mode,
                                               GimpImage            *image,
-                                              gint                  n_drawables,
-                                              GimpDrawable        **drawables,
                                               GFile                *file,
+                                              GimpExportOptions    *options,
                                               GimpMetadata         *metadata,
                                               GimpProcedureConfig  *config,
                                               gpointer              run_data);
-static GimpValueArray * ani_save             (GimpProcedure        *procedure,
+static GimpValueArray * ani_export           (GimpProcedure        *procedure,
                                               GimpRunMode           run_mode,
                                               GimpImage            *image,
-                                              gint                  n_drawables,
-                                              GimpDrawable        **drawables,
                                               GFile                *file,
+                                              GimpExportOptions    *options,
                                               GimpMetadata         *metadata,
                                               GimpProcedureConfig  *config,
                                               gpointer              run_data);
@@ -153,9 +150,9 @@ ico_query_procedures (GimpPlugIn *plug_in)
   list = g_list_append (list, g_strdup (LOAD_PROC));
   list = g_list_append (list, g_strdup (LOAD_CUR_PROC));
   list = g_list_append (list, g_strdup (LOAD_ANI_PROC));
-  list = g_list_append (list, g_strdup (SAVE_PROC));
-  list = g_list_append (list, g_strdup (SAVE_CUR_PROC));
-  list = g_list_append (list, g_strdup (SAVE_ANI_PROC));
+  list = g_list_append (list, g_strdup (EXPORT_PROC));
+  list = g_list_append (list, g_strdup (EXPORT_CUR_PROC));
+  list = g_list_append (list, g_strdup (EXPORT_ANI_PROC));
 
   return list;
 }
@@ -287,11 +284,11 @@ ico_create_procedure (GimpPlugIn  *plug_in,
                                       "James Huang, Alex S.",
                                       "2007-2022");
     }
-  else if (! strcmp (name, SAVE_PROC))
+  else if (! strcmp (name, EXPORT_PROC))
     {
-      procedure = gimp_save_procedure_new (plug_in, name,
-                                           GIMP_PDB_PROC_TYPE_PLUGIN,
-                                           FALSE, ico_save, NULL, NULL);
+      procedure = gimp_export_procedure_new (plug_in, name,
+                                             GIMP_PDB_PROC_TYPE_PLUGIN,
+                                             FALSE, ico_export, NULL, NULL);
 
       gimp_procedure_set_image_types (procedure, "*");
 
@@ -307,16 +304,26 @@ ico_create_procedure (GimpPlugIn  *plug_in,
                                       "Christian Kreibich <christian@whoop.org>",
                                       "2002");
 
+      gimp_file_procedure_set_format_name (GIMP_FILE_PROCEDURE (procedure),
+                                           "Microsoft Windows icon");
       gimp_file_procedure_set_mime_types (GIMP_FILE_PROCEDURE (procedure),
                                           "image/x-ico");
       gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
                                           "ico");
+
+      gimp_export_procedure_set_capabilities (GIMP_EXPORT_PROCEDURE (procedure),
+                                              GIMP_EXPORT_CAN_HANDLE_RGB     |
+                                              GIMP_EXPORT_CAN_HANDLE_GRAY    |
+                                              GIMP_EXPORT_CAN_HANDLE_ALPHA   |
+                                              GIMP_EXPORT_CAN_HANDLE_INDEXED |
+                                              GIMP_EXPORT_CAN_HANDLE_LAYERS,
+                                              NULL, NULL, NULL);
     }
-  else if (! strcmp (name, SAVE_CUR_PROC))
+  else if (! strcmp (name, EXPORT_CUR_PROC))
     {
-      procedure = gimp_save_procedure_new (plug_in, name,
-                                           GIMP_PDB_PROC_TYPE_PLUGIN,
-                                           FALSE, cur_save, NULL, NULL);
+      procedure = gimp_export_procedure_new (plug_in, name,
+                                             GIMP_PDB_PROC_TYPE_PLUGIN,
+                                             FALSE, cur_export, NULL, NULL);
 
       gimp_procedure_set_image_types (procedure, "*");
 
@@ -334,36 +341,35 @@ ico_create_procedure (GimpPlugIn  *plug_in,
                                       "Nikc M.",
                                       "2002-2022");
 
+      gimp_file_procedure_set_format_name (GIMP_FILE_PROCEDURE (procedure),
+                                           "Microsoft Windows cursor");
       gimp_file_procedure_set_mime_types (GIMP_FILE_PROCEDURE (procedure),
                                           "image/vnd.microsoft.icon");
       gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
                                           "cur");
 
-      GIMP_PROC_ARG_INT (procedure, "n-hot-spot-x",
-                         "Number of hot spot's X coordinates",
-                         "Number of hot spot's X coordinates",
-                         0, G_MAXINT, 0,
-                         G_PARAM_READWRITE);
-      GIMP_PROC_ARG_INT32_ARRAY (procedure, "hot-spot-x",
-                                 "Hot spot X",
-                                 "X coordinates of hot spot (one per layer)",
-                                 G_PARAM_READWRITE);
+      gimp_export_procedure_set_capabilities (GIMP_EXPORT_PROCEDURE (procedure),
+                                              GIMP_EXPORT_CAN_HANDLE_RGB     |
+                                              GIMP_EXPORT_CAN_HANDLE_GRAY    |
+                                              GIMP_EXPORT_CAN_HANDLE_ALPHA   |
+                                              GIMP_EXPORT_CAN_HANDLE_INDEXED |
+                                              GIMP_EXPORT_CAN_HANDLE_LAYERS,
+                                              NULL, NULL, NULL);
 
-      GIMP_PROC_ARG_INT (procedure, "n-hot-spot-y",
-                         "Number of hot spot's Y coordinates",
-                         "Number of hot spot's Y coordinates",
-                         0, G_MAXINT, 0,
-                         G_PARAM_READWRITE);
-      GIMP_PROC_ARG_INT32_ARRAY (procedure, "hot-spot-y",
-                                 "Hot spot Y",
-                                 "Y coordinates of hot spot (one per layer)",
-                                 G_PARAM_READWRITE);
+      gimp_procedure_add_int32_array_argument (procedure, "hot-spot-x",
+                                               "Hot spot X",
+                                               "X coordinates of hot spot (one per layer)",
+                                               G_PARAM_READWRITE);
+      gimp_procedure_add_int32_array_argument (procedure, "hot-spot-y",
+                                               "Hot spot Y",
+                                               "Y coordinates of hot spot (one per layer)",
+                                               G_PARAM_READWRITE);
     }
-  else if (! strcmp (name, SAVE_ANI_PROC))
+  else if (! strcmp (name, EXPORT_ANI_PROC))
     {
-      procedure = gimp_save_procedure_new (plug_in, name,
-                                           GIMP_PDB_PROC_TYPE_PLUGIN,
-                                           FALSE, ani_save, NULL, NULL);
+      procedure = gimp_export_procedure_new (plug_in, name,
+                                             GIMP_PDB_PROC_TYPE_PLUGIN,
+                                             FALSE, ani_export, NULL, NULL);
 
       gimp_procedure_set_image_types (procedure, "*");
 
@@ -381,49 +387,48 @@ ico_create_procedure (GimpPlugIn  *plug_in,
                                       "James Huang, Alex S.",
                                       "2007-2022");
 
+      gimp_file_procedure_set_format_name (GIMP_FILE_PROCEDURE (procedure),
+                                           "Microsoft Windows animated cursor");
       gimp_file_procedure_set_mime_types (GIMP_FILE_PROCEDURE (procedure),
                                           "application/x-navi-animation");
       gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
                                           "ani");
 
-      GIMP_PROC_ARG_STRING (procedure, "cursor-name",
-                            "Cursor Name",
-                            _("Cursor Name (Optional)"),
-                            NULL,
-                            G_PARAM_READWRITE);
+      gimp_export_procedure_set_capabilities (GIMP_EXPORT_PROCEDURE (procedure),
+                                              GIMP_EXPORT_CAN_HANDLE_RGB     |
+                                              GIMP_EXPORT_CAN_HANDLE_GRAY    |
+                                              GIMP_EXPORT_CAN_HANDLE_ALPHA   |
+                                              GIMP_EXPORT_CAN_HANDLE_INDEXED |
+                                              GIMP_EXPORT_CAN_HANDLE_LAYERS,
+                                              NULL, NULL, NULL);
 
-      GIMP_PROC_ARG_STRING (procedure, "author-name",
-                            "Cursor Author",
-                            _("Cursor Author (Optional)"),
-                            NULL,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_string_argument (procedure, "cursor-name",
+                                          "Cursor Name",
+                                          _("Cursor Name (Optional)"),
+                                          NULL,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "default-delay",
-                         "Default delay",
-                         "Default delay between frames "
-                         "in jiffies (1/60 of a second)",
-                         0, G_MAXINT, 8,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_string_argument (procedure, "author-name",
+                                          "Cursor Author",
+                                          _("Cursor Author (Optional)"),
+                                          NULL,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "n-hot-spot-x",
-                         "Number of hot spot's X coordinates",
-                         "Number of hot spot's X coordinates",
-                         0, G_MAXINT, 0,
-                         G_PARAM_READWRITE);
-      GIMP_PROC_ARG_INT32_ARRAY (procedure, "hot-spot-x",
-                                 "Hot spot X",
-                                 "X coordinates of hot spot (one per layer)",
-                                 G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "default-delay",
+                                       "Default delay",
+                                       "Default delay between frames "
+                                       "in jiffies (1/60 of a second)",
+                                       0, G_MAXINT, 8,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "n-hot-spot-y",
-                         "Number of hot spot's Y coordinates",
-                         "Number of hot spot's Y coordinates",
-                         0, G_MAXINT, 0,
-                         G_PARAM_READWRITE);
-      GIMP_PROC_ARG_INT32_ARRAY (procedure, "hot-spot-y",
-                                 "Hot spot Y",
-                                 "Y coordinates of hot spot (one per layer)",
-                                 G_PARAM_READWRITE);
+      gimp_procedure_add_int32_array_argument (procedure, "hot-spot-x",
+                                               "Hot spot X",
+                                               "X coordinates of hot spot (one per layer)",
+                                               G_PARAM_READWRITE);
+      gimp_procedure_add_int32_array_argument (procedure, "hot-spot-y",
+                                               "Hot spot Y",
+                                               "Y coordinates of hot spot (one per layer)",
+                                               G_PARAM_READWRITE);
     }
 
   return procedure;
@@ -571,97 +576,110 @@ ani_load_thumb (GimpProcedure        *procedure,
 }
 
 static GimpValueArray *
-ico_save (GimpProcedure        *procedure,
-          GimpRunMode           run_mode,
-          GimpImage            *image,
-          gint                  n_drawables,
-          GimpDrawable        **drawables,
-          GFile                *file,
-          GimpMetadata         *metadata,
-          GimpProcedureConfig  *config,
-          gpointer              run_data)
+ico_export (GimpProcedure        *procedure,
+            GimpRunMode           run_mode,
+            GimpImage            *image,
+            GFile                *file,
+            GimpExportOptions    *options,
+            GimpMetadata         *metadata,
+            GimpProcedureConfig  *config,
+            gpointer              run_data)
 {
   GimpPDBStatusType  status;
-  GError            *error = NULL;
+  GimpExportReturn   export = GIMP_EXPORT_IGNORE;
+  GError            *error  = NULL;
 
   gegl_init (NULL, NULL);
 
-  status = ico_save_image (file, image, run_mode, &error);
+  export = gimp_export_options_get_image (options, &image);
+  status = ico_export_image (file, image, procedure, config, run_mode, &error);
+
+  if (export == GIMP_EXPORT_EXPORT)
+    gimp_image_delete (image);
 
   return gimp_procedure_new_return_values (procedure, status, error);
 }
 
 static GimpValueArray *
-cur_save (GimpProcedure        *procedure,
-          GimpRunMode           run_mode,
-          GimpImage            *image,
-          gint                  n_drawables,
-          GimpDrawable        **drawables,
-          GFile                *file,
-          GimpMetadata         *metadata,
-          GimpProcedureConfig  *config,
-          gpointer              run_data)
+cur_export (GimpProcedure        *procedure,
+            GimpRunMode           run_mode,
+            GimpImage            *image,
+            GFile                *file,
+            GimpExportOptions    *options,
+            GimpMetadata         *metadata,
+            GimpProcedureConfig  *config,
+            gpointer              run_data)
 {
   GimpPDBStatusType  status;
+  GimpExportReturn   export       = GIMP_EXPORT_IGNORE;
   GError            *error        = NULL;
-  gint32            *hot_spot_x   = NULL;
-  gint32            *hot_spot_y   = NULL;
-  gint               n_hot_spot_x = 0;
-  gint               n_hot_spot_y = 0;
+  GimpArray         *x_array      = NULL;
+  GimpArray         *y_array      = NULL;
+  const gint32      *hot_spot_x   = NULL;
+  const gint32      *hot_spot_y   = NULL;
+  gint32            *new_hot_spot_x   = NULL;
+  gint32            *new_hot_spot_y   = NULL;
+  gsize              n_hot_spot_x = 0;
+  gsize              n_hot_spot_y = 0;
 
   gegl_init (NULL, NULL);
 
   g_object_get (config,
-                "n-hot-spot-x", &n_hot_spot_x,
-                "n-hot-spot-y", &n_hot_spot_y,
-                "hot-spot-x",   &hot_spot_x,
-                "hot-spot-y",   &hot_spot_y,
+                "hot-spot-x", &x_array,
+                "hot-spot-y", &y_array,
                 NULL);
 
-  status = cur_save_image (file, image, run_mode,
-                           &n_hot_spot_x, &hot_spot_x,
-                           &n_hot_spot_y, &hot_spot_y,
-                           &error);
+  hot_spot_x = gimp_int32_array_get_values (x_array, &n_hot_spot_x);
+  hot_spot_y = gimp_int32_array_get_values (y_array, &n_hot_spot_y);
+
+  export = gimp_export_options_get_image (options, &image);
+  status = cur_export_image (file, image, procedure, config, run_mode,
+                             &n_hot_spot_x, hot_spot_x, &new_hot_spot_x,
+                             &n_hot_spot_y, hot_spot_y, &new_hot_spot_y,
+                             &error);
 
   if (status == GIMP_PDB_SUCCESS)
     {
-      /* XXX: seems libgimpconfig is not able to serialize
-       * GimpInt32Array args yet anyway. Still leave this here for now,
-       * as reminder of missing feature when we see the warnings.
-       */
+      gimp_int32_array_set_values (x_array, new_hot_spot_x, n_hot_spot_x, FALSE);
+      gimp_int32_array_set_values (y_array, new_hot_spot_y, n_hot_spot_y, FALSE);
       g_object_set (config,
-                    "n-hot-spot-x", n_hot_spot_x,
-                    "n-hot-spot-y", n_hot_spot_y,
-                    /*"hot-spot-x",   hot_spot_x,*/
-                    /*"hot-spot-y",   hot_spot_y,*/
+                    "hot-spot-x", x_array,
+                    "hot-spot-y", y_array,
                     NULL);
-      g_free (hot_spot_x);
-      g_free (hot_spot_y);
+      g_free (new_hot_spot_x);
+      g_free (new_hot_spot_y);
     }
+
+  if (export == GIMP_EXPORT_EXPORT)
+    gimp_image_delete (image);
 
   return gimp_procedure_new_return_values (procedure, status, error);
 }
 
 static GimpValueArray *
-ani_save (GimpProcedure        *procedure,
-          GimpRunMode           run_mode,
-          GimpImage            *image,
-          gint                  n_drawables,
-          GimpDrawable        **drawables,
-          GFile                *file,
-          GimpMetadata         *metadata,
-          GimpProcedureConfig  *config,
-          gpointer              run_data)
+ani_export (GimpProcedure        *procedure,
+            GimpRunMode           run_mode,
+            GimpImage            *image,
+            GFile                *file,
+            GimpExportOptions    *options,
+            GimpMetadata         *metadata,
+            GimpProcedureConfig  *config,
+            gpointer              run_data)
 {
   GimpPDBStatusType  status;
-  GError            *error        = NULL;
-  gchar             *inam         = NULL;
-  gchar             *iart         = NULL;
-  gint               jif_rate     = 0;
-  gint32            *hot_spot_x   = NULL;
-  gint32            *hot_spot_y   = NULL;
-  gint               n_hot_spot_x = 0;
-  gint               n_hot_spot_y = 0;
+  GimpExportReturn   export         = GIMP_EXPORT_IGNORE;
+  GError            *error          = NULL;
+  gchar             *inam           = NULL;
+  gchar             *iart           = NULL;
+  gint               jif_rate       = 0;
+  GimpArray         *x_array        = NULL;
+  GimpArray         *y_array        = NULL;
+  const gint32      *hot_spot_x     = NULL;
+  const gint32      *hot_spot_y     = NULL;
+  gint32            *new_hot_spot_x = NULL;
+  gint32            *new_hot_spot_y = NULL;
+  gsize              n_hot_spot_x   = 0;
+  gsize              n_hot_spot_y   = 0;
   AniFileHeader      header;
   AniSaveInfo        ani_info;
 
@@ -671,10 +689,8 @@ ani_save (GimpProcedure        *procedure,
                 "cursor-name",   &inam,
                 "author-name",   &iart,
                 "default-delay", &jif_rate,
-                "n-hot-spot-x",  &n_hot_spot_x,
-                "n-hot-spot-y",  &n_hot_spot_y,
-                "hot-spot-x",    &hot_spot_x,
-                "hot-spot-y",    &hot_spot_y,
+                "hot-spot-x",    &x_array,
+                "hot-spot-y",    &y_array,
                 NULL);
 
   /* Jiffies (1/60th of a second) used if rate chunk not present. */
@@ -682,28 +698,28 @@ ani_save (GimpProcedure        *procedure,
   ani_info.inam = inam;
   ani_info.iart = iart;
 
-  status = ani_save_image (file, image, run_mode,
-                           &n_hot_spot_x, &hot_spot_x,
-                           &n_hot_spot_y, &hot_spot_y,
-                           &header, &ani_info, &error);
+  hot_spot_x = gimp_int32_array_get_values (x_array, &n_hot_spot_x);
+  hot_spot_y = gimp_int32_array_get_values (y_array, &n_hot_spot_y);
+
+  export = gimp_export_options_get_image (options, &image);
+  status = ani_export_image (file, image, procedure, config, run_mode,
+                             &n_hot_spot_x, hot_spot_x, &new_hot_spot_x,
+                             &n_hot_spot_y, hot_spot_y, &new_hot_spot_y,
+                             &header, &ani_info, &error);
 
   if (status == GIMP_PDB_SUCCESS)
     {
-      /* XXX: seems libgimpconfig is not able to serialize
-       * GimpInt32Array args yet anyway. Still leave this here for now,
-       * as reminder of missing feature when we see the warnings.
-       */
+      gimp_int32_array_set_values (x_array, new_hot_spot_x, n_hot_spot_x, FALSE);
+      gimp_int32_array_set_values (y_array, new_hot_spot_y, n_hot_spot_y, FALSE);
       g_object_set (config,
                     "cursor-name",   NULL,
                     "author-name",   NULL,
                     "default-delay", header.jif_rate,
-                    "n-hot-spot-x",  n_hot_spot_x,
-                    "n-hot-spot-y",  n_hot_spot_y,
-                    /*"hot-spot-x",   hot_spot_x,*/
-                    /*"hot-spot-y",   hot_spot_y,*/
+                    "hot-spot-x",   x_array,
+                    "hot-spot-y",   y_array,
                     NULL);
-      g_free (hot_spot_x);
-      g_free (hot_spot_y);
+      g_free (new_hot_spot_x);
+      g_free (new_hot_spot_y);
 
       g_free (inam);
       g_free (iart);
@@ -711,6 +727,9 @@ ani_save (GimpProcedure        *procedure,
       g_free (ani_info.iart);
       memset (&ani_info, 0, sizeof (AniSaveInfo));
     }
+
+  if (export == GIMP_EXPORT_EXPORT)
+    gimp_image_delete (image);
 
   return gimp_procedure_new_return_values (procedure, status, error);
 }

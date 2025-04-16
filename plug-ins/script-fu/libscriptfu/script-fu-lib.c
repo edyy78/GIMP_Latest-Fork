@@ -39,6 +39,19 @@
  * and some call functions not in scheme_wrapper.c
  */
 
+static gboolean _script_fu_report_progress = FALSE;
+
+/**
+ * script_fu_report_progress:
+ *
+ * Returns: whether we should report progress status automatically
+ *          (normally only within the "extension-script-fu" persistent plug-in).
+ */
+gboolean
+script_fu_report_progress (void)
+{
+  return _script_fu_report_progress;
+}
 
 /*
  * Return whether extension-script-fu has an open dialog.
@@ -82,11 +95,13 @@ script_fu_find_and_register_scripts ( GimpPlugIn     *plugin,
  * allow_register doesn't affect that.
  */
 void
-script_fu_init_embedded_interpreter ( GList          *paths,
-                                      gboolean        allow_register,
-                                      GimpRunMode     run_mode)
+script_fu_init_embedded_interpreter (GList       *paths,
+                                     gboolean     allow_register,
+                                     GimpRunMode  run_mode,
+                                     gboolean     report_progress)
 {
   g_debug ("script_fu_init_embedded_interpreter");
+  _script_fu_report_progress = report_progress;
   tinyscheme_init (paths, allow_register);
   ts_set_run_mode (run_mode);
   /*
@@ -151,6 +166,41 @@ script_fu_get_success_msg (void)
   return ts_get_success_msg ();
 }
 
+/* Return an error message string for recent failure of script.
+ *
+ * Requires an interpretation just returned an error, else returns "Unknown".
+ * Should be called exactly once per error, else second calls return "Unknown".
+ *
+ * Transfer ownership to caller, the string must be freed.
+ */
+const gchar *
+script_fu_get_error_msg (void)
+{
+  return ts_get_error_msg ();
+}
+
+/* Return a GError for recent failure of script.
+ *
+ * Requires an interpretation just returned an error,
+ * else returns a GError with message "Unknown".
+ * Should be called exactly once per error
+ *
+ * You should call either get_error_msg, or get_gerror, but not both.
+ *
+ * Transfers ownership, caller must free the GError.
+ */
+GError *
+script_fu_get_gerror (void)
+{
+  const gchar *error_message;
+  GError      *result;
+
+  error_message = script_fu_get_error_msg ();
+  result = g_error_new_literal (g_quark_from_string ("scriptfu"), 0, error_message);
+  g_free ((gpointer) error_message);
+  return result;
+}
+
 void
 script_fu_run_read_eval_print_loop (void)
 {
@@ -171,10 +221,13 @@ script_fu_register_post_command_callback (void (*func) (void))
 
 /*
  * Return list of paths to directories containing .scm and .init scripts.
- * Usually at least GIMP's directory named like "/scripts."
- * List can also contain dirs custom or private to a user.
- " The GIMP dir often contain: plugins, init scripts, and utility scripts.
  *
+ * List has two elements, in this order:
+ *    directory for user scripts
+ *    directory for system-wide scripts, distributed with GIMP
+ * The dirs usually contain: plugins, init scripts, and utility scripts.
+ *
+ * The returned type is GList of GFile.
  * Caller must free the returned list.
  */
 GList *
@@ -201,6 +254,88 @@ script_fu_search_path (void)
   return path;
 }
 
+/* Returns path to a subdirectory of the given path,
+ * the subdirectory containing init scripts.
+ *
+ * SF keeps init scripts segregated in a subdirectory, since 3.0.
+ * This lets them have the proper suffix ".scm"
+ * without being confused with plugin scripts.
+ * Also lets other scripts in that directory not be loaded at startup.
+ *
+ * This hides the name "init".
+ *
+ * Caller must free the result.
+ */
+gchar *
+script_fu_get_init_subdirectory (GFile *dir)
+{
+  GFile *subdirectory = g_file_get_child (dir, "scriptfu-init");
+  gchar *result_path  = g_file_get_path (subdirectory);
+
+  g_object_unref (subdirectory);
+
+  /* result is a string path to a directory which might not exist. */
+  return result_path;
+}
+
+/* The directory containing init scripts installed with GIMP.
+ * Caller must free the result string.
+ */
+gchar *
+script_fu_sys_init_directory (void)
+{
+  GList *paths = script_fu_search_path ();
+  GList *list_element;
+  gchar *result_path;
+
+  /* The second list element is the sys scripts dir. */
+  list_element = g_list_next (paths);
+
+  result_path = script_fu_get_init_subdirectory (list_element->data);
+
+  g_list_free_full (paths, (GDestroyNotify) g_object_unref);
+
+  return result_path;
+}
+
+/* The directory containing user init scripts.
+ * Caller must free the result string.
+ */
+gchar *
+script_fu_user_init_directory (void)
+{
+  GList *paths = script_fu_search_path ();
+  GList *list_element;
+  gchar *result_path;
+
+  /* The first list element is the user scripts dir. */
+  list_element = paths;
+
+  result_path = script_fu_get_init_subdirectory (list_element->data);
+
+  g_list_free_full (paths, (GDestroyNotify) g_object_unref);
+
+  return result_path;
+}
+
+gboolean
+
+/* Is the given dir named like an init dir for SF?
+ *
+ * This is lax, and doesn't check the dir is in one of
+ * the two locations for SF's init directories.
+ * Users should not use the name in their own directories
+ * in the tree of script directories.
+ */
+script_fu_is_init_directory (GFile *dir)
+{
+  char    *basename = g_file_get_basename (dir);
+  gboolean result;
+
+  result = g_strcmp0 (basename, "scriptfu-init") == 0;
+  g_free (basename);
+  return result;
+}
 
 GimpProcedure *
 script_fu_find_scripts_create_PDB_proc_plugin (GimpPlugIn  *plug_in,

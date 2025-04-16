@@ -95,7 +95,6 @@ static GimpProcedure  * metadata_create_procedure (GimpPlugIn           *plug_in
 static GimpValueArray * metadata_run              (GimpProcedure        *procedure,
                                                    GimpRunMode           run_mode,
                                                    GimpImage            *image,
-                                                   gint                  n_drawables,
                                                    GimpDrawable        **drawables,
                                                    GimpProcedureConfig  *config,
                                                    gpointer              run_data);
@@ -203,7 +202,6 @@ static GimpValueArray *
 metadata_run (GimpProcedure        *procedure,
               GimpRunMode           run_mode,
               GimpImage            *image,
-              gint                  n_drawables,
               GimpDrawable        **drawables,
               GimpProcedureConfig  *config,
               gpointer              run_data)
@@ -494,8 +492,7 @@ metadata_tag_is_string (const gchar *tag)
       return FALSE;
     }
 
-  return (g_strcmp0 (tag_type, "Byte")      != 0 &&
-          g_strcmp0 (tag_type, "Undefined") != 0 &&
+  return (g_strcmp0 (tag_type, "Undefined") != 0 &&
           g_strcmp0 (tag_type, NULL)        != 0);
 }
 

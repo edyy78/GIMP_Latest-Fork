@@ -56,7 +56,10 @@ CODE
 
 sub palette_get_by_name {
     $blurb = "Returns the palette with the given name.";
-    $help  = "Returns the palette with the given name.";
+    $help  = <<HELP;
+Returns an existing palette having the given name.
+Returns %NULL when no palette exists of that name.
+HELP
 
     &mitch_pdb_misc('2023', '3.0');
 
@@ -66,8 +69,10 @@ sub palette_get_by_name {
     );
 
     @outargs = (
-      { name => 'palette', type => 'palette', non_empty => 1,
-        desc => 'The palette' }
+      { name => 'palette',
+        type => 'palette',
+        desc => 'The palette',
+        none_ok => 1 }
     );
 
     %invoke = (
@@ -76,8 +81,8 @@ sub palette_get_by_name {
   palette = GIMP_PALETTE (gimp_pdb_get_resource (gimp, GIMP_TYPE_PALETTE, name,
                                                  GIMP_PDB_DATA_ACCESS_READ, error));
 
-  if (! palette)
-    success = FALSE;
+  /* Ignore "not found" error, just return NULL. */
+  g_clear_error (error);
 }
 CODE
     );
@@ -197,9 +202,6 @@ CODE
     );
 }
 
-
-# FIXME null_ok should allow None in Python for name, but fails.
-
 sub palette_add_entry {
     $blurb = 'Appends an entry to the palette.';
 
@@ -215,7 +217,7 @@ HELP
 
     @inargs = (
         ${palette_arg_spec},
-        { name => 'entry_name', type => 'string', null_ok => 1,
+        { name => 'entry_name', type => 'string', none_ok => 1,
           desc => 'A name for the entry' },
         { name => 'color', type => 'geglcolor',
           desc => 'The color for the added entry.' }
@@ -293,7 +295,7 @@ CODE
     );
 }
 
-sub palette_entry_get_color {
+sub palette_get_entry_color {
     $blurb = 'Gets the color of an entry in the palette.';
 
     $help = <<'HELP';
@@ -328,7 +330,7 @@ CODE
     );
 }
 
-sub palette_entry_set_color {
+sub palette_set_entry_color {
     $blurb = 'Sets the color of an entry in the palette.';
 
     $help = <<'HELP';
@@ -359,7 +361,7 @@ CODE
     );
 }
 
-sub palette_entry_get_name {
+sub palette_get_entry_name {
     $blurb = 'Gets the name of an entry in the palette.';
 
     $help = <<'HELP';
@@ -394,7 +396,7 @@ CODE
     );
 }
 
-sub palette_entry_set_name {
+sub palette_set_entry_name {
     $blurb = 'Sets the name of an entry in the palette.';
 
     $help = <<'HELP';
@@ -409,7 +411,7 @@ HELP
         ${palette_arg_spec},
         { name => 'entry_num', type => 'int32',
           desc => 'The entry to get' },
-        { name => 'entry_name', type => 'string', null_ok => 1,
+        { name => 'entry_name', type => 'string', none_ok => 1,
           desc => 'The new name' }
     );
 
@@ -425,6 +427,103 @@ CODE
     );
 }
 
+sub palette_get_bytes {
+    $blurb = "Returns the palette's colormap";
+
+    $help = <<'HELP';
+This procedure returns a palette's colormap as a bytes array with all
+colors converted to a given Babl @format.
+
+The byte-size of the returned colormap depends on the number of colors
+and on the bytes-per-pixel size of @format. E.g. that the following equality is ensured:
+
+```C
+g_bytes_get_size (colormap) == num_colors * babl_format_get_bytes_per_pixel (format)
+```
+HELP
+
+    &jehan_pdb_misc('2024', '3.0');
+
+    $lib_private = 1;
+
+    @inargs = (
+        { name => 'palette', type => 'palette',
+          desc => 'The palette' },
+        { name => 'format', type => 'format',
+          desc => 'The desired color format' },
+    );
+
+    @outargs = (
+        { name => 'colormap', type => 'bytes',
+          desc => "The image's colormap." },
+        { name => 'num_colors', type => 'int32',
+          desc => 'The number of colors in the palette', }
+    );
+
+    %invoke = (
+        headers => [ qw("core/gimpimage-colormap.h") ],
+        code => <<'CODE'
+{
+  guchar *colormap_data;
+  gint    bpp = babl_format_get_bytes_per_pixel (format);
+
+  colormap_data = gimp_palette_get_colormap (palette, format, &num_colors);
+  colormap = g_bytes_new_take (colormap_data, bpp * num_colors);
+}
+CODE
+    );
+}
+
+sub palette_set_bytes {
+    $blurb = "Sets the entries in the image's colormap.";
+
+    $help = <<'HELP';
+This procedure sets the entries in the specified palette in one go. The number
+of entries depens on the size of @colormap and the bytes-per-pixel size of @format.
+
+The procedure will fail if the size of @colormap is not an exact
+multiple of the number of bytes per pixel of @format.
+HELP
+
+    &jehan_pdb_misc('2024', '3.0');
+
+    $lib_private = 1;
+
+    @inargs = (
+        { name => 'palette', type => 'palette',
+          desc => 'The palette' },
+        { name => 'format', type => 'format',
+          desc => 'The desired color format' },
+        { name => 'colormap', type => 'bytes',
+          desc => 'The new colormap values' }
+    );
+
+    %invoke = (
+        headers => [ qw("core/gimpimage-colormap.h") ],
+        code => <<'CODE'
+{
+  gint bpp;
+
+  bpp = babl_format_get_bytes_per_pixel (format);
+
+  if (g_bytes_get_size (colormap) % bpp == 0)
+    {
+      const guchar *data;
+      gsize         n_bytes;
+      gint          n_colors;
+
+      data     = g_bytes_get_data (colormap, &n_bytes),
+      n_colors = n_bytes / bpp;
+      gimp_palette_set_colormap (palette, format, (guchar *) data, n_colors, TRUE);
+    }
+  else
+    {
+      success = FALSE;
+    }
+}
+CODE
+    );
+}
 
 @headers = qw(<string.h>
               "core/gimp.h"
@@ -440,8 +539,9 @@ CODE
             palette_get_colors
             palette_get_columns palette_set_columns
             palette_add_entry palette_delete_entry
-            palette_entry_get_color palette_entry_set_color
-            palette_entry_get_name palette_entry_set_name);
+            palette_get_entry_color palette_set_entry_color
+            palette_get_entry_name palette_set_entry_name
+            palette_get_bytes palette_set_bytes);
 
 %exports = (app => [@procs], lib => [@procs]);
 

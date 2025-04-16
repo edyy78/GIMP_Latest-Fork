@@ -29,6 +29,8 @@
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <gegl.h>
 
+#include "libgimpbase/gimpbase.h"
+
 #include "gimpcolor.h"
 
 
@@ -207,13 +209,114 @@ static const ColorEntry named_colors[] =
 
 /**
  * gimp_color_parse_css:
+ * @css: (type utf8): a string describing a color in CSS notation
+ *
+ * Attempts to parse a string describing an sRGB color in CSS notation. This can
+ * be either a numerical representation (`rgb(255,0,0)` or `rgb(100%,0%,0%)`)
+ * or a hexadecimal notation as parsed by [func@color_parse_hex] (`##ff0000`) or
+ * a color name as parsed by [func@color_parse_css] (`red`).
+ *
+ * Additionally the `rgba()`, `hsl()` and `hsla()` functions are supported too.
+ *
+ * Returns: (transfer full): a newly allocated [class@Gegl.Color] if @css was
+ *                           parsed successfully, %NULL otherwise
+ **/
+GeglColor *
+gimp_color_parse_css (const gchar *css)
+{
+  return gimp_color_parse_css_substring (css, -1);
+}
+
+/**
+ * gimp_color_parse_hex:
+ * @hex: (type utf8): a string describing a color in hexadecimal notation
+ *
+ * Attempts to parse a string describing a sRGB color in hexadecimal
+ * notation (optionally prefixed with a '#').
+ *
+ * Returns: (transfer full): a newly allocated color representing @hex.
+ **/
+GeglColor *
+gimp_color_parse_hex (const gchar *hex)
+{
+  return gimp_color_parse_hex_substring (hex, -1);
+}
+
+/**
+ * gimp_color_parse_name:
+ * @name: (type utf8): a color name (in UTF-8 encoding)
+ *
+ * Attempts to parse a color name. This function accepts [SVG 1.1 color
+ * keywords](https://www.w3.org/TR/SVG11/types.html#ColorKeywords).
+ *
+ * Returns: (transfer full): a sRGB color as defined in "4.4. Recognized color
+ *          keyword names" list of SVG 1.1 specification, if @name was parsed
+ *          successfully, %NULL otherwise
+ **/
+GeglColor *
+gimp_color_parse_name (const gchar *name)
+{
+  return gimp_color_parse_name_substring (name, -1);
+}
+
+/**
+ * gimp_color_list_names:
+ * @colors: (out) (optional) (array zero-terminated=1) (element-type GeglColor) (transfer full): return location for an array of [class@Gegl.Color]
+ *
+ * Returns the list of [SVG 1.0 color
+ * keywords](https://www.w3.org/TR/SVG/types.html) that is recognized by
+ * [func@color_parse_name].
+ *
+ * The returned strings are const and must not be freed. Only the array
+ * must be freed with `g_free()`.
+ *
+ * The optional @colors arrays must be freed with [func@color_array_free] when
+ * they are no longer needed.
+ *
+ * Returns: (array zero-terminated=1) (transfer container): an array of color names.
+ *
+ * Since: 2.2
+ **/
+const gchar **
+gimp_color_list_names (GimpColorArray *colors)
+{
+  const gchar **names;
+  gint    i;
+
+  names = g_new0 (const gchar *, G_N_ELEMENTS (named_colors) + 1);
+
+  if (colors)
+    *colors = g_new0 (GeglColor *, G_N_ELEMENTS (named_colors) + 1);
+
+  for (i = 0; i < G_N_ELEMENTS (named_colors); i++)
+    {
+      names[i] = named_colors[i].name;
+
+      if (colors)
+        {
+          GeglColor *color = gegl_color_new (NULL);
+
+          gegl_color_set_rgba_with_space (color,
+                                          (gdouble) named_colors[i].red / 255.0,
+                                          (gdouble) named_colors[i].green / 255.0,
+                                          (gdouble) named_colors[i].blue / 255.0,
+                                          1.0, NULL);
+          (*colors)[i] = color;
+        }
+    }
+
+  return names;
+}
+
+/**
+ * gimp_color_parse_css_substring: (skip)
  * @css: (array length=len): a string describing a color in CSS notation
  * @len: the length of @css, in bytes. or -1 if @css is nul-terminated
  *
  * Attempts to parse a string describing an sRGB color in CSS notation. This can
- * be either a numerical representation (`rgb(255,0,0)` or `rgb(100%,0%,0%)`)
- * or a hexadecimal notation as parsed by gimp_color_parse_hex()
- * (`##ff0000`) or a color name as parsed by gimp_color_parse_name() (`red`).
+ * be either a numerical representation (`rgb(255,0,0)` or `rgb(100%,0%,0%)`) or
+ * a hexadecimal notation as parsed by [func@color_parse_hex] (`##ff0000`) or a
+ * color name as parsed by [func@color_parse_name] (`red`).
  *
  * Additionally the `rgba()`, `hsl()` and `hsla()` functions are supported too.
  *
@@ -223,8 +326,8 @@ static const ColorEntry named_colors[] =
  * Since: 2.2
  **/
 GeglColor *
-gimp_color_parse_css (const gchar *css,
-                      gint         len)
+gimp_color_parse_css_substring (const gchar *css,
+                                gint         len)
 {
   gchar     *tmp;
   GeglColor *color;
@@ -233,7 +336,10 @@ gimp_color_parse_css (const gchar *css,
 
   tmp = gimp_color_parse_strip (css, len);
 
-  color = gimp_color_parse_css_internal (tmp);
+  if (g_strcmp0 (tmp, "transparent") == 0)
+    color = gegl_color_new ("transparent");
+  else
+    color = gimp_color_parse_css_internal (tmp);
 
   g_free (tmp);
 
@@ -241,7 +347,7 @@ gimp_color_parse_css (const gchar *css,
 }
 
 /**
- * gimp_color_parse_hex:
+ * gimp_color_parse_hex_substring: (skip)
  * @hex: (array length=len): a string describing a color in hexadecimal notation
  * @len: the length of @hex, in bytes. or -1 if @hex is nul-terminated
  *
@@ -255,8 +361,8 @@ gimp_color_parse_css (const gchar *css,
  * Since: 2.2
  **/
 GeglColor *
-gimp_color_parse_hex (const gchar *hex,
-                      gint         len)
+gimp_color_parse_hex_substring (const gchar *hex,
+                                gint         len)
 {
   GeglColor *result;
   gchar     *tmp;
@@ -273,7 +379,7 @@ gimp_color_parse_hex (const gchar *hex,
 }
 
 /**
- * gimp_color_parse_name:
+ * gimp_color_parse_name_substring: (skip)
  * @name: (array length=len): a color name (in UTF-8 encoding)
  * @len:  the length of @name, in bytes. or -1 if @name is nul-terminated
  *
@@ -287,8 +393,8 @@ gimp_color_parse_hex (const gchar *hex,
  * Since: 2.2
  **/
 GeglColor *
-gimp_color_parse_name (const gchar *name,
-                       gint         len)
+gimp_color_parse_name_substring (const gchar *name,
+                                 gint         len)
 {
   gchar     *tmp;
   GeglColor *result;
@@ -344,6 +450,14 @@ gimp_color_parse_hex_internal (const gchar *hex)
     hex++;
 
   len = strlen (hex);
+  /* TODO: current implementation has 2 issues:
+   * 1. It doesn't support the alpha channel, even though CSS spec now has
+   *    support for it with either 8 or 4 digits.
+   * 2. The spec has nothing about channels on 3 or 4 digits, which we support
+   *    here (for higher precision?). Is this format really supported somewhere?
+   *    Do we want to keep this?
+   * See: https://drafts.csswg.org/css-color/#hex-notation
+   */
   if (len % 3 || len < 3 || len > 12)
     return NULL;
 
@@ -440,10 +554,15 @@ gimp_color_parse_css_numeric (const gchar *css)
   color = gegl_color_new (NULL);
   if (hsl)
     {
+      gfloat values_f[4];
+
+      for (i = 0; i < (alpha ? 4 : 3); i++)
+        values_f[i] = (gfloat) values[i];
+
       if (alpha)
-        gegl_color_set_pixel (color, babl_format ("HSLA double"), values);
+        gegl_color_set_pixel (color, babl_format ("HSLA float"), values_f);
       else
-        gegl_color_set_pixel (color, babl_format ("HSL double"), values);
+        gegl_color_set_pixel (color, babl_format ("HSL float"), values_f);
     }
   else
     {
@@ -463,8 +582,10 @@ gimp_color_parse_css_internal (const gchar *css)
     {
       return gimp_color_parse_hex_internal (css);
     }
-  else if (strncmp (css, "rgb(", 4) == 0 ||
-           strncmp (css, "hsl(", 4) == 0)
+  else if (strncmp (css, "rgb(", 4)  == 0 ||
+           strncmp (css, "hsl(", 4)  == 0 ||
+           strncmp (css, "rgba(", 5) == 0 ||
+           strncmp (css, "hsla(", 5) == 0)
     {
       return gimp_color_parse_css_numeric (css);
     }

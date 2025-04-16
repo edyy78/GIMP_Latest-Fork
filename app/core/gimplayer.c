@@ -937,16 +937,46 @@ gimp_layer_duplicate (GimpItem *item,
       GimpLayer *layer     = GIMP_LAYER (item);
       GimpLayer *new_layer = GIMP_LAYER (new_item);
 
-      gimp_layer_set_mode            (new_layer,
-                                      gimp_layer_get_mode (layer), FALSE);
-      gimp_layer_set_blend_space     (new_layer,
-                                      gimp_layer_get_blend_space (layer), FALSE);
-      gimp_layer_set_composite_space (new_layer,
-                                      gimp_layer_get_composite_space (layer), FALSE);
-      gimp_layer_set_composite_mode  (new_layer,
-                                      gimp_layer_get_composite_mode (layer), FALSE);
-      gimp_layer_set_opacity         (new_layer,
-                                      gimp_layer_get_opacity (layer), FALSE);
+      /* PASS_THROUGH mode is invalid for regular layers.
+       * We used to change the mode to NORMAL *before* duplicating (see
+       * #793714 on bugzilla) but it would change the image's render.
+       * Instead we first duplicate so that the group's render is used
+       * as-is for the non-group duplicate layer. Then we set NORMAL
+       * mode.
+       */
+      if (gimp_layer_get_mode (layer) == GIMP_LAYER_MODE_PASS_THROUGH &&
+          ! GIMP_IS_GROUP_LAYER (new_item))
+        {
+          GimpLayerColorSpace    blend_space;
+          GimpLayerColorSpace    composite_space;
+          GimpLayerCompositeMode composite_mode;
+
+          /* keep the group's current blend space, composite space, and composite
+           * mode.
+           */
+          blend_space     = gimp_layer_get_blend_space     (layer);
+          composite_space = gimp_layer_get_composite_space (layer);
+          composite_mode  = gimp_layer_get_composite_mode  (layer);
+
+          gimp_layer_set_mode            (new_layer, GIMP_LAYER_MODE_NORMAL, FALSE);
+          gimp_layer_set_blend_space     (new_layer, blend_space,            FALSE);
+          gimp_layer_set_composite_space (new_layer, composite_space,        FALSE);
+          gimp_layer_set_composite_mode  (new_layer, composite_mode,         FALSE);
+          gimp_layer_set_opacity         (new_layer, 1.0,                    FALSE);
+        }
+      else
+        {
+          gimp_layer_set_mode            (new_layer,
+                                          gimp_layer_get_mode (layer), FALSE);
+          gimp_layer_set_blend_space     (new_layer,
+                                          gimp_layer_get_blend_space (layer), FALSE);
+          gimp_layer_set_composite_space (new_layer,
+                                          gimp_layer_get_composite_space (layer), FALSE);
+          gimp_layer_set_composite_mode  (new_layer,
+                                          gimp_layer_get_composite_mode (layer), FALSE);
+          gimp_layer_set_opacity         (new_layer,
+                                          gimp_layer_get_opacity (layer), FALSE);
+        }
 
       if (gimp_layer_can_lock_alpha (new_layer))
         gimp_layer_set_lock_alpha (new_layer,
@@ -1381,9 +1411,9 @@ gimp_layer_convert_type (GimpDrawable     *drawable,
                          gboolean          push_undo,
                          GimpProgress     *progress)
 {
-  GimpLayer       *layer = GIMP_LAYER (drawable);
-  GimpObjectQueue *queue = NULL;
-  const Babl      *dest_space;
+  GimpLayer       *layer      = GIMP_LAYER (drawable);
+  GimpObjectQueue *queue      = NULL;
+  const Babl      *dest_space = NULL;
   const Babl      *space_format;
   gboolean         convert_mask;
 
@@ -1424,13 +1454,8 @@ gimp_layer_convert_type (GimpDrawable     *drawable,
                                       GIMP_COLOR_RENDERING_INTENT_RELATIVE_COLORIMETRIC,
                                       NULL);
     }
-  else
-    {
-      dest_space = gimp_image_get_layer_space (dest_image);
-    }
 
-  space_format = babl_format_with_space ((const gchar *) new_format,
-                                         dest_space);
+  space_format = babl_format_with_space ((const gchar *) new_format, dest_space);
 
   GIMP_LAYER_GET_CLASS (layer)->convert_type (layer, dest_image, space_format,
                                               src_profile, dest_profile,
@@ -1920,7 +1945,7 @@ gimp_layer_add_mask (GimpLayer      *layer,
     }
 
   if (push_undo)
-    gimp_image_undo_push_layer_mask_add (image, C_("undo-type", "Add Layer Mask"),
+    gimp_image_undo_push_layer_mask_add (image, C_("undo-type", "Add Layer Masks"),
                                          layer, mask);
 
   layer->mask = g_object_ref_sink (mask);
@@ -2207,8 +2232,8 @@ gimp_layer_apply_mask (GimpLayer         *layer,
     {
       gimp_image_undo_group_start (image, GIMP_UNDO_GROUP_LAYER_APPLY_MASK,
                                    (mode == GIMP_MASK_APPLY) ?
-                                   C_("undo-type", "Apply Layer Mask") :
-                                   C_("undo-type", "Delete Layer Mask"));
+                                   C_("undo-type", "Apply Layer Masks") :
+                                   C_("undo-type", "Delete Layer Masks"));
 
       gimp_image_undo_push_layer_mask_show (image, NULL, layer);
       gimp_image_undo_push_layer_mask_apply (image, NULL, layer);
@@ -2315,8 +2340,8 @@ gimp_layer_set_apply_mask (GimpLayer *layer,
       if (push_undo && gimp_item_is_attached (GIMP_ITEM (layer)))
         gimp_image_undo_push_layer_mask_apply (image,
                                                apply ?
-                                               C_("undo-type", "Enable Layer Mask") :
-                                               C_("undo-type", "Disable Layer Mask"),
+                                               C_("undo-type", "Enable Layer Masks") :
+                                               C_("undo-type", "Disable Layer Masks"),
                                                layer);
 
       layer->apply_mask = apply ? TRUE : FALSE;
@@ -2397,7 +2422,7 @@ gimp_layer_set_show_mask (GimpLayer *layer,
 
       if (push_undo)
         gimp_image_undo_push_layer_mask_show (image,
-                                              C_("undo-type", "Show Layer Mask"),
+                                              C_("undo-type", "Show Layer Masks"),
                                               layer);
 
       layer->show_mask = show ? TRUE : FALSE;

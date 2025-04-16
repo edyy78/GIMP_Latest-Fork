@@ -42,9 +42,14 @@
 #include <libgimp/gimpchannel.h>
 #include <libgimp/gimpdisplay.h>
 #include <libgimp/gimpdrawable.h>
+#include <libgimp/gimpdrawablefilter.h>
+#include <libgimp/gimpdrawablefilterconfig.h>
+#include <libgimp/gimpexportoptions.h>
+#include <libgimp/gimpexportprocedure.h>
 #include <libgimp/gimpfont.h>
 #include <libgimp/gimpgimprc.h>
 #include <libgimp/gimpgradient.h>
+#include <libgimp/gimpgrouplayer.h>
 #include <libgimp/gimpimage.h>
 #include <libgimp/gimpimagecolorprofile.h>
 #include <libgimp/gimpimagemetadata.h>
@@ -55,6 +60,7 @@
 #include <libgimp/gimploadprocedure.h>
 #include <libgimp/gimppalette.h>
 #include <libgimp/gimpparamspecs.h>
+#include <libgimp/gimppath.h>
 #include <libgimp/gimppattern.h>
 #include <libgimp/gimppdb.h>
 #include <libgimp/gimpplugin.h>
@@ -62,14 +68,10 @@
 #include <libgimp/gimpprocedure-params.h>
 #include <libgimp/gimpprogress.h>
 #include <libgimp/gimpresource.h>
-#include <libgimp/gimpsaveprocedure.h>
 #include <libgimp/gimpselection.h>
 #include <libgimp/gimptextlayer.h>
 #include <libgimp/gimpthumbnailprocedure.h>
-#include <libgimp/gimpvectors.h>
-
-/* Resources and their widgets. Order important. */
-#include <libgimp/gimpresourceselect.h>
+#include <libgimp/gimpvectorloadprocedure.h>
 
 #include <libgimp/gimp_pdb_headers.h>
 
@@ -89,11 +91,16 @@ G_BEGIN_DECLS
  * A macro that expands to the appropriate main() function for the
  * platform being compiled for.
  *
- * To use this macro, simply place a line that contains just the code
+ * To use this macro, simply place a line that contains just the code:
  *
+ * ```C
  * GIMP_MAIN (MY_TYPE_PLUG_IN)
+ * ```
  *
  * at the toplevel of your file. No semicolon should be used.
+ *
+ * Non-C plug-ins won't have this function and should use
+ * [func@Gimp.main] instead.
  *
  * Since: 3.0
  **/

@@ -91,7 +91,7 @@ static const GimpActionEntry view_actions[] =
     view_zoom_fit_in_cmd_callback,
     GIMP_HELP_VIEW_ZOOM_FIT_IN },
 
-  { "view-zoom-fill", GIMP_ICON_ZOOM_FIT_BEST,
+  { "view-zoom-fill", GIMP_ICON_VIEW_ZOOM_FILL,
     NC_("view-action", "Fi_ll Window"), NULL, { NULL },
     NC_("view-action", "Adjust the zoom ratio so that the entire window is used"),
     view_zoom_fill_cmd_callback,
@@ -146,9 +146,9 @@ static const GimpActionEntry view_actions[] =
     NC_("view-action",
         "Reset color management to what's configured in preferences"),
     view_color_management_reset_cmd_callback,
-    GIMP_HELP_VIEW_COLOR_MANAGEMENT },
+    GIMP_HELP_VIEW_COLOR_MANAGEMENT_RESET },
 
-  { "view-shrink-wrap", GIMP_ICON_ZOOM_FIT_BEST,
+  { "view-shrink-wrap", GIMP_ICON_VIEW_SHRINK_WRAP,
     NC_("view-action", "Shrink _Wrap"), NULL, { "<primary>J", NULL },
     NC_("view-action", "Reduce the image window to the size of the image display"),
     view_shrink_wrap_cmd_callback,
@@ -183,21 +183,21 @@ static const GimpToggleActionEntry view_toggle_actions[] =
     NC_("view-action", "Use color management for this view"),
     view_color_management_enable_cmd_callback,
     TRUE,
-    GIMP_HELP_VIEW_COLOR_MANAGEMENT },
+    GIMP_HELP_VIEW_COLOR_MANAGE_VIEW },
 
   { "view-color-management-softproof", NULL,
     NC_("view-action", "_Proof Colors"), NULL, { NULL },
     NC_("view-action", "Use this view for soft-proofing"),
     view_color_management_softproof_cmd_callback,
     FALSE,
-    GIMP_HELP_VIEW_COLOR_MANAGEMENT },
+    GIMP_HELP_VIEW_SOFT_PROOF_VIEW },
 
   { "view-display-black-point-compensation", NULL,
     NC_("view-action", "_Black Point Compensation"), NULL, { NULL },
     NC_("view-action", "Use black point compensation for image display"),
     view_display_bpc_cmd_callback,
     TRUE,
-    GIMP_HELP_VIEW_COLOR_MANAGEMENT },
+    GIMP_HELP_VIEW_SOFT_PROOF_BLACK_POINT },
 
   { "view-softproof-gamut-check", NULL,
     NC_("view-action", "_Mark Out Of Gamut Colors"), NULL, { NULL },
@@ -205,7 +205,7 @@ static const GimpToggleActionEntry view_toggle_actions[] =
         "be represented in the target color space"),
     view_softproof_gamut_check_cmd_callback,
     FALSE,
-    GIMP_HELP_VIEW_COLOR_MANAGEMENT },
+    GIMP_HELP_VIEW_MARK_OUT_OF_GAMUT },
 
   { "view-show-selection", NULL,
     NC_("view-action", "Show _Selection"), NULL, { "<primary>T", NULL },
@@ -522,25 +522,25 @@ static const GimpRadioActionEntry view_display_intent_actions[] =
     NC_("view-action", "_Perceptual"), NULL, { NULL },
     NC_("view-action", "Display rendering intent is perceptual"),
     GIMP_COLOR_RENDERING_INTENT_PERCEPTUAL,
-    GIMP_HELP_VIEW_COLOR_MANAGEMENT },
+    GIMP_HELP_VIEW_SOFT_PROOF_RENDERING_INTENT },
 
   { "view-display-intent-relative-colorimetric", NULL,
     NC_("view-action", "_Relative Colorimetric"), NULL, { NULL },
     NC_("view-action", "Display rendering intent is relative colorimetric"),
     GIMP_COLOR_RENDERING_INTENT_RELATIVE_COLORIMETRIC,
-    GIMP_HELP_VIEW_COLOR_MANAGEMENT },
+    GIMP_HELP_VIEW_SOFT_PROOF_RENDERING_INTENT },
 
   { "view-display-intent-saturation", NULL,
     NC_("view-action", "_Saturation"), NULL, { NULL },
     NC_("view-action", "Display rendering intent is saturation"),
     GIMP_COLOR_RENDERING_INTENT_SATURATION,
-    GIMP_HELP_VIEW_COLOR_MANAGEMENT },
+    GIMP_HELP_VIEW_SOFT_PROOF_RENDERING_INTENT },
 
   { "view-display-intent-absolute-colorimetric", NULL,
     NC_("view-action", "_Absolute Colorimetric"), NULL, { NULL },
     NC_("view-action", "Display rendering intent is absolute colorimetric"),
     GIMP_COLOR_RENDERING_INTENT_ABSOLUTE_COLORIMETRIC,
-    GIMP_HELP_VIEW_COLOR_MANAGEMENT }
+    GIMP_HELP_VIEW_SOFT_PROOF_RENDERING_INTENT }
 };
 
 static const GimpEnumActionEntry view_padding_color_actions[] =

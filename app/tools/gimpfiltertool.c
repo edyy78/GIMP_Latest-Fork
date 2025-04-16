@@ -49,6 +49,7 @@
 #include "core/gimpdrawable-filters.h"
 #include "core/gimpdrawablefilter.h"
 #include "core/gimperror.h"
+#include "core/gimpgrouplayer.h"
 #include "core/gimpguide.h"
 #include "core/gimpimage.h"
 #include "core/gimpimage-guides.h"
@@ -289,20 +290,30 @@ gimp_filter_tool_initialize (GimpTool     *tool,
   GimpDisplayShell *shell       = gimp_display_get_shell (display);
   GimpItem         *locked_item = NULL;
   GList            *drawables   = gimp_image_get_selected_drawables (image);
-  GimpDrawable     *drawable;
+  GimpDrawable     *drawable    = NULL;
 
-  if (g_list_length (drawables) != 1)
+  if (filter_tool->existing_filter)
     {
-      if (g_list_length (drawables) > 1)
-        g_set_error_literal (error, GIMP_ERROR, GIMP_FAILED,
-                             _("Cannot modify multiple drawables. Select only one."));
-      else
-        g_set_error_literal (error, GIMP_ERROR, GIMP_FAILED, _("No selected drawables."));
-
-      g_list_free (drawables);
-      return FALSE;
+      drawable =
+        gimp_drawable_filter_get_drawable (filter_tool->existing_filter);
     }
-  drawable = drawables->data;
+  else
+    {
+      if (g_list_length (drawables) != 1)
+        {
+          if (g_list_length (drawables) > 1)
+            g_set_error_literal (error, GIMP_ERROR, GIMP_FAILED,
+                                 _("Cannot modify multiple drawables. "
+                                   "Select only one."));
+          else
+            g_set_error_literal (error, GIMP_ERROR, GIMP_FAILED,
+                                 _("No selected drawables."));
+
+          g_list_free (drawables);
+          return FALSE;
+        }
+      drawable = drawables->data;
+    }
 
   if (gimp_item_is_content_locked (GIMP_ITEM (drawable), &locked_item))
     {
@@ -392,7 +403,67 @@ gimp_filter_tool_initialize (GimpTool     *tool,
 
       toggle = gimp_prop_check_button_new (G_OBJECT (tool_info->tool_options),
                                            "preview", NULL);
-      gtk_box_pack_start (GTK_BOX (hbox), toggle, TRUE, TRUE, 0);
+
+      /* Only show merge filter option if we're not editing an NDE filter or
+       * applying to a layer group */
+      if ((GIMP_IS_LAYER (drawable) && ! GIMP_IS_GROUP_LAYER (drawable)) &&
+          ! filter_tool->existing_filter)
+        {
+          gchar *operation_name = NULL;
+
+          gegl_node_get (filter_tool->operation,
+                         "operation", &operation_name,
+                         NULL);
+
+          gtk_box_pack_start (GTK_BOX (hbox), toggle, FALSE, FALSE, 0);
+
+          /* TODO: Once we can serialize GimpDrawable, remove so that filters with
+           * aux nodes can be non-destructive */
+          if (gegl_node_has_pad (filter_tool->operation, "aux") ||
+              (g_strcmp0 (operation_name, "gegl:gegl") == 0 &&
+               g_getenv ("GIMP_ALLOW_GEGL_GRAPH_LAYER_EFFECT") == NULL))
+            {
+              GParamSpec  *param_spec;
+              GObject     *obj = G_OBJECT (tool_info->tool_options);
+              gchar       *tooltip;
+              const gchar *disabled_reason;
+
+              param_spec = g_object_class_find_property (G_OBJECT_GET_CLASS (obj),
+                                                         "merge-filter");
+
+              toggle =
+                gtk_check_button_new_with_mnemonic (g_param_spec_get_nick (param_spec));
+
+              gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (toggle), TRUE);
+              gtk_widget_set_sensitive (toggle, FALSE);
+
+              if (gegl_node_has_pad (filter_tool->operation, "aux"))
+                disabled_reason = _("Disabled because this filter depends on another image.");
+              else
+                /* TODO: localize when string freeze is over. */
+                disabled_reason = "Disabled because GEGL Graph is unsafe.\nFor development purpose, "
+                                  "set environment variable GIMP_ALLOW_GEGL_GRAPH_LAYER_EFFECT.";
+
+              tooltip = g_strdup_printf ("%s\n<i>%s</i>", g_param_spec_get_blurb (param_spec), disabled_reason);
+              gimp_help_set_help_data_with_markup (toggle, tooltip, NULL);
+              g_free (tooltip);
+
+              gtk_widget_set_visible (toggle, TRUE);
+            }
+          else
+            {
+              toggle = gimp_prop_check_button_new (G_OBJECT (tool_info->tool_options),
+                                                   "merge-filter", NULL);
+            }
+
+          gtk_box_pack_start (GTK_BOX (hbox), toggle, TRUE, TRUE, 0);
+
+          g_free (operation_name);
+        }
+      else
+        {
+          gtk_box_pack_start (GTK_BOX (hbox), toggle, TRUE, TRUE, 0);
+        }
 
       toggle = gimp_prop_check_button_new (G_OBJECT (tool_info->tool_options),
                                            "preview-split", NULL);
@@ -411,17 +482,17 @@ gimp_filter_tool_initialize (GimpTool     *tool,
       if (! filter_tool->widget)
         gtk_widget_hide (filter_tool->controller_toggle);
 
+      /*  Fill in subclass widgets  */
+      gimp_filter_tool_dialog (filter_tool);
+
       /*  The operation-settings box  */
       filter_tool->operation_settings_box = gtk_box_new (
         GTK_ORIENTATION_VERTICAL, 2);
-      gtk_box_pack_end (GTK_BOX (vbox), filter_tool->operation_settings_box,
-                        FALSE, FALSE, 0);
+      gtk_box_pack_start (GTK_BOX (vbox), filter_tool->operation_settings_box,
+                          FALSE, FALSE, 0);
       gtk_widget_show (filter_tool->operation_settings_box);
 
       gimp_filter_tool_update_dialog_operation_settings (filter_tool);
-
-      /*  Fill in subclass widgets  */
-      gimp_filter_tool_dialog (filter_tool);
     }
   else
     {
@@ -459,10 +530,11 @@ gimp_filter_tool_control (GimpTool       *tool,
                           GimpToolAction  action,
                           GimpDisplay    *display)
 {
-  GimpFilterTool *filter_tool     = GIMP_FILTER_TOOL (tool);
-  GimpDrawable   *drawable        = NULL;
-  gboolean        non_destructive = TRUE;
-  gchar          *operation_name  = NULL;
+  GimpFilterTool    *filter_tool     = GIMP_FILTER_TOOL (tool);
+  GimpFilterOptions *options         = GIMP_FILTER_TOOL_GET_OPTIONS (filter_tool);
+  GimpDrawable      *drawable        = NULL;
+  gboolean           non_destructive = TRUE;
+  gchar             *operation_name  = NULL;
 
   switch (action)
     {
@@ -480,7 +552,8 @@ gimp_filter_tool_control (GimpTool       *tool,
 
       /* TODO: Expand non-destructive editing to other drawables
        * besides layers */
-      if (! GIMP_IS_LAYER (drawable))
+      if (! GIMP_IS_LAYER (drawable) ||
+          (! filter_tool->existing_filter && options->merge_filter))
         non_destructive = FALSE;
 
       if (filter_tool->operation)
@@ -492,8 +565,27 @@ gimp_filter_tool_control (GimpTool       *tool,
           if (! g_strcmp0 (operation_name, "gegl:nop"))
             non_destructive = FALSE;
 
+          /* TODO: Once we can serialize GimpDrawable, remove so that filters with
+           * aux nodes can be non-destructive */
+          if (gegl_node_has_pad (filter_tool->operation, "aux") ||
+              /* GEGL graph is dangerous even without using third-party
+               * effects, because it may run any effect. E.g.  it can
+               * run sink effects overwriting any local files with user
+               * rights. We leave a way in through an environment
+               * variable because it is a useful tool for GEGL ops
+               * developers but it should only be set while knowing what
+               * you are doing.
+               */
+              (g_strcmp0 (operation_name, "gegl:gegl") == 0 &&
+               g_getenv ("GIMP_ALLOW_GEGL_GRAPH_LAYER_EFFECT") == NULL))
+            non_destructive = FALSE;
+
           g_free (operation_name);
         }
+
+      /* Ensure that filters applied to group layers are non-destructive */
+      if (GIMP_IS_GROUP_LAYER (drawable))
+        non_destructive = TRUE;
 
       gimp_filter_tool_commit (filter_tool, non_destructive);
       break;
@@ -511,6 +603,13 @@ gimp_filter_tool_button_press (GimpTool            *tool,
                                GimpDisplay         *display)
 {
   GimpFilterTool *filter_tool = GIMP_FILTER_TOOL (tool);
+  GimpDrawable   *drawable    = NULL;
+
+  if (filter_tool->existing_filter)
+    drawable =
+      gimp_drawable_filter_get_drawable (filter_tool->existing_filter);
+  else
+    drawable = tool->drawables->data;
 
   if (gimp_filter_tool_on_guide (filter_tool, coords, display))
     {
@@ -522,7 +621,7 @@ gimp_filter_tool_button_press (GimpTool            *tool,
         }
       else if (state & gimp_get_toggle_behavior_mask ())
         {
-          GimpItem *item = GIMP_ITEM (tool->drawables->data);
+          GimpItem *item = GIMP_ITEM (drawable);
           gint      pos_x;
           gint      pos_y;
 
@@ -737,10 +836,22 @@ gimp_filter_tool_options_notify (GimpTool         *tool,
     {
       if (filter_options->preview_split)
         {
-          GimpDisplayShell *shell = gimp_display_get_shell (tool->display);
-          GimpItem         *item  = GIMP_ITEM (tool->drawables->data);
+          GimpDrawable     *drawable = NULL;
+          GimpDisplayShell *shell    = gimp_display_get_shell (tool->display);
+          GimpItem         *item     = NULL;
           gint              x, y, width, height;
           gint              position;
+
+          if (filter_tool->existing_filter)
+            {
+              drawable =
+                gimp_drawable_filter_get_drawable (filter_tool->existing_filter);
+              item = GIMP_ITEM (drawable);
+            }
+          else
+            {
+              item = GIMP_ITEM (tool->drawables->data);
+            }
 
           gimp_display_shell_untransform_viewport (shell, TRUE,
                                                    &x, &y, &width, &height);
@@ -788,6 +899,41 @@ gimp_filter_tool_options_notify (GimpTool         *tool,
       if (filter_options->preview_split)
         gimp_filter_tool_move_guide (filter_tool);
     }
+  else if (! strcmp (pspec->name, "merge-filter") &&
+           filter_tool->filter)
+    {
+      GimpDrawable  *drawable = NULL;
+      GimpContainer *filters  = NULL;
+      gint           count;
+
+      if (filter_tool->existing_filter)
+        drawable =
+          gimp_drawable_filter_get_drawable (filter_tool->existing_filter);
+      else
+        drawable = tool->drawables->data;
+
+      filters = gimp_drawable_get_filters (drawable);
+      count   = gimp_container_get_n_children (filters);
+
+      if (count > 1)
+        {
+          if (filter_options->merge_filter)
+            gimp_container_reorder (filters, GIMP_OBJECT (filter_tool->filter),
+                                    count - 1);
+          else
+            gimp_container_reorder (filters, GIMP_OBJECT (filter_tool->filter),
+                                    0);
+
+          gimp_item_set_visible (GIMP_ITEM (drawable), FALSE, FALSE);
+          gimp_image_flush (gimp_item_get_image (GIMP_ITEM (drawable)));
+          gimp_item_set_visible (GIMP_ITEM (drawable), TRUE, FALSE);
+          gimp_image_flush (gimp_item_get_image (GIMP_ITEM (drawable)));
+        }
+
+      g_object_set (filter_tool->filter,
+                    "to-be-merged", filter_options->merge_filter,
+                    NULL);
+    }
   else if (! strcmp (pspec->name, "controller") &&
            filter_tool->widget)
     {
@@ -825,7 +971,9 @@ gimp_filter_tool_pick_color (GimpColorTool     *color_tool,
   GimpFilterTool *filter_tool = GIMP_FILTER_TOOL (color_tool);
   gboolean        picked;
 
-  g_return_val_if_fail (g_list_length (tool->drawables) == 1, FALSE);
+  if (! filter_tool->existing_filter)
+    g_return_val_if_fail (g_list_length (tool->drawables) == 1, FALSE);
+
   g_return_val_if_fail (color != NULL && GEGL_IS_COLOR (*color), FALSE);
   g_return_val_if_fail (sample_format != NULL, FALSE);
 
@@ -946,8 +1094,7 @@ gimp_filter_tool_real_config_notify (GimpFilterTool   *filter_tool,
         {
           if (! strcmp (pspec->name, "gimp-clip")    ||
               ! strcmp (pspec->name, "gimp-mode")    ||
-              ! strcmp (pspec->name, "gimp-opacity") ||
-              ! strcmp (pspec->name, "gimp-gamma-hack"))
+              ! strcmp (pspec->name, "gimp-opacity"))
             {
               gimp_filter_tool_update_filter (filter_tool);
             }
@@ -1076,6 +1223,7 @@ gimp_filter_tool_commit (GimpFilterTool *filter_tool,
   /* Copy over filter info back to existing filter */
   if (filter_tool->existing_filter)
     {
+      GeglNode                *node;
       GeglNode                *existing_node;
       gdouble                  opacity;
       GimpLayerMode            paint_mode;
@@ -1085,7 +1233,8 @@ gimp_filter_tool_commit (GimpFilterTool *filter_tool,
       GimpFilterRegion         region;
       GParamSpec             **pspecs;
       guint                    n_pspecs;
-      gchar                   *name          = NULL;
+      gchar                   *operation_name = NULL;
+      gchar                   *name           = NULL;
 
       opacity         = gimp_drawable_filter_get_opacity (filter_tool->filter);
       paint_mode      = gimp_drawable_filter_get_paint_mode (filter_tool->filter);
@@ -1094,13 +1243,38 @@ gimp_filter_tool_commit (GimpFilterTool *filter_tool,
       composite_mode  = gimp_drawable_filter_get_composite_mode (filter_tool->filter);
       region          = gimp_drawable_filter_get_region (filter_tool->filter);
 
+      node          = gimp_drawable_filter_get_operation (filter_tool->filter);
       existing_node = gimp_drawable_filter_get_operation (filter_tool->existing_filter);
-      gegl_node_get (existing_node,
-                     "operation", &name,
-                     NULL);
 
-      pspecs = gegl_operation_list_properties (name, &n_pspecs);
+      gegl_node_get (node, "operation", &operation_name, NULL);
+      gegl_node_get (existing_node, "operation", &name, NULL);
+
+      /* If the filter was changed, we need to update the original filter's
+       * operation */
+      if (g_strcmp0 (operation_name, name) != 0)
+        {
+          gchar *filter_name = NULL;
+          gchar *filter_icon = NULL;
+
+          gegl_node_set (existing_node, "operation", operation_name, NULL);
+
+          g_object_get (filter_tool->filter,
+                        "name",      &filter_name,
+                        "icon-name", &filter_icon,
+                        NULL);
+          g_object_set (filter_tool->existing_filter,
+                        "name",      filter_name,
+                        "icon-name", filter_icon,
+                        NULL);
+
+          g_free (filter_name);
+          g_free (filter_icon);
+        }
+
       g_free (name);
+
+      pspecs = gegl_operation_list_properties (operation_name, &n_pspecs);
+      g_free (operation_name);
 
       for (gint i = 0; i < n_pspecs; i++)
         {
@@ -1127,6 +1301,7 @@ gimp_filter_tool_commit (GimpFilterTool *filter_tool,
 
   if (filter_tool->filter)
     {
+      GimpDrawable      *drawable;
       GimpFilterOptions *options = GIMP_FILTER_TOOL_GET_OPTIONS (tool);
 
       if (! options->preview)
@@ -1162,12 +1337,21 @@ gimp_filter_tool_commit (GimpFilterTool *filter_tool,
                                            drawable, filter_tool->filter);
         }
 
+      drawable = gimp_drawable_filter_get_drawable (filter_tool->filter);
+
       g_clear_object (&filter_tool->filter);
 
       gimp_tool_control_pop_preserve (tool->control);
 
       gimp_filter_tool_remove_guide (filter_tool);
 
+      /* TODO: Review when we can apply NDE filters to channels/layer masks */
+      if (GIMP_IS_LAYER (drawable))
+        {
+          gimp_item_set_visible (GIMP_ITEM (drawable), FALSE, FALSE);
+          gimp_image_flush (gimp_display_get_image (tool->display));
+          gimp_item_set_visible (GIMP_ITEM (drawable), TRUE, FALSE);
+        }
       gimp_image_flush (gimp_display_get_image (tool->display));
 
       if (filter_tool->config && filter_tool->has_settings)
@@ -1204,9 +1388,7 @@ gimp_filter_tool_dialog (GimpFilterTool *filter_tool)
 static void
 gimp_filter_tool_update_dialog_operation_settings (GimpFilterTool *filter_tool)
 {
-  GimpTool          *tool    = GIMP_TOOL (filter_tool);
   GimpFilterOptions *options = GIMP_FILTER_TOOL_GET_OPTIONS (filter_tool);
-  GimpImage         *image   = gimp_display_get_image (tool->display);
 
   if (filter_tool->operation_settings_box)
     {
@@ -1221,7 +1403,6 @@ gimp_filter_tool_update_dialog_operation_settings (GimpFilterTool *filter_tool)
           GtkWidget *vbox2;
           GtkWidget *mode_box;
           GtkWidget *scale;
-          GtkWidget *toggle;
 
           vbox = filter_tool->operation_settings_box;
 
@@ -1248,6 +1429,7 @@ gimp_filter_tool_update_dialog_operation_settings (GimpFilterTool *filter_tool)
           expander = gtk_expander_new (_("Blending Options"));
           gtk_box_pack_start (GTK_BOX (vbox), expander,
                               FALSE, FALSE, 0);
+          gtk_expander_set_resize_toplevel (GTK_EXPANDER (expander), TRUE);
           gtk_widget_show (expander);
 
           g_object_bind_property (options,  "blending-options-expanded",
@@ -1281,35 +1463,6 @@ gimp_filter_tool_update_dialog_operation_settings (GimpFilterTool *filter_tool)
           gtk_box_pack_start (GTK_BOX (vbox2), scale,
                               FALSE, FALSE, 0);
           gtk_widget_show (scale);
-
-          /*  The Color Options expander  */
-          expander = gtk_expander_new (_("Advanced Color Options"));
-          gtk_box_pack_start (GTK_BOX (vbox), expander,
-                              FALSE, FALSE, 0);
-
-          g_object_bind_property (image->gimp->config,
-                                  "filter-tool-show-color-options",
-                                  expander, "visible",
-                                  G_BINDING_SYNC_CREATE);
-          g_object_bind_property (options,  "color-options-expanded",
-                                  expander, "expanded",
-                                  G_BINDING_SYNC_CREATE |
-                                  G_BINDING_BIDIRECTIONAL);
-
-          frame = gimp_frame_new (NULL);
-          gtk_container_add (GTK_CONTAINER (expander), frame);
-          gtk_widget_show (frame);
-
-          vbox2 = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
-          gtk_container_add (GTK_CONTAINER (frame), vbox2);
-          gtk_widget_show (vbox2);
-
-          /*  The gamma hack toggle  */
-          toggle = gimp_prop_check_button_new (filter_tool->config,
-                                               "gimp-gamma-hack", NULL);
-          gtk_box_pack_start (GTK_BOX (vbox2), toggle,
-                              FALSE, FALSE, 0);
-          gtk_widget_show (toggle);
         }
     }
 }
@@ -1335,6 +1488,8 @@ gimp_filter_tool_create_filter (GimpFilterTool *filter_tool)
   GimpTool          *tool     = GIMP_TOOL (filter_tool);
   GimpFilterOptions *options  = GIMP_FILTER_TOOL_GET_OPTIONS (filter_tool);
   GimpDrawable      *drawable = NULL;
+  GimpContainer     *filters;
+  gint               count;
 
   if (filter_tool->filter)
     {
@@ -1348,7 +1503,9 @@ gimp_filter_tool_create_filter (GimpFilterTool *filter_tool)
     drawable = tool->drawables->data;
 
   gimp_assert (filter_tool->operation);
-  g_return_if_fail (g_list_length (tool->drawables) == 1);
+
+  if (! filter_tool->existing_filter)
+    g_return_if_fail (g_list_length (tool->drawables) == 1);
 
   filter_tool->filter = gimp_drawable_filter_new (drawable,
                                                   gimp_tool_get_undo_desc (tool),
@@ -1365,34 +1522,45 @@ gimp_filter_tool_create_filter (GimpFilterTool *filter_tool)
                               GIMP_PROGRESS (filter_tool),
                               gimp_tool_get_undo_desc (tool));
 
-  if (options->preview)
-    gimp_drawable_filter_apply (filter_tool->filter, NULL);
-
-  /* If editing existing filter, shift into the right location
-   * in the filter stack. */
+  /* We need to add the filter first to ensure it is ordered correctly,
+   * then toggle its visibility based on user settings */
   if (filter_tool->existing_filter)
     {
-      GimpContainer *filters;
-      GimpChannel   *mask;
-      gint           index;
-      const gchar   *name = _("Editing filter...");
+      GimpChannel *mask = NULL;
 
+      mask = GIMP_CHANNEL (gimp_drawable_filter_get_mask (filter_tool->existing_filter));
+      gimp_drawable_filter_apply_with_mask (filter_tool->filter, mask,
+                                            NULL);
+    }
+  else
+    {
+      gimp_drawable_filter_apply (filter_tool->filter, NULL);
+    }
+  gimp_drawable_filter_set_preview (filter_tool->filter, options->preview);
+
+  /* TODO: Once we can serialize GimpDrawable, remove so that filters with
+   * aux nodes can be non-destructive */
+  if (gegl_node_has_pad (filter_tool->operation, "aux"))
+    options->merge_filter = TRUE;
+
+  g_object_set (filter_tool->filter,
+                "to-be-merged", options->merge_filter,
+                NULL);
+
+  if (options->merge_filter)
+    {
       filters = gimp_drawable_get_filters (drawable);
+      count   = gimp_container_get_n_children (filters);
 
-      if (filters)
+      if (gimp_container_have (filters, GIMP_OBJECT (filter_tool->filter)))
         {
-          index = gimp_container_get_child_index (filters,
-                                                  GIMP_OBJECT (filter_tool->existing_filter));
-
           gimp_container_reorder (filters, GIMP_OBJECT (filter_tool->filter),
-                                  index);
+                                  count - 1);
+          gimp_item_set_visible (GIMP_ITEM (drawable), FALSE, FALSE);
+          gimp_image_flush (gimp_item_get_image (GIMP_ITEM (drawable)));
+          gimp_item_set_visible (GIMP_ITEM (drawable), TRUE, FALSE);
+          gimp_image_flush (gimp_item_get_image (GIMP_ITEM (drawable)));
         }
-
-      mask = gimp_drawable_filter_get_mask (filter_tool->existing_filter);
-      g_object_set (filter_tool->filter,
-                    "name", name,
-                    "mask", mask,
-                    NULL);
     }
 }
 
@@ -1403,22 +1571,30 @@ gimp_filter_tool_update_dialog (GimpFilterTool *filter_tool)
 
   if (filter_tool->gui)
     {
-      GimpImage   *image = gimp_display_get_image (tool->display);
-      GimpChannel *mask  = gimp_image_get_mask (image);
-      const Babl  *format;
+      GimpImage    *image    = gimp_display_get_image (tool->display);
+      GimpDrawable *drawable = NULL;
+      GimpChannel  *mask     = gimp_image_get_mask (image);
+      const Babl   *format;
 
-      g_return_if_fail (g_list_length (tool->drawables) == 1);
+      if (! filter_tool->existing_filter)
+        g_return_if_fail (g_list_length (tool->drawables) == 1);
 
       if (filter_tool->filter)
-        format = gimp_drawable_filter_get_format (filter_tool->filter);
+        {
+          drawable = gimp_drawable_filter_get_drawable (filter_tool->filter);
+          format   = gimp_drawable_filter_get_format (filter_tool->filter);
+        }
       else
-        format = gimp_drawable_get_format (tool->drawables->data);
+        {
+          drawable = tool->drawables->data;
+          format   = gimp_drawable_get_format (tool->drawables->data);
+        }
 
       if (gimp_channel_is_empty (mask))
         {
           gtk_widget_set_visible (
             filter_tool->clip_combo,
-            gimp_item_get_clip (GIMP_ITEM (tool->drawables->data), FALSE) == FALSE &&
+            gimp_item_get_clip (GIMP_ITEM (drawable), FALSE) == FALSE &&
             ! gimp_gegl_node_is_point_operation (filter_tool->operation)    &&
             babl_format_has_alpha (format));
 
@@ -1503,19 +1679,30 @@ gimp_filter_tool_mask_changed (GimpImage      *image,
 static void
 gimp_filter_tool_add_guide (GimpFilterTool *filter_tool)
 {
-  GimpTool            *tool    = GIMP_TOOL (filter_tool);
-  GimpFilterOptions   *options = GIMP_FILTER_TOOL_GET_OPTIONS (filter_tool);
+  GimpTool            *tool     = GIMP_TOOL (filter_tool);
+  GimpFilterOptions   *options  = GIMP_FILTER_TOOL_GET_OPTIONS (filter_tool);
+  GimpDrawable        *drawable = NULL;
   GimpItem            *item;
   GimpImage           *image;
   GimpOrientationType  orientation;
   gint                 position;
 
-  g_return_if_fail (g_list_length (tool->drawables) == 1);
+  if (! filter_tool->existing_filter)
+    g_return_if_fail (g_list_length (tool->drawables) == 1);
 
   if (filter_tool->preview_guide)
     return;
 
-  item  = GIMP_ITEM (tool->drawables->data);
+  if (filter_tool->existing_filter)
+    {
+      drawable =
+        gimp_drawable_filter_get_drawable (filter_tool->existing_filter);
+      item = GIMP_ITEM (drawable);
+    }
+  else
+    {
+      item = GIMP_ITEM (tool->drawables->data);
+    }
   image = gimp_item_get_image (item);
 
   if (options->preview_split_alignment == GIMP_ALIGN_LEFT ||
@@ -1564,18 +1751,29 @@ gimp_filter_tool_remove_guide (GimpFilterTool *filter_tool)
 static void
 gimp_filter_tool_move_guide (GimpFilterTool *filter_tool)
 {
-  GimpTool            *tool    = GIMP_TOOL (filter_tool);
-  GimpFilterOptions   *options = GIMP_FILTER_TOOL_GET_OPTIONS (filter_tool);
+  GimpTool            *tool     = GIMP_TOOL (filter_tool);
+  GimpFilterOptions   *options  = GIMP_FILTER_TOOL_GET_OPTIONS (filter_tool);
+  GimpDrawable        *drawable = NULL;
   GimpItem            *item;
   GimpOrientationType  orientation;
   gint                 position;
 
-  g_return_if_fail (g_list_length (tool->drawables) == 1);
+  if (! filter_tool->existing_filter)
+    g_return_if_fail (g_list_length (tool->drawables) == 1);
 
   if (! filter_tool->preview_guide)
     return;
 
-  item = GIMP_ITEM (tool->drawables->data);
+  if (filter_tool->existing_filter)
+    {
+      drawable =
+        gimp_drawable_filter_get_drawable (filter_tool->existing_filter);
+      item = GIMP_ITEM (drawable);
+    }
+  else
+    {
+      item = GIMP_ITEM (tool->drawables->data);
+    }
 
   if (options->preview_split_alignment == GIMP_ALIGN_LEFT ||
       options->preview_split_alignment == GIMP_ALIGN_RIGHT)
@@ -1625,14 +1823,25 @@ gimp_filter_tool_guide_moved (GimpGuide        *guide,
                               const GParamSpec *pspec,
                               GimpFilterTool   *filter_tool)
 {
-  GimpTool          *tool    = GIMP_TOOL (filter_tool);
-  GimpFilterOptions *options = GIMP_FILTER_TOOL_GET_OPTIONS (filter_tool);
+  GimpTool          *tool     = GIMP_TOOL (filter_tool);
+  GimpFilterOptions *options  = GIMP_FILTER_TOOL_GET_OPTIONS (filter_tool);
+  GimpDrawable      *drawable = NULL;
   GimpItem          *item;
   gint               position;
 
-  g_return_if_fail (g_list_length (tool->drawables) == 1);
+  if (! filter_tool->existing_filter)
+    g_return_if_fail (g_list_length (tool->drawables) == 1);
 
-  item = GIMP_ITEM (tool->drawables->data);
+  if (filter_tool->existing_filter)
+    {
+      drawable =
+        gimp_drawable_filter_get_drawable (filter_tool->existing_filter);
+      item = GIMP_ITEM (drawable);
+    }
+  else
+    {
+      item = GIMP_ITEM (tool->drawables->data);
+    }
 
   if (options->preview_split_alignment == GIMP_ALIGN_LEFT ||
       options->preview_split_alignment == GIMP_ALIGN_RIGHT)
@@ -1952,6 +2161,48 @@ gimp_filter_tool_set_config (GimpFilterTool *filter_tool,
     g_signal_connect_object (filter_tool->config, "notify",
                              G_CALLBACK (gimp_filter_tool_unset_setting),
                              G_OBJECT (filter_tool), 0);
+
+  /* If editing a filter, move it to the right location below the existing
+   * filter and set its properties. This should only run when the filter
+   * is initially edited. */
+  if (filter_tool->existing_filter &&
+      gimp_drawable_filter_get_mask (filter_tool->filter) == NULL)
+    {
+      GimpContainer          *filters;
+      GimpDrawableFilterMask *mask;
+      GimpDrawable           *existing_drawable;
+      gint                    index;
+      const gchar            *name = _("Editing filter...");
+
+      /* Get drawable from existing filter, as we might have a different
+       * drawable selected in the layer tree */
+      existing_drawable =
+        gimp_drawable_filter_get_drawable (filter_tool->existing_filter);
+      filters = gimp_drawable_get_filters (existing_drawable);
+
+      mask = gimp_drawable_filter_get_mask (filter_tool->existing_filter);
+      if (filters)
+        {
+          gint existing_index;
+
+          index = gimp_container_get_child_index (filters,
+                                                  GIMP_OBJECT (filter_tool->existing_filter));
+
+          existing_index =
+            gimp_container_get_child_index (filters,
+                                            GIMP_OBJECT (filter_tool->filter));
+
+          if (existing_index > -1)
+            gimp_container_reorder (filters, GIMP_OBJECT (filter_tool->filter),
+                                    index);
+        }
+
+      g_object_set (filter_tool->filter,
+                    "name",      name,
+                    "mask",      mask,
+                    "temporary", TRUE,
+                    NULL);
+    }
 }
 
 void
@@ -1959,14 +2210,18 @@ gimp_filter_tool_edit_as (GimpFilterTool *filter_tool,
                           const gchar    *new_tool_id,
                           GimpConfig     *config)
 {
-  GimpDisplay  *display;
-  GimpContext  *user_context;
-  GimpToolInfo *tool_info;
-  GimpTool     *new_tool;
+  GimpDisplay        *display;
+  GimpContext        *user_context;
+  GimpToolInfo       *tool_info;
+  GimpTool           *new_tool;
+  GimpDrawableFilter *existing_filter = NULL;
 
   g_return_if_fail (GIMP_IS_FILTER_TOOL (filter_tool));
   g_return_if_fail (new_tool_id != NULL);
   g_return_if_fail (GIMP_IS_CONFIG (config));
+
+  if (filter_tool->existing_filter)
+    existing_filter = filter_tool->existing_filter;
 
   display = GIMP_TOOL (filter_tool)->display;
 
@@ -1985,6 +2240,40 @@ gimp_filter_tool_edit_as (GimpFilterTool *filter_tool,
   GIMP_FILTER_TOOL (new_tool)->default_config = g_object_ref (G_OBJECT (config));
 
   gimp_filter_tool_reset (GIMP_FILTER_TOOL (new_tool));
+
+  /* If we're converting an existing filter, set it to inactive and
+   * move the new filter to the right spot as usual */
+  if (filter_tool->existing_filter)
+    {
+      GimpDrawable  *drawable = NULL;
+      GimpContainer *filters  = NULL;
+
+      GIMP_FILTER_TOOL (new_tool)->existing_filter = existing_filter;
+
+      gimp_filter_set_active (GIMP_FILTER (existing_filter), FALSE);
+
+      drawable = gimp_drawable_filter_get_drawable (existing_filter);
+      filters  = gimp_drawable_get_filters (drawable);
+
+      if (filters)
+        {
+          gint index;
+          gint existing_index;
+
+          index =
+            gimp_container_get_child_index (filters,
+                                            GIMP_OBJECT (existing_filter));
+
+          existing_index =
+            gimp_container_get_child_index (filters,
+                                            GIMP_OBJECT (GIMP_FILTER_TOOL (new_tool)->filter));
+
+          if (existing_index > -1)
+            gimp_container_reorder (filters,
+                                    GIMP_OBJECT (GIMP_FILTER_TOOL (new_tool)->filter),
+                                    index);
+        }
+    }
 }
 
 gboolean
@@ -2236,7 +2525,8 @@ gimp_filter_tool_get_drawable_area (GimpFilterTool *filter_tool,
   tool     = GIMP_TOOL (filter_tool);
   settings = GIMP_OPERATION_SETTINGS (filter_tool->config);
 
-  g_return_val_if_fail (g_list_length (tool->drawables) == 1, FALSE);
+  if (! filter_tool->existing_filter)
+    g_return_val_if_fail (g_list_length (tool->drawables) == 1, FALSE);
 
   *drawable_offset_x = 0;
   *drawable_offset_y = 0;
@@ -2246,7 +2536,10 @@ gimp_filter_tool_get_drawable_area (GimpFilterTool *filter_tool,
   drawable_area->width  = 1;
   drawable_area->height = 1;
 
-  drawable = tool->drawables->data;
+  if (filter_tool->existing_filter)
+    drawable = gimp_drawable_filter_get_drawable (filter_tool->existing_filter);
+  else
+    drawable = tool->drawables->data;
 
   if (drawable && settings)
     {

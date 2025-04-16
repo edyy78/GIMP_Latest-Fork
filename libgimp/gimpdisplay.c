@@ -26,7 +26,6 @@
 #include "libgimpbase/gimpwire.h" /* FIXME kill this include */
 
 #include "gimpplugin-private.h"
-#include "gimpprocedure-private.h"
 
 
 enum
@@ -37,9 +36,10 @@ enum
 };
 
 
-struct _GimpDisplayPrivate
+struct _GimpDisplay
 {
-  gint id;
+  GObject parent_instance;
+  gint    id;
 };
 
 
@@ -53,7 +53,7 @@ static void   gimp_display_get_property  (GObject      *object,
                                           GParamSpec   *pspec);
 
 
-G_DEFINE_TYPE_WITH_PRIVATE (GimpDisplay, gimp_display, G_TYPE_OBJECT)
+G_DEFINE_TYPE (GimpDisplay, gimp_display, G_TYPE_OBJECT)
 
 #define parent_class gimp_display_parent_class
 
@@ -82,7 +82,6 @@ gimp_display_class_init (GimpDisplayClass *klass)
 static void
 gimp_display_init (GimpDisplay *display)
 {
-  display->priv = gimp_display_get_instance_private (display);
 }
 
 static void
@@ -96,7 +95,7 @@ gimp_display_set_property (GObject      *object,
   switch (property_id)
     {
     case PROP_ID:
-      display->priv->id = g_value_get_int (value);
+      display->id = g_value_get_int (value);
       break;
 
     default:
@@ -116,7 +115,7 @@ gimp_display_get_property (GObject    *object,
   switch (property_id)
     {
     case PROP_ID:
-      g_value_set_int (value, display->priv->id);
+      g_value_set_int (value, display->id);
       break;
 
     default:
@@ -132,6 +131,9 @@ gimp_display_get_property (GObject    *object,
  * gimp_display_get_id:
  * @display: The display.
  *
+ * Note: in most use cases, you should not need a display's ID which is
+ * mostly internal data and not reusable across sessions.
+ *
  * Returns: the display ID.
  *
  * Since: 3.0
@@ -139,7 +141,7 @@ gimp_display_get_property (GObject    *object,
 gint32
 gimp_display_get_id (GimpDisplay *display)
 {
-  return display ? display->priv->id : -1;
+  return display ? display->id : -1;
 }
 
 /**
@@ -147,6 +149,11 @@ gimp_display_get_id (GimpDisplay *display)
  * @display_id: The display id.
  *
  * Returns a #GimpDisplay representing @display_id.
+ *
+ * Note: in most use cases, you should not need to retrieve a
+ * #GimpDisplay by its ID, which is mostly internal data and not
+ * reusable across sessions. Use the appropriate functions for your use
+ * case instead.
  *
  * Returns: (nullable) (transfer none): a #GimpDisplay for @display_id or
  *          %NULL if @display_id does not represent a valid display.
@@ -160,10 +167,9 @@ gimp_display_get_by_id (gint32 display_id)
 {
   if (display_id > 0)
     {
-      GimpPlugIn    *plug_in   = gimp_get_plug_in ();
-      GimpProcedure *procedure = _gimp_plug_in_get_procedure (plug_in);
+      GimpPlugIn *plug_in = gimp_get_plug_in ();
 
-      return _gimp_procedure_get_display (procedure, display_id);
+      return _gimp_plug_in_get_display (plug_in, display_id);
     }
 
   return NULL;

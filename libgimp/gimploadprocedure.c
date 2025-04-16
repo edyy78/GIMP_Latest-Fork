@@ -56,7 +56,7 @@
  */
 
 
-struct _GimpLoadProcedurePrivate
+typedef struct _GimpLoadProcedurePrivate
 {
   GimpRunLoadFunc  run_func;
   gpointer         run_data;
@@ -64,7 +64,7 @@ struct _GimpLoadProcedurePrivate
 
   gboolean         handles_raw;
   gchar           *thumbnail_proc;
-};
+} GimpLoadProcedurePrivate;
 
 
 static void   gimp_load_procedure_constructed   (GObject              *object);
@@ -80,8 +80,7 @@ static GimpProcedureConfig *
                                                  gint                  n_args);
 
 
-G_DEFINE_TYPE_WITH_PRIVATE (GimpLoadProcedure, gimp_load_procedure,
-                            GIMP_TYPE_FILE_PROCEDURE)
+G_DEFINE_TYPE_WITH_PRIVATE (GimpLoadProcedure, gimp_load_procedure, GIMP_TYPE_FILE_PROCEDURE)
 
 #define parent_class gimp_load_procedure_parent_class
 
@@ -103,7 +102,6 @@ gimp_load_procedure_class_init (GimpLoadProcedureClass *klass)
 static void
 gimp_load_procedure_init (GimpLoadProcedure *procedure)
 {
-  procedure->priv = gimp_load_procedure_get_instance_private (procedure);
 }
 
 static void
@@ -113,27 +111,32 @@ gimp_load_procedure_constructed (GObject *object)
 
   G_OBJECT_CLASS (parent_class)->constructed (object);
 
-  GIMP_PROC_ARG_FILE (procedure, "file",
-                      "File",
-                      "The file to load",
-                      GIMP_PARAM_READWRITE);
+  gimp_procedure_add_file_argument (procedure, "file",
+                                    "File",
+                                    "The file to load",
+                                    GIMP_FILE_CHOOSER_ACTION_OPEN,
+                                    FALSE, NULL,
+                                    GIMP_PARAM_READWRITE);
 
-  GIMP_PROC_VAL_IMAGE (procedure, "image",
-                       "Image",
-                       "Output image",
-                       TRUE,
-                       GIMP_PARAM_READWRITE);
+  gimp_procedure_add_image_return_value (procedure, "image",
+                                         "Image",
+                                         "Output image",
+                                         TRUE,
+                                         GIMP_PARAM_READWRITE);
 }
 
 static void
 gimp_load_procedure_finalize (GObject *object)
 {
-  GimpLoadProcedure *procedure = GIMP_LOAD_PROCEDURE (object);
+  GimpLoadProcedure        *procedure = GIMP_LOAD_PROCEDURE (object);
+  GimpLoadProcedurePrivate *priv;
 
-  if (procedure->priv->run_data_destroy)
-    procedure->priv->run_data_destroy (procedure->priv->run_data);
+  priv = gimp_load_procedure_get_instance_private (procedure);
 
-  g_clear_pointer (&procedure->priv->thumbnail_proc, g_free);
+  if (priv->run_data_destroy)
+    priv->run_data_destroy (priv->run_data);
+
+  g_clear_pointer (&priv->thumbnail_proc, g_free);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -141,10 +144,13 @@ gimp_load_procedure_finalize (GObject *object)
 static void
 gimp_load_procedure_install (GimpProcedure *procedure)
 {
-  GimpLoadProcedure *load_proc = GIMP_LOAD_PROCEDURE (procedure);
-  GimpFileProcedure *file_proc = GIMP_FILE_PROCEDURE (procedure);
-  const gchar       *mime_types;
-  gint               priority;
+  GimpLoadProcedurePrivate *priv;
+  GimpLoadProcedure        *load_proc = GIMP_LOAD_PROCEDURE (procedure);
+  GimpFileProcedure        *file_proc = GIMP_FILE_PROCEDURE (procedure);
+  const gchar              *mime_types;
+  gint                      priority;
+
+  priv = gimp_load_procedure_get_instance_private (load_proc);
 
   GIMP_PROCEDURE_CLASS (parent_class)->install (procedure);
 
@@ -166,12 +172,12 @@ gimp_load_procedure_install (GimpProcedure *procedure)
     _gimp_pdb_set_file_proc_priority (gimp_procedure_get_name (procedure),
                                       priority);
 
-  if (load_proc->priv->handles_raw)
+  if (priv->handles_raw)
     _gimp_pdb_set_file_proc_handles_raw (gimp_procedure_get_name (procedure));
 
-  if (load_proc->priv->thumbnail_proc)
+  if (priv->thumbnail_proc)
     _gimp_pdb_set_file_proc_thumbnail_loader (gimp_procedure_get_name (procedure),
-                                              load_proc->priv->thumbnail_proc);
+                                              priv->thumbnail_proc);
 }
 
 #define ARG_OFFSET 2
@@ -180,19 +186,22 @@ static GimpValueArray *
 gimp_load_procedure_run (GimpProcedure        *procedure,
                          const GimpValueArray *args)
 {
-  GimpPlugIn            *plug_in;
-  GimpLoadProcedure     *load_proc = GIMP_LOAD_PROCEDURE (procedure);
-  GimpValueArray        *remaining;
-  GimpValueArray        *return_values;
-  GimpProcedureConfig   *config;
-  GimpImage             *image    = NULL;
-  GimpMetadata          *metadata = NULL;
-  gchar                 *mimetype = NULL;
-  GimpMetadataLoadFlags  flags    = GIMP_METADATA_LOAD_ALL;
-  GimpPDBStatusType      status   = GIMP_PDB_EXECUTION_ERROR;
-  GimpRunMode            run_mode;
-  GFile                 *file;
-  gint                   i;
+  GimpLoadProcedurePrivate *priv;
+  GimpPlugIn               *plug_in;
+  GimpLoadProcedure        *load_proc = GIMP_LOAD_PROCEDURE (procedure);
+  GimpValueArray           *remaining;
+  GimpValueArray           *return_values;
+  GimpProcedureConfig      *config;
+  GimpImage                *image    = NULL;
+  GimpMetadata             *metadata = NULL;
+  gchar                    *mimetype = NULL;
+  GimpMetadataLoadFlags     flags    = GIMP_METADATA_LOAD_ALL;
+  GimpPDBStatusType         status   = GIMP_PDB_EXECUTION_ERROR;
+  GimpRunMode               run_mode;
+  GFile                    *file;
+  gint                      i;
+
+  priv = gimp_load_procedure_get_instance_private (load_proc);
 
   run_mode = GIMP_VALUES_GET_ENUM (args, 0);
   file     = GIMP_VALUES_GET_FILE (args, 1);
@@ -206,7 +215,7 @@ gimp_load_procedure_run (GimpProcedure        *procedure,
       gimp_value_array_append (remaining, value);
     }
 
-  config   = gimp_procedure_create_config (procedure);
+  config   = _gimp_procedure_create_run_config (procedure);
   mimetype = (gchar *) gimp_file_procedure_get_mime_types (GIMP_FILE_PROCEDURE (procedure));
 
   if (mimetype != NULL)
@@ -239,14 +248,11 @@ gimp_load_procedure_run (GimpProcedure        *procedure,
   if (metadata == NULL)
     metadata = gimp_metadata_new ();
 
-  _gimp_procedure_config_begin_run (config, image, run_mode, remaining);
+  _gimp_procedure_config_begin_run (config, image, run_mode, remaining, NULL);
 
-  return_values = load_proc->priv->run_func (procedure,
-                                             run_mode,
-                                             file,
-                                             metadata, &flags,
-                                             config,
-                                             load_proc->priv->run_data);
+  return_values = priv->run_func (procedure, run_mode,
+                                  file, metadata, &flags,
+                                  config, priv->run_data);
 
   if (return_values != NULL                       &&
       gimp_value_array_length (return_values) > 0 &&
@@ -276,7 +282,7 @@ gimp_load_procedure_run (GimpProcedure        *procedure,
     }
 
   if (image != NULL && metadata != NULL && flags != GIMP_METADATA_LOAD_NONE)
-    gimp_image_metadata_load_finish (image, NULL, metadata, flags);
+    _gimp_image_metadata_load_finish (image, NULL, metadata, flags);
 
   /* This is debug printing to help plug-in developers figure out best
    * practices.
@@ -284,7 +290,7 @@ gimp_load_procedure_run (GimpProcedure        *procedure,
   plug_in = gimp_procedure_get_plug_in (procedure);
   if (G_OBJECT (config)->ref_count > 1 &&
       _gimp_plug_in_manage_memory_manually (plug_in))
-    g_printerr ("%s: ERROR: the GimpSaveProcedureConfig object was refed "
+    g_printerr ("%s: ERROR: the GimpExportProcedureConfig object was refed "
                 "by plug-in, it MUST NOT do that!\n", G_STRFUNC);
 
   g_object_unref (config);
@@ -344,12 +350,13 @@ gimp_load_procedure_new (GimpPlugIn      *plug_in,
                          gpointer         run_data,
                          GDestroyNotify   run_data_destroy)
 {
-  GimpLoadProcedure *procedure;
+  GimpLoadProcedure        *procedure;
+  GimpLoadProcedurePrivate *priv;
 
   g_return_val_if_fail (GIMP_IS_PLUG_IN (plug_in), NULL);
   g_return_val_if_fail (gimp_is_canonical_identifier (name), NULL);
   g_return_val_if_fail (proc_type != GIMP_PDB_PROC_TYPE_INTERNAL, NULL);
-  g_return_val_if_fail (proc_type != GIMP_PDB_PROC_TYPE_EXTENSION, NULL);
+  g_return_val_if_fail (proc_type != GIMP_PDB_PROC_TYPE_PERSISTENT, NULL);
   g_return_val_if_fail (run_func != NULL, NULL);
 
   procedure = g_object_new (GIMP_TYPE_LOAD_PROCEDURE,
@@ -358,9 +365,11 @@ gimp_load_procedure_new (GimpPlugIn      *plug_in,
                             "procedure-type", proc_type,
                             NULL);
 
-  procedure->priv->run_func         = run_func;
-  procedure->priv->run_data         = run_data;
-  procedure->priv->run_data_destroy = run_data_destroy;
+  priv = gimp_load_procedure_get_instance_private (procedure);
+
+  priv->run_func         = run_func;
+  priv->run_data         = run_data;
+  priv->run_data_destroy = run_data_destroy;
 
   return GIMP_PROCEDURE (procedure);
 }
@@ -372,15 +381,22 @@ gimp_load_procedure_new (GimpPlugIn      *plug_in,
  *
  * Registers a load procedure as capable of handling raw digital camera loads.
  *
+ * Note that you cannot call this function on [class@VectorLoadProcedure]
+ * subclass objects.
+ *
  * Since: 3.0
  **/
 void
 gimp_load_procedure_set_handles_raw (GimpLoadProcedure *procedure,
                                      gint               handles_raw)
 {
+  GimpLoadProcedurePrivate *priv;
+
   g_return_if_fail (GIMP_IS_LOAD_PROCEDURE (procedure));
 
-  procedure->priv->handles_raw = handles_raw;
+  priv = gimp_load_procedure_get_instance_private (procedure);
+
+  priv->handles_raw = handles_raw;
 }
 
 /**
@@ -397,9 +413,13 @@ gimp_load_procedure_set_handles_raw (GimpLoadProcedure *procedure,
 gint
 gimp_load_procedure_get_handles_raw (GimpLoadProcedure *procedure)
 {
+  GimpLoadProcedurePrivate *priv;
+
   g_return_val_if_fail (GIMP_IS_LOAD_PROCEDURE (procedure), 0);
 
-  return procedure->priv->handles_raw;
+  priv = gimp_load_procedure_get_instance_private (procedure);
+
+  return priv->handles_raw;
 }
 
 /**
@@ -422,10 +442,13 @@ void
 gimp_load_procedure_set_thumbnail_loader (GimpLoadProcedure *procedure,
                                           const gchar       *thumbnail_proc)
 {
+  GimpLoadProcedurePrivate *priv;
+
   g_return_if_fail (GIMP_IS_LOAD_PROCEDURE (procedure));
 
-  g_free (procedure->priv->thumbnail_proc);
-  procedure->priv->thumbnail_proc = g_strdup (thumbnail_proc);
+  priv = gimp_load_procedure_get_instance_private (procedure);
+  g_free (priv->thumbnail_proc);
+  priv->thumbnail_proc = g_strdup (thumbnail_proc);
 }
 
 /**
@@ -442,7 +465,11 @@ gimp_load_procedure_set_thumbnail_loader (GimpLoadProcedure *procedure,
 const gchar *
 gimp_load_procedure_get_thumbnail_loader (GimpLoadProcedure *procedure)
 {
+  GimpLoadProcedurePrivate *priv;
+
   g_return_val_if_fail (GIMP_IS_LOAD_PROCEDURE (procedure), NULL);
 
-  return procedure->priv->thumbnail_proc;
+  priv = gimp_load_procedure_get_instance_private (procedure);
+
+  return priv->thumbnail_proc;
 }

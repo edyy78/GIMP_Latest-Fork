@@ -62,18 +62,7 @@ preamble = """<!DOCTYPE html>
 
 postamble = """\n</pre>\n</body>\n</html>\n"""
 
-fmt_from_bpp = {
-        3: 'BBB',
-        6: 'HHH',
-        12: 'III'
-}
-
-def save_colorxhtml(procedure, run_mode, image, n_layers, layers, file, metadata, config, data):
-    source_file = config.get_property("source-file")
-    characters  = config.get_property("characters")
-    size        = config.get_property("font-size");
-    separate    = config.get_property("separate")
-
+def export_colorxhtml(procedure, run_mode, image, file, options, metadata, config, data):
     if file is None:
         error = 'No file given'
         return procedure.new_return_values(Gimp.PDBStatusType.CALLING_ERROR,
@@ -84,98 +73,31 @@ def save_colorxhtml(procedure, run_mode, image, n_layers, layers, file, metadata
         gi.require_version('Gtk', '3.0')
         from gi.repository import Gtk
 
-        GimpUi.init ("file-colorxhtml-save")
+        GimpUi.init ("file-colorxhtml-export")
 
-        use_header_bar = Gtk.Settings.get_default().get_property("gtk-dialogs-use-header")
-        dialog = Gtk.Dialog(use_header_bar=use_header_bar,
-                            title=_("Save as colored HTML text..."))
-        dialog.add_button(_("_Cancel"), Gtk.ResponseType.CANCEL)
-        dialog.add_button(_("_OK"), Gtk.ResponseType.OK)
+        dialog = GimpUi.ProcedureDialog.new(procedure, config, _("Save as colored HTML text..."))
 
-        choose_file_dialog = Gtk.FileChooserDialog(use_header_bar=use_header_bar,
-                                       title=_("Read characters from file..."),
-                                       action=Gtk.FileChooserAction.OPEN)
-        choose_file_dialog.add_button(_("_Cancel"), Gtk.ResponseType.CANCEL)
-        choose_file_dialog.add_button(_("_OK"), Gtk.ResponseType.OK)
+        dialog.fill_frame("file-frame", "source-file", False, "aux-file")
+        # Set the characters text field as not enabled when the user chooses a file
+        dialog.set_sensitive("characters", True, config, "source-file", True)
 
-        def choose_file(button, user_data=None):
-            choose_file_dialog.show()
-            if choose_file_dialog.run() == Gtk.ResponseType.OK:
-                characters_entry.set_text(choose_file_dialog.get_filename())
+        dialog.fill(["characters", "file-frame", "font-size", "separate"])
 
-            choose_file_dialog.hide()
-
-        grid = Gtk.Grid()
-        grid.set_column_homogeneous(False)
-        grid.set_border_width(10)
-        grid.set_column_spacing(10)
-        grid.set_row_spacing(10)
-
-        row = 0
-        label = Gtk.Label(label=_("Characters"))
-        label.set_tooltip_text(_("Characters that will be used as colored pixels. "))
-
-        grid.attach(label, 0, row, 1 , 1)
-        label.show()
-
-        characters_entry = Gtk.Entry()
-        characters_entry.set_width_chars(20)
-        characters_entry.set_max_width_chars(80)
-        characters_entry.set_text(characters)
-        characters_entry.set_placeholder_text(_("Characters or file location"))
-        grid.attach(characters_entry, 1, row, 1, 1)
-        characters_entry.show()
-
-        row += 1
-
-        characters_checkbox = Gtk.CheckButton(label=_("Read characters from file"))
-        characters_checkbox.set_active(source_file)
-        characters_checkbox.set_tooltip_text(
-            _("If set, the Characters text entry will be used as a file name, "
-              "from which the characters will be read. Otherwise, the characters "
-              "in the text entry will be used to render the image."))
-        grid.attach(characters_checkbox, 0, row, 1, 1)
-        characters_checkbox.show()
-
-        choose_file_button = Gtk.Button(label=_("Choose file"))
-        grid.attach(choose_file_button, 1, row, 1, 1)
-        choose_file_button.connect("clicked", choose_file)
-        choose_file_button.show()
-
-        row += 1
-
-        label = Gtk.Label(label=_("Font Size(px)"))
-        grid.attach(label, 0, row, 1 , 1)
-        label.show()
-
-        font_size_adj = Gtk.Adjustment.new(size, 0.0, 100.0, 1.0, 0.0, 0.0)
-        font_size_spin = Gtk.SpinButton.new(font_size_adj, climb_rate=1.0, digits=0)
-        font_size_spin.set_numeric(True)
-        grid.attach(font_size_spin, 1, row, 1 , 1)
-        font_size_spin.show()
-
-        row += 1
-
-        separate_checkbox = Gtk.CheckButton(label=_("Write separate CSS file"))
-        separate_checkbox.set_active(separate)
-        grid.attach(separate_checkbox, 0, row, 2, 1)
-        separate_checkbox.show()
-
-        dialog.get_content_area().add(grid)
-        grid.show()
-
-        dialog.show()
-        if dialog.run() == Gtk.ResponseType.OK:
-            separate = separate_checkbox.get_active()
-            size = font_size_spin.get_value_as_int()
-            source_file = characters_checkbox.get_active()
-            characters = characters_entry.get_text()
-        else:
+        if not dialog.run():
             return procedure.new_return_values(Gimp.PDBStatusType.CANCEL,
                                                GLib.Error())
 
+    source_file = config.get_property("source-file")
+    characters  = config.get_property("characters")
+    size        = config.get_property("font-size");
+    separate    = config.get_property("separate")
+    aux_file    = config.get_property("aux-file")
+
+    if source_file and aux_file:
+        characters = aux_file.get_path()
+
     #For now, work with a single layer
-    layer = layers[0]
+    layer = image.get_layers()[0]
 
     width = layer.get_width()
     height = layer.get_height()
@@ -227,11 +149,6 @@ def save_colorxhtml(procedure, run_mode, image, n_layers, layers, file, metadata
     colors = {}
     chars = []
 
-    # Constants used for formatting the pixel color. We can handle image
-    # types where each color is 8 bits, 16 bits, or 32 bit integers.
-    fmt = fmt_from_bpp[bpp]
-    pixel_shift = 8 * (bpp//3 - 1)
-
     for y in range(0, height):
 
         # The characters in "chars" will be used to draw the next row.
@@ -240,16 +157,12 @@ def save_colorxhtml(procedure, run_mode, image, n_layers, layers, file, metadata
             chars[0:0] = data
 
         for x in range(0, width):
-            # gimp_drawable_get_pixel() was removed mistakenly in commit
-            # 89c359ce47. This must get fixed.
-            pixel_bytes = layer.get_pixel(x, y)
-            pixel_tuple = struct.unpack(fmt, pixel_bytes)
-            if bpp > 3:
-                 pixel_tuple=(
-                   pixel_tuple[0] >> pixel_shift,
-                   pixel_tuple[1] >> pixel_shift,
-                   pixel_tuple[2] >> pixel_shift,
-                 )
+            pixel_color = layer.get_pixel(x, y)
+            pixel_rgb = pixel_color.get_rgba()
+            pixel_tuple = (int(pixel_rgb[0] * 255),
+                           int(pixel_rgb[1] * 255),
+                           int(pixel_rgb[2] * 255))
+
             color = '%02x%02x%02x' % pixel_tuple
             style = 'background-color:black; color:#%s;' % color
             char = chars.pop()
@@ -280,43 +193,19 @@ def save_colorxhtml(procedure, run_mode, image, n_layers, layers, file, metadata
 
 
 class ColorXhtml(Gimp.PlugIn):
-    ## Parameters ##
-    __gproperties__ = {
-        "source-file":(bool,
-                     _("_Read characters from file, if true, or use text entry"),
-                     _("_Read characters from file, if true, or use text entry"),
-                      False,
-                     GObject.ParamFlags.READWRITE),
-        "characters": (str,
-                      _("_File to read or characters to use"),
-                      _("_File to read or characters to use"),
-                      "foo",
-                      GObject.ParamFlags.READWRITE),
-        "font-size": (int,
-                      _("Fo_nt size in pixels"),
-                      _("Fo_nt size in pixels"),
-                      5, 100, 10,
-                      GObject.ParamFlags.READWRITE),
-        "separate": (bool,
-                     _("_Write a separate CSS file"),
-                     _("_Write a separate CSS file"),
-                      False,
-                     GObject.ParamFlags.READWRITE)
-    }
-
     ## GimpPlugIn virtual methods ##
     def do_set_i18n(self, procname):
         return True, 'gimp30-python', None
 
     def do_query_procedures(self):
-        return [ 'file-colorxhtml-save' ]
+        return [ 'file-colorxhtml-export' ]
 
     def do_create_procedure(self, name):
         procedure = None
-        if name == 'file-colorxhtml-save':
-            procedure = Gimp.SaveProcedure.new(self, name,
-                                               Gimp.PDBProcType.PLUGIN,
-                                               False, save_colorxhtml, None)
+        if name == 'file-colorxhtml-export':
+            procedure = Gimp.ExportProcedure.new(self, name,
+                                                 Gimp.PDBProcType.PLUGIN,
+                                                 False, export_colorxhtml, None)
             procedure.set_image_types("RGB")
             procedure.set_documentation (
                 _("Save as colored HTML text"),
@@ -329,10 +218,23 @@ class ColorXhtml(Gimp.PlugIn):
 
             procedure.set_extensions ("html,xhtml");
 
-            procedure.add_argument_from_property(self, "source-file")
-            procedure.add_argument_from_property(self, "characters")
-            procedure.add_argument_from_property(self, "font-size")
-            procedure.add_argument_from_property(self, "separate")
+            procedure.add_boolean_argument ("source-file",
+                                            _("Rea_d characters from file"),
+                                            _("Read characters from file, if true, or use text entry"),
+                                            False, GObject.ParamFlags.READWRITE)
+            procedure.add_string_argument ("characters", _("Charac_ters"),
+                                           _("Characters that will be used as colored pixels."),
+                                           "foo", GObject.ParamFlags.READWRITE)
+            procedure.add_int_argument ("font-size", _("Fo_nt size in pixels"),
+                                        _("Font size in pixels"), 5, 100, 10,
+                                        GObject.ParamFlags.READWRITE)
+            procedure.add_boolean_argument ("separate", _("_Write a separate CSS file"),
+                                            _("Write a separate CSS file"),
+                                            False, GObject.ParamFlags.READWRITE)
+            #GUI only, used to create a widget to open a file if source-file is enabled
+            procedure.add_file_aux_argument ("aux-file", _("Choose File"),
+                                             "", Gimp.FileChooserAction.SAVE,
+                                             False, None, GObject.ParamFlags.READWRITE)
 
         return procedure
 

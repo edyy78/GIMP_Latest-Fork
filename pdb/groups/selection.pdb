@@ -181,12 +181,8 @@ HELP
     $lib_private = 1;
 
     @inargs = (
-        { name => 'drawables', type => 'itemarray',
-	  desc => 'The drawables from which to float selection',
-          no_validate => 1,
-          array => { name => 'num_drawables',
-                     type => '1 <= int32',
-                     desc => "The number of drawables" } },
+        { name => 'drawables', type => 'drawablearray',
+	  desc => 'The drawables from which to float selection' },
 	{ name => 'offx', type => 'int32',
 	  desc => 'x offset for translation' },
 	{ name => 'offy', type => 'int32',
@@ -204,17 +200,17 @@ HELP
   GimpImage *image = NULL;
   gint       i;
 
-  if (num_drawables < 1)
+  if (drawables == NULL || drawables[0] == NULL)
     {
       success = FALSE;
     }
   else
     {
-      for (i = 0; i < num_drawables; i++)
+      for (i = 0; drawables[i] != NULL; i++)
         {
           if (! gimp_pdb_item_is_attached (GIMP_ITEM (drawables[i]), NULL,
-                                           GIMP_PDB_ITEM_CONTENT, error) ||
-              gimp_pdb_item_is_group (GIMP_ITEM (drawables[i]), error)   ||
+                                           GIMP_PDB_ITEM_CONTENT, error)     ||
+              ! gimp_pdb_item_is_not_group (GIMP_ITEM (drawables[i]), error) ||
               (image && image != gimp_item_get_image (GIMP_ITEM (drawables[i]))))
             {
               success = FALSE;
@@ -231,7 +227,7 @@ HELP
     {
       GList *drawable_list = NULL;
 
-      for (i = 0; i < num_drawables; i++)
+      for (i = 0; drawables[i] != NULL; i++)
         drawable_list = g_list_prepend (drawable_list, (gpointer) drawables[i]);
 
       layer = gimp_selection_float (GIMP_SELECTION (gimp_image_get_mask (image)),
@@ -357,7 +353,7 @@ HELP
     @inargs = (
 	{ name => 'image', type => 'image',
 	  desc => 'The image' },
-	{ name => 'radius', type => '0 <= float',
+	{ name => 'radius', type => '0 <= double',
 	  desc => 'Radius of feather (in pixels)' }
     );
 

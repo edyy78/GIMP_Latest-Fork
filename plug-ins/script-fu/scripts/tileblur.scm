@@ -19,16 +19,25 @@
 
   (let* (
         (theImage inImage)
-        (theLayer (aref (cadr (gimp-image-get-selected-drawables theImage)) 0))
+        (theLayer (vector-ref (car (gimp-image-get-selected-drawables theImage)) 0))
         (theHeight (car (gimp-drawable-get-height theLayer)))
         (theWidth (car (gimp-drawable-get-width theLayer)))
+        (horizontalRadius (* 0.32 inRadius))
+        (verticalRadius (* 0.32 inRadius))
         )
+
+    (if (= inHoriz FALSE)
+        (set! horizontalRadius 0)
+    )
+    (if (= inVert FALSE)
+        (set! verticalRadius 0)
+    )
 
     (define (pasteat xoff yoff)
       (let* (
-             (pasted (gimp-edit-paste theLayer FALSE))
-             (num-pasted (car pasted))
-             (floating-sel (aref (cadr pasted) (- num-pasted 1)))
+             (pasted (car (gimp-edit-paste theLayer FALSE)))
+             (num-pasted (vector-length pasted))
+             (floating-sel (vector-ref pasted (- num-pasted 1)))
             )
         (gimp-layer-set-offsets floating-sel (* xoff theWidth) (* yoff theHeight) )
         (gimp-floating-sel-anchor floating-sel)
@@ -42,7 +51,7 @@
     (gimp-layer-resize theLayer (* 3 theWidth) (* 3 theHeight) 0 0)
 
     (gimp-image-select-rectangle theImage CHANNEL-OP-REPLACE 0 0 theWidth theHeight)
-    (gimp-edit-cut 1 (vector theLayer))
+    (gimp-edit-cut (vector theLayer))
 
     (gimp-selection-none theImage)
     (gimp-layer-set-offsets theLayer theWidth theHeight)
@@ -52,12 +61,8 @@
     (pasteat 3 1) (pasteat 3 2) (pasteat 3 3)
 
     (gimp-selection-none theImage)
-    (if (= inType 0)
-        (plug-in-gauss-iir RUN-NONINTERACTIVE
-                           theImage theLayer inRadius inHoriz inVert)
-        (plug-in-gauss-rle RUN-NONINTERACTIVE
-                           theImage theLayer inRadius inHoriz inVert)
-    )
+    (gimp-drawable-merge-new-filter theLayer "gegl:gaussian-blur" 0 LAYER-MODE-REPLACE 1.0
+                                    "std-dev-x" horizontalRadius "std-dev-y" verticalRadius "filter" "auto")
 
     (gimp-layer-resize theLayer
                        theWidth theHeight (- 0 theWidth) (- 0 theHeight))

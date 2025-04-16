@@ -66,7 +66,6 @@ static GimpProcedure  * map_create_procedure (GimpPlugIn           *plug_in,
 static GimpValueArray * map_run              (GimpProcedure        *procedure,
                                               GimpRunMode           run_mode,
                                               GimpImage            *image,
-                                              gint                  n_drawables,
                                               GimpDrawable        **drawables,
                                               GimpProcedureConfig  *config,
                                               gpointer              run_data);
@@ -196,7 +195,6 @@ static GimpValueArray *
 map_run (GimpProcedure        *procedure,
          GimpRunMode           run_mode,
          GimpImage            *image,
-         gint                  n_drawables,
          GimpDrawable        **drawables,
          GimpProcedureConfig  *config,
          gpointer              run_data)
@@ -208,7 +206,7 @@ map_run (GimpProcedure        *procedure,
 
   gegl_init (NULL, NULL);
 
-  if (n_drawables != 1)
+  if (gimp_core_object_array_get_length ((GObject **) drawables) != 1)
     {
       GError *error = NULL;
 
@@ -416,25 +414,34 @@ map (GeglBuffer   *buffer,
 static gdouble *
 get_samples_gradient (GimpDrawable *drawable)
 {
-  GimpGradient *gradient;
-
-  gint     n_d_samples;
-  gdouble *d_samples = NULL;
+  GimpGradient  *gradient;
+  GeglColor    **colors;
+  const Babl    *format_dst;
+  gdouble       *d_samples;
+  gint           bpp;
 
   gradient = gimp_context_get_gradient ();
 
   /* FIXME: "reverse" hardcoded to FALSE. */
-  gimp_gradient_get_uniform_samples (gradient, NSAMPLES, FALSE,
-                                     &n_d_samples, &d_samples);
+  colors = gimp_gradient_get_uniform_samples (gradient, NSAMPLES, FALSE);
 
-  if (! gimp_drawable_is_rgb (drawable))
+  if (gimp_drawable_is_rgb (drawable))
     {
-      const Babl *format_src = babl_format ("R'G'B'A double");
-      const Babl *format_dst = babl_format ("Y'A double");
-      const Babl *fish = babl_fish (format_src, format_dst);
-
-      babl_process (fish, d_samples, d_samples, NSAMPLES);
+      format_dst = babl_format ("R'G'B'A double");
+      bpp        = 4;
     }
+  else
+    {
+      format_dst = babl_format ("Y'A double");
+      bpp        = 2;
+    }
+
+  d_samples = g_new0 (gdouble, NSAMPLES * bpp);
+
+  for (gint i = 0; colors[i] != NULL; i++)
+    gegl_color_get_pixel (colors[i], format_dst, &d_samples[i * bpp]);
+
+  gimp_color_array_free (colors);
 
   return d_samples;
 }
@@ -474,7 +481,7 @@ get_samples_palette (GimpDrawable *drawable)
       d_samp = &d_samples[i * nb_chan];
       pal_entry = CLAMP ((int)(i * factor), 0, num_colors - 1);
 
-      color_sample = gimp_palette_entry_get_color (palette, pal_entry);
+      color_sample = gimp_palette_get_entry_color (palette, pal_entry);
       gegl_color_get_pixel (color_sample, format, d_samp);
     }
 

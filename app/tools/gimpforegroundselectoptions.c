@@ -115,7 +115,7 @@ gimp_foreground_select_options_class_init (GimpForegroundSelectOptionsClass *kla
                            "mask-color",
                            _("Preview color"),
                            _("Color of selection preview mask"),
-                           blue,
+                           TRUE, blue,
                            GIMP_PARAM_STATIC_STRINGS);
   g_object_unref (blue);
 
@@ -129,7 +129,7 @@ gimp_foreground_select_options_class_init (GimpForegroundSelectOptionsClass *kla
 
   GIMP_CONFIG_PROP_INT  (object_class, PROP_LEVELS,
                          "levels",
-                         _("Levels"),
+                         C_("measurement", "Levels"),
                          _("Number of downsampled levels to use"),
                          1, 10, 2,
                          GIMP_PARAM_STATIC_STRINGS);
@@ -338,10 +338,10 @@ gimp_foreground_select_options_gui (GimpToolOptions *tool_options)
   gtk_box_pack_start (GTK_BOX (vbox), frame, TRUE, TRUE, 0);
 
   /*  mask color */
-  button = gimp_prop_gegl_color_button_new (config, "mask-color",
-                                            NULL,
-                                            128, 24,
-                                            GIMP_COLOR_AREA_SMALL_CHECKS);
+  button = gimp_prop_color_button_new (config, "mask-color",
+                                       NULL,
+                                       128, 24,
+                                       GIMP_COLOR_AREA_SMALL_CHECKS);
   gimp_color_panel_set_context (GIMP_COLOR_PANEL (button),
                                 GIMP_CONTEXT (config));
   gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);

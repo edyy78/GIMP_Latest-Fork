@@ -128,14 +128,14 @@ error_console_save_cmd_callback (GimpAction *action,
                         G_CALLBACK (gtk_true),
                         NULL);
 
-      gimp_help_connect (dialog, gimp_standard_help_func,
+      gimp_help_connect (dialog, NULL, gimp_standard_help_func,
                          GIMP_HELP_ERRORS_DIALOG, NULL, NULL);
     }
 
   gtk_window_present (GTK_WINDOW (console->file_dialog));
 
 #ifdef G_OS_WIN32
-  gimp_window_set_title_bar_theme (console->gimp, console->file_dialog, FALSE);
+  gimp_window_set_title_bar_theme (console->gimp, console->file_dialog);
 #endif
 }
 

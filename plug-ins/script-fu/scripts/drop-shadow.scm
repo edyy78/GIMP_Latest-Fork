@@ -36,7 +36,7 @@
 
 
 (define (script-fu-drop-shadow image
-                               drawable
+                               drawables
                                shadow-transl-x
                                shadow-transl-y
                                shadow-blur
@@ -44,6 +44,7 @@
                                shadow-opacity
                                allow-resize)
   (let* (
+        (drawable (vector-ref drawables 0))
         (shadow-blur (max shadow-blur 0))
         (shadow-opacity (min shadow-opacity 100))
         (shadow-opacity (max shadow-opacity 0))
@@ -58,7 +59,7 @@
   (gimp-context-push)
   (gimp-context-set-defaults)
 
-  (gimp-image-set-selected-layers image 1 (make-vector 1 drawable))
+  (gimp-image-set-selected-layers image (make-vector 1 drawable))
 
   (gimp-image-undo-group-start image)
 
@@ -122,13 +123,13 @@
     )
 
     (set! shadow-layer (car (gimp-layer-new image
+                                            "Drop Shadow"
                                             shadow-width
                                             shadow-height
                                             type
-                                            "Drop Shadow"
                                             shadow-opacity
                                             LAYER-MODE-NORMAL)))
-    (gimp-image-set-selected-layers image 1 (make-vector 1 drawable))
+    (gimp-image-set-selected-layers image (make-vector 1 drawable))
     (gimp-image-insert-layer image shadow-layer 0 -1)
     (gimp-layer-set-offsets shadow-layer
                             shadow-offset-x
@@ -139,12 +140,11 @@
   (gimp-drawable-edit-fill shadow-layer FILL-BACKGROUND)
   (gimp-selection-none image)
   (gimp-layer-set-lock-alpha shadow-layer FALSE)
-  (if (>= shadow-blur 1.0) (plug-in-gauss-rle RUN-NONINTERACTIVE
-                                              image
-                                              shadow-layer
-                                              shadow-blur
-                                              TRUE
-                                              TRUE))
+  (if (>= shadow-blur 1.0)
+    (gimp-drawable-merge-new-filter shadow-layer "gegl:gaussian-blur" 0 LAYER-MODE-REPLACE 1.0 "std-dev-x" (* 0.32 shadow-blur)
+                                                                                               "std-dev-y" (* 0.32 shadow-blur)
+                                                                                               "filter" "auto")
+    )
   (gimp-item-transform-translate shadow-layer shadow-transl-x shadow-transl-y)
 
   (if (= from-selection TRUE)
@@ -158,7 +158,7 @@
        (= from-selection FALSE))
       (gimp-image-raise-item image drawable))
 
-  (gimp-image-set-selected-layers image 1 (make-vector 1 drawable))
+  (gimp-image-set-selected-layers image (make-vector 1 drawable))
   (gimp-image-undo-group-end image)
   (gimp-displays-flush)
 
@@ -166,15 +166,14 @@
   )
 )
 
-(script-fu-register "script-fu-drop-shadow"
+(script-fu-register-filter "script-fu-drop-shadow"
   _"_Drop Shadow (legacy)..."
   _"Add a drop shadow to the selected region (or alpha)"
   "Sven Neumann <sven@gimp.org>"
   "Sven Neumann"
   "1999/12/21"
   "RGB* GRAY*"
-  SF-IMAGE      "Image"           0
-  SF-DRAWABLE   "Drawable"        0
+  SF-ONE-OR-MORE-DRAWABLE
   SF-ADJUSTMENT _"Offset X"       '(4 -4096 4096 1 10 0 1)
   SF-ADJUSTMENT _"Offset Y"       '(4 -4096 4096 1 10 0 1)
   SF-ADJUSTMENT _"Blur radius"    '(15 0 1024 1 10 0 1)

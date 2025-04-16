@@ -24,10 +24,15 @@
 
 #include "core-types.h"
 
+#include "gimpcoreapp.h"
+
 #include "gimp.h"
 #include "gimpbrush.h"
+#include "gimpcontext.h"
 #include "gimpdisplay.h"
+#include "gimpdrawablefilter.h"
 #include "gimpgradient.h"
+#include "gimpgrouplayer.h"
 #include "gimpimage.h"
 #include "gimplayer.h"
 #include "gimplayermask.h"
@@ -39,7 +44,7 @@
 #include "text/gimpfont.h"
 #include "text/gimptextlayer.h"
 
-#include "vectors/gimpvectors.h"
+#include "vectors/gimppath.h"
 
 
 /*

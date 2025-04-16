@@ -35,10 +35,26 @@ G_BEGIN_DECLS
  *
  * Since 3.0
  */
-/*
- * Keep in sync with libgimpconfig/gimpconfig-params.h
+#define GIMP_PARAM_NO_VALIDATE    (1 << (0 + G_PARAM_USER_SHIFT))
+
+/**
+ * GIMP_PARAM_DONT_SERIALIZE:
+ *
+ * This property will be ignored when serializing and deserializing.
+ * This is useful for GimpProcedure arguments for which you never want
+ * the last run values to be restored.
+ *
+ * Since 3.0
  */
-#define GIMP_PARAM_NO_VALIDATE (1 << (6 + G_PARAM_USER_SHIFT))
+#define GIMP_PARAM_DONT_SERIALIZE (1 << (1 + G_PARAM_USER_SHIFT))
+
+/**
+ * GIMP_PARAM_FLAG_SHIFT:
+ *
+ * Minimum shift count to be used for libgimpconfig defined
+ * [flags@GObject.ParamFlags] (see libgimpconfig/gimpconfig-params.h).
+ */
+#define GIMP_PARAM_FLAG_SHIFT     (2 + G_PARAM_USER_SHIFT)
 
 /**
  * GIMP_PARAM_STATIC_STRINGS:
@@ -75,31 +91,92 @@ G_BEGIN_DECLS
 
 
 /*
- * GIMP_TYPE_PARAM_CHOICE
+ * GIMP_TYPE_PARAM_OBJECT
  */
 
-#define GIMP_TYPE_PARAM_CHOICE           (gimp_param_choice_get_type ())
-#define GIMP_PARAM_SPEC_CHOICE(pspec)    (G_TYPE_CHECK_INSTANCE_CAST ((pspec), GIMP_TYPE_PARAM_CHOICE, GimpParamSpecChoice))
-#define GIMP_IS_PARAM_SPEC_CHOICE(pspec) (G_TYPE_CHECK_INSTANCE_TYPE ((pspec), GIMP_TYPE_PARAM_CHOICE))
+#define GIMP_TYPE_PARAM_OBJECT                  (gimp_param_object_get_type ())
+#define GIMP_PARAM_SPEC_OBJECT(pspec)           (G_TYPE_CHECK_INSTANCE_CAST ((pspec), GIMP_TYPE_PARAM_OBJECT, GimpParamSpecObject))
+#define GIMP_PARAM_SPEC_OBJECT_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_PARAM_OBJECT, GimpParamSpecObjectClass))
+#define GIMP_IS_PARAM_SPEC_OBJECT(pspec)        (G_TYPE_CHECK_INSTANCE_TYPE ((pspec), GIMP_TYPE_PARAM_OBJECT))
+#define GIMP_IS_PARAM_SPEC_OBJECT_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_PARAM_OBJECT))
+#define GIMP_PARAM_SPEC_OBJECT_GET_CLASS(pspec) (G_TYPE_INSTANCE_GET_CLASS ((pspec), G_TYPE_PARAM_OBJECT, GimpParamSpecObjectClass))
 
-typedef struct _GimpParamSpecChoice GimpParamSpecChoice;
 
-struct _GimpParamSpecChoice
+typedef struct _GimpParamSpecObject      GimpParamSpecObject;
+typedef struct _GimpParamSpecObjectClass GimpParamSpecObjectClass;
+
+struct _GimpParamSpecObject
 {
-  GParamSpecBoxed parent_instance;
+  GParamSpecObject  parent_instance;
 
-  gchar          *default_value;
-  GimpChoice     *choice;
+  /*< private >*/
+  GObject          *_default_value;
+  gboolean          _has_default;
 };
 
-GType        gimp_param_choice_get_type (void) G_GNUC_CONST;
+struct _GimpParamSpecObjectClass
+{
+  /* XXX: vapigen fails with the following error without the private
+   * comment:
+   * > error: The type name `GLib.ParamSpecClass' could not be found
+   * Not sure why it doesn't search for GObject.ParamSpecClass instead.
+   * Anyway putting it private is good enough and hides the parent_class
+   * to bindings.
+   */
+  /*< private >*/
+  GParamSpecClass   parent_class;
 
-GParamSpec * gimp_param_spec_choice     (const gchar  *name,
-                                         const gchar  *nick,
-                                         const gchar  *blurb,
-                                         GimpChoice   *choice,
-                                         const gchar  *default_value,
-                                         GParamFlags   flags);
+  GParamSpec      * (* duplicate)   (GParamSpec *pspec);
+  GObject         * (* get_default) (GParamSpec *pspec);
+
+  /* Padding for future expansion */
+  void              (*_gimp_reserved0) (void);
+  void              (*_gimp_reserved1) (void);
+  void              (*_gimp_reserved2) (void);
+  void              (*_gimp_reserved3) (void);
+  void              (*_gimp_reserved4) (void);
+  void              (*_gimp_reserved5) (void);
+  void              (*_gimp_reserved6) (void);
+  void              (*_gimp_reserved7) (void);
+  void              (*_gimp_reserved8) (void);
+  void              (*_gimp_reserved9) (void);
+};
+
+GType        gimp_param_object_get_type         (void) G_GNUC_CONST;
+
+GObject    * gimp_param_spec_object_get_default (GParamSpec  *pspec);
+void         gimp_param_spec_object_set_default (GParamSpec  *pspec,
+                                                 GObject     *default_value);
+gboolean     gimp_param_spec_object_has_default (GParamSpec  *pspec);
+
+GParamSpec * gimp_param_spec_object_duplicate   (GParamSpec  *pspec);
+
+
+/*
+ * GIMP_TYPE_PARAM_FILE
+ */
+
+#define GIMP_VALUE_HOLDS_FILE(value)   (G_TYPE_CHECK_VALUE_TYPE ((value), G_TYPE_FILE))
+
+#define GIMP_TYPE_PARAM_FILE           (gimp_param_file_get_type ())
+#define GIMP_IS_PARAM_SPEC_FILE(pspec) (G_TYPE_CHECK_INSTANCE_TYPE ((pspec), GIMP_TYPE_PARAM_FILE))
+
+
+GType                   gimp_param_file_get_type          (void) G_GNUC_CONST;
+
+GParamSpec            * gimp_param_spec_file              (const gchar           *name,
+                                                           const gchar           *nick,
+                                                           const gchar           *blurb,
+                                                           GimpFileChooserAction  action,
+                                                           gboolean               none_ok,
+                                                           GFile                 *default_value,
+                                                           GParamFlags            flags);
+
+GimpFileChooserAction   gimp_param_spec_file_get_action   (GParamSpec            *pspec);
+void                    gimp_param_spec_file_set_action   (GParamSpec            *pspec,
+                                                           GimpFileChooserAction  action);
+gboolean                gimp_param_spec_file_none_allowed (GParamSpec            *pspec);
+
 
 
 /*
@@ -138,15 +215,7 @@ GType   gimp_array_get_type           (void) G_GNUC_CONST;
  */
 
 #define GIMP_TYPE_PARAM_ARRAY           (gimp_param_array_get_type ())
-#define GIMP_PARAM_SPEC_ARRAY(pspec)    (G_TYPE_CHECK_INSTANCE_CAST ((pspec), GIMP_TYPE_PARAM_ARRAY, GimpParamSpecArray))
 #define GIMP_IS_PARAM_SPEC_ARRAY(pspec) (G_TYPE_CHECK_INSTANCE_TYPE ((pspec), GIMP_TYPE_PARAM_ARRAY))
-
-typedef struct _GimpParamSpecArray GimpParamSpecArray;
-
-struct _GimpParamSpecArray
-{
-  GParamSpecBoxed parent_instance;
-};
 
 GType        gimp_param_array_get_type (void) G_GNUC_CONST;
 
@@ -160,10 +229,17 @@ GParamSpec * gimp_param_spec_array     (const gchar  *name,
  * GIMP_TYPE_INT32_ARRAY
  */
 
-#define GIMP_TYPE_INT32_ARRAY               (gimp_int32_array_get_type ())
-#define GIMP_VALUE_HOLDS_INT32_ARRAY(value) (G_TYPE_CHECK_VALUE_TYPE ((value), GIMP_TYPE_INT32_ARRAY))
+#define        GIMP_TYPE_INT32_ARRAY               (gimp_int32_array_get_type ())
+#define        GIMP_VALUE_HOLDS_INT32_ARRAY(value) (G_TYPE_CHECK_VALUE_TYPE ((value), GIMP_TYPE_INT32_ARRAY))
 
-GType   gimp_int32_array_get_type           (void) G_GNUC_CONST;
+GType          gimp_int32_array_get_type           (void) G_GNUC_CONST;
+
+const gint32 * gimp_int32_array_get_values         (GimpArray    *array,
+                                                    gsize        *length);
+void           gimp_int32_array_set_values         (GimpArray    *array,
+                                                    const gint32 *values,
+                                                    gsize         length,
+                                                    gboolean      static_data);
 
 
 /*
@@ -171,15 +247,7 @@ GType   gimp_int32_array_get_type           (void) G_GNUC_CONST;
  */
 
 #define GIMP_TYPE_PARAM_INT32_ARRAY           (gimp_param_int32_array_get_type ())
-#define GIMP_PARAM_SPEC_INT32_ARRAY(pspec)    (G_TYPE_CHECK_INSTANCE_CAST ((pspec), GIMP_TYPE_PARAM_INT32_ARRAY, GimpParamSpecInt32Array))
 #define GIMP_IS_PARAM_SPEC_INT32_ARRAY(pspec) (G_TYPE_CHECK_INSTANCE_TYPE ((pspec), GIMP_TYPE_PARAM_INT32_ARRAY))
-
-typedef struct _GimpParamSpecInt32Array GimpParamSpecInt32Array;
-
-struct _GimpParamSpecInt32Array
-{
-  GimpParamSpecArray parent_instance;
-};
 
 GType          gimp_param_int32_array_get_type   (void) G_GNUC_CONST;
 
@@ -188,8 +256,10 @@ GParamSpec   * gimp_param_spec_int32_array       (const gchar  *name,
                                                   const gchar  *blurb,
                                                   GParamFlags   flags);
 
-const gint32 * gimp_value_get_int32_array        (const GValue *value);
-gint32       * gimp_value_dup_int32_array        (const GValue *value);
+const gint32 * gimp_value_get_int32_array        (const GValue *value,
+                                                  gsize        *length);
+gint32       * gimp_value_dup_int32_array        (const GValue *value,
+                                                  gsize        *length);
 void           gimp_value_set_int32_array        (GValue       *value,
                                                   const gint32 *data,
                                                   gsize         length);
@@ -202,48 +272,49 @@ void           gimp_value_take_int32_array       (GValue       *value,
 
 
 /*
- * GIMP_TYPE_FLOAT_ARRAY
+ * GIMP_TYPE_DOUBLE_ARRAY
  */
 
-#define GIMP_TYPE_FLOAT_ARRAY               (gimp_float_array_get_type ())
-#define GIMP_VALUE_HOLDS_FLOAT_ARRAY(value) (G_TYPE_CHECK_VALUE_TYPE ((value), GIMP_TYPE_FLOAT_ARRAY))
+#define         GIMP_TYPE_DOUBLE_ARRAY               (gimp_double_array_get_type ())
+#define         GIMP_VALUE_HOLDS_DOUBLE_ARRAY(value) (G_TYPE_CHECK_VALUE_TYPE ((value), GIMP_TYPE_DOUBLE_ARRAY))
 
-GType   gimp_float_array_get_type           (void) G_GNUC_CONST;
+GType           gimp_double_array_get_type           (void) G_GNUC_CONST;
+
+const gdouble * gimp_double_array_get_values         (GimpArray     *array,
+                                                      gsize         *length);
+void            gimp_double_array_set_values         (GimpArray     *array,
+                                                      const gdouble *values,
+                                                      gsize         length,
+                                                      gboolean      static_data);
 
 
 /*
- * GIMP_TYPE_PARAM_FLOAT_ARRAY
+ * GIMP_TYPE_PARAM_DOUBLE_ARRAY
  */
 
-#define GIMP_TYPE_PARAM_FLOAT_ARRAY           (gimp_param_float_array_get_type ())
-#define GIMP_PARAM_SPEC_FLOAT_ARRAY(pspec)    (G_TYPE_CHECK_INSTANCE_CAST ((pspec), GIMP_TYPE_PARAM_FLOAT_ARRAY, GimpParamSpecFloatArray))
-#define GIMP_IS_PARAM_SPEC_FLOAT_ARRAY(pspec) (G_TYPE_CHECK_INSTANCE_TYPE ((pspec), GIMP_TYPE_PARAM_FLOAT_ARRAY))
+#define GIMP_TYPE_PARAM_DOUBLE_ARRAY           (gimp_param_double_array_get_type ())
+#define GIMP_IS_PARAM_SPEC_DOUBLE_ARRAY(pspec) (G_TYPE_CHECK_INSTANCE_TYPE ((pspec), GIMP_TYPE_PARAM_DOUBLE_ARRAY))
 
-typedef struct _GimpParamSpecFloatArray GimpParamSpecFloatArray;
+GType           gimp_param_double_array_get_type   (void) G_GNUC_CONST;
 
-struct _GimpParamSpecFloatArray
-{
-  GimpParamSpecArray parent_instance;
-};
+GParamSpec    * gimp_param_spec_double_array       (const gchar  *name,
+                                                    const gchar  *nick,
+                                                    const gchar  *blurb,
+                                                    GParamFlags   flags);
 
-GType           gimp_param_float_array_get_type   (void) G_GNUC_CONST;
-
-GParamSpec    * gimp_param_spec_float_array       (const gchar  *name,
-                                                   const gchar  *nick,
-                                                   const gchar  *blurb,
-                                                   GParamFlags   flags);
-
-const gdouble * gimp_value_get_float_array        (const GValue  *value);
-gdouble       * gimp_value_dup_float_array        (const GValue  *value);
-void            gimp_value_set_float_array        (GValue        *value,
-                                                   const gdouble *data,
-                                                   gsize         length);
-void            gimp_value_set_static_float_array (GValue        *value,
-                                                   const gdouble *data,
-                                                   gsize         length);
-void            gimp_value_take_float_array       (GValue        *value,
-                                                   gdouble       *data,
-                                                   gsize         length);
+const gdouble * gimp_value_get_double_array        (const GValue  *value,
+                                                    gsize         *length);
+gdouble       * gimp_value_dup_double_array        (const GValue  *value,
+                                                    gsize         *length);
+void            gimp_value_set_double_array        (GValue        *value,
+                                                    const gdouble *data,
+                                                    gsize         length);
+void            gimp_value_set_static_double_array (GValue        *value,
+                                                    const gdouble *data,
+                                                    gsize         length);
+void            gimp_value_take_double_array       (GValue        *value,
+                                                    gdouble       *data,
+                                                    gsize         length);
 
 
 /*
@@ -251,7 +322,7 @@ void            gimp_value_take_float_array       (GValue        *value,
  */
 
 /**
- * GimpColorArray: (array zero-terminated=1) (element-type GeglColor)
+ * GimpColorArray:
  *
  * A boxed type which is nothing more than an alias to a %NULL-terminated array
  * of [class@Gegl.Color].
@@ -294,125 +365,50 @@ void             gimp_color_array_free                (GimpColorArray  array);
 gint             gimp_color_array_get_length          (GimpColorArray  array);
 
 
-
 /*
- * GIMP_TYPE_RGB_ARRAY
- */
-
-#define GIMP_TYPE_RGB_ARRAY               (gimp_rgb_array_get_type ())
-#define GIMP_VALUE_HOLDS_RGB_ARRAY(value) (G_TYPE_CHECK_VALUE_TYPE ((value), GIMP_TYPE_RGB_ARRAY))
-
-GType   gimp_rgb_array_get_type           (void) G_GNUC_CONST;
-
-
-/*
- * GIMP_TYPE_PARAM_RGB_ARRAY
- */
-
-#define GIMP_TYPE_PARAM_RGB_ARRAY           (gimp_param_rgb_array_get_type ())
-#define GIMP_PARAM_SPEC_RGB_ARRAY(pspec)    (G_TYPE_CHECK_INSTANCE_CAST ((pspec), GIMP_TYPE_PARAM_RGB_ARRAY, GimpParamSpecRGBArray))
-#define GIMP_IS_PARAM_SPEC_RGB_ARRAY(pspec) (G_TYPE_CHECK_INSTANCE_TYPE ((pspec), GIMP_TYPE_PARAM_RGB_ARRAY))
-
-typedef struct _GimpParamSpecRGBArray GimpParamSpecRGBArray;
-
-struct _GimpParamSpecRGBArray
-{
-  GParamSpecBoxed parent_instance;
-};
-
-GType           gimp_param_rgb_array_get_type   (void) G_GNUC_CONST;
-
-GParamSpec    * gimp_param_spec_rgb_array       (const gchar   *name,
-                                                 const gchar   *nick,
-                                                 const gchar   *blurb,
-                                                 GParamFlags    flags);
-
-const GimpRGB * gimp_value_get_rgb_array        (const GValue  *value);
-GimpRGB       * gimp_value_dup_rgb_array        (const GValue  *value);
-void            gimp_value_set_rgb_array        (GValue        *value,
-                                                 const GimpRGB *data,
-                                                 gsize          length);
-void            gimp_value_set_static_rgb_array (GValue        *value,
-                                                 const GimpRGB *data,
-                                                 gsize          length);
-void            gimp_value_take_rgb_array       (GValue        *value,
-                                                 GimpRGB       *data,
-                                                 gsize          length);
-
-
-/*
- * GIMP_TYPE_OBJECT_ARRAY
+ * GIMP_TYPE_CORE_OBJECT_ARRAY
  */
 
 /**
- * GimpObjectArray:
- * @object_type: #GType of the contained objects.
- * @data: (array length=length): pointer to the array's data.
- * @length:      length of @data, in number of objects.
- * @static_data: whether @data points to statically allocated memory.
- **/
-typedef struct _GimpObjectArray GimpObjectArray;
+ * GimpCoreObjectArray:
+ *
+ * A boxed type which is nothing more than an alias to a %NULL-terminated array
+ * of [class@GObject.Object]. No reference is being hold on contents
+ * because core objects are owned by `libgimp`.
+ *
+ * The reason of existence for this alias is to have common arrays of
+ * objects as a boxed type easy to use as plug-in's procedure argument.
+ *
+ * You should never have to interact with this type directly, though
+ * [func@Gimp.core_object_array_get_length] might be convenient.
+ *
+ * Since: 3.0
+ */
+typedef GObject**                                 GimpCoreObjectArray;
 
-struct _GimpObjectArray
-{
-  GType     object_type;
-  GObject **data;
-  gsize     length;
-  gboolean  static_data;
-};
+#define GIMP_TYPE_CORE_OBJECT_ARRAY               (gimp_core_object_array_get_type ())
+#define GIMP_VALUE_HOLDS_CORE_OBJECT_ARRAY(value) (G_TYPE_CHECK_VALUE_TYPE ((value), GIMP_TYPE_CORE_OBJECT_ARRAY))
 
-GimpObjectArray * gimp_object_array_new  (GType                  object_type,
-                                          GObject              **data,
-                                          gsize                  length,
-                                          gboolean               static_data);
-GimpObjectArray * gimp_object_array_copy (const GimpObjectArray  *array);
-void              gimp_object_array_free (GimpObjectArray        *array);
-
-#define GIMP_TYPE_OBJECT_ARRAY               (gimp_object_array_get_type ())
-#define GIMP_VALUE_HOLDS_OBJECT_ARRAY(value) (G_TYPE_CHECK_VALUE_TYPE ((value), GIMP_TYPE_OBJECT_ARRAY))
-
-GType   gimp_object_array_get_type           (void) G_GNUC_CONST;
+GType gimp_core_object_array_get_type   (void) G_GNUC_CONST;
+gsize gimp_core_object_array_get_length (GObject **array);
 
 
 /*
- * GIMP_TYPE_PARAM_OBJECT_ARRAY
+ * GIMP_TYPE_PARAM_CORE_OBJECT_ARRAY
  */
 
-#define GIMP_TYPE_PARAM_OBJECT_ARRAY           (gimp_param_object_array_get_type ())
-#define GIMP_PARAM_SPEC_OBJECT_ARRAY(pspec)    (G_TYPE_CHECK_INSTANCE_CAST ((pspec), GIMP_TYPE_PARAM_OBJECT_ARRAY, GimpParamSpecObjectArray))
-#define GIMP_IS_PARAM_SPEC_OBJECT_ARRAY(pspec) (G_TYPE_CHECK_INSTANCE_TYPE ((pspec), GIMP_TYPE_PARAM_OBJECT_ARRAY))
+#define GIMP_TYPE_PARAM_CORE_OBJECT_ARRAY           (gimp_param_core_object_array_get_type ())
+#define GIMP_IS_PARAM_SPEC_CORE_OBJECT_ARRAY(pspec) (G_TYPE_CHECK_INSTANCE_TYPE ((pspec), GIMP_TYPE_PARAM_CORE_OBJECT_ARRAY))
 
-typedef struct _GimpParamSpecObjectArray GimpParamSpecObjectArray;
+GType         gimp_param_core_object_array_get_type             (void) G_GNUC_CONST;
 
-struct _GimpParamSpecObjectArray
-{
-  GParamSpecBoxed parent_instance;
+GParamSpec  * gimp_param_spec_core_object_array                 (const gchar   *name,
+                                                                 const gchar   *nick,
+                                                                 const gchar   *blurb,
+                                                                 GType          object_type,
+                                                                 GParamFlags    flags);
 
-  GType           object_type;
-};
-
-GType         gimp_param_object_array_get_type   (void) G_GNUC_CONST;
-
-GParamSpec  * gimp_param_spec_object_array       (const gchar   *name,
-                                                  const gchar   *nick,
-                                                  const gchar   *blurb,
-                                                  GType          object_type,
-                                                  GParamFlags    flags);
-
-GObject    ** gimp_value_get_object_array        (const GValue  *value);
-GObject    ** gimp_value_dup_object_array        (const GValue  *value);
-void          gimp_value_set_object_array        (GValue        *value,
-                                                  GType          object_type,
-                                                  GObject      **data,
-                                                  gsize          length);
-void          gimp_value_set_static_object_array (GValue        *value,
-                                                  GType          object_type,
-                                                  GObject      **data,
-                                                  gsize          length);
-void          gimp_value_take_object_array       (GValue        *value,
-                                                  GType          object_type,
-                                                  GObject      **data,
-                                                  gsize          length);
+GType         gimp_param_spec_core_object_array_get_object_type (GParamSpec *pspec);
 
 
 G_END_DECLS

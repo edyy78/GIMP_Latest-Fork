@@ -27,6 +27,7 @@
 
 #include <gdk-pixbuf/gdk-pixbuf.h>
 
+#include "libgimpbase/gimpbase.h"
 #include "libgimpcolor/gimpcolor.h"
 #include "libgimpconfig/gimpconfig.h"
 
@@ -497,7 +498,7 @@ context_get_line_width_unit_invoker (GimpProcedure         *procedure,
                                      GError               **error)
 {
   GimpValueArray *return_vals;
-  GimpUnit line_width_unit = GIMP_UNIT_PIXEL;
+  GimpUnit *line_width_unit = NULL;
 
   GimpStrokeOptions *options =
     gimp_pdb_context_get_stroke_options (GIMP_PDB_CONTEXT (context));
@@ -507,7 +508,7 @@ context_get_line_width_unit_invoker (GimpProcedure         *procedure,
                 NULL);
 
   return_vals = gimp_procedure_get_return_values (procedure, TRUE, NULL);
-  g_value_set_int (gimp_value_array_index (return_vals, 1), line_width_unit);
+  g_value_set_object (gimp_value_array_index (return_vals, 1), line_width_unit);
 
   return return_vals;
 }
@@ -521,9 +522,9 @@ context_set_line_width_unit_invoker (GimpProcedure         *procedure,
                                      GError               **error)
 {
   gboolean success = TRUE;
-  GimpUnit line_width_unit;
+  GimpUnit *line_width_unit;
 
-  line_width_unit = g_value_get_int (gimp_value_array_index (args, 0));
+  line_width_unit = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -752,7 +753,7 @@ context_get_line_dash_pattern_invoker (GimpProcedure         *procedure,
                                        GError               **error)
 {
   GimpValueArray *return_vals;
-  gint num_dashes = 0;
+  gsize num_dashes = 0;
   gdouble *dashes = NULL;
 
   GimpStrokeOptions *options =
@@ -763,9 +764,7 @@ context_get_line_dash_pattern_invoker (GimpProcedure         *procedure,
   dashes = gimp_dash_pattern_to_double_array (pattern, &num_dashes);
 
   return_vals = gimp_procedure_get_return_values (procedure, TRUE, NULL);
-
-  g_value_set_int (gimp_value_array_index (return_vals, 1), num_dashes);
-  gimp_value_take_float_array (gimp_value_array_index (return_vals, 2), dashes, num_dashes);
+  gimp_value_take_double_array (gimp_value_array_index (return_vals, 1), dashes, num_dashes);
 
   return return_vals;
 }
@@ -779,11 +778,10 @@ context_set_line_dash_pattern_invoker (GimpProcedure         *procedure,
                                        GError               **error)
 {
   gboolean success = TRUE;
-  gint num_dashes;
+  gsize num_dashes;
   const gdouble *dashes;
 
-  num_dashes = g_value_get_int (gimp_value_array_index (args, 0));
-  dashes = gimp_value_get_float_array (gimp_value_array_index (args, 1));
+  dashes = gimp_value_get_double_array (gimp_value_array_index (args, 0), &num_dashes);
 
   if (success)
     {
@@ -1332,12 +1330,12 @@ context_set_brush_force_invoker (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
-context_get_dynamics_invoker (GimpProcedure         *procedure,
-                              Gimp                  *gimp,
-                              GimpContext           *context,
-                              GimpProgress          *progress,
-                              const GimpValueArray  *args,
-                              GError               **error)
+context_get_dynamics_name_invoker (GimpProcedure         *procedure,
+                                   Gimp                  *gimp,
+                                   GimpContext           *context,
+                                   GimpProgress          *progress,
+                                   const GimpValueArray  *args,
+                                   GError               **error)
 {
   gboolean success = TRUE;
   GimpValueArray *return_vals;
@@ -1360,12 +1358,12 @@ context_get_dynamics_invoker (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
-context_set_dynamics_invoker (GimpProcedure         *procedure,
-                              Gimp                  *gimp,
-                              GimpContext           *context,
-                              GimpProgress          *progress,
-                              const GimpValueArray  *args,
-                              GError               **error)
+context_set_dynamics_name_invoker (GimpProcedure         *procedure,
+                                   Gimp                  *gimp,
+                                   GimpContext           *context,
+                                   GimpProgress          *progress,
+                                   const GimpValueArray  *args,
+                                   GError               **error)
 {
   gboolean success = TRUE;
   const gchar *name;
@@ -1439,6 +1437,57 @@ context_enable_dynamics_invoker (GimpProcedure         *procedure,
         gimp_paint_options_enable_dynamics (options, enable);
       else
         success = FALSE;
+    }
+
+  return gimp_procedure_get_return_values (procedure, success,
+                                           error ? *error : NULL);
+}
+
+static GimpValueArray *
+context_get_emulate_brush_dynamics_invoker (GimpProcedure         *procedure,
+                                            Gimp                  *gimp,
+                                            GimpContext           *context,
+                                            GimpProgress          *progress,
+                                            const GimpValueArray  *args,
+                                            GError               **error)
+{
+  GimpValueArray *return_vals;
+  gboolean emulate_dynamics = FALSE;
+
+  GimpStrokeOptions *options =
+    gimp_pdb_context_get_stroke_options (GIMP_PDB_CONTEXT (context));
+
+  g_object_get (options,
+                "emulate-brush-dynamics", &emulate_dynamics,
+                NULL);
+
+  return_vals = gimp_procedure_get_return_values (procedure, TRUE, NULL);
+  g_value_set_boolean (gimp_value_array_index (return_vals, 1), emulate_dynamics);
+
+  return return_vals;
+}
+
+static GimpValueArray *
+context_set_emulate_brush_dynamics_invoker (GimpProcedure         *procedure,
+                                            Gimp                  *gimp,
+                                            GimpContext           *context,
+                                            GimpProgress          *progress,
+                                            const GimpValueArray  *args,
+                                            GError               **error)
+{
+  gboolean success = TRUE;
+  gboolean emulate_dynamics;
+
+  emulate_dynamics = g_value_get_boolean (gimp_value_array_index (args, 0));
+
+  if (success)
+    {
+      GimpStrokeOptions *options =
+        gimp_pdb_context_get_stroke_options (GIMP_PDB_CONTEXT (context));
+
+      g_object_set (options,
+                    "emulate-brush-dynamics", emulate_dynamics,
+                    NULL);
     }
 
   return gimp_procedure_get_return_values (procedure, success,
@@ -3076,7 +3125,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-push
    */
-  procedure = gimp_procedure_new (context_push_invoker);
+  procedure = gimp_procedure_new (context_push_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-push");
   gimp_procedure_set_static_help (procedure,
@@ -3093,7 +3142,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-pop
    */
-  procedure = gimp_procedure_new (context_pop_invoker);
+  procedure = gimp_procedure_new (context_pop_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-pop");
   gimp_procedure_set_static_help (procedure,
@@ -3110,7 +3159,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-defaults
    */
-  procedure = gimp_procedure_new (context_set_defaults_invoker);
+  procedure = gimp_procedure_new (context_set_defaults_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-defaults");
   gimp_procedure_set_static_help (procedure,
@@ -3127,7 +3176,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-list-paint-methods
    */
-  procedure = gimp_procedure_new (context_list_paint_methods_invoker);
+  procedure = gimp_procedure_new (context_list_paint_methods_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-list-paint-methods");
   gimp_procedure_set_static_help (procedure,
@@ -3150,7 +3199,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-paint-method
    */
-  procedure = gimp_procedure_new (context_get_paint_method_invoker);
+  procedure = gimp_procedure_new (context_get_paint_method_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-paint-method");
   gimp_procedure_set_static_help (procedure,
@@ -3174,7 +3223,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-paint-method
    */
-  procedure = gimp_procedure_new (context_set_paint_method_invoker);
+  procedure = gimp_procedure_new (context_set_paint_method_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-paint-method");
   gimp_procedure_set_static_help (procedure,
@@ -3198,7 +3247,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-stroke-method
    */
-  procedure = gimp_procedure_new (context_get_stroke_method_invoker);
+  procedure = gimp_procedure_new (context_get_stroke_method_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-stroke-method");
   gimp_procedure_set_static_help (procedure,
@@ -3222,7 +3271,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-stroke-method
    */
-  procedure = gimp_procedure_new (context_set_stroke_method_invoker);
+  procedure = gimp_procedure_new (context_set_stroke_method_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-stroke-method");
   gimp_procedure_set_static_help (procedure,
@@ -3246,7 +3295,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-foreground
    */
-  procedure = gimp_procedure_new (context_get_foreground_invoker);
+  procedure = gimp_procedure_new (context_get_foreground_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-foreground");
   gimp_procedure_set_static_help (procedure,
@@ -3258,9 +3307,10 @@ register_context_procs (GimpPDB *pdb)
                                          "Michael Natterer & Sven Neumann",
                                          "2004");
   gimp_procedure_add_return_value (procedure,
-                                   gegl_param_spec_color ("foreground",
+                                   gimp_param_spec_color ("foreground",
                                                           "foreground",
                                                           "The foreground color",
+                                                          FALSE,
                                                           NULL,
                                                           GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
@@ -3269,7 +3319,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-foreground
    */
-  procedure = gimp_procedure_new (context_set_foreground_invoker);
+  procedure = gimp_procedure_new (context_set_foreground_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-foreground");
   gimp_procedure_set_static_help (procedure,
@@ -3281,9 +3331,10 @@ register_context_procs (GimpPDB *pdb)
                                          "Michael Natterer & Sven Neumann",
                                          "2004");
   gimp_procedure_add_argument (procedure,
-                               gegl_param_spec_color ("foreground",
+                               gimp_param_spec_color ("foreground",
                                                       "foreground",
                                                       "The foreground color",
+                                                      FALSE,
                                                       NULL,
                                                       GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
@@ -3292,7 +3343,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-background
    */
-  procedure = gimp_procedure_new (context_get_background_invoker);
+  procedure = gimp_procedure_new (context_get_background_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-background");
   gimp_procedure_set_static_help (procedure,
@@ -3304,9 +3355,10 @@ register_context_procs (GimpPDB *pdb)
                                          "Michael Natterer & Sven Neumann",
                                          "2004");
   gimp_procedure_add_return_value (procedure,
-                                   gegl_param_spec_color ("background",
+                                   gimp_param_spec_color ("background",
                                                           "background",
                                                           "The background color",
+                                                          FALSE,
                                                           NULL,
                                                           GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
@@ -3315,7 +3367,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-background
    */
-  procedure = gimp_procedure_new (context_set_background_invoker);
+  procedure = gimp_procedure_new (context_set_background_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-background");
   gimp_procedure_set_static_help (procedure,
@@ -3327,9 +3379,10 @@ register_context_procs (GimpPDB *pdb)
                                          "Michael Natterer & Sven Neumann",
                                          "2004");
   gimp_procedure_add_argument (procedure,
-                               gegl_param_spec_color ("background",
+                               gimp_param_spec_color ("background",
                                                       "background",
                                                       "The background color",
+                                                      FALSE,
                                                       NULL,
                                                       GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
@@ -3338,7 +3391,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-default-colors
    */
-  procedure = gimp_procedure_new (context_set_default_colors_invoker);
+  procedure = gimp_procedure_new (context_set_default_colors_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-default-colors");
   gimp_procedure_set_static_help (procedure,
@@ -3355,7 +3408,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-swap-colors
    */
-  procedure = gimp_procedure_new (context_swap_colors_invoker);
+  procedure = gimp_procedure_new (context_swap_colors_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-swap-colors");
   gimp_procedure_set_static_help (procedure,
@@ -3372,7 +3425,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-opacity
    */
-  procedure = gimp_procedure_new (context_get_opacity_invoker);
+  procedure = gimp_procedure_new (context_get_opacity_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-opacity");
   gimp_procedure_set_static_help (procedure,
@@ -3395,7 +3448,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-opacity
    */
-  procedure = gimp_procedure_new (context_set_opacity_invoker);
+  procedure = gimp_procedure_new (context_set_opacity_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-opacity");
   gimp_procedure_set_static_help (procedure,
@@ -3418,7 +3471,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-paint-mode
    */
-  procedure = gimp_procedure_new (context_get_paint_mode_invoker);
+  procedure = gimp_procedure_new (context_get_paint_mode_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-paint-mode");
   gimp_procedure_set_static_help (procedure,
@@ -3442,7 +3495,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-paint-mode
    */
-  procedure = gimp_procedure_new (context_set_paint_mode_invoker);
+  procedure = gimp_procedure_new (context_set_paint_mode_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-paint-mode");
   gimp_procedure_set_static_help (procedure,
@@ -3466,7 +3519,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-line-width
    */
-  procedure = gimp_procedure_new (context_get_line_width_invoker);
+  procedure = gimp_procedure_new (context_get_line_width_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-line-width");
   gimp_procedure_set_static_help (procedure,
@@ -3489,7 +3542,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-line-width
    */
-  procedure = gimp_procedure_new (context_set_line_width_invoker);
+  procedure = gimp_procedure_new (context_set_line_width_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-line-width");
   gimp_procedure_set_static_help (procedure,
@@ -3514,7 +3567,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-line-width-unit
    */
-  procedure = gimp_procedure_new (context_get_line_width_unit_invoker);
+  procedure = gimp_procedure_new (context_get_line_width_unit_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-line-width-unit");
   gimp_procedure_set_static_help (procedure,
@@ -3529,9 +3582,9 @@ register_context_procs (GimpPDB *pdb)
                                    gimp_param_spec_unit ("line-width-unit",
                                                          "line width unit",
                                                          "The line width unit setting",
-                                                         TRUE,
                                                          FALSE,
-                                                         GIMP_UNIT_PIXEL,
+                                                         FALSE,
+                                                         gimp_unit_inch (),
                                                          GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
@@ -3539,7 +3592,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-line-width-unit
    */
-  procedure = gimp_procedure_new (context_set_line_width_unit_invoker);
+  procedure = gimp_procedure_new (context_set_line_width_unit_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-line-width-unit");
   gimp_procedure_set_static_help (procedure,
@@ -3556,9 +3609,9 @@ register_context_procs (GimpPDB *pdb)
                                gimp_param_spec_unit ("line-width-unit",
                                                      "line width unit",
                                                      "The line width setting unit",
-                                                     TRUE,
                                                      FALSE,
-                                                     GIMP_UNIT_PIXEL,
+                                                     FALSE,
+                                                     gimp_unit_inch (),
                                                      GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
@@ -3566,7 +3619,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-line-cap-style
    */
-  procedure = gimp_procedure_new (context_get_line_cap_style_invoker);
+  procedure = gimp_procedure_new (context_get_line_cap_style_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-line-cap-style");
   gimp_procedure_set_static_help (procedure,
@@ -3590,7 +3643,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-line-cap-style
    */
-  procedure = gimp_procedure_new (context_set_line_cap_style_invoker);
+  procedure = gimp_procedure_new (context_set_line_cap_style_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-line-cap-style");
   gimp_procedure_set_static_help (procedure,
@@ -3616,7 +3669,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-line-join-style
    */
-  procedure = gimp_procedure_new (context_get_line_join_style_invoker);
+  procedure = gimp_procedure_new (context_get_line_join_style_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-line-join-style");
   gimp_procedure_set_static_help (procedure,
@@ -3640,7 +3693,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-line-join-style
    */
-  procedure = gimp_procedure_new (context_set_line_join_style_invoker);
+  procedure = gimp_procedure_new (context_set_line_join_style_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-line-join-style");
   gimp_procedure_set_static_help (procedure,
@@ -3665,7 +3718,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-line-miter-limit
    */
-  procedure = gimp_procedure_new (context_get_line_miter_limit_invoker);
+  procedure = gimp_procedure_new (context_get_line_miter_limit_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-line-miter-limit");
   gimp_procedure_set_static_help (procedure,
@@ -3688,7 +3741,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-line-miter-limit
    */
-  procedure = gimp_procedure_new (context_set_line_miter_limit_invoker);
+  procedure = gimp_procedure_new (context_set_line_miter_limit_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-line-miter-limit");
   gimp_procedure_set_static_help (procedure,
@@ -3714,7 +3767,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-line-dash-offset
    */
-  procedure = gimp_procedure_new (context_get_line_dash_offset_invoker);
+  procedure = gimp_procedure_new (context_get_line_dash_offset_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-line-dash-offset");
   gimp_procedure_set_static_help (procedure,
@@ -3737,7 +3790,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-line-dash-offset
    */
-  procedure = gimp_procedure_new (context_set_line_dash_offset_invoker);
+  procedure = gimp_procedure_new (context_set_line_dash_offset_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-line-dash-offset");
   gimp_procedure_set_static_help (procedure,
@@ -3762,7 +3815,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-line-dash-pattern
    */
-  procedure = gimp_procedure_new (context_get_line_dash_pattern_invoker);
+  procedure = gimp_procedure_new (context_get_line_dash_pattern_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-line-dash-pattern");
   gimp_procedure_set_static_help (procedure,
@@ -3774,23 +3827,17 @@ register_context_procs (GimpPDB *pdb)
                                          "Michael Natterer",
                                          "2015");
   gimp_procedure_add_return_value (procedure,
-                                   g_param_spec_int ("num-dashes",
-                                                     "num dashes",
-                                                     "The number of dashes in the dash_pattern array",
-                                                     0, G_MAXINT32, 0,
-                                                     GIMP_PARAM_READWRITE));
-  gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_float_array ("dashes",
-                                                                "dashes",
-                                                                "The line dash pattern setting",
-                                                                GIMP_PARAM_READWRITE));
+                                   gimp_param_spec_double_array ("dashes",
+                                                                 "dashes",
+                                                                 "The line dash pattern setting",
+                                                                 GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-context-set-line-dash-pattern
    */
-  procedure = gimp_procedure_new (context_set_line_dash_pattern_invoker);
+  procedure = gimp_procedure_new (context_set_line_dash_pattern_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-line-dash-pattern");
   gimp_procedure_set_static_help (procedure,
@@ -3806,23 +3853,17 @@ register_context_procs (GimpPDB *pdb)
                                          "Michael Natterer",
                                          "2015");
   gimp_procedure_add_argument (procedure,
-                               g_param_spec_int ("num-dashes",
-                                                 "num dashes",
-                                                 "The number of dashes in the dash_pattern array",
-                                                 0, G_MAXINT32, 0,
-                                                 GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_float_array ("dashes",
-                                                            "dashes",
-                                                            "The line dash pattern setting",
-                                                            GIMP_PARAM_READWRITE));
+                               gimp_param_spec_double_array ("dashes",
+                                                             "dashes",
+                                                             "The line dash pattern setting",
+                                                             GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-context-get-brush
    */
-  procedure = gimp_procedure_new (context_get_brush_invoker);
+  procedure = gimp_procedure_new (context_get_brush_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-brush");
   gimp_procedure_set_static_help (procedure,
@@ -3838,6 +3879,8 @@ register_context_procs (GimpPDB *pdb)
                                                           "brush",
                                                           "The active brush",
                                                           FALSE,
+                                                          NULL,
+                                                          FALSE,
                                                           GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
@@ -3845,7 +3888,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-brush
    */
-  procedure = gimp_procedure_new (context_set_brush_invoker);
+  procedure = gimp_procedure_new (context_set_brush_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-brush");
   gimp_procedure_set_static_help (procedure,
@@ -3861,6 +3904,8 @@ register_context_procs (GimpPDB *pdb)
                                                       "brush",
                                                       "The brush",
                                                       FALSE,
+                                                      NULL,
+                                                      FALSE,
                                                       GIMP_PARAM_READWRITE | GIMP_PARAM_NO_VALIDATE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
@@ -3868,7 +3913,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-brush-size
    */
-  procedure = gimp_procedure_new (context_get_brush_size_invoker);
+  procedure = gimp_procedure_new (context_get_brush_size_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-brush-size");
   gimp_procedure_set_static_help (procedure,
@@ -3891,7 +3936,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-brush-size
    */
-  procedure = gimp_procedure_new (context_set_brush_size_invoker);
+  procedure = gimp_procedure_new (context_set_brush_size_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-brush-size");
   gimp_procedure_set_static_help (procedure,
@@ -3914,7 +3959,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-brush-default-size
    */
-  procedure = gimp_procedure_new (context_set_brush_default_size_invoker);
+  procedure = gimp_procedure_new (context_set_brush_default_size_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-brush-default-size");
   gimp_procedure_set_static_help (procedure,
@@ -3931,7 +3976,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-brush-aspect-ratio
    */
-  procedure = gimp_procedure_new (context_get_brush_aspect_ratio_invoker);
+  procedure = gimp_procedure_new (context_get_brush_aspect_ratio_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-brush-aspect-ratio");
   gimp_procedure_set_static_help (procedure,
@@ -3954,7 +3999,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-brush-aspect-ratio
    */
-  procedure = gimp_procedure_new (context_set_brush_aspect_ratio_invoker);
+  procedure = gimp_procedure_new (context_set_brush_aspect_ratio_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-brush-aspect-ratio");
   gimp_procedure_set_static_help (procedure,
@@ -3977,7 +4022,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-brush-angle
    */
-  procedure = gimp_procedure_new (context_get_brush_angle_invoker);
+  procedure = gimp_procedure_new (context_get_brush_angle_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-brush-angle");
   gimp_procedure_set_static_help (procedure,
@@ -4000,7 +4045,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-brush-angle
    */
-  procedure = gimp_procedure_new (context_set_brush_angle_invoker);
+  procedure = gimp_procedure_new (context_set_brush_angle_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-brush-angle");
   gimp_procedure_set_static_help (procedure,
@@ -4023,7 +4068,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-brush-spacing
    */
-  procedure = gimp_procedure_new (context_get_brush_spacing_invoker);
+  procedure = gimp_procedure_new (context_get_brush_spacing_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-brush-spacing");
   gimp_procedure_set_static_help (procedure,
@@ -4046,7 +4091,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-brush-spacing
    */
-  procedure = gimp_procedure_new (context_set_brush_spacing_invoker);
+  procedure = gimp_procedure_new (context_set_brush_spacing_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-brush-spacing");
   gimp_procedure_set_static_help (procedure,
@@ -4069,7 +4114,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-brush-default-spacing
    */
-  procedure = gimp_procedure_new (context_set_brush_default_spacing_invoker);
+  procedure = gimp_procedure_new (context_set_brush_default_spacing_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-brush-default-spacing");
   gimp_procedure_set_static_help (procedure,
@@ -4086,7 +4131,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-brush-hardness
    */
-  procedure = gimp_procedure_new (context_get_brush_hardness_invoker);
+  procedure = gimp_procedure_new (context_get_brush_hardness_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-brush-hardness");
   gimp_procedure_set_static_help (procedure,
@@ -4109,7 +4154,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-brush-hardness
    */
-  procedure = gimp_procedure_new (context_set_brush_hardness_invoker);
+  procedure = gimp_procedure_new (context_set_brush_hardness_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-brush-hardness");
   gimp_procedure_set_static_help (procedure,
@@ -4132,7 +4177,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-brush-default-hardness
    */
-  procedure = gimp_procedure_new (context_set_brush_default_hardness_invoker);
+  procedure = gimp_procedure_new (context_set_brush_default_hardness_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-brush-default-hardness");
   gimp_procedure_set_static_help (procedure,
@@ -4149,7 +4194,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-brush-force
    */
-  procedure = gimp_procedure_new (context_get_brush_force_invoker);
+  procedure = gimp_procedure_new (context_get_brush_force_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-brush-force");
   gimp_procedure_set_static_help (procedure,
@@ -4172,7 +4217,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-brush-force
    */
-  procedure = gimp_procedure_new (context_set_brush_force_invoker);
+  procedure = gimp_procedure_new (context_set_brush_force_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-brush-force");
   gimp_procedure_set_static_help (procedure,
@@ -4193,11 +4238,11 @@ register_context_procs (GimpPDB *pdb)
   g_object_unref (procedure);
 
   /*
-   * gimp-context-get-dynamics
+   * gimp-context-get-dynamics-name
    */
-  procedure = gimp_procedure_new (context_get_dynamics_invoker);
+  procedure = gimp_procedure_new (context_get_dynamics_name_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-context-get-dynamics");
+                               "gimp-context-get-dynamics-name");
   gimp_procedure_set_static_help (procedure,
                                   "Get the currently active paint dynamics.",
                                   "Returns the name of the currently active paint dynamics. If enabled, all paint operations and stroke operations use this paint dynamics to control the application of paint to the image. If disabled, the dynamics will be ignored during paint actions.\n"
@@ -4218,11 +4263,11 @@ register_context_procs (GimpPDB *pdb)
   g_object_unref (procedure);
 
   /*
-   * gimp-context-set-dynamics
+   * gimp-context-set-dynamics-name
    */
-  procedure = gimp_procedure_new (context_set_dynamics_invoker);
+  procedure = gimp_procedure_new (context_set_dynamics_name_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-context-set-dynamics");
+                               "gimp-context-set-dynamics-name");
   gimp_procedure_set_static_help (procedure,
                                   "Set the active paint dynamics.",
                                   "Sets the active paint dynamics. The paint dynamics will be used in all subsequent paint operations when dynamics are enabled. The name should be a name of an installed paint dynamics. Returns an error if no matching paint dynamics is found.",
@@ -4244,7 +4289,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-are-dynamics-enabled
    */
-  procedure = gimp_procedure_new (context_are_dynamics_enabled_invoker);
+  procedure = gimp_procedure_new (context_are_dynamics_enabled_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-are-dynamics-enabled");
   gimp_procedure_set_static_help (procedure,
@@ -4267,7 +4312,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-enable-dynamics
    */
-  procedure = gimp_procedure_new (context_enable_dynamics_invoker);
+  procedure = gimp_procedure_new (context_enable_dynamics_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-enable-dynamics");
   gimp_procedure_set_static_help (procedure,
@@ -4288,9 +4333,55 @@ register_context_procs (GimpPDB *pdb)
   g_object_unref (procedure);
 
   /*
+   * gimp-context-get-emulate-brush-dynamics
+   */
+  procedure = gimp_procedure_new (context_get_emulate_brush_dynamics_invoker, FALSE);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-context-get-emulate-brush-dynamics");
+  gimp_procedure_set_static_help (procedure,
+                                  "Retrieve the currently active stroke option's emulate brush dynamics setting.",
+                                  "This procedure returns the emulate brush dynamics property of the currently active stroke options.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Massimo Valentini",
+                                         "Massimo Valentini",
+                                         "2018");
+  gimp_procedure_add_return_value (procedure,
+                                   g_param_spec_boolean ("emulate-dynamics",
+                                                         "emulate dynamics",
+                                                         "The emulate brush dynamics setting",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
+   * gimp-context-set-emulate-brush-dynamics
+   */
+  procedure = gimp_procedure_new (context_set_emulate_brush_dynamics_invoker, FALSE);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-context-set-emulate-brush-dynamics");
+  gimp_procedure_set_static_help (procedure,
+                                  "Set the stroke option's emulate brush dynamics setting.",
+                                  "This procedure sets the specified emulate brush dynamics setting. The new method will be used in all subsequent stroke operations.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Massimo Valentini",
+                                         "Massimo Valentini",
+                                         "2018");
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_boolean ("emulate-dynamics",
+                                                     "emulate dynamics",
+                                                     "The new emulate brush dynamics setting",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
    * gimp-context-get-mypaint-brush
    */
-  procedure = gimp_procedure_new (context_get_mypaint_brush_invoker);
+  procedure = gimp_procedure_new (context_get_mypaint_brush_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-mypaint-brush");
   gimp_procedure_set_static_help (procedure,
@@ -4314,7 +4405,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-mypaint-brush
    */
-  procedure = gimp_procedure_new (context_set_mypaint_brush_invoker);
+  procedure = gimp_procedure_new (context_set_mypaint_brush_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-mypaint-brush");
   gimp_procedure_set_static_help (procedure,
@@ -4338,7 +4429,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-pattern
    */
-  procedure = gimp_procedure_new (context_get_pattern_invoker);
+  procedure = gimp_procedure_new (context_get_pattern_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-pattern");
   gimp_procedure_set_static_help (procedure,
@@ -4354,6 +4445,8 @@ register_context_procs (GimpPDB *pdb)
                                                             "pattern",
                                                             "The active pattern",
                                                             FALSE,
+                                                            NULL,
+                                                            FALSE,
                                                             GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
@@ -4361,7 +4454,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-pattern
    */
-  procedure = gimp_procedure_new (context_set_pattern_invoker);
+  procedure = gimp_procedure_new (context_set_pattern_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-pattern");
   gimp_procedure_set_static_help (procedure,
@@ -4377,6 +4470,8 @@ register_context_procs (GimpPDB *pdb)
                                                         "pattern",
                                                         "The pattern",
                                                         FALSE,
+                                                        NULL,
+                                                        FALSE,
                                                         GIMP_PARAM_READWRITE | GIMP_PARAM_NO_VALIDATE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
@@ -4384,7 +4479,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-gradient
    */
-  procedure = gimp_procedure_new (context_get_gradient_invoker);
+  procedure = gimp_procedure_new (context_get_gradient_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-gradient");
   gimp_procedure_set_static_help (procedure,
@@ -4400,6 +4495,8 @@ register_context_procs (GimpPDB *pdb)
                                                              "gradient",
                                                              "The active gradient",
                                                              FALSE,
+                                                             NULL,
+                                                             FALSE,
                                                              GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
@@ -4407,7 +4504,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-gradient
    */
-  procedure = gimp_procedure_new (context_set_gradient_invoker);
+  procedure = gimp_procedure_new (context_set_gradient_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-gradient");
   gimp_procedure_set_static_help (procedure,
@@ -4423,6 +4520,8 @@ register_context_procs (GimpPDB *pdb)
                                                          "gradient",
                                                          "The gradient",
                                                          FALSE,
+                                                         NULL,
+                                                         FALSE,
                                                          GIMP_PARAM_READWRITE | GIMP_PARAM_NO_VALIDATE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
@@ -4430,7 +4529,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-gradient-fg-bg-rgb
    */
-  procedure = gimp_procedure_new (context_set_gradient_fg_bg_rgb_invoker);
+  procedure = gimp_procedure_new (context_set_gradient_fg_bg_rgb_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-gradient-fg-bg-rgb");
   gimp_procedure_set_static_help (procedure,
@@ -4447,7 +4546,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-gradient-fg-bg-hsv-cw
    */
-  procedure = gimp_procedure_new (context_set_gradient_fg_bg_hsv_cw_invoker);
+  procedure = gimp_procedure_new (context_set_gradient_fg_bg_hsv_cw_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-gradient-fg-bg-hsv-cw");
   gimp_procedure_set_static_help (procedure,
@@ -4464,7 +4563,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-gradient-fg-bg-hsv-ccw
    */
-  procedure = gimp_procedure_new (context_set_gradient_fg_bg_hsv_ccw_invoker);
+  procedure = gimp_procedure_new (context_set_gradient_fg_bg_hsv_ccw_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-gradient-fg-bg-hsv-ccw");
   gimp_procedure_set_static_help (procedure,
@@ -4481,7 +4580,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-gradient-fg-transparent
    */
-  procedure = gimp_procedure_new (context_set_gradient_fg_transparent_invoker);
+  procedure = gimp_procedure_new (context_set_gradient_fg_transparent_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-gradient-fg-transparent");
   gimp_procedure_set_static_help (procedure,
@@ -4498,7 +4597,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-gradient-blend-color-space
    */
-  procedure = gimp_procedure_new (context_get_gradient_blend_color_space_invoker);
+  procedure = gimp_procedure_new (context_get_gradient_blend_color_space_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-gradient-blend-color-space");
   gimp_procedure_set_static_help (procedure,
@@ -4522,7 +4621,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-gradient-blend-color-space
    */
-  procedure = gimp_procedure_new (context_set_gradient_blend_color_space_invoker);
+  procedure = gimp_procedure_new (context_set_gradient_blend_color_space_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-gradient-blend-color-space");
   gimp_procedure_set_static_help (procedure,
@@ -4546,7 +4645,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-gradient-repeat-mode
    */
-  procedure = gimp_procedure_new (context_get_gradient_repeat_mode_invoker);
+  procedure = gimp_procedure_new (context_get_gradient_repeat_mode_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-gradient-repeat-mode");
   gimp_procedure_set_static_help (procedure,
@@ -4570,7 +4669,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-gradient-repeat-mode
    */
-  procedure = gimp_procedure_new (context_set_gradient_repeat_mode_invoker);
+  procedure = gimp_procedure_new (context_set_gradient_repeat_mode_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-gradient-repeat-mode");
   gimp_procedure_set_static_help (procedure,
@@ -4594,7 +4693,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-gradient-reverse
    */
-  procedure = gimp_procedure_new (context_get_gradient_reverse_invoker);
+  procedure = gimp_procedure_new (context_get_gradient_reverse_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-gradient-reverse");
   gimp_procedure_set_static_help (procedure,
@@ -4617,7 +4716,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-gradient-reverse
    */
-  procedure = gimp_procedure_new (context_set_gradient_reverse_invoker);
+  procedure = gimp_procedure_new (context_set_gradient_reverse_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-gradient-reverse");
   gimp_procedure_set_static_help (procedure,
@@ -4640,7 +4739,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-palette
    */
-  procedure = gimp_procedure_new (context_get_palette_invoker);
+  procedure = gimp_procedure_new (context_get_palette_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-palette");
   gimp_procedure_set_static_help (procedure,
@@ -4656,6 +4755,8 @@ register_context_procs (GimpPDB *pdb)
                                                             "palette",
                                                             "The active palette",
                                                             FALSE,
+                                                            NULL,
+                                                            FALSE,
                                                             GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
@@ -4663,7 +4764,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-palette
    */
-  procedure = gimp_procedure_new (context_set_palette_invoker);
+  procedure = gimp_procedure_new (context_set_palette_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-palette");
   gimp_procedure_set_static_help (procedure,
@@ -4679,6 +4780,8 @@ register_context_procs (GimpPDB *pdb)
                                                         "palette",
                                                         "The palette",
                                                         FALSE,
+                                                        NULL,
+                                                        FALSE,
                                                         GIMP_PARAM_READWRITE | GIMP_PARAM_NO_VALIDATE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
@@ -4686,7 +4789,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-font
    */
-  procedure = gimp_procedure_new (context_get_font_invoker);
+  procedure = gimp_procedure_new (context_get_font_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-font");
   gimp_procedure_set_static_help (procedure,
@@ -4702,6 +4805,8 @@ register_context_procs (GimpPDB *pdb)
                                                          "font",
                                                          "The active font",
                                                          FALSE,
+                                                         NULL,
+                                                         FALSE,
                                                          GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
@@ -4709,7 +4814,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-font
    */
-  procedure = gimp_procedure_new (context_set_font_invoker);
+  procedure = gimp_procedure_new (context_set_font_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-font");
   gimp_procedure_set_static_help (procedure,
@@ -4725,6 +4830,8 @@ register_context_procs (GimpPDB *pdb)
                                                      "font",
                                                      "The font",
                                                      FALSE,
+                                                     NULL,
+                                                     FALSE,
                                                      GIMP_PARAM_READWRITE | GIMP_PARAM_NO_VALIDATE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
@@ -4732,7 +4839,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-antialias
    */
-  procedure = gimp_procedure_new (context_get_antialias_invoker);
+  procedure = gimp_procedure_new (context_get_antialias_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-antialias");
   gimp_procedure_set_static_help (procedure,
@@ -4755,7 +4862,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-antialias
    */
-  procedure = gimp_procedure_new (context_set_antialias_invoker);
+  procedure = gimp_procedure_new (context_set_antialias_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-antialias");
   gimp_procedure_set_static_help (procedure,
@@ -4780,7 +4887,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-feather
    */
-  procedure = gimp_procedure_new (context_get_feather_invoker);
+  procedure = gimp_procedure_new (context_get_feather_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-feather");
   gimp_procedure_set_static_help (procedure,
@@ -4803,7 +4910,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-feather
    */
-  procedure = gimp_procedure_new (context_set_feather_invoker);
+  procedure = gimp_procedure_new (context_set_feather_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-feather");
   gimp_procedure_set_static_help (procedure,
@@ -4828,7 +4935,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-feather-radius
    */
-  procedure = gimp_procedure_new (context_get_feather_radius_invoker);
+  procedure = gimp_procedure_new (context_get_feather_radius_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-feather-radius");
   gimp_procedure_set_static_help (procedure,
@@ -4857,7 +4964,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-feather-radius
    */
-  procedure = gimp_procedure_new (context_set_feather_radius_invoker);
+  procedure = gimp_procedure_new (context_set_feather_radius_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-feather-radius");
   gimp_procedure_set_static_help (procedure,
@@ -4888,7 +4995,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-sample-merged
    */
-  procedure = gimp_procedure_new (context_get_sample_merged_invoker);
+  procedure = gimp_procedure_new (context_get_sample_merged_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-sample-merged");
   gimp_procedure_set_static_help (procedure,
@@ -4911,7 +5018,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-sample-merged
    */
-  procedure = gimp_procedure_new (context_set_sample_merged_invoker);
+  procedure = gimp_procedure_new (context_set_sample_merged_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-sample-merged");
   gimp_procedure_set_static_help (procedure,
@@ -4936,7 +5043,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-sample-criterion
    */
-  procedure = gimp_procedure_new (context_get_sample_criterion_invoker);
+  procedure = gimp_procedure_new (context_get_sample_criterion_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-sample-criterion");
   gimp_procedure_set_static_help (procedure,
@@ -4960,7 +5067,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-sample-criterion
    */
-  procedure = gimp_procedure_new (context_set_sample_criterion_invoker);
+  procedure = gimp_procedure_new (context_set_sample_criterion_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-sample-criterion");
   gimp_procedure_set_static_help (procedure,
@@ -4986,7 +5093,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-sample-threshold
    */
-  procedure = gimp_procedure_new (context_get_sample_threshold_invoker);
+  procedure = gimp_procedure_new (context_get_sample_threshold_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-sample-threshold");
   gimp_procedure_set_static_help (procedure,
@@ -5009,7 +5116,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-sample-threshold
    */
-  procedure = gimp_procedure_new (context_set_sample_threshold_invoker);
+  procedure = gimp_procedure_new (context_set_sample_threshold_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-sample-threshold");
   gimp_procedure_set_static_help (procedure,
@@ -5034,7 +5141,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-sample-threshold-int
    */
-  procedure = gimp_procedure_new (context_get_sample_threshold_int_invoker);
+  procedure = gimp_procedure_new (context_get_sample_threshold_int_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-sample-threshold-int");
   gimp_procedure_set_static_help (procedure,
@@ -5057,7 +5164,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-sample-threshold-int
    */
-  procedure = gimp_procedure_new (context_set_sample_threshold_int_invoker);
+  procedure = gimp_procedure_new (context_set_sample_threshold_int_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-sample-threshold-int");
   gimp_procedure_set_static_help (procedure,
@@ -5080,7 +5187,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-sample-transparent
    */
-  procedure = gimp_procedure_new (context_get_sample_transparent_invoker);
+  procedure = gimp_procedure_new (context_get_sample_transparent_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-sample-transparent");
   gimp_procedure_set_static_help (procedure,
@@ -5103,7 +5210,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-sample-transparent
    */
-  procedure = gimp_procedure_new (context_set_sample_transparent_invoker);
+  procedure = gimp_procedure_new (context_set_sample_transparent_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-sample-transparent");
   gimp_procedure_set_static_help (procedure,
@@ -5128,7 +5235,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-diagonal-neighbors
    */
-  procedure = gimp_procedure_new (context_get_diagonal_neighbors_invoker);
+  procedure = gimp_procedure_new (context_get_diagonal_neighbors_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-diagonal-neighbors");
   gimp_procedure_set_static_help (procedure,
@@ -5151,7 +5258,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-diagonal-neighbors
    */
-  procedure = gimp_procedure_new (context_set_diagonal_neighbors_invoker);
+  procedure = gimp_procedure_new (context_set_diagonal_neighbors_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-diagonal-neighbors");
   gimp_procedure_set_static_help (procedure,
@@ -5176,7 +5283,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-distance-metric
    */
-  procedure = gimp_procedure_new (context_get_distance_metric_invoker);
+  procedure = gimp_procedure_new (context_get_distance_metric_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-distance-metric");
   gimp_procedure_set_static_help (procedure,
@@ -5200,7 +5307,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-distance-metric
    */
-  procedure = gimp_procedure_new (context_set_distance_metric_invoker);
+  procedure = gimp_procedure_new (context_set_distance_metric_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-distance-metric");
   gimp_procedure_set_static_help (procedure,
@@ -5226,7 +5333,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-interpolation
    */
-  procedure = gimp_procedure_new (context_get_interpolation_invoker);
+  procedure = gimp_procedure_new (context_get_interpolation_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-interpolation");
   gimp_procedure_set_static_help (procedure,
@@ -5250,7 +5357,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-interpolation
    */
-  procedure = gimp_procedure_new (context_set_interpolation_invoker);
+  procedure = gimp_procedure_new (context_set_interpolation_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-interpolation");
   gimp_procedure_set_static_help (procedure,
@@ -5276,7 +5383,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-transform-direction
    */
-  procedure = gimp_procedure_new (context_get_transform_direction_invoker);
+  procedure = gimp_procedure_new (context_get_transform_direction_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-transform-direction");
   gimp_procedure_set_static_help (procedure,
@@ -5300,7 +5407,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-transform-direction
    */
-  procedure = gimp_procedure_new (context_set_transform_direction_invoker);
+  procedure = gimp_procedure_new (context_set_transform_direction_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-transform-direction");
   gimp_procedure_set_static_help (procedure,
@@ -5326,7 +5433,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-transform-resize
    */
-  procedure = gimp_procedure_new (context_get_transform_resize_invoker);
+  procedure = gimp_procedure_new (context_get_transform_resize_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-transform-resize");
   gimp_procedure_set_static_help (procedure,
@@ -5350,7 +5457,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-transform-resize
    */
-  procedure = gimp_procedure_new (context_set_transform_resize_invoker);
+  procedure = gimp_procedure_new (context_set_transform_resize_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-transform-resize");
   gimp_procedure_set_static_help (procedure,
@@ -5376,7 +5483,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-ink-size
    */
-  procedure = gimp_procedure_new (context_get_ink_size_invoker);
+  procedure = gimp_procedure_new (context_get_ink_size_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-ink-size");
   gimp_procedure_set_static_help (procedure,
@@ -5399,7 +5506,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-ink-size
    */
-  procedure = gimp_procedure_new (context_set_ink_size_invoker);
+  procedure = gimp_procedure_new (context_set_ink_size_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-ink-size");
   gimp_procedure_set_static_help (procedure,
@@ -5422,7 +5529,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-ink-angle
    */
-  procedure = gimp_procedure_new (context_get_ink_angle_invoker);
+  procedure = gimp_procedure_new (context_get_ink_angle_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-ink-angle");
   gimp_procedure_set_static_help (procedure,
@@ -5445,7 +5552,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-ink-angle
    */
-  procedure = gimp_procedure_new (context_set_ink_angle_invoker);
+  procedure = gimp_procedure_new (context_set_ink_angle_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-ink-angle");
   gimp_procedure_set_static_help (procedure,
@@ -5468,7 +5575,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-ink-size-sensitivity
    */
-  procedure = gimp_procedure_new (context_get_ink_size_sensitivity_invoker);
+  procedure = gimp_procedure_new (context_get_ink_size_sensitivity_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-ink-size-sensitivity");
   gimp_procedure_set_static_help (procedure,
@@ -5491,7 +5598,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-ink-size-sensitivity
    */
-  procedure = gimp_procedure_new (context_set_ink_size_sensitivity_invoker);
+  procedure = gimp_procedure_new (context_set_ink_size_sensitivity_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-ink-size-sensitivity");
   gimp_procedure_set_static_help (procedure,
@@ -5514,7 +5621,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-ink-tilt-sensitivity
    */
-  procedure = gimp_procedure_new (context_get_ink_tilt_sensitivity_invoker);
+  procedure = gimp_procedure_new (context_get_ink_tilt_sensitivity_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-ink-tilt-sensitivity");
   gimp_procedure_set_static_help (procedure,
@@ -5537,7 +5644,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-ink-tilt-sensitivity
    */
-  procedure = gimp_procedure_new (context_set_ink_tilt_sensitivity_invoker);
+  procedure = gimp_procedure_new (context_set_ink_tilt_sensitivity_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-ink-tilt-sensitivity");
   gimp_procedure_set_static_help (procedure,
@@ -5560,7 +5667,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-ink-speed-sensitivity
    */
-  procedure = gimp_procedure_new (context_get_ink_speed_sensitivity_invoker);
+  procedure = gimp_procedure_new (context_get_ink_speed_sensitivity_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-ink-speed-sensitivity");
   gimp_procedure_set_static_help (procedure,
@@ -5583,7 +5690,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-ink-speed-sensitivity
    */
-  procedure = gimp_procedure_new (context_set_ink_speed_sensitivity_invoker);
+  procedure = gimp_procedure_new (context_set_ink_speed_sensitivity_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-ink-speed-sensitivity");
   gimp_procedure_set_static_help (procedure,
@@ -5606,7 +5713,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-ink-blob-type
    */
-  procedure = gimp_procedure_new (context_get_ink_blob_type_invoker);
+  procedure = gimp_procedure_new (context_get_ink_blob_type_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-ink-blob-type");
   gimp_procedure_set_static_help (procedure,
@@ -5630,7 +5737,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-ink-blob-type
    */
-  procedure = gimp_procedure_new (context_set_ink_blob_type_invoker);
+  procedure = gimp_procedure_new (context_set_ink_blob_type_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-ink-blob-type");
   gimp_procedure_set_static_help (procedure,
@@ -5654,7 +5761,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-ink-blob-aspect-ratio
    */
-  procedure = gimp_procedure_new (context_get_ink_blob_aspect_ratio_invoker);
+  procedure = gimp_procedure_new (context_get_ink_blob_aspect_ratio_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-ink-blob-aspect-ratio");
   gimp_procedure_set_static_help (procedure,
@@ -5677,7 +5784,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-ink-blob-aspect-ratio
    */
-  procedure = gimp_procedure_new (context_set_ink_blob_aspect_ratio_invoker);
+  procedure = gimp_procedure_new (context_set_ink_blob_aspect_ratio_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-ink-blob-aspect-ratio");
   gimp_procedure_set_static_help (procedure,
@@ -5700,7 +5807,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-ink-blob-angle
    */
-  procedure = gimp_procedure_new (context_get_ink_blob_angle_invoker);
+  procedure = gimp_procedure_new (context_get_ink_blob_angle_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-ink-blob-angle");
   gimp_procedure_set_static_help (procedure,
@@ -5723,7 +5830,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-set-ink-blob-angle
    */
-  procedure = gimp_procedure_new (context_set_ink_blob_angle_invoker);
+  procedure = gimp_procedure_new (context_set_ink_blob_angle_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-set-ink-blob-angle");
   gimp_procedure_set_static_help (procedure,
@@ -5746,7 +5853,7 @@ register_context_procs (GimpPDB *pdb)
   /*
    * gimp-context-get-resource
    */
-  procedure = gimp_procedure_new (context_get_resource_invoker);
+  procedure = gimp_procedure_new (context_get_resource_invoker, TRUE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-context-get-resource");
   gimp_procedure_set_static_help (procedure,
@@ -5768,6 +5875,9 @@ register_context_procs (GimpPDB *pdb)
                                    gimp_param_spec_resource ("resource",
                                                              "resource",
                                                              "The active resource",
+                                                             GIMP_TYPE_RESOURCE,
+                                                             FALSE,
+                                                             NULL,
                                                              FALSE,
                                                              GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);

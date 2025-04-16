@@ -20,6 +20,7 @@
 
 #include "config.h"
 
+#include <gegl.h>
 #include <gtk/gtk.h>
 
 #include "libgimpmath/gimpmath.h"
@@ -46,7 +47,7 @@
 #define POPUP_SIZE  100
 
 
-struct _GimpScrolledPreviewPrivate
+typedef struct _GimpScrolledPreviewPrivate
 {
   GtkWidget     *hscr;
   GtkWidget     *vscr;
@@ -59,7 +60,7 @@ struct _GimpScrolledPreviewPrivate
   gint           drag_yoff;
   gboolean       in_drag;
   gint           frozen;
-};
+} GimpScrolledPreviewPrivate;
 
 #define GET_PRIVATE(obj) (gimp_scrolled_preview_get_instance_private ((GimpScrolledPreview *) (obj)))
 
@@ -546,8 +547,8 @@ gimp_scrolled_preview_nav_button_press (GtkWidget           *widget,
       GdkCursor       *cursor;
       GtkBorder        border;
       GimpCheckType    check_type;
-      GimpRGB          check_custom_color1;
-      GimpRGB          check_custom_color2;
+      GeglColor       *check_custom_color1;
+      GeglColor       *check_custom_color2;
       gint             area_width;
       gint             area_height;
       gint             x, y;

@@ -87,6 +87,9 @@ GIMP_MAIN (DARKTABLE_TYPE)
 DEFINE_STD_SET_I18N
 
 
+static gboolean before_darktable_4_6 = FALSE;
+
+
 static void
 darktable_class_init (DarktableClass *klass)
 {
@@ -113,7 +116,7 @@ darktable_init_procedures (GimpPlugIn *plug_in)
                                                              "org.darktable",
                                                              REGISTRY_KEY_BASE,
                                                              &search_path);
-  gchar    *argv[]           = { exec_path, "--version", NULL };
+  gchar    *argv[]           = { exec_path, "--gimp" , "version", NULL };
   gchar    *darktable_stdout = NULL;
   gchar    *darktable_stderr = NULL;
   gboolean  have_darktable   = FALSE;
@@ -126,6 +129,10 @@ darktable_init_procedures (GimpPlugIn *plug_in)
   if (debug_prints)
     g_printf ("[%s] trying to call '%s'\n", __FILE__, exec_path);
 
+  /* In Darktable 4.6, a new GIMP-specific API was introduced due to changes
+   * in how the version output is formatted. We first check for Darktable
+   * with this API, then fallback to the pre-4.6 regex checks if the user has
+   * an older version of Darktable installed. */
   if (g_spawn_sync (NULL,
                     argv,
                     NULL,
@@ -137,47 +144,82 @@ darktable_init_procedures (GimpPlugIn *plug_in)
                     NULL,
                     &error))
     {
-      GRegex     *regex;
-      GMatchInfo *matches;
-      gint        major;
-      gint        minor;
-
-      /* A default darktable would apparently output something like
-       * "this is darktable 2.2.5", but this version string is
-       * customizable. In the official Fedora package for instance, I
-       * encountered a "this is darktable darktable-2.2.5-4.fc27".
-       * Therefore make the version recognition a bit more flexible.
-       */
-      regex = g_regex_new ("this is darktable [^0-9]*([0-9]+)\\.([0-9]+)\\.([0-9]+)",
-                           0, 0, NULL);
-      if (g_regex_match (regex, darktable_stdout, 0, &matches))
+      /* TODO: Utilize more features of Darktable API */
+      if (! error)
         {
-          gchar *match;
-
-          match = g_match_info_fetch (matches, 1);
-          major = g_ascii_strtoll (match, NULL, 10);
-          g_free (match);
-
-          match = g_match_info_fetch (matches, 2);
-          minor = g_ascii_strtoll (match, NULL, 10);
-          g_free (match);
-
-          if (((major == 1 && minor >= 7) || major >= 2))
+          if (! (darktable_stderr && *darktable_stderr))
             {
-              if (g_strstr_len (darktable_stdout, -1,
-                                "Lua support enabled"))
-                {
-                  have_darktable = TRUE;
-                }
+              have_darktable       = TRUE;
+              before_darktable_4_6 = FALSE;
             }
         }
-
-      g_match_info_free (matches);
-      g_regex_unref (regex);
     }
   else if (debug_prints)
     {
       g_printf ("[%s] g_spawn_sync failed\n", __FILE__);
+    }
+
+  if (! have_darktable)
+    {
+      gchar *argv_pre_4_6[] = { exec_path, "--version", NULL };
+
+      g_clear_error (&error);
+      error = NULL;
+
+      if (g_spawn_sync (NULL,
+                        argv_pre_4_6,
+                        NULL,
+                        (search_path ? G_SPAWN_SEARCH_PATH : 0),
+                        NULL,
+                        NULL,
+                        &darktable_stdout,
+                        &darktable_stderr,
+                        NULL,
+                        &error))
+        {
+          GRegex     *regex;
+          GMatchInfo *matches;
+          gint        major;
+          gint        minor;
+
+          /* A default darktable would apparently output something like
+           * "this is darktable 2.2.5", but this version string is
+           * customizable. In the official Fedora package for instance, I
+           * encountered a "this is darktable darktable-2.2.5-4.fc27".
+           * Therefore make the version recognition a bit more flexible.
+           */
+          regex = g_regex_new ("this is darktable [^0-9]*([0-9]+)\\.([0-9]+)\\.([0-9]+)",
+                               0, 0, NULL);
+          if (g_regex_match (regex, darktable_stdout, 0, &matches))
+            {
+              gchar *match;
+
+              match = g_match_info_fetch (matches, 1);
+              major = g_ascii_strtoll (match, NULL, 10);
+              g_free (match);
+
+              match = g_match_info_fetch (matches, 2);
+              minor = g_ascii_strtoll (match, NULL, 10);
+              g_free (match);
+
+              if (((major == 1 && minor >= 7) || major >= 2))
+                {
+                  if (g_strstr_len (darktable_stdout, -1,
+                                    "Lua support enabled"))
+                    {
+                      have_darktable       = TRUE;
+                      before_darktable_4_6 = TRUE;
+                    }
+                }
+            }
+
+          g_match_info_free (matches);
+          g_regex_unref (regex);
+        }
+      else if (debug_prints)
+        {
+          g_printf ("[%s] g_spawn_sync failed\n", __FILE__);
+        }
     }
 
   if (debug_prints)
@@ -235,11 +277,11 @@ darktable_create_procedure (GimpPlugIn  *plug_in,
                                                 darktable_load_thumb, NULL, NULL);
 
       gimp_procedure_set_documentation (procedure,
-                                        "Load thumbnail from a raw image "
-                                        "via darktable",
-                                        "This plug-in loads a thumbnail "
-                                        "from a raw image by calling "
-                                        "darktable-cli.",
+                                        _("Load thumbnail from a raw image "
+                                          "via darktable"),
+                                        _("This plug-in loads a thumbnail "
+                                          "from a raw image by calling "
+                                          "darktable-cli."),
                                         name);
       gimp_procedure_set_attribution (procedure,
                                       "Tobias Ellinghaus",
@@ -399,7 +441,15 @@ load_image (GFile        *file,
                                                              "org.darktable",
                                                              REGISTRY_KEY_BASE,
                                                              &search_path);
-  gchar    *argv[] =
+  gchar    *argv[]           =
+    {
+      exec_path,
+      "--gimp",
+      "file",
+      (gchar *) g_file_peek_path (file),
+      NULL
+    };
+  gchar    *argv_pre_4_6[]   =
     {
       exec_path,
       "--library", ":memory:",
@@ -433,20 +483,64 @@ load_image (GFile        *file,
       g_strfreev (environ_) ;
     }
 
-  if (g_spawn_sync (NULL,
-                    argv,
-                    NULL,
-                    /*G_SPAWN_STDOUT_TO_DEV_NULL |*/
-                    /*G_SPAWN_STDERR_TO_DEV_NULL |*/
-                    (search_path ? G_SPAWN_SEARCH_PATH : 0),
-                    NULL,
-                    NULL,
-                    &darktable_stdout,
-                    &darktable_stderr,
-                    NULL,
-                    error))
+  if (! before_darktable_4_6)
     {
-      image = gimp_file_load (run_mode, file_out);
+      if (g_spawn_sync (NULL,
+                        argv,
+                        NULL,
+                        /*G_SPAWN_STDOUT_TO_DEV_NULL |*/
+                        /*G_SPAWN_STDERR_TO_DEV_NULL |*/
+                        (search_path ? G_SPAWN_SEARCH_PATH : 0),
+                        NULL,
+                        NULL,
+                        &darktable_stdout,
+                        &darktable_stderr,
+                        NULL,
+                        error))
+        {
+          gchar **response = NULL;
+
+          gimp_progress_update (0.5);
+
+          response = g_strsplit (darktable_stdout, "\n", 0);
+
+          if (response != NULL)
+            {
+              GFile *darktable_file;
+
+              for (gint i = 0; response[i] != NULL; i++)
+                {
+                  if (g_strrstr (response[i], "<<gimp") != NULL &&
+                      response[i + 1] != NULL)
+                    {
+                      darktable_file = g_file_new_for_path (response[i + 1]);
+                      image = gimp_file_load (run_mode, darktable_file);
+
+                      g_object_unref (darktable_file);
+                      break;
+                    }
+                }
+              g_strfreev (response);
+            }
+        }
+    }
+  else
+    {
+      if (g_spawn_sync (NULL,
+                        argv_pre_4_6,
+                        NULL,
+                        /*G_SPAWN_STDOUT_TO_DEV_NULL |*/
+                        /*G_SPAWN_STDERR_TO_DEV_NULL |*/
+                        (search_path ? G_SPAWN_SEARCH_PATH : 0),
+                        NULL,
+                        NULL,
+                        &darktable_stdout,
+                        &darktable_stderr,
+                        NULL,
+                        error))
+        {
+          image = gimp_file_load (run_mode, file_out);
+        }
     }
 
   if (debug_prints)
@@ -496,7 +590,16 @@ load_thumbnail_image (GFile   *file,
                                                              "org.darktable",
                                                              REGISTRY_KEY_BASE,
                                                              &search_path);
-  gchar    *argv[] =
+  gchar    *argv[]           =
+    {
+      exec_path,
+      "--gimp",
+      "thumb",
+      (gchar *) g_file_peek_path (file),
+      size,
+      NULL
+    };
+  gchar    *argv_pre_4_6[]   =
     {
       exec_path,
       (gchar *) g_file_peek_path (file),
@@ -519,31 +622,76 @@ load_thumbnail_image (GFile   *file,
 
   *width = *height = 0;
 
-  if (g_spawn_sync (NULL,
-                    argv,
-                    NULL,
-                    G_SPAWN_STDERR_TO_DEV_NULL |
-                    (search_path ? G_SPAWN_SEARCH_PATH : 0),
-                    NULL,
-                    NULL,
-                    &darktable_stdout,
-                    NULL,
-                    NULL,
-                    error))
+  if (! before_darktable_4_6)
     {
-      gimp_progress_update (0.5);
-
-      image = gimp_file_load (GIMP_RUN_NONINTERACTIVE, file_out);
-      if (image)
+      if (g_spawn_sync (NULL,
+                        argv,
+                        NULL,
+                        G_SPAWN_STDERR_TO_DEV_NULL |
+                        (search_path ? G_SPAWN_SEARCH_PATH : 0),
+                        NULL,
+                        NULL,
+                        &darktable_stdout,
+                        NULL,
+                        NULL,
+                        error))
         {
-          /* the size reported by raw files isn't precise,
-           * but it should be close enough to get an idea.
-           */
-          gchar *start_of_size = g_strstr_len (darktable_stdout,
-                                               -1,
-                                               "[dt4gimp]");
-          if (start_of_size)
-            sscanf (start_of_size, "[dt4gimp] %d %d", width, height);
+          gchar **response = NULL;
+
+          gimp_progress_update (0.5);
+
+          response = g_strsplit (darktable_stdout, "\n", 0);
+
+          if (response != NULL)
+            {
+              GFile *darktable_file;
+
+              for (gint i = 0; response[i] != NULL; i++)
+                {
+                  if (g_strrstr (response[i], "<<gimp") != NULL &&
+                      response[i + 2] != NULL)
+                    {
+                      darktable_file = g_file_new_for_path (response[i + 1]);
+                      image = gimp_file_load (GIMP_RUN_NONINTERACTIVE,
+                                              darktable_file);
+                      sscanf (response[i + 2], "%d %d", width, height);
+
+                      g_object_unref (darktable_file);
+                      break;
+                    }
+                }
+              g_strfreev (response);
+            }
+        }
+    }
+  else
+    {
+      if (g_spawn_sync (NULL,
+                        argv_pre_4_6,
+                        NULL,
+                        G_SPAWN_STDERR_TO_DEV_NULL |
+                        (search_path ? G_SPAWN_SEARCH_PATH : 0),
+                        NULL,
+                        NULL,
+                        &darktable_stdout,
+                        NULL,
+                        NULL,
+                        error))
+        {
+          gimp_progress_update (0.5);
+
+          image = gimp_file_load (GIMP_RUN_NONINTERACTIVE, file_out);
+          if (image)
+            {
+              /* the size reported by raw files isn't precise,
+               * but it should be close enough to get an idea.
+               */
+              gchar *start_of_size = g_strstr_len (darktable_stdout,
+                                                   -1,
+                                                   "[dt4gimp]");
+              if (start_of_size)
+                sscanf (start_of_size, "[dt4gimp] %d %d", width, height);
+            }
         }
     }
 

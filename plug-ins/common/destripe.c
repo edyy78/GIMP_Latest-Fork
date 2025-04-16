@@ -64,7 +64,6 @@ static GimpProcedure  * destripe_create_procedure (GimpPlugIn           *plug_in
 static GimpValueArray * destripe_run              (GimpProcedure        *procedure,
                                                    GimpRunMode           run_mode,
                                                    GimpImage            *image,
-                                                   gint                  n_drawables,
                                                    GimpDrawable        **drawables,
                                                    GimpProcedureConfig  *config,
                                                    gpointer              run_data);
@@ -137,18 +136,18 @@ destripe_create_procedure (GimpPlugIn  *plug_in,
                                       "Marc Lehmann <pcg@goof.com>",
                                       PLUG_IN_VERSION);
 
-      GIMP_PROC_ARG_INT (procedure, "avg-width",
-                         _("_Width"),
-                         _("Averaging filter width"),
-                         2, MAX_AVG, 36,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "avg-width",
+                                       _("_Width"),
+                                       _("Averaging filter width"),
+                                       2, MAX_AVG, 36,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure,
-                             "create-histogram",
-                             _("Create _histogram"),
-                             _("Output a histogram"),
-                             FALSE,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure,
+                                           "create-histogram",
+                                           _("Create _histogram"),
+                                           _("Output a histogram"),
+                                           FALSE,
+                                           G_PARAM_READWRITE);
     }
 
   return procedure;
@@ -158,7 +157,6 @@ static GimpValueArray *
 destripe_run (GimpProcedure        *procedure,
               GimpRunMode           run_mode,
               GimpImage            *image,
-              gint                  n_drawables,
               GimpDrawable        **drawables,
               GimpProcedureConfig  *config,
               gpointer              run_data)
@@ -167,7 +165,7 @@ destripe_run (GimpProcedure        *procedure,
 
   gegl_init (NULL, NULL);
 
-  if (n_drawables != 1)
+  if (gimp_core_object_array_get_length ((GObject **) drawables) != 1)
     {
       GError *error = NULL;
 

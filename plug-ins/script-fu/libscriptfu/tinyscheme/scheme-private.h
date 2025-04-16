@@ -7,18 +7,31 @@
 /*------------------ Ugly internals -----------------------------------*/
 /*------------------ Of interest only to FFI users --------------------*/
 
-enum scheme_port_kind {
-  port_free=0,
+/* FUTURE: should have bit fields.
+ * With separate enums for each field.
+ */
+/* Direction bit field:
+ *    00 fully closed
+ *    01 open for input
+ *    10 open for output
+ *    11 open for input or output
+ */
+/* !!! A struct port retains whether the port
+ * is-a string or file port, even when closed.
+ */
+enum PortData {
+  /* Kind */
   port_file=1,
   port_string=2,
-  port_srfi6=4,
-  port_input=16,
-  port_output=32,
-  port_saw_EOF=64
+  /* Direction. */
+  port_input=4,
+  port_output=8,
+  /* A state, for all kinds. */
+  port_saw_EOF=16
 };
 
 typedef struct port {
-  unsigned char kind;
+  unsigned int kind;
   union {
     struct {
       FILE *file;
@@ -119,6 +132,7 @@ pointer inport;
 pointer outport;
 pointer save_inport;
 pointer loadport;
+port   *errport;          /* Not a cell, a port struct. */
 
 #ifndef MAXFIL
 #define MAXFIL 64

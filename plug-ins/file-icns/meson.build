@@ -3,7 +3,7 @@ plugin_name = 'file-icns'
 plugin_sources = [
   'file-icns-data.c',
   'file-icns-load.c',
-  'file-icns-save.c',
+  'file-icns-export.c',
   'file-icns.c',
 ]
 
@@ -21,12 +21,13 @@ if platform_windows
   )
 endif
 
-executable(plugin_name,
-  plugin_sources,
-  dependencies: [
-    libgimpui_dep,
-    libpng,
-  ],
-  install: true,
-  install_dir: gimpplugindir / 'plug-ins' / plugin_name,
-)
+plugin_exe = executable(plugin_name,
+                        plugin_sources,
+                        dependencies: [
+                          libgimpui_dep,
+                          libpng,
+                        ],
+                        win_subsystem: 'windows',
+                        install: true,
+                        install_dir: gimpplugindir / 'plug-ins' / plugin_name)
+plugin_executables += [plugin_exe.full_path()]

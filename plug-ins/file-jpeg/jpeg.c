@@ -32,7 +32,7 @@
 #include "jpeg.h"
 #include "jpeg-settings.h"
 #include "jpeg-load.h"
-#include "jpeg-save.h"
+#include "jpeg-export.h"
 
 
 typedef struct _Jpeg      Jpeg;
@@ -70,12 +70,11 @@ static GimpValueArray * jpeg_load_thumb       (GimpProcedure         *procedure,
                                                gint                   size,
                                                GimpProcedureConfig   *config,
                                                gpointer               run_data);
-static GimpValueArray * jpeg_save             (GimpProcedure         *procedure,
+static GimpValueArray * jpeg_export           (GimpProcedure         *procedure,
                                                GimpRunMode            run_mode,
                                                GimpImage             *image,
-                                               gint                   n_drawables,
-                                               GimpDrawable         **drawables,
                                                GFile                 *file,
+                                               GimpExportOptions     *options,
                                                GimpMetadata          *metadata,
                                                GimpProcedureConfig   *config,
                                                gpointer               run_data);
@@ -116,7 +115,7 @@ jpeg_query_procedures (GimpPlugIn *plug_in)
 
   list = g_list_append (list, g_strdup (LOAD_THUMB_PROC));
   list = g_list_append (list, g_strdup (LOAD_PROC));
-  list = g_list_append (list, g_strdup (SAVE_PROC));
+  list = g_list_append (list, g_strdup (EXPORT_PROC));
 
   return list;
 }
@@ -136,8 +135,8 @@ jpeg_create_procedure (GimpPlugIn  *plug_in,
       gimp_procedure_set_menu_label (procedure, _("JPEG image"));
 
       gimp_procedure_set_documentation (procedure,
-                                        "Loads files in the JPEG file format",
-                                        "Loads files in the JPEG file format",
+                                        _("Loads files in the JPEG file format"),
+                                        _("Loads files in the JPEG file format"),
                                         name);
       gimp_procedure_set_attribution (procedure,
                                       "Spencer Kimball, Peter Mattis & others",
@@ -161,9 +160,9 @@ jpeg_create_procedure (GimpPlugIn  *plug_in,
                                                 jpeg_load_thumb, NULL, NULL);
 
       gimp_procedure_set_documentation (procedure,
-                                        "Loads a thumbnail from a JPEG image",
-                                        "Loads a thumbnail from a JPEG image, "
-                                        "if one exists",
+                                        _("Loads a thumbnail from a JPEG image"),
+                                        _("Loads a thumbnail from a JPEG image, "
+                                          "if one exists"),
                                         name);
       gimp_procedure_set_attribution (procedure,
                                       "Mukund Sivaraman <muks@mukund.org>, "
@@ -172,20 +171,20 @@ jpeg_create_procedure (GimpPlugIn  *plug_in,
                                       "Sven Neumann <sven@gimp.org>",
                                       "November 15, 2004");
     }
-  else if (! strcmp (name, SAVE_PROC))
+  else if (! strcmp (name, EXPORT_PROC))
     {
-      procedure = gimp_save_procedure_new (plug_in, name,
-                                           GIMP_PDB_PROC_TYPE_PLUGIN,
-                                           TRUE, jpeg_save, NULL, NULL);
+      procedure = gimp_export_procedure_new (plug_in, name,
+                                             GIMP_PDB_PROC_TYPE_PLUGIN,
+                                             TRUE, jpeg_export, NULL, NULL);
 
       gimp_procedure_set_image_types (procedure, "RGB*, GRAY*");
 
       gimp_procedure_set_menu_label (procedure, _("JPEG image"));
 
       gimp_procedure_set_documentation (procedure,
-                                        "Saves files in the JPEG file format",
-                                        "Saves files in the lossy, widely "
-                                        "supported JPEG format",
+                                        _("Exports files in the JPEG file format"),
+                                        _("Exports files in the lossy, widely "
+                                          "supported JPEG format"),
                                         name);
       gimp_procedure_set_attribution (procedure,
                                       "Spencer Kimball, Peter Mattis & others",
@@ -199,118 +198,124 @@ jpeg_create_procedure (GimpPlugIn  *plug_in,
       gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
                                           "jpg,jpeg,jpe");
 
+      gimp_export_procedure_set_capabilities (GIMP_EXPORT_PROCEDURE (procedure),
+                                              GIMP_EXPORT_CAN_HANDLE_RGB |
+                                              GIMP_EXPORT_CAN_HANDLE_GRAY,
+                                              NULL, NULL, NULL);
+
       /* See bugs #63610 and #61088 for a discussion about the quality
        * settings
        */
-      GIMP_PROC_ARG_DOUBLE (procedure, "quality",
-                            _("_Quality"),
-                            _("Quality of exported image"),
-                            0.0, 1.0, 0.9,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "quality",
+                                          _("_Quality"),
+                                          _("Quality of exported image"),
+                                          0.0, 1.0, 0.9,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "smoothing",
-                            _("S_moothing"),
-                            _("Smoothing factor for exported image"),
-                            0.0, 1.0, 0.0,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "smoothing",
+                                          _("S_moothing"),
+                                          _("Smoothing factor for exported image"),
+                                          0.0, 1.0, 0.0,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "optimize",
-                             _("Optimi_ze"),
-                             _("Use optimized tables during Huffman coding"),
-                             TRUE,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "optimize",
+                                           _("Optimi_ze"),
+                                           _("Use optimized tables during Huffman coding"),
+                                           TRUE,
+                                           G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "progressive",
-                             _("_Progressive"),
-                             _("Create progressive JPEG images"),
-                             TRUE,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "progressive",
+                                           _("_Progressive"),
+                                           _("Create progressive JPEG images"),
+                                           TRUE,
+                                           G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "cmyk",
-                             _("Export as CM_YK"),
-                             _("Create a CMYK JPEG image using the soft-proofing color profile"),
-                             FALSE,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "cmyk",
+                                           _("Export as CM_YK"),
+                                           _("Create a CMYK JPEG image using the soft-proofing color profile"),
+                                           FALSE,
+                                           G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "sub-sampling",
-                         _("Su_bsampling"),
-                         _("Sub-sampling type { 0 == 4:2:0 (chroma quartered), "
-                           "1 == 4:2:2 (chroma halved horizontally), "
-                           "2 == 4:4:4 (best quality), "
-                           "3 == 4:4:0 (chroma halved vertically)"),
-                         JPEG_SUBSAMPLING_2x2_1x1_1x1,
-                         JPEG_SUBSAMPLING_1x2_1x1_1x1,
-                         JPEG_SUBSAMPLING_1x1_1x1_1x1,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_choice_argument (procedure, "sub-sampling",
+                                          _("Su_bsampling"),
+                                          _("Sub-sampling type"),
+                                          gimp_choice_new_with_values ("sub-sampling-1x1", JPEG_SUBSAMPLING_1x1_1x1_1x1, _("4:4:4 (best quality)"),               NULL,
+                                                                       "sub-sampling-2x1", JPEG_SUBSAMPLING_2x1_1x1_1x1, _("4:2:2 (chroma halved horizontally)"), NULL,
+                                                                       "sub-sampling-1x2", JPEG_SUBSAMPLING_1x2_1x1_1x1, _("4:4:0 (chroma halved vertically)"),   NULL,
+                                                                       "sub-sampling-2x2", JPEG_SUBSAMPLING_2x2_1x1_1x1, _("4:2:0 (chroma quartered)"),           NULL,
+                                                                       NULL),
+                                          "sub-sampling-1x1", G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "baseline",
-                             _("Baseline"),
-                             _("Force creation of a baseline JPEG "
-                               "(non-baseline JPEGs can't be read by all decoders)"),
-                             TRUE,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "baseline",
+                                           _("Baseline"),
+                                           _("Force creation of a baseline JPEG "
+                                             "(non-baseline JPEGs can't be read by all decoders)"),
+                                           TRUE,
+                                           G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "restart",
-                         _("Inter_val (MCU rows):"),
-                         _("Interval of restart markers "
-                           "(in MCU rows, 0 = no restart markers)"),
-                         0, 64, 0,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "restart",
+                                       _("Inter_val (MCU rows):"),
+                                       _("Interval of restart markers "
+                                         "(in MCU rows, 0 = no restart markers)"),
+                                       0, 64, 0,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "dct",
-                         _("_DCT method"),
-                         _("DCT method to use { INTEGER (0), FIXED (1), "
-                           "FLOAT (2) }"),
-                         0, 2, 0,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_choice_argument (procedure, "dct",
+                                          _("_DCT method"),
+                                          _("DCT method to use"),
+                                          gimp_choice_new_with_values ("fixed",   1, _("Fast Integer"),    NULL,
+                                                                       "integer", 0, _("Integer"),         NULL,
+                                                                       "float",   2, _("Floating-Point"),  NULL,
+                                                                       NULL),
+                                          "integer", G_PARAM_READWRITE);
 
       /* Some auxiliary arguments mostly for interactive usage. */
 
-      GIMP_PROC_AUX_ARG_BOOLEAN (procedure, "use-original-quality",
-                                 _("_Use quality settings from original image"),
-                                 _("If the original image was loaded from a JPEG "
-                                   "file using non-standard quality settings "
-                                   "(quantization tables), enable this option to "
-                                   "get almost the same quality and file size."),
-                                 FALSE,
-                                 G_PARAM_READWRITE);
-      GIMP_PROC_AUX_ARG_INT (procedure, "original-quality",
-                             NULL, NULL,
-                             -1, 100, -1,
-                             G_PARAM_READWRITE);
-      GIMP_PROC_AUX_ARG_INT (procedure, "original-sub-sampling",
-                             NULL, NULL,
-                             JPEG_SUBSAMPLING_2x2_1x1_1x1,
-                             JPEG_SUBSAMPLING_1x2_1x1_1x1,
-                             JPEG_SUBSAMPLING_2x2_1x1_1x1,
-                             G_PARAM_READWRITE);
-      GIMP_PROC_AUX_ARG_INT (procedure, "original-num-quant-tables",
-                             NULL, NULL,
-                             -1, 4, -1,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_aux_argument (procedure, "use-original-quality",
+                                               _("_Use quality settings from original image"),
+                                               _("If the original image was loaded from a JPEG "
+                                                 "file using non-standard quality settings "
+                                                 "(quantization tables), enable this option to "
+                                                 "get almost the same quality and file size."),
+                                               FALSE,
+                                               G_PARAM_READWRITE);
+      gimp_procedure_add_int_aux_argument (procedure, "original-quality",
+                                           NULL, NULL,
+                                           -1, 100, -1,
+                                           G_PARAM_READWRITE);
+      gimp_procedure_add_int_aux_argument (procedure, "original-sub-sampling",
+                                           NULL, NULL,
+                                           JPEG_SUBSAMPLING_2x2_1x1_1x1,
+                                           JPEG_SUBSAMPLING_1x2_1x1_1x1,
+                                           JPEG_SUBSAMPLING_2x2_1x1_1x1,
+                                           G_PARAM_READWRITE);
+      gimp_procedure_add_int_aux_argument (procedure, "original-num-quant-tables",
+                                           NULL, NULL,
+                                           -1, 4, -1,
+                                           G_PARAM_READWRITE);
 
-      GIMP_PROC_AUX_ARG_BOOLEAN (procedure, "show-preview",
-                                 _("Sho_w preview in image window"),
-                                 _("Creates a temporary layer with an export preview"),
-                                 FALSE,
-                                 G_PARAM_READWRITE);
-      GIMP_PROC_AUX_ARG_BOOLEAN (procedure, "use-arithmetic-coding",
-                                 _("Use _arithmetic coding"),
-                                 _("Older software may have trouble opening "
-                                   "arithmetic-coded images"),
-                                 FALSE,
-                                 G_PARAM_READWRITE);
-      GIMP_PROC_AUX_ARG_BOOLEAN (procedure, "use-restart",
-                                 _("Use restart mar_kers"),
-                                 NULL, FALSE,
-                                 G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_aux_argument (procedure, "show-preview",
+                                               _("Sho_w preview in image window"),
+                                               _("Creates a temporary layer with an export preview"),
+                                               FALSE,
+                                               G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_aux_argument (procedure, "use-arithmetic-coding",
+                                               _("Use _arithmetic coding"),
+                                               _("Older software may have trouble opening "
+                                                 "arithmetic-coded images"),
+                                               FALSE,
+                                               G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_aux_argument (procedure, "use-restart",
+                                               _("Use restart mar_kers"),
+                                               NULL, FALSE,
+                                               G_PARAM_READWRITE);
 
-      gimp_save_procedure_set_support_exif      (GIMP_SAVE_PROCEDURE (procedure), TRUE);
-      gimp_save_procedure_set_support_iptc      (GIMP_SAVE_PROCEDURE (procedure), TRUE);
-      gimp_save_procedure_set_support_xmp       (GIMP_SAVE_PROCEDURE (procedure), TRUE);
-      gimp_save_procedure_set_support_profile   (GIMP_SAVE_PROCEDURE (procedure), TRUE);
-      gimp_save_procedure_set_support_thumbnail (GIMP_SAVE_PROCEDURE (procedure), TRUE);
-      gimp_save_procedure_set_support_comment   (GIMP_SAVE_PROCEDURE (procedure), TRUE);
+      gimp_export_procedure_set_support_exif      (GIMP_EXPORT_PROCEDURE (procedure), TRUE);
+      gimp_export_procedure_set_support_iptc      (GIMP_EXPORT_PROCEDURE (procedure), TRUE);
+      gimp_export_procedure_set_support_xmp       (GIMP_EXPORT_PROCEDURE (procedure), TRUE);
+      gimp_export_procedure_set_support_profile   (GIMP_EXPORT_PROCEDURE (procedure), TRUE);
+      gimp_export_procedure_set_support_thumbnail (GIMP_EXPORT_PROCEDURE (procedure), TRUE);
+      gimp_export_procedure_set_support_comment   (GIMP_EXPORT_PROCEDURE (procedure), TRUE);
     }
 
   return procedure;
@@ -412,19 +417,19 @@ jpeg_load_thumb (GimpProcedure       *procedure,
 }
 
 static GimpValueArray *
-jpeg_save (GimpProcedure        *procedure,
-           GimpRunMode           run_mode,
-           GimpImage            *image,
-           gint                  n_drawables,
-           GimpDrawable        **drawables,
-           GFile                *file,
-           GimpMetadata         *metadata,
-           GimpProcedureConfig  *config,
-           gpointer              run_data)
+jpeg_export (GimpProcedure        *procedure,
+             GimpRunMode           run_mode,
+             GimpImage            *image,
+             GFile                *file,
+             GimpExportOptions    *options,
+             GimpMetadata         *metadata,
+             GimpProcedureConfig  *config,
+             gpointer              run_data)
 {
   GimpPDBStatusType  status = GIMP_PDB_SUCCESS;
   GimpImage         *orig_image;
-  GimpExportReturn   export = GIMP_EXPORT_CANCEL;
+  GimpExportReturn   export = GIMP_EXPORT_IGNORE;
+  GList             *drawables;
   GError            *error  = NULL;
 
   gint                   orig_num_quant_tables = -1;
@@ -437,48 +442,6 @@ jpeg_save (GimpProcedure        *procedure,
   preview_layer = NULL;
 
   orig_image = image;
-
-  switch (run_mode)
-    {
-    case GIMP_RUN_INTERACTIVE:
-    case GIMP_RUN_WITH_LAST_VALS:
-      gimp_ui_init (PLUG_IN_BINARY);
-
-      export = gimp_export_image (&image, &n_drawables, &drawables, "JPEG",
-                                  GIMP_EXPORT_CAN_HANDLE_RGB |
-                                  GIMP_EXPORT_CAN_HANDLE_GRAY);
-
-      switch (export)
-        {
-        case GIMP_EXPORT_EXPORT:
-          display = NULL;
-          separate_display = TRUE;
-          break;
-
-        case GIMP_EXPORT_IGNORE:
-          break;
-
-        case GIMP_EXPORT_CANCEL:
-          return gimp_procedure_new_return_values (procedure,
-                                                   GIMP_PDB_CANCEL,
-                                                   NULL);
-          break;
-        }
-      break;
-
-    default:
-      break;
-    }
-
-  if (n_drawables != 1)
-    {
-      g_set_error (&error, G_FILE_ERROR, 0,
-                   _("JPEG format does not support multiple layers."));
-
-      return gimp_procedure_new_return_values (procedure,
-                                               GIMP_PDB_CALLING_ERROR,
-                                               error);
-    }
 
   /* Override preferences from JPG export defaults (if saved). */
 
@@ -502,9 +465,9 @@ jpeg_save (GimpProcedure        *procedure,
                                           &orig_num_quant_tables);
 
           g_object_get (config,
-                        "quality",      &dquality,
-                        "sub-sampling", &subsmp,
+                        "quality", &dquality,
                         NULL);
+          subsmp = gimp_procedure_config_get_choice_id (config, "sub-sampling");
 
           quality = (gint) (dquality * 100.0);
 
@@ -528,7 +491,24 @@ jpeg_save (GimpProcedure        *procedure,
                     orig_subsmp == JPEG_SUBSAMPLING_2x2_1x1_1x1))
                 {
                   subsmp = orig_subsmp;
-                  g_object_set (config, "sub-sampling", orig_subsmp, NULL);
+                  switch (subsmp)
+                    {
+                    case JPEG_SUBSAMPLING_1x1_1x1_1x1:
+                      g_object_set (config, "sub-sampling", "sub-sampling-1x1", NULL);
+                      break;
+
+                    case JPEG_SUBSAMPLING_2x1_1x1_1x1:
+                      g_object_set (config, "sub-sampling", "sub-sampling-2x1", NULL);
+                      break;
+
+                    case JPEG_SUBSAMPLING_1x2_1x1_1x1:
+                      g_object_set (config, "sub-sampling", "sub-sampling-1x2", NULL);
+                      break;
+
+                    case JPEG_SUBSAMPLING_2x2_1x1_1x1:
+                      g_object_set (config, "sub-sampling", "sub-sampling-2x2", NULL);
+                      break;
+                    }
                 }
 
               if (orig_quality == quality && orig_subsmp == subsmp)
@@ -545,9 +525,14 @@ jpeg_save (GimpProcedure        *procedure,
                 "original-num-quant-tables", orig_num_quant_tables,
                 NULL);
 
+  export    = gimp_export_options_get_image (options, &image);
+  drawables = gimp_image_list_layers (image);
+
   if (run_mode == GIMP_RUN_INTERACTIVE)
     {
       gboolean show_preview = FALSE;
+
+      gimp_ui_init (PLUG_IN_BINARY);
 
       g_object_get (config, "show-preview", &show_preview, NULL);
       if (show_preview)
@@ -562,10 +547,12 @@ jpeg_save (GimpProcedure        *procedure,
       /* prepare for the preview */
       preview_image     = image;
       orig_image_global = orig_image;
-      drawable_global   = drawables[0];
+      drawable_global   = drawables->data;
+      display           = NULL;
+      separate_display  = TRUE;
 
       /*  First acquire information with a dialog  */
-      if (! save_dialog (procedure, config, drawables[0], orig_image))
+      if (! save_dialog (procedure, config, drawables->data, orig_image))
         {
           status = GIMP_PDB_CANCEL;
         }
@@ -582,9 +569,9 @@ jpeg_save (GimpProcedure        *procedure,
 
   if (status == GIMP_PDB_SUCCESS)
     {
-      if (! save_image (file, config,
-                        image, drawables[0], orig_image, FALSE,
-                        &error))
+      if (! export_image (file, config,
+                          image, drawables->data, orig_image, FALSE,
+                          &error))
         {
           status = GIMP_PDB_EXECUTION_ERROR;
         }
@@ -610,10 +597,9 @@ jpeg_save (GimpProcedure        *procedure,
         {
           gimp_image_delete (image);
         }
-
-      g_free (drawables);
     }
 
+  g_list_free (drawables);
   return gimp_procedure_new_return_values (procedure, status, error);
 }
 

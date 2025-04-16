@@ -29,8 +29,10 @@
 #include "gimpprocedureconfig-private.h"
 
 
-struct _GimpThumbnailProcedurePrivate
+struct _GimpThumbnailProcedure
 {
+  GimpProcedure         parent_instance;
+
   GimpRunThumbnailFunc  run_func;
   gpointer              run_data;
   GDestroyNotify        run_data_destroy;
@@ -50,8 +52,7 @@ static GimpProcedureConfig *
                                                     gint                  n_args);
 
 
-G_DEFINE_TYPE_WITH_PRIVATE (GimpThumbnailProcedure, gimp_thumbnail_procedure,
-                            GIMP_TYPE_PROCEDURE)
+G_DEFINE_TYPE (GimpThumbnailProcedure, gimp_thumbnail_procedure, GIMP_TYPE_PROCEDURE)
 
 #define parent_class gimp_thumbnail_procedure_parent_class
 
@@ -72,7 +73,6 @@ gimp_thumbnail_procedure_class_init (GimpThumbnailProcedureClass *klass)
 static void
 gimp_thumbnail_procedure_init (GimpThumbnailProcedure *procedure)
 {
-  procedure->priv = gimp_thumbnail_procedure_get_instance_private (procedure);
 }
 
 static void
@@ -82,47 +82,49 @@ gimp_thumbnail_procedure_constructed (GObject *object)
 
   G_OBJECT_CLASS (parent_class)->constructed (object);
 
-  GIMP_PROC_ARG_FILE (procedure, "file",
-                      "File",
-                      "The file to load the thumbnail from",
-                      GIMP_PARAM_READWRITE);
+  gimp_procedure_add_file_argument (procedure, "file",
+                                    "File",
+                                    "The file to load the thumbnail from",
+                                    GIMP_FILE_CHOOSER_ACTION_OPEN,
+                                    FALSE, NULL,
+                                    GIMP_PARAM_READWRITE);
 
-  GIMP_PROC_ARG_INT (procedure, "thumb-size",
-                     "Thumb Size",
-                     "Preferred thumbnail size",
-                     16, 2014, 256,
-                     GIMP_PARAM_READWRITE);
+  gimp_procedure_add_int_argument (procedure, "thumb-size",
+                                   "Thumb Size",
+                                   "Preferred thumbnail size",
+                                   16, 2014, 256,
+                                   GIMP_PARAM_READWRITE);
 
-  GIMP_PROC_VAL_IMAGE (procedure, "image",
-                       "Image",
-                       "Thumbnail image",
-                       TRUE,
-                       GIMP_PARAM_READWRITE);
+  gimp_procedure_add_image_return_value (procedure, "image",
+                                         "Image",
+                                         "Thumbnail image",
+                                         TRUE,
+                                         GIMP_PARAM_READWRITE);
 
-  GIMP_PROC_VAL_INT (procedure, "image-width",
-                     "Image width",
-                     "Width of the full-sized image (0 for unknown)",
-                     0, GIMP_MAX_IMAGE_SIZE, 0,
-                     GIMP_PARAM_READWRITE);
+  gimp_procedure_add_int_return_value (procedure, "image-width",
+                                       "Image width",
+                                       "Width of the full-sized image (0 for unknown)",
+                                       0, GIMP_MAX_IMAGE_SIZE, 0,
+                                       GIMP_PARAM_READWRITE);
 
-  GIMP_PROC_VAL_INT (procedure, "image-height",
-                     "Image height",
-                     "Height of the full-sized image (0 for unknown)",
-                     0, GIMP_MAX_IMAGE_SIZE, 0,
-                     GIMP_PARAM_READWRITE);
+  gimp_procedure_add_int_return_value (procedure, "image-height",
+                                       "Image height",
+                                       "Height of the full-sized image (0 for unknown)",
+                                       0, GIMP_MAX_IMAGE_SIZE, 0,
+                                       GIMP_PARAM_READWRITE);
 
-  GIMP_PROC_VAL_ENUM (procedure, "image-type",
-                      "Image type",
-                      "Type of the image",
-                      GIMP_TYPE_IMAGE_TYPE,
-                      GIMP_RGB_IMAGE,
-                      GIMP_PARAM_READWRITE);
+  gimp_procedure_add_enum_return_value (procedure, "image-type",
+                                        "Image type",
+                                        "Type of the image",
+                                        GIMP_TYPE_IMAGE_TYPE,
+                                        GIMP_RGB_IMAGE,
+                                        GIMP_PARAM_READWRITE);
 
-  GIMP_PROC_VAL_INT (procedure, "num-layers",
-                     "Num layers",
-                     "Number of layers in the image",
-                     1, G_MAXINT, 1,
-                     GIMP_PARAM_READWRITE);
+  gimp_procedure_add_int_return_value (procedure, "num-layers",
+                                       "Num layers",
+                                       "Number of layers in the image",
+                                       1, G_MAXINT, 1,
+                                       GIMP_PARAM_READWRITE);
 }
 
 static void
@@ -130,8 +132,8 @@ gimp_thumbnail_procedure_finalize (GObject *object)
 {
   GimpThumbnailProcedure *procedure = GIMP_THUMBNAIL_PROCEDURE (object);
 
-  if (procedure->priv->run_data_destroy)
-    procedure->priv->run_data_destroy (procedure->priv->run_data);
+  if (procedure->run_data_destroy)
+    procedure->run_data_destroy (procedure->run_data);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -164,15 +166,12 @@ gimp_thumbnail_procedure_run (GimpProcedure        *procedure,
       gimp_value_array_append (remaining, value);
     }
 
-  config = gimp_procedure_create_config (procedure);
-  _gimp_procedure_config_begin_run (config, NULL, GIMP_RUN_NONINTERACTIVE, remaining);
+  config = _gimp_procedure_create_run_config (procedure);
+  _gimp_procedure_config_begin_run (config, NULL, GIMP_RUN_NONINTERACTIVE, remaining, NULL);
   gimp_value_array_unref (remaining);
 
-  return_values = thumbnail_proc->priv->run_func (procedure,
-                                                  file,
-                                                  size,
-                                                  config,
-                                                  thumbnail_proc->priv->run_data);
+  return_values = thumbnail_proc->run_func (procedure, file, size,
+                                            config, thumbnail_proc->run_data);
 
   if (return_values != NULL                       &&
       gimp_value_array_length (return_values) > 0 &&
@@ -271,7 +270,7 @@ gimp_thumbnail_procedure_new (GimpPlugIn           *plug_in,
   g_return_val_if_fail (GIMP_IS_PLUG_IN (plug_in), NULL);
   g_return_val_if_fail (gimp_is_canonical_identifier (name), NULL);
   g_return_val_if_fail (proc_type != GIMP_PDB_PROC_TYPE_INTERNAL, NULL);
-  g_return_val_if_fail (proc_type != GIMP_PDB_PROC_TYPE_EXTENSION, NULL);
+  g_return_val_if_fail (proc_type != GIMP_PDB_PROC_TYPE_PERSISTENT, NULL);
   g_return_val_if_fail (run_func != NULL, NULL);
 
   procedure = g_object_new (GIMP_TYPE_THUMBNAIL_PROCEDURE,
@@ -280,9 +279,9 @@ gimp_thumbnail_procedure_new (GimpPlugIn           *plug_in,
                             "procedure-type", proc_type,
                             NULL);
 
-  procedure->priv->run_func         = run_func;
-  procedure->priv->run_data         = run_data;
-  procedure->priv->run_data_destroy = run_data_destroy;
+  procedure->run_func         = run_func;
+  procedure->run_data         = run_data;
+  procedure->run_data_destroy = run_data_destroy;
 
   return GIMP_PROCEDURE (procedure);
 }

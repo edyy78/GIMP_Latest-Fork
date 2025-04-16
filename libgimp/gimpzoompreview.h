@@ -32,55 +32,22 @@ G_BEGIN_DECLS
 /* For information look into the C source or the html documentation */
 
 
-#define GIMP_TYPE_ZOOM_PREVIEW            (gimp_zoom_preview_get_type ())
-#define GIMP_ZOOM_PREVIEW(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_ZOOM_PREVIEW, GimpZoomPreview))
-#define GIMP_ZOOM_PREVIEW_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_ZOOM_PREVIEW, GimpZoomPreviewClass))
-#define GIMP_IS_ZOOM_PREVIEW(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_ZOOM_PREVIEW))
-#define GIMP_IS_ZOOM_PREVIEW_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_ZOOM_PREVIEW))
-#define GIMP_ZOOM_PREVIEW_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_ZOOM_PREVIEW, GimpZoomPreviewClass))
+#define GIMP_TYPE_ZOOM_PREVIEW (gimp_zoom_preview_get_type ())
+G_DECLARE_FINAL_TYPE (GimpZoomPreview, gimp_zoom_preview, GIMP, ZOOM_PREVIEW, GimpScrolledPreview)
 
 
-typedef struct _GimpZoomPreviewPrivate GimpZoomPreviewPrivate;
-typedef struct _GimpZoomPreviewClass   GimpZoomPreviewClass;
+GtkWidget     * gimp_zoom_preview_new_from_drawable            (GimpDrawable    *drawable);
+GtkWidget     * gimp_zoom_preview_new_with_model_from_drawable (GimpDrawable    *drawable,
+                                                                GimpZoomModel   *model);
 
-struct _GimpZoomPreview
-{
-  GimpScrolledPreview     parent_instance;
+guchar        * gimp_zoom_preview_get_source                   (GimpZoomPreview *preview,
+                                                                gint            *width,
+                                                                gint            *height,
+                                                                gint            *bpp);
 
-  GimpZoomPreviewPrivate *priv;
-};
-
-struct _GimpZoomPreviewClass
-{
-  GimpScrolledPreviewClass  parent_class;
-
-  /* Padding for future expansion */
-  void (* _gimp_reserved1) (void);
-  void (* _gimp_reserved2) (void);
-  void (* _gimp_reserved3) (void);
-  void (* _gimp_reserved4) (void);
-  void (* _gimp_reserved5) (void);
-  void (* _gimp_reserved6) (void);
-  void (* _gimp_reserved7) (void);
-  void (* _gimp_reserved8) (void);
-};
-
-
-GType           gimp_zoom_preview_get_type       (void) G_GNUC_CONST;
-
-GtkWidget     * gimp_zoom_preview_new_from_drawable (GimpDrawable *drawable);
-GtkWidget     * gimp_zoom_preview_new_with_model_from_drawable
-                                                 (GimpDrawable    *drawable,
-                                                  GimpZoomModel   *model);
-
-guchar        * gimp_zoom_preview_get_source     (GimpZoomPreview *preview,
-                                                  gint            *width,
-                                                  gint            *height,
-                                                  gint            *bpp);
-
-GimpDrawable  * gimp_zoom_preview_get_drawable   (GimpZoomPreview *preview);
-GimpZoomModel * gimp_zoom_preview_get_model      (GimpZoomPreview *preview);
-gdouble         gimp_zoom_preview_get_factor     (GimpZoomPreview *preview);
+GimpDrawable  * gimp_zoom_preview_get_drawable                 (GimpZoomPreview *preview);
+GimpZoomModel * gimp_zoom_preview_get_model                    (GimpZoomPreview *preview);
+gdouble         gimp_zoom_preview_get_factor                   (GimpZoomPreview *preview);
 
 
 G_END_DECLS

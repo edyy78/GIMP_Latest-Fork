@@ -34,7 +34,7 @@
 #include "gimpobjectqueue.h"
 #include "gimpprogress.h"
 
-#include "vectors/gimpvectors.h"
+#include "vectors/gimppath.h"
 
 #include "gimp-intl.h"
 
@@ -342,9 +342,9 @@ gimp_image_item_list_get_list (GimpImage        *image,
       g_list_free (all_items);
     }
 
-  if (type & GIMP_ITEM_TYPE_VECTORS)
+  if (type & GIMP_ITEM_TYPE_PATHS)
     {
-      all_items = gimp_image_get_vectors_list (image);
+      all_items = gimp_image_get_path_list (image);
 
       for (list = all_items; list; list = g_list_next (list))
         {

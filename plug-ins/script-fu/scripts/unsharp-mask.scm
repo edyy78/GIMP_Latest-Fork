@@ -3,14 +3,27 @@
 ;;; Author: Narazaki Shuji <narazaki@gimp.org>
 ;;; Version 0.8
 
-(define (script-fu-unsharp-mask img drw mask-size mask-opacity)
+; This script-fu-unsharp-mask is not in the menus.
+; There is an equivalent GEGL filter at Filters>Enhance>Sharpen (Unsharp).
+; This might be kept for compatibility and used by third party scripts.
+
+; Seems not used by any script in the repo.
+; FUTURE move to gimp-data-extras or to scripts/test
+; and maintain it with low priority.
+
+; unsharp-mask is a filter AND renderer, creating a new, visible, dirty image
+; from the given image.
+
+
+(define (script-fu-unsharp-mask img drws mask-size mask-opacity)
   (let* (
+        (drw (vector-ref drws 0))
         (drawable-width (car (gimp-drawable-get-width drw)))
         (drawable-height (car (gimp-drawable-get-height drw)))
         (new-image (car (gimp-image-new drawable-width drawable-height RGB)))
-        (original-layer (car (gimp-layer-new new-image
+        (original-layer (car (gimp-layer-new new-image "Original"
                                              drawable-width drawable-height
-                                             RGB-IMAGE "Original"
+                                             RGB-IMAGE
                                              100 LAYER-MODE-NORMAL)))
         (original-layer-for-darker 0)
         (original-layer-for-lighter 0)
@@ -21,32 +34,35 @@
         )
 
     (gimp-selection-all img)
-    (gimp-edit-copy 1 (vector drw))
+    (gimp-edit-copy (vector drw))
 
     (gimp-image-undo-disable new-image)
 
     (gimp-image-insert-layer new-image original-layer 0 0)
 
     (let* (
-           (pasted (gimp-edit-paste original-layer FALSE))
-           (num-pasted (car pasted))
-           (floating-sel (aref (cadr pasted) (- num-pasted 1)))
+           (pasted (car (gimp-edit-paste original-layer FALSE)))
+           (num-pasted (vector-length pasted))
+           (floating-sel (vector-ref pasted (- num-pasted 1)))
           )
      (gimp-floating-sel-anchor floating-sel)
     )
 
-    (set! original-layer-for-darker (car (gimp-layer-copy original-layer TRUE)))
-    (set! original-layer-for-lighter (car (gimp-layer-copy original-layer TRUE)))
-    (set! blurred-layer-for-darker (car (gimp-layer-copy original-layer TRUE)))
+    (set! original-layer-for-darker (car (gimp-layer-copy original-layer)))
+    (gimp-layer-add-alpha original-layer-for-darker)
+    (set! original-layer-for-lighter (car (gimp-layer-copy original-layer)))
+    (gimp-layer-add-alpha original-layer-for-lighter)
+    (set! blurred-layer-for-darker (car (gimp-layer-copy original-layer)))
+    (gimp-layer-add-alpha blurred-layer-for-darker)
     (gimp-item-set-visible original-layer FALSE)
     (gimp-display-new new-image)
 
     ;; make darker mask
     (gimp-image-insert-layer new-image blurred-layer-for-darker 0 -1)
-    (plug-in-gauss-iir RUN-NONINTERACTIVE
-		       new-image blurred-layer-for-darker mask-size TRUE TRUE)
+    (gimp-drawable-merge-new-filter blurred-layer-for-darker "gegl:gaussian-blur" 0 LAYER-MODE-REPLACE 1.0 "std-dev-x" (* 0.32 mask-size) "std-dev-y" (* 0.32 mask-size) "filter" "auto")
     (set! blurred-layer-for-lighter
-          (car (gimp-layer-copy blurred-layer-for-darker TRUE)))
+          (car (gimp-layer-copy blurred-layer-for-darker)))
+    (gimp-layer-add-alpha blurred-layer-for-lighter)
     (gimp-image-insert-layer new-image original-layer-for-darker 0 -1)
     (gimp-layer-set-mode original-layer-for-darker LAYER-MODE-SUBTRACT)
     (set! darker-layer
@@ -76,15 +92,14 @@
   )
 )
 
-(script-fu-register "script-fu-unsharp-mask"
+(script-fu-register-filter "script-fu-unsharp-mask"
   "Unsharp Mask..."
   "Make a new image from the current layer by applying the unsharp mask method"
   "Shuji Narazaki <narazaki@gimp.org>"
   "Shuji Narazaki"
   "1997,1998"
-  ""
-  SF-IMAGE      "Image"             0
-  SF-DRAWABLE   "Drawable to apply" 0
+  "*"
+  SF-ONE-OR-MORE-DRAWABLE
   SF-ADJUSTMENT _"Mask size"        '(5 1 100 1 1 0 1)
   SF-ADJUSTMENT _"Mask opacity"     '(50 0 100 1 1 0 1)
 )

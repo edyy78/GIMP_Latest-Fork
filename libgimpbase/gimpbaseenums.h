@@ -750,7 +750,7 @@ typedef enum
 
 /**
  * GimpOffsetType:
- * @GIMP_OFFSET_BACKGROUND:  Background
+ * @GIMP_OFFSET_COLOR:       Color
  * @GIMP_OFFSET_TRANSPARENT: Transparent
  * @GIMP_OFFSET_WRAP_AROUND: Wrap image around
  *
@@ -762,7 +762,7 @@ GType gimp_offset_type_get_type (void) G_GNUC_CONST;
 
 typedef enum
 {
-  GIMP_OFFSET_BACKGROUND,
+  GIMP_OFFSET_COLOR,
   GIMP_OFFSET_TRANSPARENT,
   GIMP_OFFSET_WRAP_AROUND
 } GimpOffsetType;
@@ -826,10 +826,10 @@ typedef enum
 
 /**
  * GimpPDBProcType:
- * @GIMP_PDB_PROC_TYPE_INTERNAL:  Internal GIMP procedure
- * @GIMP_PDB_PROC_TYPE_PLUGIN:    GIMP Plug-In
- * @GIMP_PDB_PROC_TYPE_EXTENSION: GIMP Extension
- * @GIMP_PDB_PROC_TYPE_TEMPORARY: Temporary Procedure
+ * @GIMP_PDB_PROC_TYPE_INTERNAL:   Internal GIMP procedure
+ * @GIMP_PDB_PROC_TYPE_PLUGIN:     GIMP Plug-In
+ * @GIMP_PDB_PROC_TYPE_PERSISTENT: GIMP Persistent Plug-in
+ * @GIMP_PDB_PROC_TYPE_TEMPORARY:  Temporary Procedure
  *
  * Types of PDB procedures.
  **/
@@ -841,7 +841,7 @@ typedef enum
 {
   GIMP_PDB_PROC_TYPE_INTERNAL,   /*< desc="Internal GIMP procedure" >*/
   GIMP_PDB_PROC_TYPE_PLUGIN,     /*< desc="GIMP Plug-In" >*/
-  GIMP_PDB_PROC_TYPE_EXTENSION,  /*< desc="GIMP Extension" >*/
+  GIMP_PDB_PROC_TYPE_PERSISTENT, /*< desc="GIMP Persistent Plug-In" >*/
   GIMP_PDB_PROC_TYPE_TEMPORARY   /*< desc="Temporary Procedure" >*/
 } GimpPDBProcType;
 
@@ -890,18 +890,6 @@ typedef enum
  * @GIMP_PRECISION_DOUBLE_LINEAR:     64-bit linear floating point
  * @GIMP_PRECISION_DOUBLE_NON_LINEAR: 64-bit non-linear floating point
  * @GIMP_PRECISION_DOUBLE_PERCEPTUAL: 64-bit perceptual floating point
- * @GIMP_PRECISION_U8_GAMMA:      deprecated alias for
- *                                @GIMP_PRECISION_U8_NON_LINEAR
- * @GIMP_PRECISION_U16_GAMMA:     deprecated alias for
- *                                @GIMP_PRECISION_U16_NON_LINEAR
- * @GIMP_PRECISION_U32_GAMMA:     deprecated alias for
- *                                @GIMP_PRECISION_U32_NON_LINEAR
- * @GIMP_PRECISION_HALF_GAMMA:    deprecated alias for
- *                                @GIMP_PRECISION_HALF_NON_LINEAR
- * @GIMP_PRECISION_FLOAT_GAMMA:   deprecated alias for
- *                                @GIMP_PRECISION_FLOAT_NON_LINEAR
- * @GIMP_PRECISION_DOUBLE_GAMMA:  deprecated alias for
- *                                @GIMP_PRECISION_DOUBLE_NON_LINEAR
  *
  * Precisions for pixel encoding.
  *
@@ -931,15 +919,6 @@ typedef enum
   GIMP_PRECISION_DOUBLE_LINEAR     = 700, /*< desc="64-bit linear floating point" >*/
   GIMP_PRECISION_DOUBLE_NON_LINEAR = 750, /*< desc="64-bit non-linear floating point"  >*/
   GIMP_PRECISION_DOUBLE_PERCEPTUAL = 775, /*< desc="64-bit perceptual floating point"  >*/
-
-#ifndef GIMP_DISABLE_DEPRECATED
-  GIMP_PRECISION_U8_GAMMA      = GIMP_PRECISION_U8_NON_LINEAR,
-  GIMP_PRECISION_U16_GAMMA     = GIMP_PRECISION_U16_NON_LINEAR,
-  GIMP_PRECISION_U32_GAMMA     = GIMP_PRECISION_U32_NON_LINEAR,
-  GIMP_PRECISION_HALF_GAMMA    = GIMP_PRECISION_HALF_NON_LINEAR,
-  GIMP_PRECISION_FLOAT_GAMMA   = GIMP_PRECISION_FLOAT_NON_LINEAR,
-  GIMP_PRECISION_DOUBLE_GAMMA  = GIMP_PRECISION_DOUBLE_NON_LINEAR
-#endif
 } GimpPrecision;
 
 
@@ -1279,7 +1258,7 @@ typedef enum
 
 
 /**
- * GimpUnit:
+ * GimpUnitID:
  * @GIMP_UNIT_PIXEL:   Pixels
  * @GIMP_UNIT_INCH:    Inches
  * @GIMP_UNIT_MM:      Millimeters
@@ -1288,7 +1267,9 @@ typedef enum
  * @GIMP_UNIT_END:     Marker for end-of-builtin-units
  * @GIMP_UNIT_PERCENT: Pseudo-unit percent
  *
- * Units used for dimensions in images.
+ * Integer IDs of built-in units used for dimensions in images. These
+ * IDs are meant to stay stable but user-created units IDs may change
+ * from one session to another.
  **/
 typedef enum /*< skip >*/
 {
@@ -1302,23 +1283,87 @@ typedef enum /*< skip >*/
   GIMP_UNIT_END     = 5,
 
   GIMP_UNIT_PERCENT = 65536 /*< pdb-skip >*/
-} GimpUnit;
+} GimpUnitID;
 
 
 /**
- * GimpVectorsStrokeType:
- * @GIMP_VECTORS_STROKE_TYPE_BEZIER: A bezier stroke
+ * GimpPathStrokeType:
+ * @GIMP_PATH_STROKE_TYPE_BEZIER: A bezier stroke
  *
- * Possible type of strokes in vectors objects.
+ * Possible type of strokes in path objects.
  **/
-#define GIMP_TYPE_VECTORS_STROKE_TYPE (gimp_vectors_stroke_type_get_type ())
+#define GIMP_TYPE_PATH_STROKE_TYPE (gimp_path_stroke_type_get_type ())
 
-GType gimp_vectors_stroke_type_get_type (void) G_GNUC_CONST;
+GType gimp_path_stroke_type_get_type (void) G_GNUC_CONST;
 
 typedef enum
 {
-  GIMP_VECTORS_STROKE_TYPE_BEZIER
-} GimpVectorsStrokeType;
+  GIMP_PATH_STROKE_TYPE_BEZIER
+} GimpPathStrokeType;
+
+
+/**
+ * GimpExportCapabilities:
+ * @GIMP_EXPORT_CAN_HANDLE_RGB:                 Handles RGB images
+ * @GIMP_EXPORT_CAN_HANDLE_GRAY:                Handles grayscale images
+ * @GIMP_EXPORT_CAN_HANDLE_INDEXED:             Handles indexed images
+ * @GIMP_EXPORT_CAN_HANDLE_BITMAP:              Handles two-color indexed images
+ * @GIMP_EXPORT_CAN_HANDLE_ALPHA:               Handles alpha channels
+ * @GIMP_EXPORT_CAN_HANDLE_LAYERS:              Handles layers
+ * @GIMP_EXPORT_CAN_HANDLE_LAYERS_AS_ANIMATION: Handles animation of layers
+ * @GIMP_EXPORT_CAN_HANDLE_LAYER_EFFECTS:       Handles layer effects
+ * @GIMP_EXPORT_CAN_HANDLE_LAYER_MASKS:         Handles layer masks
+ * @GIMP_EXPORT_NEEDS_ALPHA:                    Needs alpha channels
+ * @GIMP_EXPORT_NEEDS_CROP:                     Needs to crop content to image bounds
+ *
+ * The types of images and layers an export procedure can handle
+ **/
+#define GIMP_TYPE_EXPORT_CAPABILITIES (gimp_export_capabilities_get_type ())
+
+GType gimp_export_capabilities_get_type (void) G_GNUC_CONST;
+
+typedef enum
+{
+  GIMP_EXPORT_CAN_HANDLE_RGB                 = 1 << 0,
+  GIMP_EXPORT_CAN_HANDLE_GRAY                = 1 << 1,
+  GIMP_EXPORT_CAN_HANDLE_INDEXED             = 1 << 2,
+  GIMP_EXPORT_CAN_HANDLE_BITMAP              = 1 << 3,
+  GIMP_EXPORT_CAN_HANDLE_ALPHA               = 1 << 4,
+  GIMP_EXPORT_CAN_HANDLE_LAYERS              = 1 << 5,
+  GIMP_EXPORT_CAN_HANDLE_LAYERS_AS_ANIMATION = 1 << 6,
+  GIMP_EXPORT_CAN_HANDLE_LAYER_MASKS         = 1 << 7,
+  GIMP_EXPORT_CAN_HANDLE_LAYER_EFFECTS       = 1 << 8,
+  GIMP_EXPORT_NEEDS_ALPHA                    = 1 << 9,
+  GIMP_EXPORT_NEEDS_CROP                     = 1 << 10
+} GimpExportCapabilities;
+
+
+/**
+ * GimpFileChooserAction:
+ * @GIMP_FILE_CHOOSER_ACTION_ANY:           No restriction.
+ * @GIMP_FILE_CHOOSER_ACTION_OPEN:          Opens an existing file.
+ * @GIMP_FILE_CHOOSER_ACTION_SAVE:          Saves a file (over a new file or an existing one.
+ * @GIMP_FILE_CHOOSER_ACTION_SELECT_FOLDER: Picks an existing folder.
+ * @GIMP_FILE_CHOOSER_ACTION_CREATE_FOLDER: Picks an existing or new folder.
+ *
+ * A type of file to choose from when actions are expected to choose a
+ * file. This is basically a mapping to %GtkFileChooserAction except for
+ * [enum@Gimp.FileChooserAction.ANY] which should not be used for any
+ * GUI functions since we can't know what you are looking for.
+ **/
+#define GIMP_TYPE_FILE_CHOOSER_ACTION (gimp_file_chooser_action_get_type ())
+
+GType gimp_file_chooser_action_get_type (void) G_GNUC_CONST;
+
+typedef enum
+{
+  GIMP_FILE_CHOOSER_ACTION_ANY           = -1,
+  GIMP_FILE_CHOOSER_ACTION_OPEN          = 0,
+  GIMP_FILE_CHOOSER_ACTION_SAVE          = 1,
+  GIMP_FILE_CHOOSER_ACTION_SELECT_FOLDER = 2,
+  GIMP_FILE_CHOOSER_ACTION_CREATE_FOLDER = 3,
+} GimpFileChooserAction;
+
 
 G_END_DECLS
 

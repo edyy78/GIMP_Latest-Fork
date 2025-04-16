@@ -32,7 +32,6 @@
 #include "gimpconfigtypes.h"
 
 #include "gimpconfigwriter.h"
-#include "gimpconfig-array.h"
 #include "gimpconfig-iface.h"
 #include "gimpconfig-deserialize.h"
 #include "gimpconfig-params.h"
@@ -74,9 +73,6 @@ static GTokenType  gimp_config_deserialize_memsize        (GValue     *value,
 static GTokenType  gimp_config_deserialize_path           (GValue     *value,
                                                            GParamSpec *prop_spec,
                                                            GScanner   *scanner);
-static GTokenType  gimp_config_deserialize_rgb            (GValue     *value,
-                                                           GParamSpec *prop_spec,
-                                                           GScanner   *scanner);
 static GTokenType  gimp_config_deserialize_matrix2        (GValue     *value,
                                                            GParamSpec *prop_spec,
                                                            GScanner   *scanner);
@@ -89,6 +85,11 @@ static GTokenType  gimp_config_deserialize_value_array    (GValue     *value,
                                                            GimpConfig *config,
                                                            GParamSpec *prop_spec,
                                                            GScanner   *scanner);
+static GTokenType  gimp_config_deserialize_array          (GValue     *value,
+                                                           GScanner   *scanner);
+static GTokenType  gimp_config_deserialize_strv           (GValue     *value,
+                                                           GScanner   *scanner);
+static GimpUnit  * gimp_config_get_unit_from_identifier   (const gchar *identifier);
 static GTokenType  gimp_config_deserialize_unit           (GValue     *value,
                                                            GParamSpec *prop_spec,
                                                            GScanner   *scanner);
@@ -305,9 +306,10 @@ gimp_config_deserialize_property (GimpConfig *config,
     }
   else
     {
-      if (G_VALUE_HOLDS_OBJECT (&value)        &&
-          G_VALUE_TYPE (&value) != G_TYPE_FILE &&
-          G_VALUE_TYPE (&value) != GEGL_TYPE_COLOR)
+      if (G_VALUE_HOLDS_OBJECT (&value)            &&
+          G_VALUE_TYPE (&value) != G_TYPE_FILE     &&
+          G_VALUE_TYPE (&value) != GEGL_TYPE_COLOR &&
+          G_VALUE_TYPE (&value) != GIMP_TYPE_UNIT)
         {
           token = gimp_config_deserialize_object (&value,
                                                   config, prop_spec,
@@ -323,9 +325,10 @@ gimp_config_deserialize_property (GimpConfig *config,
   if (token == G_TOKEN_RIGHT_PAREN &&
       g_scanner_peek_next_token (scanner) == token)
     {
-      if (GIMP_VALUE_HOLDS_COLOR (&value) ||
-          ! (G_VALUE_HOLDS_OBJECT (&value)     &&
-             (prop_spec->flags & GIMP_CONFIG_PARAM_AGGREGATE)))
+      if (! (prop_spec->flags & GIMP_PARAM_DONT_SERIALIZE) &&
+          (GIMP_VALUE_HOLDS_COLOR (&value) ||
+           ! (G_VALUE_HOLDS_OBJECT (&value)     &&
+              (prop_spec->flags & GIMP_CONFIG_PARAM_AGGREGATE))))
         g_object_set_property (G_OBJECT (config), prop_spec->name, &value);
     }
 #ifdef CONFIG_DEBUG
@@ -368,10 +371,6 @@ gimp_config_deserialize_value (GValue     *value,
     {
       return  gimp_config_deserialize_path (value, prop_spec, scanner);
     }
-  else if (prop_spec->value_type == GIMP_TYPE_RGB)
-    {
-      return gimp_config_deserialize_rgb (value, prop_spec, scanner);
-    }
   else if (prop_spec->value_type == GIMP_TYPE_MATRIX2)
     {
       return gimp_config_deserialize_matrix2 (value, prop_spec, scanner);
@@ -384,6 +383,11 @@ gimp_config_deserialize_value (GValue     *value,
   else if (prop_spec->value_type == G_TYPE_STRV)
     {
       return gimp_config_deserialize_strv (value, scanner);
+    }
+  else if (prop_spec->value_type == GIMP_TYPE_INT32_ARRAY ||
+           prop_spec->value_type == GIMP_TYPE_DOUBLE_ARRAY)
+    {
+      return gimp_config_deserialize_array (value, scanner);
     }
   else if (prop_spec->value_type == GIMP_TYPE_UNIT)
     {
@@ -534,8 +538,8 @@ gimp_config_deserialize_fundamental (GValue     *value,
     case G_TYPE_FLOAT:
       if (next_token == G_TOKEN_FLOAT)
         g_value_set_float (value, negate ?
-                           - scanner->value.v_float :
-                             scanner->value.v_float);
+                           - (gfloat) scanner->value.v_float :
+                             (gfloat) scanner->value.v_float);
       else
         g_value_set_float (value, negate ?
                            - (gfloat) scanner->value.v_int :
@@ -713,23 +717,6 @@ gimp_config_deserialize_path (GValue     *value,
 }
 
 static GTokenType
-gimp_config_deserialize_rgb (GValue     *value,
-                             GParamSpec *prop_spec,
-                             GScanner   *scanner)
-{
-  GeglColor *color = NULL;
-  GimpRGB    rgb;
-
-  if (! gimp_scanner_parse_color (scanner, &color))
-    return G_TOKEN_NONE;
-
-  gegl_color_get_pixel (color, babl_format ("R'G'B'A double"), &rgb);
-  g_value_set_boxed (value, &rgb);
-
-  return G_TOKEN_RIGHT_PAREN;
-}
-
-static GTokenType
 gimp_config_deserialize_matrix2 (GValue     *value,
                                  GParamSpec *prop_spec,
                                  GScanner   *scanner)
@@ -837,14 +824,14 @@ gimp_config_deserialize_value_array (GValue     *value,
                                      GParamSpec *prop_spec,
                                      GScanner   *scanner)
 {
-  GimpParamSpecValueArray *array_spec;
-  GimpValueArray          *array;
-  GValue                   array_value = G_VALUE_INIT;
-  gint                     n_values;
-  GTokenType               token;
-  gint                     i;
+  GParamSpec     *element_spec;
+  GimpValueArray *array;
+  GValue          array_value = G_VALUE_INIT;
+  gint            n_values;
+  GTokenType      token;
+  gint            i;
 
-  array_spec = GIMP_PARAM_SPEC_VALUE_ARRAY (prop_spec);
+  element_spec = gimp_param_spec_value_array_get_element_spec (prop_spec);
 
   if (! gimp_scanner_parse_int (scanner, &n_values))
     return G_TOKEN_INT;
@@ -853,12 +840,10 @@ gimp_config_deserialize_value_array (GValue     *value,
 
   for (i = 0; i < n_values; i++)
     {
-      g_value_init (&array_value, array_spec->element_spec->value_type);
+      g_value_init (&array_value, element_spec->value_type);
 
-      token = gimp_config_deserialize_value (&array_value,
-                                             config,
-                                             array_spec->element_spec,
-                                             scanner);
+      token = gimp_config_deserialize_value (&array_value, config,
+                                             element_spec, scanner);
 
       if (token == G_TOKEN_RIGHT_PAREN)
         gimp_value_array_append (array, &array_value);
@@ -875,6 +860,159 @@ gimp_config_deserialize_value_array (GValue     *value,
   g_value_take_boxed (value, array);
 
   return G_TOKEN_RIGHT_PAREN;
+}
+
+/**
+ * gimp_config_deserialize_strv:
+ * @value:   destination #GValue to hold a #GStrv
+ * @scanner: #GScanner positioned in serialization stream
+ *
+ * Sets @value to new #GStrv.
+ * Scans i.e. consumes serialization to fill the GStrv.
+ *
+ * Requires @value to be initialized to hold type #G_TYPE_BOXED.
+ *
+ * Returns:
+ * G_TOKEN_RIGHT_PAREN on success.
+ * G_TOKEN_INT on failure to scan length.
+ * G_TOKEN_STRING on failure to scan enough quoted strings.
+ *
+ * On failure, the value in @value is not touched and could be NULL.
+ *
+ * Since: 3.0
+ **/
+static GTokenType
+gimp_config_deserialize_strv (GValue     *value,
+                              GScanner   *scanner)
+{
+  gint          n_values;
+  GTokenType    result_token = G_TOKEN_RIGHT_PAREN;
+  GStrvBuilder *builder;
+
+  /* Scan length of array. */
+  if (! gimp_scanner_parse_int (scanner, &n_values))
+    return G_TOKEN_INT;
+
+  builder = g_strv_builder_new ();
+
+  for (gint i = 0; i < n_values; i++)
+    {
+      gchar *scanned_string;
+
+      if (! gimp_scanner_parse_string (scanner, &scanned_string))
+        {
+          /* Error, missing a string. */
+          result_token = G_TOKEN_STRING;
+          break;
+        }
+
+      g_strv_builder_add (builder, scanned_string ? scanned_string : "");
+      g_free (scanned_string);
+    }
+
+  /* assert result_token is G_TOKEN_RIGHT_PAREN OR G_TOKEN_STRING */
+  if (result_token == G_TOKEN_RIGHT_PAREN)
+    {
+      GStrv   gstrv;
+
+      /* Allocate new GStrv. */
+      gstrv = g_strv_builder_end (builder);
+      /* Transfer ownership of the array and all strings it points to. */
+      g_value_take_boxed (value, gstrv);
+    }
+  else
+    {
+      /* No GStrv to unref. */
+      g_scanner_error (scanner, "Missing string.");
+    }
+
+  g_strv_builder_unref (builder);
+
+  return result_token;
+}
+
+static GTokenType
+gimp_config_deserialize_array (GValue     *value,
+                               GScanner   *scanner)
+{
+  gint32     *values;
+  gint        n_values;
+  GTokenType  result_token = G_TOKEN_RIGHT_PAREN;
+
+  if (! gimp_scanner_parse_int (scanner, &n_values))
+    return G_TOKEN_INT;
+
+  if (GIMP_VALUE_HOLDS_INT32_ARRAY (value))
+    values = g_new0 (gint32, n_values);
+  else /* GIMP_VALUE_HOLDS_DOUBLE_ARRAY (value) */
+    values = (gint32 *) g_new0 (gdouble, n_values);
+
+  for (gint i = 0; i < n_values; i++)
+    {
+      if (GIMP_VALUE_HOLDS_INT32_ARRAY (value))
+        {
+          gint value;
+
+          if (! gimp_scanner_parse_int (scanner, &value))
+            {
+              result_token = G_TOKEN_INT;
+              break;
+            }
+
+          values[i] = value;
+        }
+      else
+        {
+          gdouble value;
+
+          if (! gimp_scanner_parse_double (scanner, &value))
+            {
+              result_token = G_TOKEN_FLOAT;
+              break;
+            }
+
+          ((gdouble *) values)[i] = value;
+        }
+    }
+
+  if (result_token == G_TOKEN_RIGHT_PAREN)
+    {
+      if (GIMP_VALUE_HOLDS_INT32_ARRAY (value))
+        gimp_value_take_int32_array (value, values, n_values);
+      else
+        gimp_value_take_double_array (value, (gdouble *) values, n_values);
+    }
+  else
+    {
+      g_scanner_error (scanner, "Missing value.");
+    }
+
+  return result_token;
+}
+
+static GimpUnit *
+gimp_config_get_unit_from_identifier (const gchar *identifier)
+{
+  GimpUnit *unit;
+
+  unit = gimp_unit_get_by_id (GIMP_UNIT_PIXEL);
+  for (gint i = GIMP_UNIT_PIXEL; unit; i++)
+    {
+      if (g_strcmp0 (identifier, gimp_unit_get_name (unit)) == 0)
+        break;
+
+      unit = gimp_unit_get_by_id (i);
+    }
+
+  if (unit == NULL && g_strcmp0 (identifier, "percent") == 0)
+    unit = gimp_unit_percent ();
+
+  /* XXX This may return NULL, especially for user-defined units which
+   * may have disappeared from one session to another. Should we return
+   * some default unit then?
+   */
+
+  return unit;
 }
 
 /* This function is entirely sick, so is our method of serializing
@@ -896,7 +1034,7 @@ gimp_config_deserialize_unit (GValue     *value,
   gchar      *old_cset_identifier_first;
   gchar      *old_cset_identifier_nth;
   GString    *buffer;
-  GValue      src = G_VALUE_INIT;
+  GimpUnit   *unit;
   GTokenType  token;
 
   /* parse the next token *before* reconfiguring the scanner, so it
@@ -905,7 +1043,13 @@ gimp_config_deserialize_unit (GValue     *value,
   token = g_scanner_peek_next_token (scanner);
 
   if (token == G_TOKEN_STRING)
-    return gimp_config_deserialize_any (value, prop_spec, scanner);
+    {
+      g_scanner_get_next_token (scanner);
+      unit = gimp_config_get_unit_from_identifier (scanner->value.v_string);
+      g_value_set_object (value, unit);
+
+      return G_TOKEN_RIGHT_PAREN;
+    }
 
   old_cset_skip_characters  = scanner->config->cset_skip_characters;
   old_cset_identifier_first = scanner->config->cset_identifier_first;
@@ -944,10 +1088,8 @@ gimp_config_deserialize_unit (GValue     *value,
         }
     }
 
-  g_value_init (&src, G_TYPE_STRING);
-  g_value_set_static_string (&src, buffer->str);
-  g_value_transform (&src, value);
-  g_value_unset (&src);
+  unit = gimp_config_get_unit_from_identifier (buffer->str);
+  g_value_set_object (value, unit);
 
   token = G_TOKEN_RIGHT_PAREN;
 
@@ -991,7 +1133,7 @@ gimp_config_deserialize_file_value (GValue     *value,
 
       if (path)
         {
-          GFile *file = g_file_new_for_path (path);
+          GFile *file = g_file_new_for_uri (path);
 
           g_value_take_object (value, file);
           g_free (path);

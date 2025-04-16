@@ -1,4 +1,5 @@
 #!/usr/bin/env gimp-script-fu-interpreter-3.0
+;!# Close comment started on first line. Needed by gettext.
 
 ; v3 >>> Has shebang, is interpreter
 
@@ -47,8 +48,8 @@
         (width (* radius 3.75))
         (height (* radius 2.5))
         (img (gimp-image-new width height RGB)) ; v3 >>> elide car
-        (drawable (gimp-layer-new img width height RGB-IMAGE
-                                  "Sphere Layer" 100 LAYER-MODE-NORMAL))
+        (drawable (gimp-layer-new img "Sphere Layer" width height RGB-IMAGE
+                                  100 LAYER-MODE-NORMAL))
         (radians (/ (* light *pi*) 180))
         (cx (/ width 2))
         (cy (/ height 2))
@@ -79,8 +80,8 @@
     (if (and
          (or (and (>= light 45) (<= light 75))
              (and (<= light 135) (>= light 105)))
-         ; v3 >>> conditional doesn't need (= shadow TRUE)
-         shadow )
+         ; v3 >>> a SF-TOGGLE arg is still [0, 1], not [#f, #t]
+        (= shadow TRUE))
         (let ((shadow-w (* (* radius 2.5) (cos (+ *pi* radians))))
               (shadow-h (* radius 0.5))
               (shadow-x cx)
@@ -145,9 +146,13 @@
 ; v3 >>> menu item is v3, alongside old one
 ; v3 >>> not yet localized
 
+; Translate the menu item and help, but not the dialog labels,
+; since only plugin authors will read the dialog labels.
+
 (script-fu-register-filter "script-fu-test-sphere-v3"
-  "Sphere v3..."
-  "Test script-fu-register-filter and GimpProcedureDialog: needs 2 selected layers."
+  ; Translator: this means "in the Scheme programming language" aka ScriptFu.
+  _"Plug-In Example in _Scheme"
+  _"Plug-in example in Scheme"
   "Spencer Kimball, Sven Neumann"
   "Spencer Kimball"
   "1996, 1998"
@@ -165,7 +170,7 @@
   SF-PATTERN    "Pattern"            "Maple Leaves"
   SF-GRADIENT   "Gradient"           "Deep Sea"
   SF-TOGGLE     "Gradient reverse"   #f    ; v3 >>>
-  SF-FONT       "Font"               "Agate"
+  SF-FONT       "Font"               "Sans-serif"
   SF-ADJUSTMENT "Font size (pixels)" '(50 1 1000 1 10 0 1)
   SF-PALETTE    "Palette"            "Default"
   SF-FILENAME   "Environment map"
@@ -183,4 +188,4 @@
 )
 
 (script-fu-menu-register "script-fu-test-sphere-v3"
-                         "<Image>/Filters/Development/Script-Fu/Test")
+                         "<Image>/Filters/Development/Plug-In Examples")

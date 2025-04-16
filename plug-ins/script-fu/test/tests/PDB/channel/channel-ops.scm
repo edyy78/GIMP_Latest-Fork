@@ -7,7 +7,7 @@
 
 ; setup
 ; Load test image that already has drawable
-(define testImage (testing:load-test-image "wilber.png"))
+(define testImage (testing:load-test-image "gimp-logo.png"))
 
 ; gimp-channel-ops-duplicate is deprecated, use gimp-image-duplicate
 ; gimp-channel-ops-offset deprecated, use gimp-drawable-offset
@@ -57,7 +57,7 @@
             "Channel copied from red copy"))
 
 ; effective: image now has two non-component channels
-(assert `(= (car (gimp-image-get-channels ,testImage))
+(assert `(= (vector-length (car (gimp-image-get-channels ,testImage)))
             2))
 
 
@@ -72,7 +72,7 @@
             -10 -10))   ; offset
 
 ; effective: image still has two non-component channels
-(assert `(= (car (gimp-image-get-channels ,testImage))
+(assert `(= (vector-length (car (gimp-image-get-channels ,testImage)))
             2))
 
 ; effective: second channel still valid
@@ -82,7 +82,7 @@
 
 
 
-; channel stack ordering operations
+(test! "channel stack ordering operations")
 
 ; The first created channel is at the bottom of the two
 ; The second created channel is initially at top
@@ -99,7 +99,8 @@
               "Procedure execution of gimp-image-raise-item failed: Channel cannot be raised higher.")
 
 ; Can be lowered
-(assert `(gimp-image-lower-channel ,testImage ,testChannel))
+; gimp-image-lower-channel is deprecated
+(assert `(gimp-image-lower-item ,testImage ,testChannel))
 
 ; TODO test effectiveness by checking position now
 

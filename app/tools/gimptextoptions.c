@@ -163,7 +163,7 @@ gimp_text_options_class_init (GimpTextOptionsClass *klass)
                          "font-size-unit",
                          _("Unit"),
                          _("Font size unit"),
-                         TRUE, FALSE, GIMP_UNIT_PIXEL,
+                         TRUE, FALSE, gimp_unit_pixel (),
                          GIMP_PARAM_STATIC_STRINGS);
   GIMP_CONFIG_PROP_DOUBLE (object_class, PROP_FONT_SIZE,
                            "font-size",
@@ -288,7 +288,7 @@ gimp_text_options_class_init (GimpTextOptionsClass *klass)
    GIMP_CONFIG_PROP_COLOR (object_class, PROP_OUTLINE_FOREGROUND,
                            "outline-foreground",
                            NULL, NULL,
-                           gray,
+                           FALSE, gray,
                            GIMP_PARAM_STATIC_STRINGS);
    GIMP_CONFIG_PROP_OBJECT (object_class, PROP_OUTLINE_PATTERN,
                             "outline-pattern",
@@ -306,7 +306,7 @@ gimp_text_options_class_init (GimpTextOptionsClass *klass)
                           "outline-unit",
                           _("Unit"),
                           _("Outline width unit"),
-                          TRUE, FALSE, GIMP_UNIT_PIXEL,
+                          TRUE, FALSE, gimp_unit_pixel (),
                           GIMP_PARAM_STATIC_STRINGS);
    GIMP_CONFIG_PROP_ENUM (object_class, PROP_OUTLINE_CAP_STYLE,
                           "outline-cap-style",
@@ -397,7 +397,7 @@ gimp_text_options_get_property (GObject    *object,
       g_value_set_double (value, options->font_size);
       break;
     case PROP_UNIT:
-      g_value_set_int (value, options->unit);
+      g_value_set_object (value, options->unit);
       break;
     case PROP_ANTIALIAS:
       g_value_set_boolean (value, options->antialias);
@@ -443,7 +443,7 @@ gimp_text_options_get_property (GObject    *object,
       g_value_set_double (value, options->outline_width);
       break;
     case PROP_OUTLINE_UNIT:
-      g_value_set_int (value, options->outline_unit);
+      g_value_set_object (value, options->outline_unit);
       break;
     case PROP_OUTLINE_CAP_STYLE:
       g_value_set_enum (value, options->outline_cap_style);
@@ -503,7 +503,7 @@ gimp_text_options_set_property (GObject      *object,
       options->font_size = g_value_get_double (value);
       break;
     case PROP_UNIT:
-      options->unit = g_value_get_int (value);
+      options->unit = g_value_get_object (value);
       break;
     case PROP_ANTIALIAS:
       options->antialias = g_value_get_boolean (value);
@@ -560,7 +560,7 @@ gimp_text_options_set_property (GObject      *object,
       options->outline_width = g_value_get_double (value);
       break;
     case PROP_OUTLINE_UNIT:
-      options->outline_unit = g_value_get_int (value);
+      options->outline_unit = g_value_get_object (value);
       break;
     case PROP_OUTLINE_CAP_STYLE:
       options->outline_cap_style = g_value_get_enum (value);
@@ -653,7 +653,7 @@ gimp_text_options_notify_font (GimpContext *context,
                                GParamSpec  *pspec,
                                GimpText    *text)
 {
-  if (gimp_context_get_font (context) == text->font)
+  if (gimp_context_get_font (context) == text->font || gimp_context_get_font (context) == NULL)
     return;
 
   g_signal_handlers_block_by_func (text,
@@ -672,6 +672,9 @@ gimp_text_options_notify_text_font (GimpText    *text,
                                     GParamSpec  *pspec,
                                     GimpContext *context)
 {
+  if (context->font == NULL)
+    return;
+
   g_signal_handlers_block_by_func (context,
                                    gimp_text_options_notify_font, text);
 
@@ -804,7 +807,7 @@ gimp_text_options_gui (GimpToolOptions *tool_options)
   gtk_widget_show (grid);
 
   entry = gimp_prop_size_entry_new (config,
-                                    "font-size", FALSE, "font-size-unit", "%p",
+                                    "font-size", FALSE, "font-size-unit", "%n",
                                     GIMP_SIZE_ENTRY_UPDATE_SIZE, 72.0);
   gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++,
                             _("Size:"), 0.0, 0.5,
@@ -842,8 +845,8 @@ gimp_text_options_gui (GimpToolOptions *tool_options)
                             button, 1);
   gtk_size_group_add_widget (size_group, button);
 
-  button = gimp_prop_gegl_color_button_new (config, "foreground", _("Text Color"),
-                                            40, 24, GIMP_COLOR_AREA_FLAT);
+  button = gimp_prop_color_button_new (config, "foreground", _("Text Color"),
+                                       40, 24, GIMP_COLOR_AREA_FLAT);
   gimp_color_button_set_update (GIMP_COLOR_BUTTON (button), TRUE);
   gimp_color_panel_set_context (GIMP_COLOR_PANEL (button),
                                 GIMP_CONTEXT (options));

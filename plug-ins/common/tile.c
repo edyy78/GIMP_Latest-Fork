@@ -59,7 +59,6 @@ static GimpProcedure  * tile_create_procedure (GimpPlugIn           *plug_in,
 static GimpValueArray * tile_run              (GimpProcedure        *procedure,
                                                GimpRunMode           run_mode,
                                                GimpImage            *image,
-                                               gint                  n_drawables,
                                                GimpDrawable        **drawables,
                                                GimpProcedureConfig  *config,
                                                gpointer              run_data);
@@ -157,35 +156,35 @@ tile_create_procedure (GimpPlugIn  *plug_in,
        * sense or when we want stored values to only apply when run on a same
        * image.
        */
-      GIMP_PROC_ARG_INT (procedure, "new-width",
-                         _("New _width"),
-                         _("New (tiled) image width"),
-                         1, GIMP_MAX_IMAGE_SIZE, 1,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "new-width",
+                                       _("New _width"),
+                                       _("New (tiled) image width"),
+                                       1, GIMP_MAX_IMAGE_SIZE, 1,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "new-height",
-                         _("New _height"),
-                         _("New (tiled) image height"),
-                         1, GIMP_MAX_IMAGE_SIZE, 1,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "new-height",
+                                       _("New _height"),
+                                       _("New (tiled) image height"),
+                                       1, GIMP_MAX_IMAGE_SIZE, 1,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "new-image",
-                             _("New _image"),
-                             _("Create a new image"),
-                             TRUE,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "new-image",
+                                           _("New _image"),
+                                           _("Create a new image"),
+                                           TRUE,
+                                           G_PARAM_READWRITE);
 
-      GIMP_PROC_VAL_IMAGE (procedure, "new-image",
-                           "New image",
-                           "Output image (NULL if new-image == FALSE)",
-                           TRUE,
-                           G_PARAM_READWRITE);
+      gimp_procedure_add_image_return_value (procedure, "new-image",
+                                             "New image",
+                                             "Output image (NULL if new-image == FALSE)",
+                                             TRUE,
+                                             G_PARAM_READWRITE);
 
-      GIMP_PROC_VAL_LAYER (procedure, "new-layer",
-                           "New layer",
-                           "Output layer (NULL if new-image == FALSE)",
-                           TRUE,
-                           G_PARAM_READWRITE);
+      gimp_procedure_add_layer_return_value (procedure, "new-layer",
+                                             "New layer",
+                                             "Output layer (NULL if new-image == FALSE)",
+                                             TRUE,
+                                             G_PARAM_READWRITE);
     }
 
   return procedure;
@@ -195,7 +194,6 @@ static GimpValueArray *
 tile_run (GimpProcedure        *procedure,
           GimpRunMode           run_mode,
           GimpImage            *image,
-          gint                  n_drawables,
           GimpDrawable        **drawables,
           GimpProcedureConfig  *config,
           gpointer              run_data)
@@ -210,7 +208,7 @@ tile_run (GimpProcedure        *procedure,
 
   gegl_init (NULL, NULL);
 
-  if (n_drawables != 1)
+  if (gimp_core_object_array_get_length ((GObject **) drawables) != 1)
     {
       GError *error = NULL;
 
@@ -387,14 +385,7 @@ tile (GimpImage     *image,
 
       /*  copy the colormap, if necessary  */
       if (image_type == GIMP_INDEXED)
-        {
-          guchar *cmap;
-          gint    ncols;
-
-          cmap = gimp_image_get_colormap (image, NULL, &ncols);
-          gimp_image_set_colormap (*new_image, cmap, ncols);
-          g_free (cmap);
-        }
+        gimp_image_set_palette (*new_image, gimp_image_get_palette (image));
 
       *new_layer = gimp_layer_new (*new_image, _("Background"),
                                    new_width, new_height,

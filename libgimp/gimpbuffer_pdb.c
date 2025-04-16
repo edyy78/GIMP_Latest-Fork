@@ -37,8 +37,8 @@
 
 
 /**
- * gimp_buffers_get_list:
- * @filter: An optional regular expression used to filter the list.
+ * gimp_buffers_get_name_list:
+ * @filter: (nullable): An optional regular expression used to filter the list.
  *
  * Retrieve a complete listing of the available buffers.
  *
@@ -52,7 +52,7 @@
  * Since: 2.4
  **/
 gchar **
-gimp_buffers_get_list (const gchar *filter)
+gimp_buffers_get_name_list (const gchar *filter)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
@@ -63,7 +63,7 @@ gimp_buffers_get_list (const gchar *filter)
                                           G_TYPE_NONE);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
-                                               "gimp-buffers-get-list",
+                                               "gimp-buffers-get-name-list",
                                                args);
   gimp_value_array_unref (args);
 
@@ -270,12 +270,12 @@ gimp_buffer_get_bytes (const gchar *buffer_name)
  *
  * Since: 2.4
  **/
-GimpImageBaseType
+GimpImageType
 gimp_buffer_get_image_type (const gchar *buffer_name)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
-  GimpImageBaseType image_type = 0;
+  GimpImageType image_type = 0;
 
   args = gimp_value_array_new_from_types (NULL,
                                           G_TYPE_STRING, buffer_name,

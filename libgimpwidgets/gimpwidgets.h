@@ -54,7 +54,7 @@
 #include <libgimpwidgets/gimpenumlabel.h>
 #include <libgimpwidgets/gimpenumstore.h>
 #include <libgimpwidgets/gimpenumwidgets.h>
-#include <libgimpwidgets/gimpfileentry.h>
+#include <libgimpwidgets/gimpfilechooser.h>
 #include <libgimpwidgets/gimpframe.h>
 #include <libgimpwidgets/gimphelpui.h>
 #include <libgimpwidgets/gimphintbox.h>
@@ -160,7 +160,7 @@ GtkWidget * gimp_random_seed_new   (guint32            *seed,
 #define GIMP_COORDINATES_CHAINBUTTON(sizeentry) \
         (g_object_get_data (G_OBJECT (sizeentry), "chainbutton"))
 
-GtkWidget * gimp_coordinates_new   (GimpUnit            unit,
+GtkWidget * gimp_coordinates_new   (GimpUnit           *unit,
                                     const gchar        *unit_format,
                                     gboolean            menu_show_pixels,
                                     gboolean            menu_show_percent,

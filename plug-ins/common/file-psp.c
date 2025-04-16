@@ -26,7 +26,7 @@
  */
 
 #define LOAD_PROC      "file-psp-load"
-#define SAVE_PROC      "file-psp-save"
+#define EXPORT_PROC    "file-psp-export"
 #define PLUG_IN_BINARY "file-psp"
 #define PLUG_IN_ROLE   "gimp-file-psp"
 
@@ -591,22 +591,21 @@ static GimpValueArray * psp_load             (GimpProcedure         *procedure,
                                               GimpMetadataLoadFlags *flags,
                                               GimpProcedureConfig   *config,
                                               gpointer               run_data);
-static GimpValueArray * psp_save             (GimpProcedure         *procedure,
+static GimpValueArray * psp_export           (GimpProcedure         *procedure,
                                               GimpRunMode            run_mode,
                                               GimpImage             *image,
-                                              gint                   n_drawables,
-                                              GimpDrawable         **drawables,
                                               GFile                 *file,
+                                              GimpExportOptions     *options,
                                               GimpMetadata          *metadata,
                                               GimpProcedureConfig   *config,
                                               gpointer               run_data);
 
 static GimpImage      * load_image           (GFile                 *file,
                                               GError               **error);
-static gboolean         save_image           (GFile                 *file,
+static gboolean         export_image         (GFile                 *file,
                                               GimpImage             *image,
                                               gint                   n_drawables,
-                                              GimpDrawable         **drawables,
+                                              GList                 *drawables,
                                               GObject               *config,
                                               GError               **error);
 static gboolean         save_dialog          (GimpProcedure         *procedure,
@@ -647,7 +646,7 @@ psp_query_procedures (GimpPlugIn *plug_in)
   list = g_list_append (list, g_strdup (LOAD_PROC));
 #if 0
   /* commented out until exporting is implemented */
-  list = g_list_append (list, g_strdup (SAVE_PROC));
+  list = g_list_append (list, g_strdup (EXPORT_PROC));
 #endif
   return list;
 }
@@ -686,11 +685,11 @@ psp_create_procedure (GimpPlugIn  *plug_in,
       gimp_file_procedure_set_magics (GIMP_FILE_PROCEDURE (procedure),
                                       "0,string,Paint\\040Shop\\040Pro\\040Image\\040File\n\032");
     }
-  else if (! strcmp (name, SAVE_PROC))
+  else if (! strcmp (name, EXPORT_PROC))
     {
-      procedure = gimp_save_procedure_new (plug_in, name,
-                                           GIMP_PDB_PROC_TYPE_PLUGIN,
-                                           FALSE, psp_save, NULL, NULL);
+      procedure = gimp_export_procedure_new (plug_in, name,
+                                             GIMP_PDB_PROC_TYPE_PLUGIN,
+                                             FALSE, psp_export, NULL, NULL);
 
       gimp_procedure_set_image_types (procedure, "*");
 
@@ -715,12 +714,23 @@ psp_create_procedure (GimpPlugIn  *plug_in,
       gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
                                           "psp,tub");
 
-      GIMP_PROC_ARG_INT (procedure, "compression",
-                         "_Data Compression",
-                         "Specify 0 for no compression, "
-                         "1 for RLE, and 2 for LZ77",
-                         0, 2, PSP_COMP_LZ77,
-                         G_PARAM_READWRITE);
+      gimp_export_procedure_set_capabilities (GIMP_EXPORT_PROCEDURE (procedure),
+                                              GIMP_EXPORT_CAN_HANDLE_RGB     |
+                                              GIMP_EXPORT_CAN_HANDLE_GRAY    |
+                                              GIMP_EXPORT_CAN_HANDLE_INDEXED |
+                                              GIMP_EXPORT_CAN_HANDLE_ALPHA   |
+                                              GIMP_EXPORT_CAN_HANDLE_LAYERS,
+                                              NULL, NULL, NULL);
+
+      gimp_procedure_add_choice_argument (procedure, "compression",
+                                          _("_Data Compression"),
+                                          _("Type of compression"),
+                                          gimp_choice_new_with_values ("none", PSP_COMP_NONE, _("none"), NULL,
+                                                                       "rle",  PSP_COMP_RLE,  _("rle"),  NULL,
+                                                                       "lz77", PSP_COMP_LZ77, _("lz77"), NULL,
+                                                                       NULL),
+                                          "lz77",
+                                          G_PARAM_READWRITE);
     }
 
   return procedure;
@@ -758,66 +768,48 @@ psp_load (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
-psp_save (GimpProcedure        *procedure,
-          GimpRunMode           run_mode,
-          GimpImage            *image,
-          gint                  n_drawables,
-          GimpDrawable        **drawables,
-          GFile                *file,
-          GimpMetadata         *metadata,
-          GimpProcedureConfig  *config,
-          gpointer              run_data)
+psp_export (GimpProcedure        *procedure,
+            GimpRunMode           run_mode,
+            GimpImage            *image,
+            GFile                *file,
+            GimpExportOptions    *options,
+            GimpMetadata         *metadata,
+            GimpProcedureConfig  *config,
+            gpointer              run_data)
 {
   GimpPDBStatusType  status = GIMP_PDB_SUCCESS;
-  GimpExportReturn   export = GIMP_EXPORT_CANCEL;
+  GimpExportReturn   export = GIMP_EXPORT_IGNORE;
+  GList             *drawables;
+  gint               n_drawables;
   GError            *error  = NULL;
 
   gegl_init (NULL, NULL);
 
-  switch (run_mode)
-    {
-    case GIMP_RUN_INTERACTIVE:
-    case GIMP_RUN_WITH_LAST_VALS:
-      gimp_ui_init (PLUG_IN_BINARY);
-
-      export = gimp_export_image (&image, &n_drawables, &drawables, "PSP",
-                                  GIMP_EXPORT_CAN_HANDLE_RGB     |
-                                  GIMP_EXPORT_CAN_HANDLE_GRAY    |
-                                  GIMP_EXPORT_CAN_HANDLE_INDEXED |
-                                  GIMP_EXPORT_CAN_HANDLE_ALPHA   |
-                                  GIMP_EXPORT_CAN_HANDLE_LAYERS);
-
-      if (export == GIMP_EXPORT_CANCEL)
-        return gimp_procedure_new_return_values (procedure,
-                                                 GIMP_PDB_CANCEL,
-                                                 NULL);
-      break;
-
-    default:
-      break;
-    }
-
   if (run_mode == GIMP_RUN_INTERACTIVE)
     {
+      gimp_ui_init (PLUG_IN_BINARY);
+
       if (! save_dialog (procedure, G_OBJECT (config), image))
         status = GIMP_PDB_CANCEL;
     }
 
+  export      = gimp_export_options_get_image (options, &image);
+  drawables   = gimp_image_list_layers (image);
+  n_drawables = g_list_length (drawables);
+
   if (status == GIMP_PDB_SUCCESS)
     {
-      if (! save_image (file, image, n_drawables, drawables,
-                        G_OBJECT (config), &error))
+      if (! export_image (file, image, n_drawables, drawables,
+                          G_OBJECT (config), &error))
         {
           status = GIMP_PDB_EXECUTION_ERROR;
         }
     }
 
   if (export == GIMP_EXPORT_EXPORT)
-    {
-      gimp_image_delete (image);
-      g_free (drawables);
-    }
+    gimp_image_delete (image);
 
+  g_list_free (drawables);
   return gimp_procedure_new_return_values (procedure, status, error);
 }
 
@@ -826,22 +818,17 @@ save_dialog (GimpProcedure *procedure,
              GObject       *config,
              GimpImage     *image)
 {
-  GtkWidget    *dialog;
-  GtkListStore *store;
-  GtkWidget    *frame;
-  gint          run;
+  GtkWidget *dialog;
+  GtkWidget *frame;
+  gint       run;
 
-  dialog = gimp_save_procedure_dialog_new (GIMP_SAVE_PROCEDURE (procedure),
-                                           GIMP_PROCEDURE_CONFIG (config),
-                                           image);
+  dialog = gimp_export_procedure_dialog_new (GIMP_EXPORT_PROCEDURE (procedure),
+                                             GIMP_PROCEDURE_CONFIG (config),
+                                             image);
 
   /*  file save type  */
-  store = gimp_int_store_new (_("None"), PSP_COMP_NONE,
-                              _("RLE"),  PSP_COMP_RLE,
-                              _("LZ77"), PSP_COMP_LZ77,
-                              NULL);
-  frame = gimp_procedure_dialog_get_int_radio (GIMP_PROCEDURE_DIALOG (dialog),
-                                               "compression", GIMP_INT_STORE (store));
+  frame = gimp_procedure_dialog_get_widget (GIMP_PROCEDURE_DIALOG (dialog),
+                                            "compression", GIMP_TYPE_INT_RADIO_FRAME);
   gtk_container_set_border_width (GTK_CONTAINER (frame), 12);
 
   gimp_procedure_dialog_fill (GIMP_PROCEDURE_DIALOG (dialog), NULL);
@@ -1314,7 +1301,7 @@ read_color_block (FILE      *f,
       memcpy (color_palette, tmpmap, color_palette_entries * 3);
       g_free (tmpmap);
 
-      gimp_image_set_colormap (image, color_palette, color_palette_entries);
+      gimp_palette_set_colormap (gimp_image_get_palette (image), babl_format ("R'G'B' u8"), color_palette, color_palette_entries * 3);
       g_free (color_palette);
     }
 
@@ -2836,12 +2823,12 @@ load_image (GFile   *file,
 }
 
 static gint
-save_image (GFile         *file,
-            GimpImage     *image,
-            gint           n_drawables,
-            GimpDrawable **drawables,
-            GObject       *config,
-            GError       **error)
+export_image (GFile         *file,
+              GimpImage     *image,
+              gint           n_drawables,
+              GList         *drawables,
+              GObject       *config,
+              GError       **error)
 {
   g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
                _("Exporting not implemented yet."));

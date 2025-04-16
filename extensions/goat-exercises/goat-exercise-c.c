@@ -64,7 +64,6 @@ static GimpProcedure  * goat_create_procedure (GimpPlugIn           *plug_in,
 static GimpValueArray * goat_run              (GimpProcedure        *procedure,
                                                GimpRunMode           run_mode,
                                                GimpImage            *image,
-                                               gint                  n_drawables,
                                                GimpDrawable        **drawables,
                                                GimpProcedureConfig  *config,
                                                gpointer              run_data);
@@ -111,14 +110,14 @@ goat_create_procedure (GimpPlugIn  *plug_in,
       gimp_procedure_set_sensitivity_mask (procedure,
                                            GIMP_PROCEDURE_SENSITIVE_DRAWABLE);
 
-      gimp_procedure_set_menu_label (procedure, _("Exercise in _C minor"));
+      gimp_procedure_set_menu_label (procedure, _("Plug-In Example in _C"));
       gimp_procedure_set_icon_name (procedure, GIMP_ICON_GEGL);
       gimp_procedure_add_menu_path (procedure,
-                                    "<Image>/Filters/Development/Goat exercises/");
+                                    "<Image>/Filters/Development/Plug-In Examples/");
 
       gimp_procedure_set_documentation (procedure,
-                                        _("Exercise a goat in the C language"),
-                                        "Takes a goat for a walk",
+                                        _("Plug-in example in C"),
+                                        _("Plug-in example in C"),
                                         PLUG_IN_PROC);
       gimp_procedure_set_attribution (procedure,
                                       "Øyvind Kolås <pippin@gimp.org>",
@@ -133,7 +132,6 @@ static GimpValueArray *
 goat_run (GimpProcedure        *procedure,
           GimpRunMode           run_mode,
           GimpImage            *image,
-          gint                  n_drawables,
           GimpDrawable        **drawables,
           GimpProcedureConfig  *config,
           gpointer              run_data)
@@ -142,7 +140,7 @@ goat_run (GimpProcedure        *procedure,
   GimpPDBStatusType  status = GIMP_PDB_SUCCESS;
   gint               x, y, width, height;
 
-  if (n_drawables != 1)
+  if (gimp_core_object_array_get_length ((GObject **) drawables) != 1)
     {
       GError *error = NULL;
 
@@ -177,7 +175,7 @@ goat_run (GimpProcedure        *procedure,
       gint              response;
 
       gimp_ui_init (PLUG_IN_BINARY);
-      dialog = gimp_dialog_new (_("Exercise a goat (C)"), PLUG_IN_ROLE,
+      dialog = gimp_dialog_new (_("Plug-In Example in C"), PLUG_IN_ROLE,
                                 NULL, GTK_DIALOG_USE_HEADER_BAR,
                                 gimp_standard_help_func, PLUG_IN_PROC,
 
@@ -281,6 +279,15 @@ goat_run (GimpProcedure        *procedure,
       gimp_displays_flush ();
 
       gegl_exit ();
+#if 0
+      /* Above is an example of using GEGL API directly within the
+       * plug-in process. Below is a variant using drawable filters. The
+       * operation rendering is done core process side.
+       */
+      gimp_drawable_merge_new_filter (drawable, "gegl:invert", NULL,
+                                      GIMP_LAYER_MODE_REPLACE, 1.0,
+                                      NULL);
+#endif
     }
 
   return gimp_procedure_new_return_values (procedure, status, NULL);

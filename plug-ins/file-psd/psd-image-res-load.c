@@ -573,8 +573,8 @@ load_resource_1005 (const PSDimageres  *res_a,
 
   /* FIXME  width unit and height unit unused at present */
 
-  ResolutionInfo        res_info;
-  GimpUnit              image_unit;
+  ResolutionInfo  res_info;
+  GimpUnit       *image_unit;
 
   IFDBG(2) g_debug ("Process image resource block 1005: Resolution Info");
 
@@ -613,13 +613,13 @@ load_resource_1005 (const PSDimageres  *res_a,
   switch (res_info.hResUnit)
     {
     case PSD_RES_INCH:
-      image_unit = GIMP_UNIT_INCH;
+      image_unit = gimp_unit_inch ();
       break;
     case PSD_RES_CM:
-      image_unit = GIMP_UNIT_MM;
+      image_unit = gimp_unit_mm ();
       break;
     default:
-      image_unit = GIMP_UNIT_INCH;
+      image_unit = gimp_unit_inch ();
     }
 
   gimp_image_set_unit (image, image_unit);
@@ -725,14 +725,14 @@ load_resource_1007 (const PSDimageres  *res_a,
 
           case PSD_CS_HSB:
             {
-              gdouble hsv[3] =
+              gfloat hsv[3] =
                 {
-                  ps_color.hsv.hue / 65535.0,
-                  ps_color.hsv.saturation / 65535.0,
-                  ps_color.hsv.value / 65535.0
+                  ps_color.hsv.hue / 65535.0f,
+                  ps_color.hsv.saturation / 65535.0f,
+                  ps_color.hsv.value / 65535.0f
                 };
 
-              gegl_color_set_pixel (color, babl_format ("HSV double"), hsv);
+              gegl_color_set_pixel (color, babl_format ("HSV float"), hsv);
             }
           break;
 
@@ -823,7 +823,7 @@ load_resource_1022 (const PSDimageres  *res_a,
                     GError            **error)
 {
   /* Load quick mask info */
-  gboolean              quick_mask_empty;       /* Quick mask initially empty */
+  gboolean quick_mask_empty = TRUE; /* Quick mask initially empty */
 
   IFDBG(2) g_debug ("Process image resource block: 1022: Quick Mask");
 
@@ -1264,9 +1264,7 @@ load_resource_1046 (const PSDimageres  *res_a,
                     GError            **error)
 {
   /* Load indexed color table count */
-  guchar       *cmap;
-  gint32        cmap_count = 0;
-  gint16        index_count = 0;
+  gint16 index_count = 0;
 
   IFDBG(2) g_debug ("Process image resource block: 1046: Indexed Color Table Count");
 
@@ -1281,10 +1279,12 @@ load_resource_1046 (const PSDimageres  *res_a,
   /* FIXME - check that we have indexed image */
   if (index_count && index_count < 256)
     {
-      cmap = gimp_image_get_colormap (image, NULL, &cmap_count);
-      if (cmap && index_count < cmap_count)
-        gimp_image_set_colormap (image, cmap, index_count);
-      g_free (cmap);
+      GimpPalette *palette;
+
+      palette = gimp_image_get_palette (image);
+      if (palette)
+        while (index_count < gimp_palette_get_color_count (palette))
+          gimp_palette_delete_entry (palette, index_count);
     }
   return 0;
 }
@@ -1366,7 +1366,7 @@ load_resource_1069 (const PSDimageres  *res_a,
                     GInputStream       *input,
                     GError            **error)
 {
-  guint16 layer_count;
+  guint16 layer_count = 0;
   gint    i;
 
   IFDBG(2) g_debug ("Process image resource block: 1069: Layer Selection ID(s)");
@@ -1386,7 +1386,7 @@ load_resource_1069 (const PSDimageres  *res_a,
 
   for (i = 0; i < layer_count; i++)
     {
-      guint32 layer_id;
+      guint32 layer_id = 0;
 
       if (psd_read (input, &layer_id, 4, error) < 4)
         {
@@ -1461,14 +1461,14 @@ load_resource_1077 (const PSDimageres  *res_a,
 
           case PSD_CS_HSB:
             {
-              gdouble hsv[3] =
+              gfloat hsv[3] =
                 {
-                  ps_color.hsv.hue / 65535.0,
-                  ps_color.hsv.saturation / 65535.0,
-                  ps_color.hsv.value / 65535.0
+                  ps_color.hsv.hue / 65535.0f,
+                  ps_color.hsv.saturation / 65535.0f,
+                  ps_color.hsv.value / 65535.0f
                 };
 
-              gegl_color_set_pixel (color, babl_format ("HSV double"), hsv);
+              gegl_color_set_pixel (color, babl_format ("HSV float"), hsv);
             }
             break;
 
@@ -1530,19 +1530,19 @@ load_resource_2000 (const PSDimageres  *res_a,
                     GInputStream       *input,
                     GError            **error)
 {
-  gdouble      *controlpoints;
-  gint32        x[3];
-  gint32        y[3];
-  GimpVectors  *vectors = NULL;
-  gint16        type;
-  gint16        init_fill;
-  gint16        num_rec;
-  gint16        path_rec;
-  gint16        cntr;
-  gint          image_width;
-  gint          image_height;
-  gint          i;
-  gboolean      closed;
+  gdouble   *controlpoints;
+  gint32     x[3];
+  gint32     y[3];
+  GimpPath  *path = NULL;
+  gint16     type = 0;
+  gint16     init_fill;
+  gint16     num_rec;
+  gint16     path_rec;
+  gint16     cntr;
+  gint       image_width;
+  gint       image_height;
+  gint       i;
+  gboolean   closed;
 
   /* Load path data from image resources 2000-2998 */
 
@@ -1580,15 +1580,15 @@ load_resource_2000 (const PSDimageres  *res_a,
   if (res_a->id == PSD_WORKING_PATH)
     {
       /* use "Working Path" for the path name to match the Photoshop display */
-      vectors = gimp_vectors_new (image, "Working Path");
+      path = gimp_path_new (image, "Working Path");
     }
   else
     {
       /* Use the name stored in the PSD to name the path */
-      vectors = gimp_vectors_new (image, res_a->name);
+      path = gimp_path_new (image, res_a->name);
     }
 
-  gimp_image_insert_vectors (image, vectors, NULL, -1);
+  gimp_image_insert_path (image, path, NULL, -1);
 
   while (path_rec > 0)
     {
@@ -1703,9 +1703,9 @@ load_resource_2000 (const PSDimageres  *res_a,
               num_rec--;
             }
           /* Add sub-path */
-          gimp_vectors_stroke_new_from_points (vectors,
-                                               GIMP_VECTORS_STROKE_TYPE_BEZIER,
-                                               cntr, controlpoints, closed);
+          gimp_path_stroke_new_from_points (path,
+                                            GIMP_PATH_STROKE_TYPE_BEZIER,
+                                            cntr, controlpoints, closed);
           g_free (controlpoints);
         }
 
@@ -1731,25 +1731,30 @@ load_resource_2999 (const PSDimageres  *res_a,
                     GError            **error)
 {
   gchar        *path_name;
-  gint16        path_flatness_int;
-  gint16        path_flatness_fixed;
+  gint16        path_flatness_int   = 0;
+  gint16        path_flatness_fixed = 0;
   gfloat        path_flatness;
   GimpParasite *parasite;
   gint32        read_len;
   gint32        write_len;
 
   path_name = fread_pascal_string (&read_len, &write_len, 2, input, error);
-  if (*error)
-    return -1;
+  if (*error || ! path_name)
+    {
+      g_printerr ("psd-load: Unable to read clipping path name.");
+      return -1;
+    }
 
   /* Convert from fixed to floating point */
-  if (psd_read (input, &path_flatness_int, 1, error) < 1 ||
-      psd_read (input, &path_flatness_fixed, 1, error) < 1)
+  if (psd_read (input, &path_flatness_int, 2, error) < 2 ||
+      psd_read (input, &path_flatness_fixed, 2, error) < 2)
     {
       psd_set_error (error);
       return -1;
     }
   path_flatness_fixed = GINT16_FROM_BE (path_flatness_fixed);
+  path_flatness_int   = GINT16_FROM_BE (path_flatness_int);
+
   /* Converting from Adobe fixed point value to float */
   path_flatness = (path_flatness_fixed - 0.5f) / 65536.0;
   path_flatness += path_flatness_int;
@@ -1769,7 +1774,7 @@ load_resource_2999 (const PSDimageres  *res_a,
   gimp_parasite_free (parasite);
 
   /* Adobe says they ignore the last two bytes, the fill rule */
-  if (psd_read (input, &path_flatness_fixed, 1, error) < 1)
+  if (psd_read (input, &path_flatness_fixed, 2, error) < 2)
     {
       psd_set_error (error);
       return -1;

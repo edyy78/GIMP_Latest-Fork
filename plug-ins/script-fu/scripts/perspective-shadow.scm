@@ -25,7 +25,7 @@
 ;
 
 (define (script-fu-perspective-shadow image
-                                      drawable
+                                      drawables
                                       alpha
                                       rel-distance
                                       rel-length
@@ -35,6 +35,7 @@
                                       interpolation
                                       allow-resize)
   (let* (
+        (drawable (vector-ref drawables 0))
         (shadow-blur (max shadow-blur 0))
         (shadow-opacity (min shadow-opacity 100))
         (shadow-opacity (max shadow-opacity 0))
@@ -95,10 +96,10 @@
 
 
       (set! shadow-layer (car (gimp-layer-new image
+                                              "Perspective Shadow"
                                               select-width
                                               select-height
                                               type
-                                              "Perspective Shadow"
                                               shadow-opacity
                                               LAYER-MODE-NORMAL)))
 
@@ -167,12 +168,10 @@
                                shadow-height
                                shadow-blur
                                shadow-blur)
-            (plug-in-gauss-rle RUN-NONINTERACTIVE
-                               image
-                               shadow-layer
-                               shadow-blur
-                               TRUE
-                               TRUE))))
+            (gimp-drawable-merge-new-filter shadow-layer "gegl:gaussian-blur" 0 LAYER-MODE-REPLACE 1.0
+                                            "std-dev-x" (* 0.32 shadow-blur)
+                                            "std-dev-y" (* 0.32 shadow-blur)
+                                            "filter" "auto"))))
 
     (if (= from-selection TRUE)
         (begin
@@ -185,7 +184,7 @@
           (= from-selection FALSE))
       (gimp-image-raise-item image drawable))
 
-    (gimp-image-set-selected-layers image 1 (vector drawable))
+    (gimp-image-set-selected-layers image (vector drawable))
     (gimp-image-undo-group-end image)
     (gimp-displays-flush)
 
@@ -193,15 +192,14 @@
   )
 )
 
-(script-fu-register "script-fu-perspective-shadow"
+(script-fu-register-filter "script-fu-perspective-shadow"
   _"_Perspective..."
   _"Add a perspective shadow to the selected region (or alpha)"
   "Sven Neumann <sven@gimp.org>"
   "Sven Neumann"
   "2000/11/08"
   "RGB* GRAY*"
-  SF-IMAGE       "Image"                        0
-  SF-DRAWABLE    "Drawable"                     0
+  SF-ONE-OR-MORE-DRAWABLE
   SF-ADJUSTMENT _"Angle"                        '(45 0 180 1 10 1 0)
   SF-ADJUSTMENT _"Relative distance of horizon" '(5 0.1 24.1 0.1 1 1 1)
   SF-ADJUSTMENT _"Relative length of shadow"    '(1 0.1 24   0.1 1 1 1)

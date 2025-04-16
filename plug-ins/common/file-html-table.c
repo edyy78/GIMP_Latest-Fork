@@ -57,7 +57,7 @@
 #include "libgimp/stdplugins-intl.h"
 
 
-#define SAVE_PROC      "file-html-table-save"
+#define EXPORT_PROC    "file-html-table-export"
 #define PLUG_IN_BINARY "file-html-table"
 
 
@@ -84,17 +84,16 @@ static GList          * html_query_procedures  (GimpPlugIn           *plug_in);
 static GimpProcedure  * html_create_procedure  (GimpPlugIn           *plug_in,
                                                 const gchar          *name);
 
-static GimpValueArray * html_save              (GimpProcedure        *procedure,
+static GimpValueArray * html_export            (GimpProcedure        *procedure,
                                                 GimpRunMode           run_mode,
                                                 GimpImage            *image,
-                                                gint                  n_drawables,
-                                                GimpDrawable        **drawables,
                                                 GFile                *file,
+                                                GimpExportOptions    *options,
                                                 GimpMetadata         *metadata,
                                                 GimpProcedureConfig  *config,
                                                 gpointer              run_data);
 
-static gboolean         save_image             (GFile                *file,
+static gboolean         export_image           (GFile                *file,
                                                 GeglBuffer           *buffer,
                                                 GObject              *config,
                                                 GError              **error);
@@ -134,7 +133,7 @@ html_init (Html *html)
 static GList *
 html_query_procedures (GimpPlugIn *plug_in)
 {
-  return  g_list_append (NULL, g_strdup (SAVE_PROC));
+  return  g_list_append (NULL, g_strdup (EXPORT_PROC));
 }
 
 static GimpProcedure *
@@ -143,11 +142,11 @@ html_create_procedure (GimpPlugIn  *plug_in,
 {
   GimpProcedure *procedure = NULL;
 
-  if (! strcmp (name, SAVE_PROC))
+  if (! strcmp (name, EXPORT_PROC))
     {
-      procedure = gimp_save_procedure_new (plug_in, name,
-                                           GIMP_PDB_PROC_TYPE_PLUGIN,
-                                           FALSE, html_save, NULL, NULL);
+      procedure = gimp_export_procedure_new (plug_in, name,
+                                             GIMP_PDB_PROC_TYPE_PLUGIN,
+                                             FALSE, html_export, NULL, NULL);
 
       gimp_procedure_set_image_types (procedure, "*");
 
@@ -171,101 +170,107 @@ html_create_procedure (GimpPlugIn  *plug_in,
                                           "text/html");
       gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
                                           "html,htm");
+      gimp_export_procedure_set_capabilities (GIMP_EXPORT_PROCEDURE (procedure),
+                                              GIMP_EXPORT_CAN_HANDLE_RGB  |
+                                              GIMP_EXPORT_CAN_HANDLE_GRAY |
+                                              GIMP_EXPORT_CAN_HANDLE_ALPHA,
+                                              NULL, NULL, NULL);
 
-      GIMP_PROC_AUX_ARG_BOOLEAN (procedure, "use-caption",
-                                 _("Use c_aption"),
-                                 _("Enable if you would like to have the table "
-                                   "captioned."),
-                                 FALSE,
-                                 GIMP_PARAM_READWRITE);
+      gimp_procedure_add_boolean_aux_argument (procedure, "use-caption",
+                                               _("Use c_aption"),
+                                               _("Enable if you would like to have the table "
+                                                 "captioned."),
+                                               FALSE,
+                                               GIMP_PARAM_READWRITE);
 
-      GIMP_PROC_AUX_ARG_STRING (procedure, "caption-text",
-                                _("Capt_ion"),
-                                _("The text for the table caption."),
-                                "Made with GIMP Table Magic",
-                                GIMP_PARAM_READWRITE);
+      gimp_procedure_add_string_aux_argument (procedure, "caption-text",
+                                              _("Capt_ion"),
+                                              _("The text for the table caption."),
+                                              "Made with GIMP Table Magic",
+                                              GIMP_PARAM_READWRITE);
 
-      GIMP_PROC_AUX_ARG_STRING (procedure, "cell-content",
-                                _("Cell con_tent"),
-                                _("The text to go into each cell."),
-                                "&nbsp;",
-                                GIMP_PARAM_READWRITE);
+      gimp_procedure_add_string_aux_argument (procedure, "cell-content",
+                                              _("Cell con_tent"),
+                                              _("The text to go into each cell."),
+                                              "&nbsp;",
+                                              GIMP_PARAM_READWRITE);
 
-      GIMP_PROC_AUX_ARG_STRING (procedure, "cell-width",
-                                _("_Width"),
-                                _("The width for each table cell. "
-                                  "Can be a number or a percent."),
-                                "",
-                                GIMP_PARAM_READWRITE);
+      gimp_procedure_add_string_aux_argument (procedure, "cell-width",
+                                              _("_Width"),
+                                              _("The width for each table cell. "
+                                                "Can be a number or a percent."),
+                                              "",
+                                              GIMP_PARAM_READWRITE);
 
-      GIMP_PROC_AUX_ARG_STRING (procedure, "cell-height",
-                                _("_Height"),
-                                _("The height for each table cell. "
-                                  "Can be a number or a percent."),
-                                "",
-                                GIMP_PARAM_READWRITE);
+      gimp_procedure_add_string_aux_argument (procedure, "cell-height",
+                                              _("_Height"),
+                                              _("The height for each table cell. "
+                                                "Can be a number or a percent."),
+                                              "",
+                                              GIMP_PARAM_READWRITE);
 
-      GIMP_PROC_AUX_ARG_BOOLEAN (procedure, "full-document",
-                                 _("_Generate full HTML document"),
-                                 _("If enabled GTM will output a full HTML "
-                                   "document with <HTML>, <BODY>, etc. tags "
-                                   "instead of just the table html."),
-                                 TRUE,
-                                 GIMP_PARAM_READWRITE);
+      gimp_procedure_add_boolean_aux_argument (procedure, "full-document",
+                                               _("_Generate full HTML document"),
+                                               _("If enabled GTM will output a full HTML "
+                                                 "document with <HTML>, <BODY>, etc. tags "
+                                                 "instead of just the table html."),
+                                               TRUE,
+                                               GIMP_PARAM_READWRITE);
 
-      GIMP_PROC_AUX_ARG_INT (procedure, "border",
-                             _("_Border"),
-                             _("The number of pixels in the table border."),
-                             0, 1000, 2,
-                             GIMP_PARAM_READWRITE);
+      gimp_procedure_add_int_aux_argument (procedure, "border",
+                                           _("_Border"),
+                                           _("The number of pixels in the table border."),
+                                           0, 1000, 2,
+                                           GIMP_PARAM_READWRITE);
 
-      GIMP_PROC_AUX_ARG_BOOLEAN (procedure, "span-tags",
-                                 _("_Use cellspan"),
-                                 _("If enabled GTM will replace any "
-                                   "rectangular sections of identically "
-                                   "colored blocks with one large cell with "
-                                   "ROWSPAN and COLSPAN values."),
-                                 FALSE,
-                                 GIMP_PARAM_READWRITE);
+      gimp_procedure_add_boolean_aux_argument (procedure, "span-tags",
+                                               _("_Use cellspan"),
+                                               _("If enabled GTM will replace any "
+                                                 "rectangular sections of identically "
+                                                 "colored blocks with one large cell with "
+                                                 "ROWSPAN and COLSPAN values."),
+                                               FALSE,
+                                               GIMP_PARAM_READWRITE);
 
-      GIMP_PROC_AUX_ARG_BOOLEAN (procedure, "compress-td-tags",
-                                 _("Co_mpress TD tags"),
-                                 _("Enabling this will cause GTM to "
-                                   "leave no whitespace between the TD "
-                                   "tags and the cell content. This is only "
-                                   "necessary for pixel level positioning "
-                                   "control."),
-                                 FALSE,
-                                 GIMP_PARAM_READWRITE);
+      gimp_procedure_add_boolean_aux_argument (procedure, "compress-td-tags",
+                                               _("Co_mpress TD tags"),
+                                               _("Enabling this will cause GTM to "
+                                                 "leave no whitespace between the TD "
+                                                 "tags and the cell content. This is only "
+                                                 "necessary for pixel level positioning "
+                                                 "control."),
+                                               FALSE,
+                                               GIMP_PARAM_READWRITE);
 
-      GIMP_PROC_AUX_ARG_INT (procedure, "cell-padding",
-                             _("Cell-pa_dding"),
-                             _("The amount of cell padding."),
-                             0, 1000, 4,
-                             GIMP_PARAM_READWRITE);
+      gimp_procedure_add_int_aux_argument (procedure, "cell-padding",
+                                           _("Cell-pa_dding"),
+                                           _("The amount of cell padding."),
+                                           0, 1000, 4,
+                                           GIMP_PARAM_READWRITE);
 
-      GIMP_PROC_AUX_ARG_INT (procedure, "cell-spacing",
-                             _("Cell spaci_ng"),
-                             _("The amount of cell spacing."),
-                             0, 1000, 0,
-                             GIMP_PARAM_READWRITE);
+      gimp_procedure_add_int_aux_argument (procedure, "cell-spacing",
+                                           _("Cell spaci_ng"),
+                                           _("The amount of cell spacing."),
+                                           0, 1000, 0,
+                                           GIMP_PARAM_READWRITE);
     }
 
   return procedure;
 }
 
 static GimpValueArray *
-html_save (GimpProcedure        *procedure,
-           GimpRunMode           run_mode,
-           GimpImage            *image,
-           gint                  n_drawables,
-           GimpDrawable        **drawables,
-           GFile                *file,
-           GimpMetadata         *metadata,
-           GimpProcedureConfig  *config,
-           gpointer              run_data)
+html_export (GimpProcedure        *procedure,
+             GimpRunMode           run_mode,
+             GimpImage            *image,
+             GFile                *file,
+             GimpExportOptions    *options,
+             GimpMetadata         *metadata,
+             GimpProcedureConfig  *config,
+             gpointer              run_data)
 {
   GimpPDBStatusType  status = GIMP_PDB_SUCCESS;
+  GimpExportReturn   export = GIMP_EXPORT_IGNORE;
+  GList             *drawables;
   GeglBuffer        *buffer;
   GError            *error  = NULL;
 
@@ -281,34 +286,30 @@ html_save (GimpProcedure        *procedure,
                                              GIMP_PDB_CANCEL,
                                              NULL);
 
-  if (n_drawables != 1)
-    {
-      g_set_error (&error, G_FILE_ERROR, 0,
-                   _("HTML table plug-in does not support multiple layers."));
+  export    = gimp_export_options_get_image (options, &image);
+  drawables = gimp_image_list_layers (image);
+  buffer    = gimp_drawable_get_buffer (drawables->data);
 
-      return gimp_procedure_new_return_values (procedure,
-                                               GIMP_PDB_CALLING_ERROR,
-                                               error);
-    }
-
-  buffer = gimp_drawable_get_buffer (drawables[0]);
-
-  if (! save_image (file, buffer, G_OBJECT (config),
-                    &error))
+  if (! export_image (file, buffer, G_OBJECT (config),
+                      &error))
     {
       status = GIMP_PDB_EXECUTION_ERROR;
     }
 
+  if (export == GIMP_EXPORT_EXPORT)
+    gimp_image_delete (image);
+
   g_object_unref (buffer);
 
+  g_list_free (drawables);
   return gimp_procedure_new_return_values (procedure, status, error);
 }
 
 static gboolean
-save_image (GFile       *file,
-            GeglBuffer  *buffer,
-            GObject     *config,
-            GError     **error)
+export_image (GFile       *file,
+              GeglBuffer  *buffer,
+              GObject     *config,
+              GError     **error)
 {
   const Babl    *format = babl_format ("R'G'B'A u8");
   GeglSampler   *sampler;
@@ -595,9 +596,9 @@ save_dialog (GimpImage     *image,
 
   gimp_ui_init (PLUG_IN_BINARY);
 
-  dialog = gimp_save_procedure_dialog_new (GIMP_SAVE_PROCEDURE (procedure),
-                                           GIMP_PROCEDURE_CONFIG (config),
-                                           image);
+  dialog = gimp_export_procedure_dialog_new (GIMP_EXPORT_PROCEDURE (procedure),
+                                             GIMP_PROCEDURE_CONFIG (config),
+                                             image);
 
   if (gimp_image_get_width (image) * gimp_image_get_height (image) > 4096)
     {

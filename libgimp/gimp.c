@@ -94,7 +94,6 @@
 #include "gimpgpparams.h"
 #include "gimppdb-private.h"
 #include "gimpplugin-private.h"
-#include "gimpunitcache.h"
 
 #include "libgimp-intl.h"
 
@@ -153,13 +152,20 @@ static GimpStackTraceMode  stack_trace_mode      = GIMP_STACK_TRACE_NEVER;
  * @argv:         (array length=argc): the arguments
  *
  * The main plug-in function that must be called with the plug-in's
- * #GimpPlugIn subclass #GType and the 'argc' and 'argv' that are passed
- * to the platform's main().
+ * [class@Gimp.PlugIn] subclass #GType and the 'argc' and 'argv' that are passed
+ * to the platform's `main()`.
  *
- * See also: GIMP_MAIN(), #GimpPlugIn.
+ * For instance, in Python, you will want to end your plug-in with this
+ * call:
+ *
+ * ```py
+ * Gimp.main(MyPlugIn.__gtype__, sys.argv)
+ * ```
+ *
+ * For C plug-ins, use instead the [func@Gimp.MAIN] macro
  *
  * Returns: an exit status as defined by the C library,
- *          on success EXIT_SUCCESS.
+ *          on success `EXIT_SUCCESS`.
  *
  * Since: 3.0
  **/
@@ -220,9 +226,16 @@ gimp_main (GType  plug_in_type,
   /* Use Dr. Mingw (dumps backtrace on crash) if it is available. */
   {
     time_t   t;
+    gchar   *codeview_path;
     gchar   *filename;
     gchar   *dir;
     wchar_t *plug_in_backtrace_path_utf16;
+
+    /* FIXME: https://github.com/jrfonseca/drmingw/issues/91 */
+    codeview_path = g_build_filename (gimp_installation_directory (),
+                                      "bin", NULL);
+    g_setenv ("_NT_SYMBOL_PATH", codeview_path, TRUE);
+    g_free (codeview_path);
 
     /* This has to be the non-roaming directory (i.e., the local
      * directory) as backtraces correspond to the binaries on this
@@ -415,41 +428,45 @@ gimp_main (GType  plug_in_type,
   {
     GType init_types[] =
     {
-      G_TYPE_INT,              G_TYPE_PARAM_INT,
-      G_TYPE_UCHAR,            G_TYPE_PARAM_UCHAR,
+      G_TYPE_INT,                  G_TYPE_PARAM_INT,
+      G_TYPE_UCHAR,                G_TYPE_PARAM_UCHAR,
 
-      G_TYPE_STRING,           G_TYPE_PARAM_STRING,
-      G_TYPE_STRV,             G_TYPE_PARAM_BOXED,
+      G_TYPE_STRING,               G_TYPE_PARAM_STRING,
+      G_TYPE_STRV,                 G_TYPE_PARAM_BOXED,
 
-      G_TYPE_BYTES,            G_TYPE_PARAM_BOXED,
+      G_TYPE_BYTES,                G_TYPE_PARAM_BOXED,
 
-      GIMP_TYPE_ARRAY,         GIMP_TYPE_PARAM_ARRAY,
-      GIMP_TYPE_INT32_ARRAY,   GIMP_TYPE_PARAM_INT32_ARRAY,
-      GIMP_TYPE_FLOAT_ARRAY,   GIMP_TYPE_PARAM_FLOAT_ARRAY,
-      GIMP_TYPE_RGB_ARRAY,     GIMP_TYPE_PARAM_RGB_ARRAY,
-      GIMP_TYPE_OBJECT_ARRAY,  GIMP_TYPE_PARAM_OBJECT_ARRAY,
+      GIMP_TYPE_ARRAY,             GIMP_TYPE_PARAM_ARRAY,
+      GIMP_TYPE_INT32_ARRAY,       GIMP_TYPE_PARAM_INT32_ARRAY,
+      GIMP_TYPE_DOUBLE_ARRAY,      GIMP_TYPE_PARAM_DOUBLE_ARRAY,
+      GIMP_TYPE_VALUE_ARRAY,       GIMP_TYPE_PARAM_VALUE_ARRAY,
+      GIMP_TYPE_CORE_OBJECT_ARRAY, GIMP_TYPE_PARAM_CORE_OBJECT_ARRAY,
 
-      GIMP_TYPE_DISPLAY,       GIMP_TYPE_PARAM_DISPLAY,
-      GIMP_TYPE_IMAGE,         GIMP_TYPE_PARAM_IMAGE,
-      GIMP_TYPE_ITEM,          GIMP_TYPE_PARAM_ITEM,
-      GIMP_TYPE_DRAWABLE,      GIMP_TYPE_PARAM_DRAWABLE,
-      GIMP_TYPE_LAYER,         GIMP_TYPE_PARAM_LAYER,
-      GIMP_TYPE_TEXT_LAYER,    GIMP_TYPE_PARAM_TEXT_LAYER,
-      GIMP_TYPE_CHANNEL,       GIMP_TYPE_PARAM_CHANNEL,
-      GIMP_TYPE_LAYER_MASK,    GIMP_TYPE_PARAM_LAYER_MASK,
-      GIMP_TYPE_SELECTION,     GIMP_TYPE_PARAM_SELECTION,
-      GIMP_TYPE_VECTORS,       GIMP_TYPE_PARAM_VECTORS,
+      GIMP_TYPE_DISPLAY,           GIMP_TYPE_PARAM_DISPLAY,
+      GIMP_TYPE_IMAGE,             GIMP_TYPE_PARAM_IMAGE,
+      GIMP_TYPE_ITEM,              GIMP_TYPE_PARAM_ITEM,
+      GIMP_TYPE_DRAWABLE,          GIMP_TYPE_PARAM_DRAWABLE,
+      GIMP_TYPE_LAYER,             GIMP_TYPE_PARAM_LAYER,
+      GIMP_TYPE_TEXT_LAYER,        GIMP_TYPE_PARAM_TEXT_LAYER,
+      GIMP_TYPE_GROUP_LAYER,       GIMP_TYPE_PARAM_GROUP_LAYER,
+      GIMP_TYPE_CHANNEL,           GIMP_TYPE_PARAM_CHANNEL,
+      GIMP_TYPE_LAYER_MASK,        GIMP_TYPE_PARAM_LAYER_MASK,
+      GIMP_TYPE_SELECTION,         GIMP_TYPE_PARAM_SELECTION,
+      GIMP_TYPE_PATH,              GIMP_TYPE_PARAM_PATH,
+      GIMP_TYPE_DRAWABLE_FILTER,   GIMP_TYPE_PARAM_DRAWABLE_FILTER,
 
-      GIMP_TYPE_BRUSH,         GIMP_TYPE_PARAM_BRUSH,
-      GIMP_TYPE_FONT,          GIMP_TYPE_PARAM_FONT,
-      GIMP_TYPE_GRADIENT,      GIMP_TYPE_PARAM_GRADIENT,
-      GIMP_TYPE_PALETTE,       GIMP_TYPE_PARAM_PALETTE,
-      GIMP_TYPE_PATTERN,       GIMP_TYPE_PARAM_PATTERN
+      GIMP_TYPE_BRUSH,             GIMP_TYPE_PARAM_BRUSH,
+      GIMP_TYPE_FONT,              GIMP_TYPE_PARAM_FONT,
+      GIMP_TYPE_GRADIENT,          GIMP_TYPE_PARAM_GRADIENT,
+      GIMP_TYPE_PALETTE,           GIMP_TYPE_PARAM_PALETTE,
+      GIMP_TYPE_PATTERN,           GIMP_TYPE_PARAM_PATTERN,
+
+      GIMP_TYPE_UNIT,              GIMP_TYPE_PARAM_UNIT,
     };
 
     gint i;
 
-    for (i = 0; i < G_N_ELEMENTS (init_types); i++, i++)
+    for (i = 0; i < G_N_ELEMENTS (init_types); i++)
       {
         GType type = init_types[i];
 
@@ -462,21 +479,11 @@ gimp_main (GType  plug_in_type,
 
   /*  initialize units  */
   {
-    GimpUnitVtable vtable;
+    GimpUnitVtable vtable = { 0 };
 
-    vtable.unit_get_number_of_units = _gimp_unit_cache_get_number_of_units;
-    vtable.unit_get_number_of_built_in_units =
-      _gimp_unit_cache_get_number_of_built_in_units;
-    vtable.unit_new                 = _gimp_unit_cache_new;
-    vtable.unit_get_deletion_flag   = _gimp_unit_cache_get_deletion_flag;
-    vtable.unit_set_deletion_flag   = _gimp_unit_cache_set_deletion_flag;
-    vtable.unit_get_factor          = _gimp_unit_cache_get_factor;
-    vtable.unit_get_digits          = _gimp_unit_cache_get_digits;
-    vtable.unit_get_identifier      = _gimp_unit_cache_get_identifier;
-    vtable.unit_get_symbol          = _gimp_unit_cache_get_symbol;
-    vtable.unit_get_abbreviation    = _gimp_unit_cache_get_abbreviation;
-    vtable.unit_get_singular        = _gimp_unit_cache_get_singular;
-    vtable.unit_get_plural          = _gimp_unit_cache_get_plural;
+    vtable.get_deletion_flag = _gimp_unit_get_deletion_flag;
+    vtable.set_deletion_flag = _gimp_unit_set_deletion_flag;
+    vtable.get_data          = _gimp_unit_get_data;
 
     gimp_base_init (&vtable);
   }
@@ -949,6 +956,8 @@ gimp_close (void)
   if (_gimp_get_debug_flags () & GIMP_DEBUG_QUIT)
     _gimp_debug_stop ();
 
+  gimp_base_exit ();
+
   _gimp_plug_in_quit (PLUG_IN);
 
   if (PDB)
@@ -1122,9 +1131,9 @@ _gimp_config (GPConfig *config)
   format = babl_format_with_space (config->check_custom_encoding1, space);
   if (bpp != babl_format_get_bytes_per_pixel (format))
     {
-      g_warning ("%s: checker board color 1's format expects %d bpp but %ld bytes were passed.",
+      g_warning ("%s: checker board color 1's format expects %d bpp but %" G_GSIZE_FORMAT " bytes were passed.",
                  G_STRFUNC, babl_format_get_bytes_per_pixel (format), bpp);
-      gegl_color_set_pixel (_check_custom_color1, babl_format ("R'G'B'A double"), &GIMP_CHECKS_CUSTOM_COLOR1);
+      gegl_color_set_pixel (_check_custom_color1, babl_format ("R'G'B'A double"), GIMP_CHECKS_CUSTOM_COLOR1);
     }
   else
     {
@@ -1141,9 +1150,9 @@ _gimp_config (GPConfig *config)
   format = babl_format_with_space (config->check_custom_encoding2, space);
   if (bpp != babl_format_get_bytes_per_pixel (format))
     {
-      g_warning ("%s: checker board color 2's format expects %d bpp but %ld bytes were passed.",
+      g_warning ("%s: checker board color 2's format expects %d bpp but %" G_GSIZE_FORMAT " bytes were passed.",
                  G_STRFUNC, babl_format_get_bytes_per_pixel (format), bpp);
-      gegl_color_set_pixel (_check_custom_color2, babl_format ("R'G'B'A double"), &GIMP_CHECKS_CUSTOM_COLOR2);
+      gegl_color_set_pixel (_check_custom_color2, babl_format ("R'G'B'A double"), GIMP_CHECKS_CUSTOM_COLOR2);
     }
   else
     {

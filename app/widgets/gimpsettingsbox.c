@@ -138,8 +138,10 @@ static void  gimp_settings_box_file_dialog       (GimpSettingsBox   *box,
 static void  gimp_settings_box_file_response     (GtkWidget         *dialog,
                                                   gint               response_id,
                                                   GimpSettingsBox   *box);
-static void  gimp_settings_box_dialog_map        (GtkWidget         *dialog,
+#ifdef G_OS_WIN32
+static void  gimp_settings_box_dialog_realize    (GtkWidget         *dialog,
                                                   gpointer          *data);
+#endif
 static void  gimp_settings_box_toplevel_unmap    (GtkWidget         *toplevel,
                                                   GtkWidget         *dialog);
 static void  gimp_settings_box_truncate_list     (GimpSettingsBox   *box,
@@ -740,8 +742,8 @@ gimp_settings_box_file_dialog (GimpSettingsBox *box,
                                                     TRUE);
 
 #ifdef G_OS_WIN32
-  g_signal_connect (dialog, "map",
-                    G_CALLBACK (gimp_settings_box_dialog_map),
+  g_signal_connect (dialog, "realize",
+                    G_CALLBACK (gimp_settings_box_dialog_realize),
                     box);
 #endif
   g_signal_connect (dialog, "response",
@@ -776,7 +778,7 @@ gimp_settings_box_file_dialog (GimpSettingsBox *box,
     gtk_file_chooser_set_file (GTK_FILE_CHOOSER (dialog),
                                private->last_file, NULL);
 
-  gimp_help_connect (private->file_dialog, gimp_standard_help_func,
+  gimp_help_connect (private->file_dialog, NULL, gimp_standard_help_func,
                      private->help_id, NULL, NULL);
 
   /*  allow callbacks to add widgets to the dialog  */
@@ -832,17 +834,17 @@ gimp_settings_box_file_response (GtkWidget       *dialog,
   gtk_widget_destroy (dialog);
 }
 
-static void
-gimp_settings_box_dialog_map (GtkWidget *dialog,
-                              gpointer  *data)
-{
 #ifdef G_OS_WIN32
+static void
+gimp_settings_box_dialog_realize (GtkWidget *dialog,
+                                  gpointer  *data)
+{
   GimpSettingsBox        *box     = (GimpSettingsBox *) data;
   GimpSettingsBoxPrivate *private = GET_PRIVATE (box);
 
-  gimp_window_set_title_bar_theme (private->gimp, dialog, FALSE);
-#endif
+  gimp_window_set_title_bar_theme (private->gimp, dialog);
 }
+#endif
 
 static void
 gimp_settings_box_toplevel_unmap (GtkWidget *toplevel,

@@ -34,7 +34,7 @@
 
 
 #define LOAD_PROC      "file-farbfeld-load"
-#define SAVE_PROC      "file-farbfeld-save"
+#define EXPORT_PROC    "file-farbfeld-export"
 #define PLUG_IN_BINARY "file-farbfeld"
 #define PLUG_IN_ROLE   "gimp-file-farbfeld"
 
@@ -70,12 +70,11 @@ static GimpValueArray * farbfeld_load             (GimpProcedure         *proced
                                                    GimpMetadataLoadFlags *flags,
                                                    GimpProcedureConfig   *config,
                                                    gpointer               run_data);
-static GimpValueArray * farbfeld_save             (GimpProcedure         *procedure,
+static GimpValueArray * farbfeld_export           (GimpProcedure         *procedure,
                                                    GimpRunMode            run_mode,
                                                    GimpImage             *image,
-                                                   gint                   n_drawables,
-                                                   GimpDrawable         **drawables,
                                                    GFile                 *file,
+                                                   GimpExportOptions     *options,
                                                    GimpMetadata          *metadata,
                                                    GimpProcedureConfig   *config,
                                                    gpointer               run_data);
@@ -84,7 +83,7 @@ static GimpImage      * load_image                (GFile                 *file,
                                                    GObject               *config,
                                                    GimpRunMode            run_mode,
                                                    GError               **error);
-static gboolean         save_image                (GFile                 *file,
+static gboolean         export_image              (GFile                 *file,
                                                    GimpImage             *image,
                                                    GimpDrawable          *drawable,
                                                    GError               **error);
@@ -117,7 +116,7 @@ farbfeld_query_procedures (GimpPlugIn *plug_in)
   GList *list = NULL;
 
   list = g_list_append (list, g_strdup (LOAD_PROC));
-  list = g_list_append (list, g_strdup (SAVE_PROC));
+  list = g_list_append (list, g_strdup (EXPORT_PROC));
 
   return list;
 }
@@ -153,11 +152,11 @@ farbfeld_create_procedure (GimpPlugIn  *plug_in,
       gimp_file_procedure_set_magics (GIMP_FILE_PROCEDURE (procedure),
                                       "0,string,farbfeld");
     }
-  else if (! strcmp (name, SAVE_PROC))
+  else if (! strcmp (name, EXPORT_PROC))
     {
-      procedure = gimp_save_procedure_new (plug_in, name,
-                                           GIMP_PDB_PROC_TYPE_PLUGIN,
-                                           FALSE, farbfeld_save, NULL, NULL);
+      procedure = gimp_export_procedure_new (plug_in, name,
+                                             GIMP_PDB_PROC_TYPE_PLUGIN,
+                                             FALSE, farbfeld_export, NULL, NULL);
 
       gimp_procedure_set_image_types (procedure, "*");
 
@@ -176,6 +175,13 @@ farbfeld_create_procedure (GimpPlugIn  *plug_in,
 
       gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
                                           "ff");
+
+      gimp_export_procedure_set_capabilities (GIMP_EXPORT_PROCEDURE (procedure),
+                                              GIMP_EXPORT_CAN_HANDLE_RGB     |
+                                              GIMP_EXPORT_CAN_HANDLE_GRAY    |
+                                              GIMP_EXPORT_CAN_HANDLE_INDEXED |
+                                              GIMP_EXPORT_CAN_HANDLE_ALPHA,
+                                              NULL, NULL, NULL);
     }
 
   return procedure;
@@ -213,63 +219,32 @@ farbfeld_load (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
-farbfeld_save (GimpProcedure        *procedure,
-               GimpRunMode           run_mode,
-               GimpImage            *image,
-               gint                  n_drawables,
-               GimpDrawable        **drawables,
-               GFile                *file,
-               GimpMetadata         *metadata,
-               GimpProcedureConfig  *config,
-               gpointer              run_data)
+farbfeld_export (GimpProcedure        *procedure,
+                 GimpRunMode           run_mode,
+                 GimpImage            *image,
+                 GFile                *file,
+                 GimpExportOptions    *options,
+                 GimpMetadata         *metadata,
+                 GimpProcedureConfig  *config,
+                 gpointer              run_data)
 {
   GimpPDBStatusType  status = GIMP_PDB_SUCCESS;
-  GimpExportReturn   export = GIMP_EXPORT_CANCEL;
+  GimpExportReturn   export = GIMP_EXPORT_IGNORE;
+  GList             *drawables;
   GError            *error  = NULL;
 
   gegl_init (NULL, NULL);
 
-  switch (run_mode)
-    {
-    case GIMP_RUN_INTERACTIVE:
-    case GIMP_RUN_WITH_LAST_VALS:
-      gimp_ui_init (PLUG_IN_BINARY);
+  export = gimp_export_options_get_image (options, &image);
+  drawables = gimp_image_list_layers (image);
 
-      export = gimp_export_image (&image, &n_drawables, &drawables, "farbfeld",
-                                  GIMP_EXPORT_CAN_HANDLE_RGB     |
-                                  GIMP_EXPORT_CAN_HANDLE_GRAY    |
-                                  GIMP_EXPORT_CAN_HANDLE_INDEXED |
-                                  GIMP_EXPORT_CAN_HANDLE_ALPHA);
-
-      if (export == GIMP_EXPORT_CANCEL)
-        return gimp_procedure_new_return_values (procedure,
-                                                 GIMP_PDB_CANCEL,
-                                                 NULL);
-      break;
-
-    default:
-      break;
-    }
-
-  if (n_drawables != 1)
-    {
-      g_set_error (&error, G_FILE_ERROR, 0,
-                   _("Farbfeld format does not support multiple layers."));
-
-      return gimp_procedure_new_return_values (procedure,
-                                               GIMP_PDB_CALLING_ERROR,
-                                               error);
-    }
-
-  if (! save_image (file, image, drawables[0], &error))
+  if (! export_image (file, image, drawables->data, &error))
     status = GIMP_PDB_EXECUTION_ERROR;
 
   if (export == GIMP_EXPORT_EXPORT)
-    {
-      gimp_image_delete (image);
-      g_free (drawables);
-    }
+    gimp_image_delete (image);
 
+  g_list_free (drawables);
   return gimp_procedure_new_return_values (procedure, status, error);
 }
 
@@ -354,10 +329,10 @@ load_image (GFile        *file,
 }
 
 static gboolean
-save_image (GFile         *file,
-            GimpImage     *image,
-            GimpDrawable  *drawable,
-            GError       **error)
+export_image (GFile         *file,
+              GimpImage     *image,
+              GimpDrawable  *drawable,
+              GError       **error)
 {
   FILE       *fp;
   GeglBuffer *buffer;

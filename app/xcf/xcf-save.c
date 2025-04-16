@@ -66,10 +66,10 @@
 #include "text/gimptextlayer-xcf.h"
 
 #include "vectors/gimpanchor.h"
-#include "vectors/gimpstroke.h"
 #include "vectors/gimpbezierstroke.h"
-#include "vectors/gimpvectors.h"
-#include "vectors/gimpvectors-compat.h"
+#include "vectors/gimppath.h"
+#include "vectors/gimpstroke.h"
+#include "vectors/gimppath-compat.h"
 
 #include "xcf-private.h"
 #include "xcf-read.h"
@@ -124,7 +124,7 @@ static gboolean xcf_save_effect_props  (XcfInfo           *info,
                                         GError           **error);
 static gboolean xcf_save_path_props    (XcfInfo           *info,
                                         GimpImage         *image,
-                                        GimpVectors       *vectors,
+                                        GimpPath          *vectors,
                                         GError           **error);
 static gboolean xcf_save_prop          (XcfInfo           *info,
                                         GimpImage         *image,
@@ -145,7 +145,7 @@ static gboolean xcf_save_effect        (XcfInfo           *info,
                                         GError           **error);
 static gboolean xcf_save_path          (XcfInfo           *info,
                                         GimpImage         *image,
-                                        GimpVectors       *vectors,
+                                        GimpPath          *vectors,
                                         GError           **error);
 static gboolean xcf_save_buffer        (XcfInfo           *info,
                                         GimpImage         *image,
@@ -353,7 +353,7 @@ xcf_save_image (XcfInfo    *info,
 
   if (write_paths)
     {
-      all_paths = gimp_image_get_vectors_list (image);
+      all_paths = gimp_image_get_path_list (image);
       n_paths   = (guint) g_list_length (all_paths);
     }
 
@@ -435,7 +435,7 @@ xcf_save_image (XcfInfo    *info,
 
       for (list = all_paths; list; list = g_list_next (list))
         {
-          GimpVectors *vectors = list->data;
+          GimpPath *vectors = list->data;
 
           /* seek back to the next slot in the offset table and write the
            * offset of the channel
@@ -478,7 +478,7 @@ xcf_save_image_props (XcfInfo    *info,
   GimpParasite     *meta_parasite = NULL;
   GList            *symmetry_parasites = NULL;
   GList            *iter;
-  GimpUnit          unit          = gimp_image_get_unit (image);
+  GimpUnit         *unit          = gimp_image_get_unit (image);
   gdouble           xres;
   gdouble           yres;
 
@@ -519,19 +519,19 @@ xcf_save_image_props (XcfInfo    *info,
   xcf_check_error (xcf_save_prop (info, image, PROP_TATTOO, error,
                                   gimp_image_get_tattoo_state (image)), ;);
 
-  if (unit < gimp_unit_get_number_of_built_in_units ())
+  if (gimp_unit_is_built_in (unit))
     xcf_check_error (xcf_save_prop (info, image, PROP_UNIT, error, unit), ;);
 
-  if (gimp_container_get_n_children (gimp_image_get_vectors (image)) > 0 &&
+  if (gimp_container_get_n_children (gimp_image_get_paths (image)) > 0 &&
       info->file_version < 18)
     {
-      if (gimp_vectors_compat_is_compatible (image))
+      if (gimp_path_compat_is_compatible (image))
         xcf_check_error (xcf_save_prop (info, image, PROP_PATHS, error), ;);
       else
         xcf_check_error (xcf_save_prop (info, image, PROP_VECTORS, error), ;);
     }
 
-  if (unit >= gimp_unit_get_number_of_built_in_units ())
+  if (! gimp_unit_is_built_in (unit))
     xcf_check_error (xcf_save_prop (info, image, PROP_USER_UNIT, error, unit), ;);
 
   if (gimp_image_get_grid (image))
@@ -852,6 +852,8 @@ xcf_save_effect_props (XcfInfo      *info,
                                   gimp_drawable_filter_get_composite_space (GIMP_DRAWABLE_FILTER (filter))), ;);
   xcf_check_error (xcf_save_prop (info, image, PROP_COMPOSITE_MODE, error,
                                   gimp_drawable_filter_get_composite_mode (GIMP_DRAWABLE_FILTER (filter))), ;);
+  xcf_check_error (xcf_save_prop (info, image, PROP_FILTER_CLIP, error,
+                                  gimp_drawable_filter_get_clip (GIMP_DRAWABLE_FILTER (filter))), ;);
   xcf_check_error (xcf_save_prop (info, image, PROP_FILTER_REGION, error,
                                   gimp_drawable_filter_get_region (GIMP_DRAWABLE_FILTER (filter))), ;);
 
@@ -939,12 +941,12 @@ xcf_save_effect_props (XcfInfo      *info,
 static gboolean
 xcf_save_path_props (XcfInfo      *info,
                      GimpImage    *image,
-                     GimpVectors  *vectors,
+                     GimpPath     *vectors,
                      GError      **error)
 {
   GimpParasiteList *parasites;
 
-  if (g_list_find (gimp_image_get_selected_vectors (image), vectors))
+  if (g_list_find (gimp_image_get_selected_paths (image), vectors))
     xcf_check_error (xcf_save_prop (info, image, PROP_SELECTED_PATH, error), ;);
 
   xcf_check_error (xcf_save_prop (info, image, PROP_VISIBLE, error,
@@ -1537,14 +1539,15 @@ xcf_save_prop (XcfInfo    *info,
 
     case PROP_UNIT:
       {
-        guint32 unit = va_arg (args, guint32);
+        GimpUnit *unit       = va_arg (args, GimpUnit *);
+        guint32   unit_index = gimp_unit_get_id (unit);
 
         size = 4;
 
         xcf_write_prop_type_check_error (info, prop_type, va_end (args));
         xcf_write_int32_check_error (info, &size, 1, va_end (args));
 
-        xcf_write_int32_check_error (info, &unit, 1, va_end (args));
+        xcf_write_int32_check_error (info, &unit_index, 1, va_end (args));
       }
       break;
 
@@ -1579,34 +1582,43 @@ xcf_save_prop (XcfInfo    *info,
 
     case PROP_USER_UNIT:
       {
-        GimpUnit     unit = va_arg (args, guint32);
+        GimpUnit    *unit = va_arg (args, GimpUnit *);
         const gchar *unit_strings[5];
         gfloat       factor;
         guint32      digits;
 
         /* write the entire unit definition */
-        unit_strings[0] = gimp_unit_get_identifier (unit);
+        unit_strings[0] = gimp_unit_get_name (unit);
         factor          = gimp_unit_get_factor (unit);
         digits          = gimp_unit_get_digits (unit);
         unit_strings[1] = gimp_unit_get_symbol (unit);
         unit_strings[2] = gimp_unit_get_abbreviation (unit);
-        unit_strings[3] = gimp_unit_get_singular (unit);
-        unit_strings[4] = gimp_unit_get_plural (unit);
+        /* Singular and plural forms were deprecated in XCF 21. Just use
+         * the unit name as bogus (yet reasonable) replacements.
+         */
+        unit_strings[3] = gimp_unit_get_name (unit);
+        unit_strings[4] = gimp_unit_get_name (unit);
 
         size =
           2 * 4 +
           strlen (unit_strings[0]) ? strlen (unit_strings[0]) + 5 : 4 +
           strlen (unit_strings[1]) ? strlen (unit_strings[1]) + 5 : 4 +
-          strlen (unit_strings[2]) ? strlen (unit_strings[2]) + 5 : 4 +
-          strlen (unit_strings[3]) ? strlen (unit_strings[3]) + 5 : 4 +
-          strlen (unit_strings[4]) ? strlen (unit_strings[4]) + 5 : 4;
+          strlen (unit_strings[2]) ? strlen (unit_strings[2]) + 5 : 4;
+
+        if (info->file_version < 21)
+          size +=
+            strlen (unit_strings[3]) ? strlen (unit_strings[3]) + 5 : 4 +
+            strlen (unit_strings[4]) ? strlen (unit_strings[4]) + 5 : 4;
 
         xcf_write_prop_type_check_error (info, prop_type, va_end (args));
         xcf_write_int32_check_error (info, &size, 1, va_end (args));
 
         xcf_write_float_check_error  (info, &factor,                 1, va_end (args));
         xcf_write_int32_check_error  (info, &digits,                 1, va_end (args));
-        xcf_write_string_check_error (info, (gchar **) unit_strings, 5, va_end (args));
+        if (info->file_version < 21)
+          xcf_write_string_check_error (info, (gchar **) unit_strings, 5, va_end (args));
+        else
+          xcf_write_string_check_error (info, (gchar **) unit_strings, 3, va_end (args));
       }
       break;
 
@@ -1704,7 +1716,7 @@ xcf_save_prop (XcfInfo    *info,
           item_type = 0;
         else if (gimp_item_list_get_item_type (set) == GIMP_TYPE_CHANNEL)
           item_type = 1;
-        else if (gimp_item_list_get_item_type (set) == GIMP_TYPE_VECTORS)
+        else if (gimp_item_list_get_item_type (set) == GIMP_TYPE_PATH)
           item_type = 2;
         else
           g_return_val_if_reached (FALSE);
@@ -1851,10 +1863,10 @@ xcf_save_prop (XcfInfo    *info,
 
                     bytes = gegl_color_get_bytes (color, format);
                     data  = (guint8 *) g_bytes_get_data (bytes, &data_length);
-                    g_bytes_unref (bytes);
 
                     xcf_write_int32_check_error (info, (guint32 *) &data_length, 1, ;);
                     xcf_write_int8_check_error (info, (const guint8 *) data, data_length, ;);
+                    g_bytes_unref (bytes);
 
                     space = babl_format_get_space (format);
                     if (space != babl_space ("sRGB"))
@@ -1866,7 +1878,7 @@ xcf_save_prop (XcfInfo    *info,
                         xcf_write_int32_check_error (info, (guint32 *) &profile_length, 1, ;);
 
                         if (profile_data)
-                          xcf_write_int8_check_error (info, (guint8 *) &profile_data, profile_length, ;);
+                          xcf_write_int8_check_error (info, profile_data, profile_length, ;);
                       }
                     else
                       {
@@ -1897,6 +1909,20 @@ xcf_save_prop (XcfInfo    *info,
 
         xcf_check_error (xcf_seek_pos (info, base + size, error), va_end (args));
       }
+      break;
+
+    case PROP_FILTER_CLIP:
+      {
+        guint32 visible = va_arg (args, guint32);
+
+        size = 4;
+
+        xcf_write_prop_type_check_error (info, prop_type, va_end (args));
+        xcf_write_int32_check_error (info, &size, 1, va_end (args));
+
+        xcf_write_int32_check_error (info, &visible, 1, va_end (args));
+      }
+      break;
     }
 
   va_end (args);
@@ -1939,7 +1965,20 @@ xcf_save_layer (XcfInfo    *info,
        filter_list = g_list_previous (filter_list))
     {
       if (GIMP_IS_DRAWABLE_FILTER (filter_list->data))
-        num_effects++;
+        {
+          GimpDrawableFilter     *filter  = filter_list->data;
+          GimpDrawableFilterMask *mask    = NULL;
+          GeglNode               *op_node = NULL;
+
+          mask    = gimp_drawable_filter_get_mask (filter);
+          op_node = gimp_drawable_filter_get_operation (filter);
+
+          /* For now, prevent tool-based filters from being saved */
+          if (mask    != NULL &&
+              op_node != NULL &&
+              strcmp (gegl_node_get_operation (op_node), "GraphNode") != 0)
+            num_effects++;
+        }
     }
 
   /* write out the width, height and image type information for the layer */
@@ -2001,18 +2040,30 @@ xcf_save_layer (XcfInfo    *info,
         {
           if (GIMP_IS_DRAWABLE_FILTER (list->data))
             {
-              GimpDrawableFilter *filter = list->data;
+              GimpDrawableFilter     *filter  = list->data;
+              GimpDrawableFilterMask *mask    = NULL;
+              GeglNode               *op_node = NULL;
 
-              offset = info->cp;
+              mask    = gimp_drawable_filter_get_mask (filter);
+              op_node = gimp_drawable_filter_get_operation (filter);
 
-              xcf_check_error (xcf_seek_pos (info, saved_pos, error), ;);
-              xcf_write_offset_check_error (info, &offset, 1, ;);
+               /* For now, prevent tool-based filters from being saved */
+              if (mask    != NULL &&
+                  op_node != NULL &&
+                  strcmp (gegl_node_get_operation (op_node), "GraphNode") != 0)
+                {
+                  offset = info->cp;
 
-              saved_pos = info->cp;
+                  xcf_check_error (xcf_seek_pos (info, saved_pos, error), ;);
+                  xcf_write_offset_check_error (info, &offset, 1, ;);
 
-              xcf_check_error (xcf_seek_pos (info, offset, error), ;);
-              xcf_check_error (xcf_save_effect (info, image, GIMP_FILTER (filter),
-                                                error), ;);
+                  saved_pos = info->cp;
+
+                  xcf_check_error (xcf_seek_pos (info, offset, error), ;);
+                  xcf_check_error (xcf_save_effect (info, image,
+                                                    GIMP_FILTER (filter),
+                                                    error), ;);
+                }
             }
         }
       g_list_free (list);
@@ -2077,9 +2128,11 @@ xcf_save_effect (XcfInfo     *info,
 {
   gchar              *name;
   gchar              *icon;
+  gboolean            has_custom_name;
   GimpDrawableFilter *filter_drawable;
   GeglNode           *node;
   gchar              *operation;
+  const gchar        *op_version;
   GimpChannel        *effect_mask;
   goffset             offset;
   GError             *tmp_error = NULL;
@@ -2092,12 +2145,22 @@ xcf_save_effect (XcfInfo     *info,
                  NULL);
 
   g_object_get (filter,
-                "name",      &name,
-                "icon-name", &icon,
+                "name",        &name,
+                "icon-name",   &icon,
+                "custom-name", &has_custom_name,
                 NULL);
 
   /* Write out effect name */
-  xcf_write_string_check_error (info, (gchar **) &name, 1, ;);
+  if (has_custom_name)
+    {
+      xcf_write_string_check_error (info, (gchar **) &name, 1, ;);
+    }
+  else
+    {
+      gchar *empty = NULL;
+
+      xcf_write_string_check_error (info, (gchar **) &empty, 1, ;);
+    }
   g_free (name);
 
   /* Write out effect icon */
@@ -2106,6 +2169,13 @@ xcf_save_effect (XcfInfo     *info,
 
   /* Write out GEGL operation name */
   xcf_write_string_check_error (info, (gchar **) &operation, 1, ;);
+
+  if (info->file_version >= 22)
+    {
+      /* Write out GEGL operation version */
+      op_version = gegl_operation_get_op_version (operation);
+      xcf_write_string_check_error (info, (gchar **) &op_version, 1, ;);
+    }
   g_free (operation);
 
   /* write out the effect properties */
@@ -2115,7 +2185,7 @@ xcf_save_effect (XcfInfo     *info,
   offset = info->cp + info->bytes_per_offset;
   xcf_write_offset_check_error (info, &offset, 1, ;);
 
-  effect_mask = gimp_drawable_filter_get_mask (filter_drawable);
+  effect_mask = GIMP_CHANNEL (gimp_drawable_filter_get_mask (filter_drawable));
   xcf_check_error (xcf_save_channel (info, image, effect_mask,
                                      error), ;);
 
@@ -2856,11 +2926,11 @@ xcf_save_old_paths (XcfInfo    *info,
                     GimpImage  *image,
                     GError    **error)
 {
-  GimpVectors *active_vectors = NULL;
-  guint32      num_paths;
-  guint32      active_index = 0;
-  GList       *list;
-  GError      *tmp_error = NULL;
+  GimpPath *active_path = NULL;
+  guint32   num_paths;
+  guint32   active_index = 0;
+  GList    *list;
+  GError   *tmp_error = NULL;
 
   /* Write out the following:-
    *
@@ -2870,38 +2940,38 @@ xcf_save_old_paths (XcfInfo    *info,
    * then each path:-
    */
 
-  num_paths = gimp_container_get_n_children (gimp_image_get_vectors (image));
+  num_paths = gimp_container_get_n_children (gimp_image_get_paths (image));
 
-  if (gimp_image_get_selected_vectors (image))
+  if (gimp_image_get_selected_paths (image))
     {
-      active_vectors = gimp_image_get_selected_vectors (image)->data;
+      active_path = gimp_image_get_selected_paths (image)->data;
       /* Having more than 1 selected vectors should not have happened in this
        * code path but let's not break saving, only produce a critical.
        */
-      if (g_list_length (gimp_image_get_selected_vectors (image)) > 1)
+      if (g_list_length (gimp_image_get_selected_paths (image)) > 1)
         g_critical ("%s: this code path should not happen with multiple paths selected",
                     G_STRFUNC);
     }
 
-  if (active_vectors)
-    active_index = gimp_container_get_child_index (gimp_image_get_vectors (image),
-                                                   GIMP_OBJECT (active_vectors));
+  if (active_path)
+    active_index = gimp_container_get_child_index (gimp_image_get_paths (image),
+                                                   GIMP_OBJECT (active_path));
 
   xcf_write_int32_check_error (info, &active_index, 1, ;);
   xcf_write_int32_check_error (info, &num_paths,    1, ;);
 
-  for (list = gimp_image_get_vectors_iter (image);
+  for (list = gimp_image_get_path_iter (image);
        list;
        list = g_list_next (list))
     {
-      GimpVectors            *vectors = list->data;
+      GimpPath               *vectors = list->data;
       gchar                  *name;
       guint32                 locked;
       guint8                  state;
       guint32                 version;
       guint32                 pathtype;
       guint32                 tattoo;
-      GimpVectorsCompatPoint *points;
+      GimpPathCompatPoint    *points;
       guint32                 num_points;
       guint32                 closed;
       gint                    i;
@@ -2918,9 +2988,9 @@ xcf_save_old_paths (XcfInfo    *info,
        * then each point.
        */
 
-      points = gimp_vectors_compat_get_points (vectors,
-                                               (gint32 *) &num_points,
-                                               (gint32 *) &closed);
+      points = gimp_path_compat_get_points (vectors,
+                                            (gint32 *) &num_points,
+                                            (gint32 *) &closed);
 
       /* if no points are generated because of a faulty path we should
        * skip saving the path - this is unfortunately impossible, because
@@ -2978,13 +3048,13 @@ xcf_save_old_vectors (XcfInfo    *info,
                       GimpImage  *image,
                       GError    **error)
 {
-  GimpVectors *active_vectors = NULL;
-  guint32      version        = 1;
-  guint32      active_index   = 0;
-  guint32      num_paths;
-  GList       *list;
-  GList       *stroke_list;
-  GError      *tmp_error = NULL;
+  GimpPath *active_path = NULL;
+  guint32   version        = 1;
+  guint32   active_index   = 0;
+  guint32   num_paths;
+  GList    *list;
+  GList    *stroke_list;
+  GError   *tmp_error = NULL;
 
   /* Write out the following:-
    *
@@ -2995,32 +3065,32 @@ xcf_save_old_vectors (XcfInfo    *info,
    * then each path:-
    */
 
-  if (gimp_image_get_selected_vectors (image))
+  if (gimp_image_get_selected_paths (image))
     {
-      active_vectors = gimp_image_get_selected_vectors (image)->data;
+      active_path = gimp_image_get_selected_paths (image)->data;
       /* Having more than 1 selected vectors should not have happened in this
        * code path but let's not break saving, only produce a critical.
        */
-      if (g_list_length (gimp_image_get_selected_vectors (image)) > 1)
+      if (g_list_length (gimp_image_get_selected_paths (image)) > 1)
         g_critical ("%s: this code path should not happen with multiple paths selected",
                     G_STRFUNC);
     }
 
-  if (active_vectors)
-    active_index = gimp_container_get_child_index (gimp_image_get_vectors (image),
-                                                   GIMP_OBJECT (active_vectors));
+  if (active_path)
+    active_index = gimp_container_get_child_index (gimp_image_get_paths (image),
+                                                   GIMP_OBJECT (active_path));
 
-  num_paths = gimp_container_get_n_children (gimp_image_get_vectors (image));
+  num_paths = gimp_container_get_n_children (gimp_image_get_paths (image));
 
   xcf_write_int32_check_error (info, &version,      1, ;);
   xcf_write_int32_check_error (info, &active_index, 1, ;);
   xcf_write_int32_check_error (info, &num_paths,    1, ;);
 
-  for (list = gimp_image_get_vectors_iter (image);
+  for (list = gimp_image_get_path_iter (image);
        list;
        list = g_list_next (list))
     {
-      GimpVectors      *vectors = list->data;
+      GimpPath         *vectors = list->data;
       GimpParasiteList *parasites;
       const gchar      *name;
       guint32           tattoo;
@@ -3141,7 +3211,7 @@ xcf_save_old_vectors (XcfInfo    *info,
 static gboolean
 xcf_save_path (XcfInfo      *info,
                GimpImage    *image,
-               GimpVectors  *vectors,
+               GimpPath     *vectors,
                GError      **error)
 {
   const gchar *string;

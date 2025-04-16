@@ -126,6 +126,9 @@ static void         gimp_dockbook_page_reordered    (GtkNotebook    *notebook,
                                                      GtkWidget      *child,
                                                      guint           page_num);
 
+static gboolean     gimp_dockbook_tab_scroll_cb     (GtkWidget      *widget,
+                                                     GdkEventScroll *event);
+
 static gboolean     gimp_dockbook_menu_button_press (GimpDockbook   *dockbook,
                                                      GdkEventButton *bevent,
                                                      GtkWidget      *button);
@@ -222,6 +225,12 @@ gimp_dockbook_init (GimpDockbook *dockbook)
   gtk_notebook_set_show_tabs (notebook, TRUE);
   gtk_notebook_set_group_name (notebook, "gimp-dockbook");
 
+  gtk_widget_add_events (GTK_WIDGET (notebook),
+                         GDK_SCROLL_MASK);
+  g_signal_connect (GTK_WIDGET (notebook), "scroll-event",
+                    G_CALLBACK (gimp_dockbook_tab_scroll_cb),
+                    NULL);
+
   gtk_drag_dest_set (GTK_WIDGET (dockbook),
                      0,
                      dialog_target_table, G_N_ELEMENTS (dialog_target_table),
@@ -261,6 +270,8 @@ gimp_dockbook_style_updated (GtkWidget *widget)
   GtkWidget    *tab_widget;
   GList        *children;
   GList        *iter;
+  GtkIconSize   tab_size = DEFAULT_TAB_ICON_SIZE;
+  gint          icon_size = 12;
 
   GTK_WIDGET_CLASS (parent_class)->style_updated (widget);
 
@@ -268,6 +279,7 @@ gimp_dockbook_style_updated (GtkWidget *widget)
       ! (context = gimp_dock_get_context (dockbook->p->dock)))
     return;
 
+  /* Update size of 'Configure this tab' icon */
   children = gtk_container_get_children (GTK_CONTAINER (dockbook));
   for (iter = children; iter; iter = g_list_next (iter))
     {
@@ -278,6 +290,14 @@ gimp_dockbook_style_updated (GtkWidget *widget)
                                   GTK_WIDGET (dockable),
                                   tab_widget);
     }
+  g_list_free (children);
+
+  children = gtk_container_get_children (GTK_CONTAINER (dockbook->p->menu_button));
+  gtk_widget_style_get (GTK_WIDGET (dockbook),
+                        "tab-icon-size", &tab_size,
+                        NULL);
+  gtk_icon_size_lookup (tab_size, &icon_size, NULL);
+  gtk_image_set_pixel_size (GTK_IMAGE (children->data), icon_size * 0.75f);
   g_list_free (children);
 
   gimp_dock_invalidate_geometry (GIMP_DOCK (dockbook->p->dock));
@@ -511,6 +531,41 @@ gimp_dockbook_page_removed (GtkNotebook *notebook,
     }
 }
 
+/* Restore GTK2 behavior of mouse-scrolling to switch between
+ * notebook tabs. References Geany's notebook_tab_bar_click_cb ()
+ * at https://github.com/geany/geany/blob/master/src/notebook.c
+ */
+static gboolean
+gimp_dockbook_tab_scroll_cb (GtkWidget      *widget,
+                             GdkEventScroll *event)
+{
+  GtkNotebook *notebook = GTK_NOTEBOOK (widget);
+  GtkWidget   *page     = NULL;
+
+  page = gtk_notebook_get_nth_page (notebook,
+                                    gtk_notebook_get_current_page (notebook));
+  if (! page)
+    return FALSE;
+
+  switch (event->direction)
+    {
+    case GDK_SCROLL_RIGHT:
+    case GDK_SCROLL_DOWN:
+      gtk_notebook_next_page (notebook);
+      break;
+
+    case GDK_SCROLL_LEFT:
+    case GDK_SCROLL_UP:
+      gtk_notebook_prev_page (notebook);
+      break;
+
+    default:
+      break;
+    }
+
+  return TRUE;
+}
+
 static void
 gimp_dockbook_page_reordered (GtkNotebook *notebook,
                               GtkWidget   *child,
@@ -608,7 +663,7 @@ gimp_dockbook_new (GimpMenuFactory *menu_factory)
                                                            "<Dockable>",
                                                            dockbook);
 
-  gimp_help_connect (GTK_WIDGET (dockbook), gimp_dockbook_help_func,
+  gimp_help_connect (GTK_WIDGET (dockbook), NULL, gimp_dockbook_help_func,
                      GIMP_HELP_DOCK, dockbook, NULL);
 
   return GTK_WIDGET (dockbook);

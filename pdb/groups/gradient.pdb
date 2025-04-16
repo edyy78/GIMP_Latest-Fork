@@ -70,8 +70,10 @@ CODE
 
 sub gradient_get_by_name {
     $blurb = "Returns the gradient with the given name.";
-    $help  = "Returns the gradient with the given name.";
-
+    $help  = <<HELP;
+Returns an existing gradient having the given name.
+Returns %NULL when no gradient exists of that name.
+HELP
     &mitch_pdb_misc('2023', '3.0');
 
     @inargs = (
@@ -80,7 +82,10 @@ sub gradient_get_by_name {
     );
 
     @outargs = (
-      ${gradient_arg_spec}
+      { name => 'gradient',
+        type => 'gradient',
+        desc => 'The gradient',
+        none_ok => 1 }
     );
 
     %invoke = (
@@ -89,8 +94,8 @@ sub gradient_get_by_name {
   gradient = GIMP_GRADIENT (gimp_pdb_get_resource (gimp, GIMP_TYPE_GRADIENT, name,
                                                    GIMP_PDB_DATA_ACCESS_READ, error));
 
-  if (! gradient)
-    success = FALSE;
+  /* Ignore "not found" error, just return NULL. */
+  g_clear_error (error);
 }
 CODE
     );
@@ -132,11 +137,11 @@ sub gradient_get_uniform_samples {
     $blurb = 'Sample the gradient in uniform parts.';
 
     $help = <<'HELP';
-Samples colors uniformly across the gradient. It returns a list of floating-point values
-which correspond to the RGBA values for each sample. The minimum number of
-samples to take is 2, in which case the returned colors will correspond to the
-{ 0.0, 1.0 } positions in the gradient. For example, if the number of samples
-is 3, the procedure will return the colors at positions { 0.0, 0.5, 1.0 }.
+Samples colors uniformly across the gradient. It returns a list of
+colors for each sample. The minimum number of samples to take is 2, in
+which case the returned colors will correspond to the `{ 0.0, 1.0 }`
+positions in the gradient. For example, if the number of samples is 3,
+the procedure will return the colors at positions `{ 0.0, 0.5, 1.0 }`.
 HELP
 
     &federico_pdb_misc('1997', '2.2');
@@ -150,10 +155,8 @@ HELP
         );
 
     @outargs = (
-        { name => 'color_samples', type => 'floatarray', void_ret => 1,
-	  desc => 'Color samples: { R1, G1, B1, A1, ..., Rn, Gn, Bn, An }',
-	  array => { desc => 'Length of the color_samples array (4 *
-			      num_samples)' } }
+        { name => 'color_samples', type => 'colorarray',
+	  desc => 'Color samples' }
     );
 
     %invoke = (
@@ -164,31 +167,19 @@ HELP
       GimpGradientSegment *seg   = NULL;
       gdouble              pos   = 0.0;
       gdouble              delta = 1.0 / (num_samples - 1);
-      gdouble             *sample;
+      GeglColor          **sample;
 
-      num_color_samples = num_samples * 4;
-
-      sample = color_samples = g_new0 (gdouble, num_color_samples);
+      sample = color_samples = g_new0 (GeglColor *, num_samples + 1);
 
       while (num_samples--)
         {
-          GeglColor *color = NULL;
-
           seg = gimp_gradient_get_color_at (gradient, context, seg,
                                             pos, reverse,
                                             GIMP_GRADIENT_BLEND_RGB_PERCEPTUAL,
-                                            &color);
-          /* XXX "float" in PDB are in fact double. */
-          if (color)
-            gegl_color_get_pixel (color, babl_format ("R'G'B'A double"), sample);
-          /* TODO: should we really return a list of floats? What about a list
-           * of GeglColor?
-           */
+                                            sample);
 
-          sample += 4;
-          pos    += delta;
-
-          g_clear_object (&color);
+          sample++,
+          pos += delta;
         }
     }
   else
@@ -205,26 +196,24 @@ sub gradient_get_custom_samples {
 Samples the color of the gradient at positions from a list.
 The left endpoint of the gradient corresponds
 to position 0.0, and the right endpoint corresponds to 1.0.
-Returns a list of floating-point values, four for each sample (RGBA.)
+Returns a list of colors, one for each sample.
 HELP
 
     &federico_pdb_misc('1997', '2.2');
 
     @inargs = (
         ${gradient_arg_spec},
-      	{ name  => 'positions', type  => 'floatarray',
+      	{ name  => 'positions', type  => 'doublearray',
       	  desc  => 'The list of positions to sample along the gradient',
-      	  array => { name => 'num_samples', type => '1 <= int32',
+      	  array => { name => 'num_samples', type => '1 <= size',
       		     desc => 'The number of samples to take' } },
       	{ name => 'reverse', type => 'boolean',
       	  desc => 'Use the reverse gradient' }
     );
 
     @outargs = (
-        { name => 'color_samples', type => 'floatarray', void_ret => 1,
-    	  desc => 'Color samples: { R1, G1, B1, A1, ..., Rn, Gn, Bn, An }',
-    	  array => { desc => 'Length of the color_samples array (4 *
-    			      num_samples)' } }
+        { name => 'color_samples', type => 'colorarray',
+          desc => 'Color samples' }
     );
 
     %invoke = (
@@ -232,30 +221,21 @@ HELP
 {
   if (gradient)
     {
-      GimpGradientSegment *seg = NULL;
-      gdouble             *sample;
+      GimpGradientSegment  *seg = NULL;
+      GeglColor           **sample;
 
-      num_color_samples = num_samples * 4;
-
-      sample = color_samples = g_new0 (gdouble, num_color_samples);
+      sample = color_samples = g_new0 (GeglColor *, num_samples + 1);
 
       while (num_samples--)
         {
-          GeglColor *color = NULL;
-
           seg = gimp_gradient_get_color_at (gradient, context,
                                             seg, *positions,
                                             reverse,
                                             GIMP_GRADIENT_BLEND_RGB_PERCEPTUAL,
-                                            &color);
+                                            sample);
 
-          if (color)
-            gegl_color_get_pixel (color, babl_format ("R'G'B'A double"), sample);
-
-          sample += 4;
+          sample++;
           positions++;
-
-          g_clear_object (&color);
         }
     }
   else
@@ -431,7 +411,7 @@ HELP
     );
 
     @outargs = (
-        { name => 'pos', type => 'float', void_ret => 1,
+        { name => 'pos', type => 'double', void_ret => 1,
           desc => 'The return position' }
     );
 
@@ -465,7 +445,7 @@ HELP
     );
 
     @outargs = (
-        { name => 'pos', type => 'float', void_ret => 1,
+        { name => 'pos', type => 'double', void_ret => 1,
           desc => 'The return position' }
     );
 
@@ -499,7 +479,7 @@ HELP
     );
 
     @outargs = (
-        { name => 'pos', type => 'float', void_ret => 1,
+        { name => 'pos', type => 'double', void_ret => 1,
           desc => 'The return position' }
     );
 
@@ -533,12 +513,12 @@ HELP
     @inargs = (
         ${gradient_arg_spec},
         ${gradient_seg_arg_spec},
-        { name => 'pos', type => '0.0 <= float <= 1.0',
+        { name => 'pos', type => '0.0 <= double <= 1.0',
           desc => 'The position to set the guidepoint to' }
     );
 
     @outargs = (
-        { name => 'final_pos', type => 'float', void_ret => 1,
+        { name => 'final_pos', type => 'double', void_ret => 1,
           desc => 'The return position' }
     );
 
@@ -580,12 +560,12 @@ HELP
     @inargs = (
         ${gradient_arg_spec},
         ${gradient_seg_arg_spec},
-        { name => 'pos', type => '0.0 <= float <= 1.0',
+        { name => 'pos', type => '0.0 <= double <= 1.0',
           desc => 'The position to set the right endpoint to' }
     );
 
     @outargs = (
-        { name => 'final_pos', type => 'float', void_ret => 1,
+        { name => 'final_pos', type => 'double', void_ret => 1,
           desc => 'The return position' }
     );
 
@@ -626,12 +606,12 @@ HELP
     @inargs = (
         ${gradient_arg_spec},
         ${gradient_seg_arg_spec},
-        { name => 'pos', type => '0.0 <= float <= 1.0',
+        { name => 'pos', type => '0.0 <= double <= 1.0',
           desc => 'The position to set the guidepoint to' }
     );
 
     @outargs = (
-        { name => 'final_pos', type => 'float', void_ret => 1,
+        { name => 'final_pos', type => 'double', void_ret => 1,
           desc => 'The return position' }
     );
 
@@ -1192,14 +1172,14 @@ HELP
         ${gradient_arg_spec},
         ${gradient_start_segment_arg_spec},
         ${gradient_end_segment_arg_spec},
-        { name => 'delta', type => '-1.0 <= float <= 1.0',
+        { name => 'delta', type => '-1.0 <= double <= 1.0',
           desc => 'The delta to move the segment range' },
         { name => 'control_compress', type => 'boolean',
           desc => 'Whether or not to compress the neighboring segments' }
     );
 
     @outargs = (
-        { name => 'final_delta', type => 'float',
+        { name => 'final_delta', type => 'double',
           desc => 'The final delta by which the range moved' }
     );
 

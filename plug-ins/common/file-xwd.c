@@ -62,7 +62,7 @@
 
 
 #define LOAD_PROC      "file-xwd-load"
-#define SAVE_PROC      "file-xwd-save"
+#define EXPORT_PROC    "file-xwd-export"
 #define PLUG_IN_BINARY "file-xwd"
 #define PLUG_IN_ROLE   "gimp-file-xwd"
 
@@ -166,19 +166,18 @@ static GimpValueArray * xwd_load             (GimpProcedure         *procedure,
                                               GimpMetadataLoadFlags *flags,
                                               GimpProcedureConfig   *config,
                                               gpointer               run_data);
-static GimpValueArray * xwd_save             (GimpProcedure         *procedure,
+static GimpValueArray * xwd_export           (GimpProcedure         *procedure,
                                               GimpRunMode            run_mode,
                                               GimpImage             *image,
-                                              gint                   n_drawables,
-                                              GimpDrawable         **drawables,
                                               GFile                 *file,
+                                              GimpExportOptions     *options,
                                               GimpMetadata          *metadata,
                                               GimpProcedureConfig   *config,
                                               gpointer               run_data);
 
 static GimpImage      * load_image           (GFile                 *file,
                                               GError               **error);
-static gboolean         save_image           (GFile                 *file,
+static gboolean         export_image         (GFile                 *file,
                                               GimpImage             *image,
                                               GimpDrawable          *drawable,
                                               GError               **error);
@@ -307,7 +306,7 @@ xwd_query_procedures (GimpPlugIn *plug_in)
   GList *list = NULL;
 
   list = g_list_append (list, g_strdup (LOAD_PROC));
-  list = g_list_append (list, g_strdup (SAVE_PROC));
+  list = g_list_append (list, g_strdup (EXPORT_PROC));
 
   return list;
 }
@@ -346,11 +345,11 @@ xwd_create_procedure (GimpPlugIn  *plug_in,
       gimp_file_procedure_set_magics (GIMP_FILE_PROCEDURE (procedure),
                                       "4,long,0x00000007");
     }
-  else if (! strcmp (name, SAVE_PROC))
+  else if (! strcmp (name, EXPORT_PROC))
     {
-      procedure = gimp_save_procedure_new (plug_in, name,
-                                           GIMP_PDB_PROC_TYPE_PLUGIN,
-                                           FALSE, xwd_save, NULL, NULL);
+      procedure = gimp_export_procedure_new (plug_in, name,
+                                             GIMP_PDB_PROC_TYPE_PLUGIN,
+                                             FALSE, xwd_export, NULL, NULL);
 
       gimp_procedure_set_image_types (procedure, "RGB, GRAY, INDEXED");
 
@@ -373,6 +372,12 @@ xwd_create_procedure (GimpPlugIn  *plug_in,
                                           "image/x-xwindowdump");
       gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
                                           "xwd");
+
+      gimp_export_procedure_set_capabilities (GIMP_EXPORT_PROCEDURE (procedure),
+                                              GIMP_EXPORT_CAN_HANDLE_RGB  |
+                                              GIMP_EXPORT_CAN_HANDLE_GRAY |
+                                              GIMP_EXPORT_CAN_HANDLE_INDEXED,
+                                              NULL, NULL, NULL);
     }
 
   return procedure;
@@ -410,64 +415,32 @@ xwd_load (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
-xwd_save (GimpProcedure        *procedure,
-          GimpRunMode           run_mode,
-          GimpImage            *image,
-          gint                  n_drawables,
-          GimpDrawable        **drawables,
-          GFile                *file,
-          GimpMetadata         *metadata,
-          GimpProcedureConfig  *config,
-          gpointer              run_data)
+xwd_export (GimpProcedure        *procedure,
+            GimpRunMode           run_mode,
+            GimpImage            *image,
+            GFile                *file,
+            GimpExportOptions    *options,
+            GimpMetadata         *metadata,
+            GimpProcedureConfig  *config,
+            gpointer              run_data)
 {
   GimpPDBStatusType  status = GIMP_PDB_SUCCESS;
-  GimpExportReturn   export = GIMP_EXPORT_CANCEL;
-  GError            *error = NULL;
+  GimpExportReturn   export = GIMP_EXPORT_IGNORE;
+  GList             *drawables;
+  GError            *error  = NULL;
 
   gegl_init (NULL, NULL);
 
-  switch (run_mode)
-    {
-    case GIMP_RUN_INTERACTIVE:
-    case GIMP_RUN_WITH_LAST_VALS:
-      gimp_ui_init (PLUG_IN_BINARY);
+  export    = gimp_export_options_get_image (options, &image);
+  drawables = gimp_image_list_layers (image);
 
-      export = gimp_export_image (&image, &n_drawables, &drawables, "XWD",
-                                  GIMP_EXPORT_CAN_HANDLE_RGB  |
-                                  GIMP_EXPORT_CAN_HANDLE_GRAY |
-                                  GIMP_EXPORT_CAN_HANDLE_INDEXED);
-
-      if (export == GIMP_EXPORT_CANCEL)
-        return gimp_procedure_new_return_values (procedure,
-                                                 GIMP_PDB_CANCEL,
-                                                 NULL);
-      break;
-
-    default:
-      break;
-    }
-
-  if (n_drawables != 1)
-    {
-      g_set_error (&error, G_FILE_ERROR, 0,
-                   _("TGA format does not support multiple layers."));
-
-      return gimp_procedure_new_return_values (procedure,
-                                               GIMP_PDB_CALLING_ERROR,
-                                               error);
-    }
-
-  if (! save_image (file, image, drawables[0], &error))
-    {
-      status = GIMP_PDB_EXECUTION_ERROR;
-    }
+  if (! export_image (file, image, drawables->data, &error))
+    status = GIMP_PDB_EXECUTION_ERROR;
 
   if (export == GIMP_EXPORT_EXPORT)
-    {
-      gimp_image_delete (image);
-      g_free (drawables);
-    }
+    gimp_image_delete (image);
 
+  g_list_free (drawables);
   return gimp_procedure_new_return_values (procedure, status, error);
 }
 
@@ -543,7 +516,7 @@ load_image (GFile   *file,
       goto out;
     }
 
-  /* Guard against insanely huge color maps -- gimp_image_set_colormap() only
+  /* Guard against insanely huge color maps -- gimp_palette_set_colormap() only
    * accepts colormaps with 0..256 colors anyway. */
   if (xwdhdr.l_colormap_entries > 256)
     {
@@ -686,10 +659,10 @@ out:
 }
 
 static gboolean
-save_image (GFile         *file,
-            GimpImage     *image,
-            GimpDrawable  *drawable,
-            GError       **error)
+export_image (GFile         *file,
+              GimpImage     *image,
+              GimpDrawable  *drawable,
+              GError       **error)
 {
   GOutputStream *output;
   GimpImageType  drawable_type;
@@ -1233,13 +1206,14 @@ get_pixelmap (L_CARD32   pixelval,
 static void
 set_bw_color_table (GimpImage *image)
 {
-  static guchar BWColorMap[2*3] = { 255, 255, 255, 0, 0, 0 };
+  static guchar  BWColorMap[2*3] = { 255, 255, 255, 0, 0, 0 };
+  GimpPalette   *palette         = gimp_image_get_palette (image);
 
 #ifdef XWD_COL_DEBUG
   g_printf ("Set GIMP b/w-colortable:\n");
 #endif
 
-  gimp_image_set_colormap (image, BWColorMap, 2);
+  gimp_palette_set_colormap (palette, babl_format ("R'G'B' u8"), BWColorMap, 2 * 3);
 }
 
 
@@ -1345,7 +1319,7 @@ set_color_table (GimpImage       *image,
               ColorMap[j*3], ColorMap[j*3+1], ColorMap[j*3+2]);
 #endif
 
-  gimp_image_set_colormap (image, ColorMap, 256);
+  gimp_palette_set_colormap (gimp_image_get_palette (image), babl_format ("R'G'B' u8"), ColorMap, 256 * 3);
 }
 
 
@@ -2576,7 +2550,7 @@ save_index (GOutputStream  *output,
   else
     {
       vclass = 3;
-      cmap = gimp_image_get_colormap (image, NULL, &ncolors);
+      cmap = gimp_palette_get_colormap (gimp_image_get_palette (image), babl_format ("R'G'B' u8"), &ncolors, NULL);
 
       for (j = 0; j < ncolors; j++)
         {

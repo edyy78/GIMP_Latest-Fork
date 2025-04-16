@@ -31,17 +31,14 @@ G_BEGIN_DECLS
 /* For information look into the C source or the html documentation */
 
 
+#include <libgimp/gimplayer.h>
+
+
 #define GIMP_TYPE_TEXT_LAYER (gimp_text_layer_get_type ())
 G_DECLARE_FINAL_TYPE (GimpTextLayer, gimp_text_layer, GIMP, TEXT_LAYER, GimpLayer)
 
 
 GimpTextLayer * gimp_text_layer_get_by_id (gint32       layer_id);
-
-GimpTextLayer * gimp_text_layer_new       (GimpImage   *image,
-                                           const gchar *text,
-                                           GimpFont    *font,
-                                           gdouble      size,
-                                           GimpUnit     unit);
 
 
 G_END_DECLS

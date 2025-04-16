@@ -12,7 +12,9 @@ subdir('scripts')
 subdir('server')
 subdir('interpreter')
 subdir('console')
-subdir('test')
+if not stable or not release or gimp_version.endswith('+git')
+  subdir('test')
+endif
 
 
 executable_name = 'script-fu'
@@ -24,6 +26,7 @@ executable_name = 'script-fu'
 plugin_sources = [
   'script-fu-eval.c',
   'script-fu-text-console.c',
+  'script-fu-refresh.c',
 
   'script-fu.c',
 ]
@@ -58,21 +61,22 @@ if not meson.is_cross_build()
 
   # libscriptfu is installed to standard place; no rpath necessary
 
-  executable(executable_name,
-    plugin_sources,
-    dependencies: [
-      libgimpui_dep,
-      math,
-      gi,
-    ],
-    c_args: [
-      '-DG_LOG_DOMAIN="scriptfu"',
-    ],
-    include_directories: [
-      libscriptfuInclude,
-    ],
-    link_with : [libscriptfuconsole, libscriptfu ],
-    install: true,
-    install_dir: gimpplugindir / 'plug-ins' / executable_name,
-  )
+  plugin_exe = executable(executable_name,
+                          plugin_sources,
+                          dependencies: [
+                            libgimpui_dep,
+                            math,
+                            gi,
+                          ],
+                          c_args: [
+                            '-DG_LOG_DOMAIN="scriptfu"',
+                          ],
+                          include_directories: [
+                            libscriptfuInclude,
+                          ],
+                          link_with : [libscriptfuconsole, libscriptfu ],
+                          win_subsystem: 'windows',
+                          install: true,
+                          install_dir: gimpplugindir / 'plug-ins' / executable_name)
+  plugin_executables += [plugin_exe.full_path()]
 endif

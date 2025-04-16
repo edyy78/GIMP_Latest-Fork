@@ -23,6 +23,7 @@
 #include <cairo.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <gegl.h>
+#include <gegl-paramspecs.h>
 
 #include "libgimpbase/gimpbase.h"
 #include "libgimpcolor/gimpcolor.h"
@@ -33,20 +34,25 @@
 #include "core/gimp.h"
 #include "core/gimpbrush.h"
 #include "core/gimpdisplay.h"
+#include "core/gimpdrawablefilter.h"
 #include "core/gimpgradient.h"
+#include "core/gimpgrouplayer.h"
 #include "core/gimpimage.h"
 #include "core/gimplayer.h"
 #include "core/gimplayermask.h"
 #include "core/gimppalette.h"
 #include "core/gimppattern.h"
 #include "core/gimpselection.h"
+#include "core/gimpunit.h"
+
 #include "text/gimpfont.h"
+#include "text/gimptextlayer.h"
 
 #include "core/gimpparamspecs.h"
 
 #include "pdb/gimppdb-utils.h"
 
-#include "vectors/gimpvectors.h"
+#include "vectors/gimppath.h"
 
 #include "libgimp/gimpgpparams.h"
 

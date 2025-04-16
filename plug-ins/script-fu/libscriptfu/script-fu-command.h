@@ -24,8 +24,11 @@ gboolean        script_fu_run_command          (const gchar  *command,
 GimpValueArray *script_fu_interpret_image_proc (GimpProcedure        *procedure,
                                                 SFScript             *script,
                                                 GimpImage            *image,
-                                                guint                 n_drawables,
                                                 GimpDrawable        **drawables,
+                                                GimpProcedureConfig  *config);
+GimpValueArray *script_fu_interpret_regular_proc (
+                                                GimpProcedure        *procedure,
+                                                SFScript             *script,
                                                 GimpProcedureConfig  *config);
 
 #endif /* __SCRIPT_FU_COMMAND_H__ */

@@ -300,7 +300,8 @@ gimp_radio_action_get_enabled (GAction *action)
 {
   GimpRadioAction *radio = GIMP_RADIO_ACTION (action);
 
-  return gimp_radio_action_get_current_value (radio) != radio->priv->value;
+  return gimp_radio_action_get_current_value (radio) != radio->priv->value &&
+         gimp_action_is_sensitive (GIMP_ACTION (action), NULL);
 }
 
 static void
@@ -536,7 +537,12 @@ gimp_radio_action_set_current_value (GimpRadioAction *action,
           GimpRadioAction  *radio  = slist->data;
 
           if (radio->priv->value == current_value &&
-              ! gimp_toggle_action_get_active (toggle))
+              gimp_toggle_action_get_active (toggle))
+            {
+              /* Value to set is already toggled. */
+              return;
+            }
+          else if (radio->priv->value == current_value)
             {
               /* Change the "active" state but don't notify the property change
                * immediately. We want to notify both "active" properties

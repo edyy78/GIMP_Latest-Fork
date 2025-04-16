@@ -22,10 +22,8 @@
 ;      distribution.                                                    ;
 ;.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.;
 ;
-;Install script for GIMP and GTK+
+;Install script for GIMP and its deps
 ;requires Inno Setup 6
-;
-;See base_directories.isi
 ;
 ;Changelog:
 ;
@@ -79,93 +77,103 @@
 ;
 #pragma option -e+
 
-#ifndef VERSION
-	#error VERSION must be defined
+;1 NOTE: This script do NOT work with Inno Compiler alone
+
+
+;2 GLOBAL VARIABLES SET BY PARAMS
+;Meson don't support C++ style comments. See: https://github.com/mesonbuild/meson/issues/14260
+#include BUILD_DIR + "\build\windows\installer\config_clean.h"
+
+;Main GIMP versions:
+;Get GIMP_MUTEX_VERSION (used for internal versioning control)
+#if Defined(GIMP_UNSTABLE) && GIMP_UNSTABLE != ""
+	#define GIMP_MUTEX_VERSION GIMP_APP_VERSION
+#else
+	#define GIMP_MUTEX_VERSION=Copy(GIMP_APP_VERSION,1,Pos(".",GIMP_APP_VERSION)-1)
 #endif
-#ifndef GIMP_DIR
-	#error GIMP_DIR must be defined
+;Get FULL_GIMP_VERSION (used by ITs)
+#define ORIGINAL_GIMP_VERSION GIMP_VERSION
+#if Defined(GIMP_RC_VERSION) && GIMP_RC_VERSION != ""
+	#define GIMP_VERSION=Copy(GIMP_VERSION,1,Pos("-",GIMP_VERSION)-1)
 #endif
-#ifndef DIR32
-	#error DIR32 must be defined
+#if !Defined(REVISION) || REVISION=="0" || REVISION==""
+	#define FULL_GIMP_VERSION GIMP_VERSION + "." + "0"
+#else
+	#define FULL_GIMP_VERSION GIMP_VERSION + "." + REVISION
 #endif
-#ifndef DIR64
-	#error DIR64 must be defined
-#endif
-#ifndef DEPS_DIR
-	#error DEPS_DIR must be defined
-#endif
-#ifndef DDIR32
-	#error DDIR32 must be defined
-#endif
-#ifndef DDIR64
-	#error DDIR64 must be defined
+;Get CUSTOM_GIMP_VERSION (that the users see)
+#if !Defined(REVISION) || REVISION=="0" || REVISION==""
+	#define CUSTOM_GIMP_VERSION ORIGINAL_GIMP_VERSION
+#else
+	#define CUSTOM_GIMP_VERSION ORIGINAL_GIMP_VERSION + "-" + REVISION
 #endif
 
-; Optional: DEBUG_SYMBOLS, LUA, PYTHON, NOCOMPRESSION, NOFILES, DEVEL
+;Optional Build-time params: DEBUG_SYMBOLS, LUA, PYTHON, NOCOMPRESSION, NOFILES, DEVEL_WARNING
 
-#define X86 1
-#define X64 2
-#define ARM64 3
+;Optional Run-time params: /configoverride= /disablecheckupdate=false|true /debugresume=0|1 /resumeinstall=0|1|2
 
-#include "base_directories.isi"
-#include "util_version.isi"
 
+;3 INSTALLER SOURCE
+
+;3.1.1 Icons and other files
+#define ASSETS_DIR BUILD_DIR + "\build\windows\installer"
+
+;3.1.2 Installer lang files
+[Languages]
+Name: "en"; MessagesFile: "compiler:Default.isl,{#ASSETS_DIR}\lang\en.setup.isl"
+#include ASSETS_DIR + "\base_po-msg.list"
+;Avoid annoying inoffensive warnings about langs that we can't do nothing about
 [Setup]
-AppName=GIMP
-#if Defined(DEVEL) && DEVEL != ""
-AppID=GIMP-{#MAJOR}.{#MINOR}
-#else
-AppID=GIMP-{#MAJOR}
-#endif
-VersionInfoVersion={#VERSION}
-#if !defined(REVISION)
-AppVerName=GIMP {#VERSION}
-#else
-AppVerName=GIMP {#VERSION}-{#REVISION}
-#endif
-AppPublisherURL=https://www.gimp.org/
-AppSupportURL=https://www.gimp.org/docs/
-AppUpdatesURL=https://www.gimp.org/
-AppPublisher=The GIMP Team
-AppVersion={#VERSION}
-DisableProgramGroupPage=yes
-DisableWelcomePage=no
-DisableDirPage=auto
-AlwaysShowDirOnReadyPage=yes
-ChangesEnvironment=yes
+MissingMessagesWarning=no
+NotRecognizedMessagesWarning=no
 
-#if Defined(DEVEL) && DEVEL != ""
-DefaultDirName={autopf}\GIMP {#MAJOR}.{#MINOR}
-LZMANumBlockThreads=4
-LZMABlockSize=76800
-#else
-DefaultDirName={autopf}\GIMP {#MAJOR}
-#endif
 
-;AllowNoIcons=true
-FlatComponentsList=yes
-InfoBeforeFile=gpl+python.rtf
-ChangesAssociations=true
-
-WizardImageFile=windows-installer-intro-big.bmp
-WizardImageStretch=yes
-WizardSmallImageFile=wilber.bmp
-
-UninstallDisplayIcon={app}\bin\gimp-{#MAJOR}.{#MINOR}.exe
+;3.2.1 INNO INTERNAL VERSIONING (used to rule how different versions are installed)
+;GIMP process identifier for Inno
+AppMutex=GIMP-{#GIMP_MUTEX_VERSION}
+;Inno installer identifier
+SetupMutex=GIMP-{#GIMP_MUTEX_VERSION}
+;Inno installer (default) install location
+DefaultDirName={autopf}\GIMP {#GIMP_MUTEX_VERSION}
+;Inno uninstaller identifier
+AppID=GIMP-{#GIMP_MUTEX_VERSION}
+;Inno unninstaller identifier logs location
 UninstallFilesDir={app}\uninst
 
-MinVersion=10.0
-ArchitecturesInstallIn64BitMode=x64 arm64
+;3.2.2 WINDOWS INTERNAL VERSIONING (used by ITs for deploying GIMP)
+;Inno installer file version
+VersionInfoVersion={#FULL_GIMP_VERSION}
+;Inno installer product version and ImmersiveControlPanel 'DisplayVersion'
+AppVersion={#FULL_GIMP_VERSION}
 
+;3.2.3 THAT'S WHAT THE FINAL USER ACTUALLY SEE
+;ImmersiveControlPanel 'DisplayName'
+AppVerName=GIMP {#CUSTOM_GIMP_VERSION}
+;ImmersiveControlPanel 'DisplayIcon'
+UninstallDisplayIcon={app}\bin\gimp-{#GIMP_MUTEX_VERSION}.exe
+;ImmersiveControlPanel 'Publisher'
+AppPublisher=The GIMP Team
+;ControlPanel 'URLInfoAbout'
+AppPublisherURL=https://www.gimp.org/
+;ControlPanel 'HelpLink'
+AppSupportURL=https://www.gimp.org/docs/
+#if Defined(GIMP_UNSTABLE) && GIMP_UNSTABLE != ""
+	;ControlPanel 'URLUpdateInfo'
+	AppUpdatesURL=https://www.gimp.org/downloads/devel/
+#else
+	AppUpdatesURL=https://www.gimp.org/downloads/
+#endif
+
+
+;3.3.1 EXE COMPRESSION
+LZMANumBlockThreads=4
+LZMABlockSize=76800
 #ifdef NOCOMPRESSION
-;UseSetupLdr=no
-OutputDir=_Output\unc
+OutputDir={#GIMP_DIR}\unc
 Compression=none
-;InternalCompressLevel=0
 DiskSpanning=yes
 DiskSliceSize=max
 #else
-OutputDir=_Output
 Compression=lzma2/ultra64
 InternalCompressLevel=ultra
 SolidCompression=yes
@@ -175,193 +183,222 @@ LZMANumFastBytes=273
 ; expense of memory requirement. We run into "Out of memory" error in
 ; the CI.
 ;LZMADictionarySize=524288
+#endif //NOCOMPRESSION
 
+;3.3.2 EXE SIGNING
 ;SignTool=Default
 ;SignedUninstaller=yes
 ;SignedUninstallerDir=_Uninst
-#endif //NOCOMPRESSION
 
-#if !defined(REVISION)
-OutputBaseFileName=gimp-{#VERSION}-setup
-OutputManifestFile=gimp-{#VERSION}-setup.txt
-#else
-OutputBaseFileName=gimp-{#VERSION}-{#REVISION}-setup
-OutputManifestFile=gimp-{#VERSION}-{#REVISION}-setup.txt
-#endif
+;3.3.3 EXE FILE DETAILS
+AppName=GIMP
+SetupIconFile={#ASSETS_DIR}\setup.ico
+OutputDir={#GIMP_DIR}
+OutputBaseFileName=gimp-{#CUSTOM_GIMP_VERSION}-setup
+OutputManifestFile=inno.log
+ArchitecturesInstallIn64BitMode=x64os arm64
+MinVersion=10.0
 
+
+;3.4.1 INSTALLER PAGES
+PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
+ShowLanguageDialog=auto
+DisableWelcomePage=no
+InfoBeforeFile=gpl+python.rtf
+DisableDirPage=no
+FlatComponentsList=yes
+DisableProgramGroupPage=yes
+AllowNoIcons=no
+ChangesAssociations=true
+ChangesEnvironment=yes
+AlwaysShowDirOnReadyPage=yes
 
-[Languages]
-Name: "en"; MessagesFile: "compiler:Default.isl,lang\en.setup.isl"
-Name: "be"; MessagesFile: "compiler:Languages\Unofficial\Belarusian.isl,lang\be.setup.isl"
-Name: "bg"; MessagesFile: "compiler:Languages\Bulgarian.isl,lang\bg.setup.isl"
-Name: "ca"; MessagesFile: "compiler:Languages\Catalan.isl,lang\ca.setup.isl"
-Name: "cs"; MessagesFile: "compiler:Languages\Czech.isl,lang\cs.setup.isl"
-Name: "da"; MessagesFile: "compiler:Languages\Danish.isl,lang\da.setup.isl"
-Name: "de"; MessagesFile: "compiler:Languages\German.isl,lang\de.setup.isl"
-Name: "el"; MessagesFile: "compiler:Languages\Unofficial\Greek.isl,lang\el.setup.isl"
-Name: "en_GB"; MessagesFile: "compiler:Languages\Unofficial\EnglishBritish.isl,lang\en_GB.setup.isl"
-Name: "eo"; MessagesFile: "compiler:Languages\Unofficial\Esperanto.isl,lang\eo.setup.isl"
-Name: "es"; MessagesFile: "compiler:Languages\Spanish.isl,lang\es.setup.isl"
-Name: "eu"; MessagesFile: "compiler:Languages\Unofficial\Basque.isl,lang\eu.setup.isl"
-Name: "fi"; MessagesFile: "compiler:Languages\Finnish.isl,lang\fi.setup.isl"
-Name: "fr"; MessagesFile: "compiler:Languages\French.isl,lang\fr.setup.isl"
-Name: "gl"; MessagesFile: "compiler:Languages\Unofficial\Galician.isl,lang\gl.setup.isl"
-Name: "he"; MessagesFile: "compiler:Languages\Hebrew.isl,lang\he.setup.isl"
-Name: "hu"; MessagesFile: "compiler:Languages\Hungarian.isl,lang\hu.setup.isl"
-;Name: "hr"; MessagesFile: "compiler:Languages\Unofficial\Croatian.isl,lang\hr.setup.isl"
-Name: "id"; MessagesFile: "compiler:Languages\Unofficial\Indonesian.isl,lang\id.setup.isl"
-Name: "is"; MessagesFile: "compiler:Languages\Icelandic.isl,lang\is.setup.isl"
-Name: "it"; MessagesFile: "compiler:Languages\Italian.isl,lang\it.setup.isl"
-Name: "ja"; MessagesFile: "compiler:Languages\Japanese.isl,lang\ja.setup.isl"
-Name: "ka"; MessagesFile: "compiler:Languages\Unofficial\Georgian.isl,lang\ka.setup.isl"
-Name: "kab"; MessagesFile: "compiler:Default.isl,lang\kab.isl,lang\kab.setup.isl"
-Name: "ko"; MessagesFile: "compiler:Languages\Korean.isl,lang\ko.setup.isl"
-Name: "lt"; MessagesFile: "compiler:Languages\Unofficial\Lithuanian.isl,lang\lt.setup.isl"
-Name: "lv"; MessagesFile: "compiler:Languages\Unofficial\Latvian.isl,lang\lv.setup.isl"
-Name: "mr"; MessagesFile: "compiler:Languages\Unofficial\Marathi.islu,lang\mr.setup.isl"
-Name: "ms"; MessagesFile: "compiler:Languages\Unofficial\Malaysian.isl,lang\ms.setup.isl"
-Name: "nl"; MessagesFile: "compiler:Languages\Dutch.isl,lang\nl.setup.isl"
-Name: "nn"; MessagesFile: "compiler:Languages\Norwegian.isl,lang\nn.setup.isl"
-Name: "pl"; MessagesFile: "compiler:Languages\Polish.isl,lang\pl.setup.isl"
-Name: "pt"; MessagesFile: "compiler:Languages\Portuguese.isl,lang\pt.setup.isl"
-Name: "pt_BR"; MessagesFile: "compiler:Languages\BrazilianPortuguese.isl,lang\pt_BR.setup.isl"
-Name: "ro"; MessagesFile: "compiler:Languages\Unofficial\Romanian.isl,lang\ro.setup.isl"
-Name: "ru"; MessagesFile: "compiler:Languages\Russian.isl,lang\ru.setup.isl"
-Name: "sk"; MessagesFile: "compiler:Languages\Slovak.isl,lang\sk.setup.isl"
-Name: "sl"; MessagesFile: "compiler:Languages\Slovenian.isl,lang\sl.setup.isl"
-Name: "sv"; MessagesFile: "compiler:Languages\Unofficial\Swedish.isl,lang\sv.setup.isl"
-Name: "tr"; MessagesFile: "compiler:Languages\Turkish.isl,lang\tr.setup.isl"
-Name: "uk"; MessagesFile: "compiler:Languages\Ukrainian.isl,lang\uk.setup.isl"
-Name: "vi"; MessagesFile: "compiler:Languages\Unofficial\Vietnamese.isl,lang\vi.setup.isl"
-Name: "zh_CN"; MessagesFile: "compiler:Languages\Unofficial\ChineseSimplified.isl,lang\zh_CN.setup.isl"
-Name: "zh_TW"; MessagesFile: "compiler:Languages\Unofficial\ChineseTraditional.isl,lang\zh_TW.setup.isl"
-;Name: "ro"; MessagesFile: "Romanian.islu,ro.setup.islu"
+;3.4.2 INSTALLER UI: uses modern Win32 "Vista" (still used today) design
+WizardStyle=modern
+WizardSizePercent=100
+WizardResizable=no
+WizardSmallImageFile={#ASSETS_DIR}\gimp.scale-100.bmp,{#ASSETS_DIR}\gimp.scale-125.bmp,{#ASSETS_DIR}\gimp.scale-150.bmp,{#ASSETS_DIR}\gimp.scale-175.bmp,{#ASSETS_DIR}\gimp.scale-200.bmp,{#ASSETS_DIR}\gimp.scale-225.bmp,{#ASSETS_DIR}\gimp.scale-250.bmp
+WizardImageFile={#ASSETS_DIR}\install-end.scale-100.bmp,{#ASSETS_DIR}\install-end.scale-125.bmp,{#ASSETS_DIR}\install-end.scale-150.bmp,{#ASSETS_DIR}\install-end.scale-175.bmp,{#ASSETS_DIR}\install-end.scale-200.bmp,{#ASSETS_DIR}\install-end.scale-225.bmp,{#ASSETS_DIR}\install-end.scale-250.bmp
+WizardImageStretch=yes
+[LangOptions]
+DialogFontName=Segoe UI
+DialogFontSize=9
+WelcomeFontName=Segoe UI
+WelcomeFontSize=12
 
+;3.4.1 INSTALLER PAGES AGAIN
+[Tasks]
+Name: desktopicon; Description: "{cm:AdditionalIconsDesktop}"; GroupDescription: "{cm:AdditionalIcons}"
+[Icons]
+Name: "{autoprograms}\GIMP {#CUSTOM_GIMP_VERSION}"; Filename: "{app}\bin\gimp-{#GIMP_MUTEX_VERSION}.exe"; WorkingDir: "%USERPROFILE%"; Comment: "GIMP {#CUSTOM_GIMP_VERSION}"
+Name: "{autodesktop}\GIMP {#CUSTOM_GIMP_VERSION}"; Filename: "{app}\bin\gimp-{#GIMP_MUTEX_VERSION}.exe"; WorkingDir: "%USERPROFILE%"; Comment: "GIMP {#CUSTOM_GIMP_VERSION}"; Tasks: desktopicon
+[Run]
+Filename: "{app}\bin\gimp-{#GIMP_MUTEX_VERSION}.exe"; Description: "{cm:LaunchGimp}"; Flags: unchecked postinstall nowait skipifsilent
+
+
+;4.1 GIMP FILES
 [Types]
-;Name: normal; Description: "{cm:TypeTypical}"
 Name: full; Description: "{cm:TypeFull}"
 Name: compact; Description: "{cm:TypeCompact}"
 Name: custom; Description: "{cm:TypeCustom}"; Flags: iscustom
 
 [Components]
 ;Required components (minimal install)
-Name: gimp32; Description: "{cm:ComponentsGimp,{#VERSION}}"; Types: full compact custom; Flags: fixed; Check: Check3264('32')
-Name: gimp64; Description: "{cm:ComponentsGimp,{#VERSION}}"; Types: full compact custom; Flags: fixed; Check: Check3264('x64')
-Name: gimpARM64; Description: "{cm:ComponentsGimp,{#VERSION}}"; Types: full compact custom; Flags: fixed; Check: Check3264('arm64')
-
-Name: deps32; Description: "{cm:ComponentsDeps,{#GTK_VERSION}}"; Types: full compact custom; Flags: checkablealone fixed; Check: Check3264('32')
-Name: deps64; Description: "{cm:ComponentsDeps,{#GTK_VERSION}}"; Types: full compact custom; Flags: checkablealone fixed; Check: Check3264('x64')
-Name: depsARM64; Description: "{cm:ComponentsDeps,{#GTK_VERSION}}"; Types: full compact custom; Flags: checkablealone fixed; Check: Check3264('arm64')
+;GIMP files
+Name: gimp32; Description: "{cm:ComponentsGimp,{#GIMP_VERSION}}"; Types: full compact custom; Flags: fixed; Check: Check3264('32')
+Name: gimp64; Description: "{cm:ComponentsGimp,{#GIMP_VERSION}}"; Types: full compact custom; Flags: fixed; Check: Check3264('x64')
+Name: gimpARM64; Description: "{cm:ComponentsGimp,{#GIMP_VERSION}}"; Types: full compact custom; Flags: fixed; Check: Check3264('arm64')
+;Deps files
+Name: deps32; Description: "{cm:ComponentsDeps,{#FULL_GIMP_VERSION}}"; Types: full compact custom; Flags: fixed; Check: Check3264('32')
+Name: deps64; Description: "{cm:ComponentsDeps,{#FULL_GIMP_VERSION}}"; Types: full compact custom; Flags: fixed; Check: Check3264('x64')
+Name: depsARM64; Description: "{cm:ComponentsDeps,{#FULL_GIMP_VERSION}}"; Types: full compact custom; Flags: fixed; Check: Check3264('arm64')
 
 ;Optional components (complete install)
 #ifdef DEBUG_SYMBOLS
-Name: debug; Description: "{cm:ComponentsDebug}"; Types: full custom; Flags: disablenouninstallwarning
+Name: debug32; Description: "{cm:ComponentsDebug}"; Types: full custom; Flags: disablenouninstallwarning; Check: Check3264('32')
+Name: debug64; Description: "{cm:ComponentsDebug}"; Types: full custom; Flags: disablenouninstallwarning; Check: Check3264('x64')
+Name: debugARM64; Description: "{cm:ComponentsDebug}"; Types: full custom; Flags: disablenouninstallwarning; Check: Check3264('arm64')
 #endif
-
-;Ghostscript
-Name: gs; Description: "{cm:ComponentsGhostscript}"; Types: full custom
-
+;Development files
+Name: dev32; Description: "{cm:ComponentsDev}"; Types: full custom; Flags: disablenouninstallwarning; Check: Check3264('32')
+Name: dev64; Description: "{cm:ComponentsDev}"; Types: full custom; Flags: disablenouninstallwarning; Check: Check3264('x64')
+Name: devARM64; Description: "{cm:ComponentsDev}"; Types: full custom; Flags: disablenouninstallwarning; Check: Check3264('arm64')
+;PostScript support
+Name: gs32; Description: "{cm:ComponentsGhostscript}"; Types: full custom; Check: Check3264('32')
+Name: gs64; Description: "{cm:ComponentsGhostscript}"; Types: full custom; Check: Check3264('x64')
+Name: gsARM64; Description: "{cm:ComponentsGhostscript}"; Types: full custom; Check: Check3264('arm64')
+;Lua plug-ins support
+#ifdef LUA
+Name: lua32; Description: "{cm:ComponentsLua}"; Types: full custom; Check: Check3264('32')
+Name: lua64; Description: "{cm:ComponentsLua}"; Types: full custom; Check: Check3264('x64')
+Name: luaARM64; Description: "{cm:ComponentsLua}"; Types: full custom; Check: Check3264('arm64')
+#endif
+;Python plug-ins support
+#ifdef PYTHON
+Name: py32; Description: "{cm:ComponentsPython}"; Types: full custom; Check: Check3264('32')
+Name: py64; Description: "{cm:ComponentsPython}"; Types: full custom; Check: Check3264('x64')
+Name: pyARM64; Description: "{cm:ComponentsPython}"; Types: full custom; Check: Check3264('arm64')
+#endif
 ;Locales
 Name: loc; Description: "{cm:ComponentsTranslations}"; Types: full custom
-
-#ifdef LUA
-Name: lua; Description: "{cm:ComponentsLua}"; Types: full custom
-#endif
-
+#include ASSETS_DIR + "\base_po-cmp.list"
 ;MyPaint Brushes
 Name: mypaint; Description: "{cm:ComponentsMyPaint}"; Types: full custom
-
-#ifdef PYTHON
-Name: py; Description: "{cm:ComponentsPython}"; Types: full custom
-#endif
-
 ;32-bit TWAIN support
 Name: gimp32on64; Description: "{cm:ComponentsGimp32}"; Types: full custom; Flags: checkablealone; Check: Check3264('64')
 
-[Tasks]
-Name: desktopicon; Description: "{cm:AdditionalIconsDesktop}"; GroupDescription: "{cm:AdditionalIcons}"
-
-[Icons]
-#define ICON_VERSION=MAJOR + "." + MINOR + "." + MICRO
-Name: "{autoprograms}\GIMP {#ICON_VERSION}"; Filename: "{app}\bin\gimp-{#MAJOR}.{#MINOR}.exe"; WorkingDir: "%USERPROFILE%"; Comment: "GIMP {#VERSION}"
-Name: "{autodesktop}\GIMP {#ICON_VERSION}"; Filename: "{app}\bin\gimp-{#MAJOR}.{#MINOR}.exe"; WorkingDir: "%USERPROFILE%"; Comment: "GIMP {#VERSION}"; Tasks: desktopicon
-
-
 [Files]
 ;setup files
-Source: "windows-installer-intro-small.bmp"; Flags: dontcopy
-#ifndef DEVEL
-Source: "installsplash.bmp"; Flags: dontcopy
-Source: "installsplash_small.bmp"; Flags: dontcopy
-#else
-Source: "installsplash-devel.bmp"; Destname: "installsplash.bmp"; Flags: dontcopy
-Source: "installsplash_small-devel.bmp"; Destname: "installsplash_small.bmp"; Flags: dontcopy
-#endif
+Source: "{#ASSETS_DIR}\installsplash_top.scale-100.bmp"; Flags: dontcopy
+Source: "{#ASSETS_DIR}\installsplash_top.scale-125.bmp"; Flags: dontcopy
+Source: "{#ASSETS_DIR}\installsplash_top.scale-150.bmp"; Flags: dontcopy
+Source: "{#ASSETS_DIR}\installsplash_top.scale-175.bmp"; Flags: dontcopy
+Source: "{#ASSETS_DIR}\installsplash_top.scale-200.bmp"; Flags: dontcopy
+Source: "{#ASSETS_DIR}\installsplash_top.scale-225.bmp"; Flags: dontcopy
+Source: "{#ASSETS_DIR}\installsplash_top.scale-250.bmp"; Flags: dontcopy
+Source: "{#ASSETS_DIR}\installsplash_bottom.bmp"; Flags: dontcopy
 
 #ifndef NOFILES
-;Required neutral components (minimal install)
+#define X86 1
+#define X64 2
+#define ARM64 3
+#define GIMP_DIR32 GIMP_DIR + "\" + DIR32
+#define GIMP_DIR64 GIMP_DIR + "\" + DIR64
+#define GIMP_DIRA64 GIMP_DIR + "\" + DIR64
+#define DDIR32 DIR32
+#define DDIR64 DIR64
+#define DDIRA64 DIRA64
+#define DEPS_DIR32 DEPS_DIR + "\" + DDIR32
+#define DEPS_DIR64 DEPS_DIR + "\" + DDIR64
+#define DEPS_DIRA64 DEPS_DIR + "\" + DDIRA64
+
+#define COMMON_FLAGS="recursesubdirs restartreplace uninsrestartdelete ignoreversion"
+
+;Required arch-neutral files (compact install)
 #define GIMP_ARCHS="gimp32 or gimp64 or gimpARM64"
-Source: "{#GIMP_DIR32}\etc\*"; DestDir: "{app}\etc"; Components: {#GIMP_ARCHS}; Flags: recursesubdirs restartreplace uninsrestartdelete ignoreversion
-Source: "{#GIMP_DIR32}\lib\gimp\{#DIR_VER}\environ\*"; DestDir: "{app}\lib\gimp\{#DIR_VER}\environ"; Components: {#GIMP_ARCHS}; Flags: recursesubdirs restartreplace uninsrestartdelete ignoreversion
-Source: "{#GIMP_DIR32}\lib\gimp\{#DIR_VER}\interpreters\*"; DestDir: "{app}\lib\gimp\{#DIR_VER}\interpreters"; Components: {#GIMP_ARCHS}; Flags: recursesubdirs restartreplace uninsrestartdelete ignoreversion
-Source: "{#GIMP_DIR32}\share\gimp\*"; DestDir: "{app}\share\gimp"; Components: {#GIMP_ARCHS}; Flags: recursesubdirs createallsubdirs restartreplace uninsrestartdelete ignoreversion
-Source: "{#GIMP_DIR32}\share\metainfo\*"; DestDir: "{app}\share\metainfo"; Components: {#GIMP_ARCHS}; Flags: recursesubdirs restartreplace uninsrestartdelete ignoreversion
-
+#define OPTIONAL_EXT="*.pdb,*.lua,*.py"
+Source: "{#GIMP_DIR32}\etc\gimp\*"; DestDir: "{app}\etc\gimp"; Components: {#GIMP_ARCHS}; Flags: {#COMMON_FLAGS}
+Source: "{#GIMP_DIR32}\lib\gimp\{#GIMP_PKGCONFIG_VERSION}\environ\default.env"; DestDir: "{app}\lib\gimp\{#GIMP_PKGCONFIG_VERSION}\environ"; Components: {#GIMP_ARCHS}; Flags: {#COMMON_FLAGS}
+Source: "{#GIMP_DIR32}\lib\gimp\{#GIMP_PKGCONFIG_VERSION}\interpreters\gimp-script-fu-interpreter.interp"; DestDir: "{app}\lib\gimp\{#GIMP_PKGCONFIG_VERSION}\interpreters"; Components: {#GIMP_ARCHS}; Flags: {#COMMON_FLAGS}
+Source: "{#GIMP_DIR32}\lib\gimp\{#GIMP_PKGCONFIG_VERSION}\extensions\*"; DestDir: "{app}\lib\gimp\{#GIMP_PKGCONFIG_VERSION}\extensions"; Excludes: "*.dll,*.exe,{#OPTIONAL_EXT}"; Components: {#GIMP_ARCHS}; Flags: {#COMMON_FLAGS}
+Source: "{#GIMP_DIR32}\lib\gimp\{#GIMP_PKGCONFIG_VERSION}\plug-ins\*"; DestDir: "{app}\lib\gimp\{#GIMP_PKGCONFIG_VERSION}\plug-ins"; Excludes: "*.dll,*.exe,{#OPTIONAL_EXT}"; Components: {#GIMP_ARCHS}; Flags: {#COMMON_FLAGS}
+Source: "{#GIMP_DIR32}\share\gimp\*"; DestDir: "{app}\share\gimp"; Excludes: "{#OPTIONAL_EXT}"; Components: {#GIMP_ARCHS}; Flags: {#COMMON_FLAGS} createallsubdirs
+Source: "{#GIMP_DIR32}\share\icons\hicolor\*"; DestDir: "{app}\share\icons\hicolor"; Components: {#GIMP_ARCHS}; Flags: {#COMMON_FLAGS}
+Source: "{#GIMP_DIR32}\share\metainfo\*"; DestDir: "{app}\share\metainfo"; Components: {#GIMP_ARCHS}; Flags: {#COMMON_FLAGS}
 #define DEPS_ARCHS="deps32 or deps64 or depsARM64"
-#define OMISSIONS="\gir-1.0,\man,\vala"
-Source: "{#DEPS_DIR32}\etc\*"; DestDir: "{app}\etc"; Excludes: "\gimp"; Components: {#DEPS_ARCHS}; Flags: recursesubdirs restartreplace uninsrestartdelete ignoreversion
-Source: "{#DEPS_DIR32}\share\*"; DestDir: "{app}\share"; Excludes: "{#OMISSIONS},\gimp\*,\metainfo\*,ghostscript\*,\locale\*,\lua\*,\mypaint-data\*,"; Components: {#DEPS_ARCHS}; Flags: recursesubdirs createallsubdirs restartreplace uninsrestartdelete ignoreversion
+Source: "{#DEPS_DIR32}\etc\*"; DestDir: "{app}\etc"; Excludes: "gimp"; Components: {#DEPS_ARCHS}; Flags: {#COMMON_FLAGS}
+Source: "{#DEPS_DIR32}\share\*"; DestDir: "{app}\share"; Excludes: "gimp,icons\hicolor,metainfo,locale\*,mypaint-data"; Components: {#DEPS_ARCHS}; Flags: {#COMMON_FLAGS} createallsubdirs
 
-;Optional neutral components (complete install)
-Source: "{#DEPS_DIR32}\share\ghostscript\*"; DestDir: "{app}\share\ghostscript"; Components: gs and ({#GIMP_ARCHS}); Flags: recursesubdirs restartreplace uninsrestartdelete ignoreversion
-Source: "{#GIMP_DIR32}\share\locale\*"; DestDir: "{app}\share\locale"; Components: loc; Flags: recursesubdirs restartreplace uninsrestartdelete ignoreversion
-Source: "{#DEPS_DIR32}\share\locale\*"; DestDir: "{app}\share\locale"; Components: loc; Flags: recursesubdirs restartreplace uninsrestartdelete ignoreversion
+;Optional arch-neutral files (full install)
 #ifdef LUA
-Source: "{#DEPS_DIR32}\share\lua\*"; DestDir: "{app}\share\lua"; Components: lua and ({#GIMP_ARCHS}); Flags: recursesubdirs restartreplace ignoreversion uninsrestartdelete
+Source: "{#GIMP_DIR32}\lib\gimp\{#GIMP_PKGCONFIG_VERSION}\interpreters\lua.interp"; DestDir: "{app}\lib\gimp\{#GIMP_PKGCONFIG_VERSION}\interpreters"; Components: (lua32 or lua64 or luaARM64); Flags: {#COMMON_FLAGS}
+Source: "{#GIMP_DIR32}\*.lua"; DestDir: "{app}"; Components: (lua32 or lua64 or luaARM64); Flags: {#COMMON_FLAGS}
 #endif
-Source: "{#DEPS_DIR32}\share\mypaint-data\*"; DestDir: "{app}\share\mypaint-data"; Components: mypaint; Flags: recursesubdirs restartreplace uninsrestartdelete ignoreversion
 #ifdef PYTHON
-Source: "{#GIMP_DIR32}\lib\gimp\{#DIR_VER}\plug-ins\*.py"; DestDir: "{app}\lib\gimp\{#DIR_VER}\plug-ins"; Components: py; Flags: recursesubdirs restartreplace uninsrestartdelete ignoreversion
+Source: "{#GIMP_DIR32}\lib\gimp\{#GIMP_PKGCONFIG_VERSION}\environ\py*.env"; DestDir: "{app}\lib\gimp\{#GIMP_PKGCONFIG_VERSION}\environ"; Components: (py32 or py64 or pyARM64); Flags: {#COMMON_FLAGS}
+Source: "{#GIMP_DIR32}\lib\gimp\{#GIMP_PKGCONFIG_VERSION}\interpreters\pygimp.interp"; DestDir: "{app}\lib\gimp\{#GIMP_PKGCONFIG_VERSION}\interpreters"; Components: (py32 or py64 or pyARM64); Flags: {#COMMON_FLAGS}
+Source: "{#GIMP_DIR32}\*.py"; DestDir: "{app}"; Components: (py32 or py64 or pyARM64); Flags: {#COMMON_FLAGS}
 #endif
+Source: "{#GIMP_DIR32}\share\locale\*"; DestDir: "{app}\share\locale"; Components: loc; Flags: dontcopy {#COMMON_FLAGS}
+#include ASSETS_DIR + "\base_po-files.list"
+Source: "{#DEPS_DIR32}\share\mypaint-data\*"; DestDir: "{app}\share\mypaint-data"; Components: mypaint; Flags: {#COMMON_FLAGS}
 
-
-;files arch specific
+;Required and optional arch specific files (binaries), except TWAIN in x64 and amd64
 ;i686
 #define PLATFORM X86
 #include "base_executables.isi"
-;special case, since 64bit version doesn't work, and is excluded in base_executables.isi
-Source: "{#GIMP_DIR32}\lib\gimp\{#DIR_VER}\plug-ins\twain.exe"; DestDir: "{app}\lib\gimp\{#DIR_VER}\plug-ins"; Components: gimp32; Flags: recursesubdirs restartreplace uninsrestartdelete ignoreversion
-
+;TWAIN is always installed in the 32-bit version of GIMP
+Source: "{#GIMP_DIR32}\lib\gimp\{#GIMP_PKGCONFIG_VERSION}\plug-ins\twain.exe"; DestDir: "{app}\lib\gimp\{#GIMP_PKGCONFIG_VERSION}\plug-ins"; Components: gimp32; Flags: {#COMMON_FLAGS}
 ;x86_64
 #define PLATFORM X64
 #include "base_executables.isi"
-
 ;AArch64
 #define PLATFORM ARM64
 #include "base_executables.isi"
 
-;32-on-64bit
+;Optional 32-bit specific bins for TWAIN, since x64 and arm64 twain drivers are rare
 #include "base_twain32on64.isi"
-;prefer 32bit twain plugin over 64bit because 64bit twain drivers are rare
-Source: "{#GIMP_DIR32}\lib\gimp\{#DIR_VER}\plug-ins\twain\twain.exe"; DestDir: "{app}\lib\gimp\{#DIR_VER}\plug-ins\twain"; Components: gimp32on64; Flags: recursesubdirs restartreplace uninsrestartdelete ignoreversion
-Source: "{#GIMP_DIR64}\lib\gimp\{#DIR_VER}\plug-ins\twain\twain.exe"; DestDir: "{app}\lib\gimp\{#DIR_VER}\plug-ins\twain"; Components: (not gimp32on64) and gimp64; Flags: recursesubdirs restartreplace uninsrestartdelete ignoreversion
-Source: "{#GIMP_DIRA64}\lib\gimp\{#DIR_VER}\plug-ins\twain\twain.exe"; DestDir: "{app}\lib\gimp\{#DIR_VER}\plug-ins\twain"; Components: (not gimp32on64) and gimpARM64; Flags: recursesubdirs restartreplace uninsrestartdelete ignoreversion
-
-;special case due to MS-Windows engine
-Source: "{#DEPS_DIR32}\etc\gtk-3.0\*"; DestDir: "{app}\32\etc\gtk-3.0"; Components: gimp32on64; Flags: recursesubdirs restartreplace uninsrestartdelete ignoreversion
+Source: "{#GIMP_DIR32}\lib\gimp\{#GIMP_PKGCONFIG_VERSION}\plug-ins\twain\twain.exe"; DestDir: "{app}\lib\gimp\{#GIMP_PKGCONFIG_VERSION}\plug-ins\twain"; Components: gimp32on64; Flags: {#COMMON_FLAGS}
 
 ;upgrade zlib1.dll in System32 if it's present there to avoid breaking plugins
 ;sharedfile flag will ensure that the upgraded file is left behind on uninstall to avoid breaking other programs that use the file
 Source: "{#DEPS_DIR32}\bin\zlib1.dll"; DestDir: "{sys}"; Components: {#GIMP_ARCHS}; Flags: restartreplace sharedfile 32bit uninsrestartdelete comparetimestamp; Check: BadSysDLL('zlib1.dll',32)
 Source: "{#DEPS_DIR64}\bin\zlib1.dll"; DestDir: "{sys}"; Components: gimp64; Flags: restartreplace sharedfile uninsrestartdelete comparetimestamp; Check: BadSysDLL('zlib1.dll',64)
 
-;overridden configuration files
-#include "data_configoverride.isi"
+;allow specific config files to be overridden if '/configoverride=' is set at run time
+#define FindHandle
+#sub ProcessConfigFile
+  #define FileName FindGetFileName(FindHandle)
+Source: "{code:GetExternalConfDir}\{#FileName}"; DestDir: "{app}\{#ConfigDir}"; Flags: external restartreplace; Check: CheckExternalConf('{#FileName}')
+  #if BaseDir != GIMP_DIR32
+Source: "{code:GetExternalConfDir}\{#FileName}"; DestDir: "{app}\32\{#ConfigDir}"; Components: gimp32on64; Flags: external restartreplace; Check: CheckExternalConf('{#FileName}')
+  #endif
+#endsub
+#define FindResult
+#sub ProcessConfigDir
+  #emit ';; ' + ConfigDir
+  #emit ';; ' + BaseDir
+  #for {FindHandle = FindResult = FindFirst(AddBackslash(BaseDir) + AddBackSlash(ConfigDir) + "*", 0); \
+      FindResult; FindResult = FindNext(FindHandle)} ProcessConfigFile
+  #if FindHandle
+    #expr FindClose(FindHandle)
+  #endif
+#endsub
+#define public BaseDir GIMP_DIR32
+#define public ConfigDir "etc\gimp\" + GIMP_PKGCONFIG_VERSION
+#expr ProcessConfigDir
+#define public ConfigDir "etc\fonts"
+#expr ProcessConfigDir
 
 #endif //NOFILES
 
+;We need at least an empty folder to avoid GIMP*_LOCALEDIR warnings
+[Dirs]
+Name: "{app}\32\share\locale"; Components: gimp32on64; Flags: uninsalwaysuninstall
 
+
+;4.2 SPECIAL-CASE FILES TO BE WIPED
 [InstallDelete]
 Type: files; Name: "{app}\bin\gimp-?.?.exe"
 Type: files; Name: "{app}\bin\gimp-?.??.exe"
@@ -369,41 +406,106 @@ Type: files; Name: "{app}\bin\gimp-console-?.?.exe"
 Type: files; Name: "{app}\bin\gimp-console-?.??.exe"
 ;old ghostscript
 Type: filesandordirs; Name: "{app}\share\ghostscript\*"
-;<2.99.14 plug-ins and modules
-Type: files; Name: "{app}\lib\gimp\2.99\plug-ins\py-slice\py-slice.py"
-Type: files; Name: "{app}\lib\gimp\2.99\plug-ins\benchmark-foreground-extract\benchmark-foreground-extract.py"
-;Some typo in meson which we used for GIMP 2.99.12 installer.
-Type: files; Name: "{app}\lib\gimp\2.99\modules\libcontroller-dx-input.dll"
-;old icons
-#ifndef DEVEL
-Type: files; Name: "{autoprograms}\GIMP 2.lnk"
-Type: files; Name: "{autodesktop}\GIMP 2.lnk"
-#endif
 ;get previous GIMP icon name from uninstall name in Registry
-#if Defined(DEVEL) && DEVEL != ""
-Type: files; Name: "{autoprograms}\GIMP {reg:HKA\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\GIMP-{#MAJOR}.{#MINOR}_is1,DisplayVersion|GIMP {#MAJOR}.{#MINOR}}.lnk"; Check: CheckRegValueExists('SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\GIMP-{#MAJOR}.{#MINOR}_is1','DisplayVersion')
-Type: files; Name: "{autodesktop}\GIMP {reg:HKA\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\GIMP-{#MAJOR}.{#MINOR}_is1,DisplayVersion|GIMP {#MAJOR}.{#MINOR}}.lnk"; Check: CheckRegValueExists('SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\GIMP-{#MAJOR}.{#MINOR}_is1','DisplayVersion')
-#else
-Type: files; Name: "{autoprograms}\GIMP {reg:HKA\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\GIMP-{#MAJOR}_is1,DisplayVersion|GIMP {#MAJOR}}.lnk"; Check: CheckRegValueExists('SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\GIMP-{#MAJOR}_is1','DisplayVersion')
-Type: files; Name: "{autodesktop}\GIMP {reg:HKA\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\GIMP-{#MAJOR}_is1,DisplayVersion|GIMP {#MAJOR}}.lnk"; Check: CheckRegValueExists('SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\GIMP-{#MAJOR}_is1','DisplayVersion')
-#endif
+Type: files; Name: "{autoprograms}\{reg:HKA\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\GIMP-{#GIMP_MUTEX_VERSION}_is1,DisplayName|GIMP {#GIMP_MUTEX_VERSION}}.lnk"; Check: CheckRegValueExists('SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\GIMP-{#GIMP_MUTEX_VERSION}_is1','DisplayName')
+Type: files; Name: "{autodesktop}\{reg:HKA\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\GIMP-{#GIMP_MUTEX_VERSION}_is1,DisplayName|GIMP {#GIMP_MUTEX_VERSION}}.lnk"; Check: CheckRegValueExists('SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\GIMP-{#GIMP_MUTEX_VERSION}_is1','DisplayName')
 ;remove old babl and gegl plugins
 Type: filesandordirs; Name: "{app}\lib\babl-0.1"
 Type: filesandordirs; Name: "{app}\lib\gegl-0.4"
-
-[Registry]
-;remove LIBTHAI_DICTDIR variable set by original 2.10.8 installer
-Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"; ValueType: none; ValueName: "LIBTHAI_DICTDIR"; Flags: deletevalue uninsdeletevalue noerror
-#include "data_associations.isi"
+;This was bunbled in 3.0 RC1 but not needed since the "Debug" menu is hidden in stable releases
+#if (!Defined(GIMP_UNSTABLE) || GIMP_UNSTABLE=="") && (Defined(GIMP_RELEASE) && GIMP_RELEASE != "")
+	Type: files; Name: "{app}\bin\dot.exe"
+#endif
+;No need to all these python binaries shipped in 3.0 RC1
+Type: files; Name: "{app}\bin\python3*.exe"
+;Uneeded shipped headers in 3.0 RC3 (we now ship only babl, gegl and gimp)
+Type: filesandordirs; Name: "{app}\include\exiv2"
+Type: filesandordirs; Name: "{app}\include\gexiv2"
 
 [UninstallDelete]
 Type: files; Name: "{app}\uninst\uninst.inf"
-Type: files; Name: "{app}\lib\gimp\{#DIR_VER}\interpreters\lua.interp"
-Type: files; Name: "{app}\lib\gimp\{#DIR_VER}\environ\pygimp.env"
-;need to clean out all the generated .pyc files
-Type: filesandordirs; Name: "{app}\Python\*"
+Type: files; Name: "{app}\lib\gimp\{#GIMP_PKGCONFIG_VERSION}\interpreters\lua.interp"
+Type: files; Name: "{app}\lib\gimp\{#GIMP_PKGCONFIG_VERSION}\environ\pygimp.env"
 
+
+;4.3 KEYS TO BE REGISTERED
+[Registry]
+;'ms-settings:appsfeatures' page (using info from 3.2.3 [Setup] section above)
+;Root: HKA; Subkey: "Software\Microsoft\Windows\CurrentVersion\Uninstall\GIMP-{#GIMP_MUTEX_VERSION}_is1"; //(auto registered by Inno)
+
+;Add GIMP .exe to PATH/'Win + R' (conflicts with MSIX. See: ..\store\AppxManifest.xml)
+;Root: HKA; Subkey: "Software\Microsoft\Windows\CurrentVersion\App Paths\gimp-{#GIMP_MUTEX_VERSION}.exe"; Flags: uninsdeletekey
+;Root: HKA; Subkey: "Software\Microsoft\Windows\CurrentVersion\App Paths\gimp-{#GIMP_MUTEX_VERSION}.exe"; ValueType: string; ValueName: ""; ValueData: "{app}\bin\gimp-{#GIMP_MUTEX_VERSION}.exe"
+;Root: HKA; Subkey: "Software\Microsoft\Windows\CurrentVersion\App Paths\gimp-{#GIMP_MUTEX_VERSION}.exe"; ValueType: string; ValueName: "Path"; ValueData: "{app}\bin"
+
+;Shell "Open with"
+Root: HKA; Subkey: "Software\Classes\Applications\gimp-{#GIMP_MUTEX_VERSION}.exe"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Applications\gimp-{#GIMP_MUTEX_VERSION}.exe"; ValueType: string; ValueName: "FriendlyAppName"; ValueData: "GIMP"
+Root: HKA; Subkey: "Software\Classes\Applications\gimp-{#GIMP_MUTEX_VERSION}.exe\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\bin\gimp-{#GIMP_MUTEX_VERSION}.exe,1"
+Root: HKA; Subkey: "Software\Classes\Applications\gimp-{#GIMP_MUTEX_VERSION}.exe\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\bin\gimp-{#GIMP_MUTEX_VERSION}.exe"" ""%1"""
+;'ms-settings:defaultapps' page
+Root: HKA; Subkey: "Software\GIMP {#GIMP_MUTEX_VERSION}"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\GIMP {#GIMP_MUTEX_VERSION}\Capabilities"; ValueType: string; ValueName: "ApplicationName"; ValueData: "GIMP"
+Root: HKA; Subkey: "Software\GIMP {#GIMP_MUTEX_VERSION}\Capabilities"; ValueType: string; ValueName: "ApplicationIcon"; ValueData: "{app}\bin\gimp-{#GIMP_MUTEX_VERSION}.exe,0"
+Root: HKA; Subkey: "Software\GIMP {#GIMP_MUTEX_VERSION}\Capabilities"; ValueType: string; ValueName: "ApplicationDescription"; ValueData: "GIMP is a free raster graphics editor used for image retouching and editing, free-form drawing, converting between different image formats, and more specialized tasks."
+Root: HKA; Subkey: "Software\RegisteredApplications"; ValueType: string; ValueName: "GIMP {#GIMP_MUTEX_VERSION}"; ValueData: "Software\GIMP {#GIMP_MUTEX_VERSION}\Capabilities"; Flags: uninsdeletevalue
+;Associations
+#pragma option -e-
+#define protected
+#define Line=0
+#define FileLine
+#sub ProcessAssociation
+	#if !defined(Finished)
+		#if Copy(FileLine,1,1)=="#" || FileLine==""
+			//skip comments and empty lines
+		#else
+			#pragma message "Processing data_associations.list: " + FileLine
+Root: HKA; Subkey: "Software\Classes\.{#FileLine}\OpenWithProgids"; ValueType: string; ValueName: "GIMP{#GIMP_MUTEX_VERSION}.{#FileLine}"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\GIMP{#GIMP_MUTEX_VERSION}.{#FileLine}"; ValueType: string; ValueName: ""; ValueData: "GIMP {#CUSTOM_GIMP_VERSION} {#UpperCase(FileLine)}"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\GIMP{#GIMP_MUTEX_VERSION}.{#FileLine}\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\bin\gimp-{#GIMP_MUTEX_VERSION}.exe,2"
+Root: HKA; Subkey: "Software\Classes\GIMP{#GIMP_MUTEX_VERSION}.{#FileLine}\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\bin\gimp-{#GIMP_MUTEX_VERSION}.exe"" ""%1"""
+Root: HKA; Subkey: "Software\Classes\Applications\gimp-{#GIMP_MUTEX_VERSION}.exe\SupportedTypes"; ValueType: string; ValueName: ".{#FileLine}"; ValueData: ""
+Root: HKA; Subkey: "Software\GIMP {#GIMP_MUTEX_VERSION}\Capabilities\FileAssociations"; ValueType: string; ValueName: ".{#FileLine}"; ValueData: "GIMP{#GIMP_MUTEX_VERSION}.{#FileLine}"
+		#endif
+	#endif
+#endsub
+#define FileHandle
+#for {FileHandle = FileOpen(AddBackslash(SourcePath)+"data_associations.list"); \
+  FileHandle && !FileEof(FileHandle); FileLine = FileRead(FileHandle)} \
+  ProcessAssociation
+#if FileHandle
+  #expr FileClose(FileHandle)
+#endif
+;Associations (special case for .xcf files)
+Root: HKA; Subkey: "Software\Classes\.xcf\OpenWithProgids"; ValueType: string; ValueName: "GIMP{#GIMP_MUTEX_VERSION}.xcf"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\GIMP{#GIMP_MUTEX_VERSION}.xcf"; ValueType: string; ValueName: ""; ValueData: "GIMP {#CUSTOM_GIMP_VERSION} {#UpperCase(FileLine)}"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\GIMP{#GIMP_MUTEX_VERSION}.xcf\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\bin\gimp-{#GIMP_MUTEX_VERSION}.exe,1"
+Root: HKA; Subkey: "Software\Classes\GIMP{#GIMP_MUTEX_VERSION}.xcf\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\bin\gimp-{#GIMP_MUTEX_VERSION}.exe"" ""%1"""
+Root: HKA; Subkey: "Software\Classes\Applications\gimp-{#GIMP_MUTEX_VERSION}.exe\SupportedTypes"; ValueType: string; ValueName: ".xcf"; ValueData: ""
+Root: HKA; Subkey: "Software\GIMP {#GIMP_MUTEX_VERSION}\Capabilities\FileAssociations"; ValueType: string; ValueName: ".xcf"; ValueData: "GIMP{#GIMP_MUTEX_VERSION}.xcf"
+;Associations (make association for .ico files but do not set DefaultIcon since their content is the DefaultIcon)
+Root: HKA; Subkey: "Software\Classes\.ico\OpenWithProgids"; ValueType: string; ValueName: "GIMP{#GIMP_MUTEX_VERSION}.ico"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\GIMP{#GIMP_MUTEX_VERSION}.ico"; ValueType: string; ValueName: ""; ValueData: "GIMP {#CUSTOM_GIMP_VERSION}"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\GIMP{#GIMP_MUTEX_VERSION}.ico\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "%1"
+Root: HKA; Subkey: "Software\Classes\GIMP{#GIMP_MUTEX_VERSION}.ico\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\bin\gimp-{#GIMP_MUTEX_VERSION}.exe"" ""%1"""
+Root: HKA; Subkey: "Software\Classes\Applications\gimp-{#GIMP_MUTEX_VERSION}.exe\SupportedTypes"; ValueType: string; ValueName: ".ico"; ValueData: ""
+Root: HKA; Subkey: "Software\GIMP {#GIMP_MUTEX_VERSION}\Capabilities\FileAssociations"; ValueType: string; ValueName: ".ico"; ValueData: "GIMP{#GIMP_MUTEX_VERSION}.ico"
+
+
+;5 INSTALLER CUSTOM CODE
 [Code]
+//GENERAL VARS AND UTILS
+const
+	CP_ACP = 0;
+	CP_UTF8 = 65001;
+  COLOR_HOTLIGHT = 26;
+
+var
+	//pgSimple: TWizardPage;
+  InstallType: String;
+  InstallMode: (imNone, imSimple, imCustom, imRebootContinue);
+  ConfigOverride: (coUndefined, coOverride, coDontOverride);
+	Force32bitInstall: Boolean;
 
 function WideCharToMultiByte(CodePage: Cardinal; dwFlags: DWORD; lpWideCharStr: String; cchWideCharStr: Integer;
                              lpMultiByteStr: PAnsiChar; cbMultiByte: Integer; lpDefaultChar: Integer;
@@ -417,68 +519,909 @@ function GetLastError(): DWORD; external 'GetLastError@Kernel32 stdcall';
 
 function GetSysColor(nIndex: Integer): DWORD; external 'GetSysColor@user32.dll stdcall';
 
-function IsProcessorFeaturePresent(ProcessorFeature: DWORD): LongBool; external 'IsProcessorFeaturePresent@kernel32 stdcall';
+function GetButtonWidth(const Texts: TArrayOfString; const Minimum: Integer): Integer;
+var MeasureLabel: TNewStaticText;
+	i: Integer;
+begin
+	MeasureLabel := TNewStaticText.Create(WizardForm);
+	with MeasureLabel do
+	begin
+		Parent := WizardForm;
+		Left := 0;
+		Top := 0;
+		AutoSize := True;
+	end;
 
-//functions needed to get BPP
+	Result := Minimum;
+
+	for i := 0 to GetArrayLength(Texts) - 1 do
+	begin
+		MeasureLabel.Caption := Texts[i];
+		if (MeasureLabel.Width + ScaleX(16)) > Result then
+			Result := (MeasureLabel.Width + ScaleX(16));
+	end;
+
+	MeasureLabel.Free;
+end;
+
+#include "util_general.isi"
+
+#include "util_MessageWithURL.isi"
+
+
+//0. PRELIMINARY SETUP CODE
+
+//Existing 32-bit
+procedure Check32bitOverride;
+var i: Integer;
+	old: String;
+begin
+	Force32bitInstall := False;
+
+	old := LowerCase(GetPreviousData('32bitMode',''));
+
+	if old = 'true' then //ignore command line if previous install is already present
+		Force32bitInstall := True
+	else if old = 'false' then
+		Force32bitInstall := False
+	else
+		for i := 0 to ParamCount do //not a bug (in script anyway) - ParamCount returns the index of last ParamStr element, not the actual count
+			if ParamStr(i) = '/32' then
+			begin
+				Force32bitInstall := True;
+				break;
+			end;
+
+	DebugMsg('Check32bitOverride',BoolToStr(Force32bitInstall) + '[' + old + ']');
+end;
+
+procedure RegisterPreviousData(PreviousDataKey: Integer);
+begin
+	if Is64BitInstallMode() then
+		SetPreviousData(PreviousDataKey,'32BitMode',BoolToStr(Force32bitInstall));
+end;
+
+//Resume after reboot (if needed)
+function RestartSetupAfterReboot(): Boolean; forward;
+
+//Screen bit depth
 function GetDC(hWnd: Integer): Integer; external 'GetDC@User32 stdcall';
 function ReleaseDC(hWnd, hDC: Integer): Integer; external 'ReleaseDC@User32 stdcall';
 function GetDeviceCaps(hDC, nIndex: Integer): Integer; external 'GetDeviceCaps@GDI32 stdcall';
 
+const
+	BITSPIXEL = 12;
+  PLANES = 14;
+function BPPTooLowWarning(): Boolean;
+var hDC, bpp, pl: Integer;
+	Message,Buttons: TArrayOfString;
+begin
+	hDC := GetDC(0);
+	pl := GetDeviceCaps(hDC, PLANES);
+	bpp := GetDeviceCaps(hDC, BITSPIXEL);
+	ReleaseDC(0,hDC);
+
+	bpp := pl * bpp;
+
+	if bpp < 32 then
+	begin
+		SetArrayLength(Message,1);
+		SetArrayLength(Buttons,2);
+		Message[0] := CustomMessage('Require32BPP');
+		Buttons[0] := CustomMessage('Require32BPPContinue');
+		Buttons[1] := CustomMessage('Require32BPPExit');
+		if (not WizardSilent) and
+		   (MessageWithURL(Message, CustomMessage('Require32BPPTitle'), Buttons, mbError, 2, 2) = 2) then
+			Result := False
+		else
+			Result := True;
+	end
+	else
+		Result := True;
+end;
+
+//Check what type of installation is being done
+procedure CheckInstallType;
+var
+	isInstalled: String;
+	InstallLocation: String;
+	Installed_AppVersion: String;
+	Installed_AppVersionInt: Int64;
+	Installer_AppVersionInt: Int64;
+	ErrorCode: Integer;
+begin
+	isInstalled := 'notInstalled';
+	if RegQueryStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\GIMP-{#GIMP_MUTEX_VERSION}_is1',
+                           'DisplayVersion', Installed_AppVersion) then begin
+	    RegQueryStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\GIMP-{#GIMP_MUTEX_VERSION}_is1',
+                           'InstallLocation', InstallLocation);
+		StrToVersion(Installed_AppVersion, Installed_AppVersionInt);
+		isInstalled := 'Installed';
+	end;
+	if RegQueryStringValue(HKLM, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\GIMP-{#GIMP_MUTEX_VERSION}_is1',
+                           'DisplayVersion', Installed_AppVersion) then begin
+	    RegQueryStringValue(HKLM, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\GIMP-{#GIMP_MUTEX_VERSION}_is1',
+                           'InstallLocation', InstallLocation);
+	    StrToVersion(Installed_AppVersion, Installed_AppVersionInt);
+		isInstalled := 'Installed';
+	end;
+
+	StrToVersion('{#FULL_GIMP_VERSION}', Installer_AppVersionInt);
+
+	if (isInstalled = 'Installed') and not DirExists(ExtractFilePath(RemoveBackslashUnlessRoot(InstallLocation))) then begin
+        InstallType := 'itRepair';
+    end else if isInstalled = 'notInstalled' then begin
+	    InstallType := 'itInstall';
+	end else if ComparePackedVersion(Installer_AppVersionInt, Installed_AppVersionInt) = 0 then begin
+		InstallType := 'itReinstall';
+    end else if ComparePackedVersion(Installer_AppVersionInt, Installed_AppVersionInt) > 0 then begin
+	    InstallType := 'itUpdate';
+    end else begin
+	    InstallType := 'itDowngrade';
+	end;
+	DebugMsg('CheckInstallType','Installed GIMP {#GIMP_MUTEX_VERSION} is: ' + Installed_AppVersion + ', installer is: {#FULL_GIMP_VERSION}. So Install type is: ' + InstallType);
+	
+	//Inno does not support direct downgrade so let's block it to not break installs
+	if (not WizardSilent) and (InstallType = 'itDowngrade') then begin 
+	    if SuppressibleMsgBox(FmtMessage(CustomMessage('DowngradeError'), [Installed_AppVersion, '{#FULL_GIMP_VERSION}']), mbCriticalError, MB_OK, IDOK) = IDOK then begin
+			ShellExecAsOriginalUser('','ms-settings:appsfeatures','','',SW_SHOW,ewNoWait,ErrorCode);
+			Abort;
+		end;
+	end else if (WizardSilent) and (InstallType = 'itDowngrade') then begin 
+	    DebugMsg('CheckInstallType',CustomMessage('DowngradeError'));
+		Abort;
+	end;
+end;
+
+function InitializeSetup(): Boolean;
+#if (Defined(GIMP_UNSTABLE) && GIMP_UNSTABLE != "") || (Defined(GIMP_RC_VERSION) && GIMP_RC_VERSION != "") || (!Defined(GIMP_RELEASE) || GIMP_RELEASE=="") || Defined(DEVEL_WARNING)
+var Message,Buttons: TArrayOfString;
+#endif
+begin
+	CheckInstallType;
+	
+	ConfigOverride := coUndefined;
+
+	Check32bitOverride;
+
+	Result := RestartSetupAfterReboot(); //resume install after reboot - skip all setting pages, and install directly
+
+	if Result then
+		Result := BPPTooLowWarning();
+
+	if not Result then //no need to do anything else
+		exit;
+
+//Unstable version warning
+#if (Defined(GIMP_UNSTABLE) && GIMP_UNSTABLE != "") || (Defined(GIMP_RC_VERSION) && GIMP_RC_VERSION != "") || (!Defined(GIMP_RELEASE) || GIMP_RELEASE=="") || Defined(DEVEL_WARNING)
+	Explode(Message, CustomMessage('DevelopmentWarning'), #13#10);
+	SetArrayLength(Buttons,2);
+	Buttons[0] := CustomMessage('DevelopmentButtonContinue');
+	Buttons[1] := CustomMessage('DevelopmentButtonExit');
+	if (not WizardSilent) and
+	   (MessageWithURL(Message, CustomMessage('DevelopmentWarningTitle'), Buttons, mbError, 2, 2) = 2) then
+	begin
+		Result := False;
+		Exit;
+	end;
+#endif
+
+	try
+		ExtractTemporaryFile('installsplash_top.scale-100.bmp');
+		ExtractTemporaryFile('installsplash_top.scale-125.bmp');
+		ExtractTemporaryFile('installsplash_top.scale-150.bmp');
+		ExtractTemporaryFile('installsplash_top.scale-175.bmp');
+		ExtractTemporaryFile('installsplash_top.scale-200.bmp');
+		ExtractTemporaryFile('installsplash_top.scale-225.bmp');
+		ExtractTemporaryFile('installsplash_top.scale-250.bmp');
+		ExtractTemporaryFile('installsplash_bottom.bmp');
+	except
+		DebugMsg('InitializeSetup','Error extracting temporary file: ' + GetExceptionMessage);
+		MsgBox(CustomMessage('ErrorExtractingTemp') + #13#13 + GetExceptionMessage,mbError,MB_OK);
+		Result := False;
+		exit;
+	end;
+
+	//if InstallMode <> imRebootContinue then
+	//	SuppressibleMsgBox(CustomMessage('UninstallWarning'),mbError,MB_OK,IDOK);
+end;
+
+
+//1. WELCOME: add splash image with buttons in non-default positions
+var
+  WelcomeBitmapTop: TBitmapImage;
+  WelcomeBitmapBottom: TBitmapImage;
+  btnInstall, btnCustomize: TNewButton;
+
+procedure UpdateWizardImages();
+var TopBitmap,BottomBitmap: TFileStream;
+begin
+	//Automatically scaled splash image
+	WelcomeBitmapTop := TBitmapImage.Create(WizardForm.WelcomePage);
+	with WelcomeBitmapTop do
+	begin
+		Parent := WizardForm.WelcomePage;
+		Width := WizardForm.WelcomePage.ClientWidth
+		Height := 1080 * Width / 1920
+		Left := 0;
+		Top := (WizardForm.ClientHeight - Height) / 2;
+		AutoSize := False;
+		Stretch := True;
+		Center := True;
+	end;
+	try
+		if WelcomeBitmapTop.Height <= 314 then begin
+			TopBitmap := TFileStream.Create(ExpandConstant('{tmp}\installsplash_top.scale-100.bmp'),fmOpenRead);
+		end else if WelcomeBitmapTop.Height <= 386 then begin
+			TopBitmap := TFileStream.Create(ExpandConstant('{tmp}\installsplash_top.scale-125.bmp'),fmOpenRead);
+		end else if WelcomeBitmapTop.Height <= 459 then begin
+			TopBitmap := TFileStream.Create(ExpandConstant('{tmp}\installsplash_top.scale-150.bmp'),fmOpenRead);
+		end else if WelcomeBitmapTop.Height <= 556 then begin
+			TopBitmap := TFileStream.Create(ExpandConstant('{tmp}\installsplash_top.scale-175.bmp'),fmOpenRead);
+		end else if WelcomeBitmapTop.Height <= 604 then begin
+			TopBitmap := TFileStream.Create(ExpandConstant('{tmp}\installsplash_top.scale-200.bmp'),fmOpenRead);
+		end else if WelcomeBitmapTop.Height <= 700 then begin
+			TopBitmap := TFileStream.Create(ExpandConstant('{tmp}\installsplash_top.scale-225.bmp'),fmOpenRead);
+		end else begin
+			TopBitmap := TFileStream.Create(ExpandConstant('{tmp}\installsplash_top.scale-250.bmp'),fmOpenRead);
+		end;
+		DebugMsg('UpdateWizardImages','Height: ' + IntToStr(WelcomeBitmapTop.Height));
+		WizardForm.WizardBitmapImage.Bitmap.LoadFromStream(TopBitmap);
+		WelcomeBitmapTop.Bitmap := WizardForm.WizardBitmapImage.Bitmap;
+	except
+		DebugMsg('UpdateWizardImages','Error loading image: ' + GetExceptionMessage);
+	finally
+		if TopBitmap <> nil then
+			TopBitmap.Free;
+	end;
+	WizardForm.WelcomePage.Color := clNone;
+
+	//Blurred background
+	WelcomeBitmapBottom := TBitmapImage.Create(WizardForm);
+	with WelcomeBitmapBottom do
+	begin
+		Left := 0;
+		Top := 0;
+		Parent := WizardForm;
+		Width := WizardForm.ClientWidth;
+		Height := WizardForm.ClientHeight;
+		Stretch := True;
+	end;
+	try
+		BottomBitmap := TFileStream.Create(ExpandConstant('{tmp}\installsplash_bottom.bmp'),fmOpenRead);
+		WizardForm.WizardBitmapImage.Bitmap.LoadFromStream(BottomBitmap);
+		WelcomeBitmapBottom.Bitmap := WizardForm.WizardBitmapImage.Bitmap;
+	except
+		DebugMsg('UpdateWizardImages','Error loading image: ' + GetExceptionMessage);
+	finally
+		if BottomBitmap <> nil then
+			BottomBitmap.Free;
+	end;
+	WizardForm.WizardBitmapImage.Width := WizardForm.ClientWidth;
+	WizardForm.WizardBitmapImage.Height := WizardForm.ClientHeight;
+end;
+
+procedure PrepareWelcomePage();
+begin
+	if not WizardSilent then
+	begin
+		WizardForm.NextButton.Visible := False;
+
+		if not (InstallType = 'itRepair') then begin
+		    btnInstall.Visible := True;
+		end;
+		btnInstall.TabOrder := 1;
+
+		//Inno does not support "repairing" a lost install so let's show Customize button to allow to repair installs
+		//Inno does not support changing components at reinstall or update so let's hide Customize to not break installs
+		if (InstallType = 'itRepair') or (InstallType = 'itInstall') then begin
+		    btnCustomize.Visible := True;
+		end;
+
+		WizardForm.Bevel.Visible := False;
+		WizardForm.WelcomeLabel1.Visible := False;
+		WizardForm.WelcomeLabel2.Visible := False;
+
+		WelcomeBitmapBottom.Visible := True;
+	end;
+end;
+
+procedure CleanUpCustomWelcome();
+begin
+	WizardForm.NextButton.Visible := True;
+	if not (InstallType = 'itRepair') then begin
+	     btnInstall.Visible := False;
+	end;
+	if (InstallType = 'itRepair') or (InstallType = 'itInstall') then begin
+	     btnCustomize.Visible := False;
+    end;
+
+	WizardForm.Bevel.Visible := True;
+	WelcomeBitmapBottom.Visible := False;
+end;
+
+procedure InstallOnClick(Sender: TObject);
+begin
+	DebugMsg('Install mode','Simple');
+	InstallMode := imSimple;
+
+	CleanUpCustomWelcome();
+
+	WizardForm.NextButton.OnClick(TNewButton(Sender).Parent);
+end;
+
+procedure CustomizeOnClick(Sender: TObject);
+begin
+	DebugMsg('Install mode','Custom');
+	InstallMode := imCustom;
+
+	CleanUpCustomWelcome();
+
+	WizardForm.NextButton.OnClick(TNewButton(Sender).Parent);
+end;
+
+procedure InitCustomPages();
+var	i,ButtonWidth: Integer;
+	ButtonText: TArrayOfString;
+	MeasureLabel: TNewStaticText;
+	//lblInfo: TNewStaticText;
+begin
+	DebugMsg('InitCustomPages','wpLicense');
+
+	CheckInstallType;
+
+	btnInstall := TNewButton.Create(WizardForm);
+	with btnInstall do
+	begin
+		Parent := WizardForm;
+		Width := WizardForm.NextButton.Width;
+		Height := WizardForm.NextButton.Height;
+		Left := WizardForm.NextButton.Left;
+		Top := WizardForm.NextButton.Top;
+		if InstallType = 'itInstall' then begin
+		    Caption := CustomMessage('Install');
+	    end else if InstallType = 'itReinstall' then begin
+		    Caption := CustomMessage('Reinstall');
+	    end else if InstallType = 'itUpdate' then begin
+		    Caption := CustomMessage('Update');
+		end;
+		Default := True;
+		Visible := False;
+
+		OnClick := @InstallOnClick;
+	end;
+
+	//used to measure text width
+	MeasureLabel := TNewStaticText.Create(WizardForm);
+	with MeasureLabel do
+	begin
+		Parent := WizardForm;
+		Left := 0;
+		Top := 0;
+		AutoSize := True;
+		if InstallType = 'itRepair' then begin
+		    Caption := CustomMessage('Repair');
+		end else if InstallType = 'itInstall' then begin
+		    Caption := CustomMessage('Customize');
+		end;
+	end;
+
+	btnCustomize := TNewButton.Create(WizardForm);
+	with btnCustomize do
+	begin
+		Parent := WizardForm;
+		Width := WizardForm.NextButton.Width;
+
+		if Width < (MeasureLabel.Width + ScaleX(8)) then
+			Width := MeasureLabel.Width + ScaleX(8);
+
+		Height := WizardForm.NextButton.Height;
+		Left := WizardForm.ClientWidth - (WizardForm.CancelButton.Left + WizardForm.CancelButton.Width);
+		//Left := WizardForm.BackButton.Left;
+		Top := WizardForm.NextButton.Top;
+		Visible := False;
+
+		if InstallType = 'itRepair' then begin
+		    Caption := CustomMessage('Repair');
+		end else if InstallType = 'itInstall' then begin
+		    Caption := CustomMessage('Customize');
+		end;
+		   
+		OnClick := @CustomizeOnClick;
+	end;
+
+	MeasureLabel.Free;
+	
+end;
+
+
+//2. LICENSE
+procedure InfoBeforeLikeLicense();
+begin
+	WizardForm.Bevel.Visible := False;
+
+	WizardForm.InfoBeforeClickLabel.Visible := False;
+	WizardForm.InfoBeforeMemo.Height := WizardForm.InfoBeforeMemo.Height + WizardForm.InfoBeforeMemo.Top - WizardForm.InfoBeforeClickLabel.Top;
+	WizardForm.InfoBeforeMemo.Top := WizardForm.InfoBeforeClickLabel.Top;
+end;
+
+
+//3. INSTALL DIR: override Inno custom dir icon
+procedure NativeDirIcon();
+var TypRect: TRect;
+    Icon: THandle;
+	IconSize: Integer;
+begin
+    WizardForm.SelectDirBitmapImage.Visible := False;
+
+	Icon := ExtractIcon(0,'imageres.dll',3)
+    with TBitmapImage.Create(WizardForm.SelectDirPage) do begin
+        Parent := WizardForm.SelectDirPage;
+	   	with Bitmap do begin
+            Left := 0;
+	        Top := 0;
+	        AutoSize := True;
+			Center := True;
+			Width := ScaleY(32);
+            Height := ScaleY(32);
+			Canvas.FillRect(TypRect);
+
+			if WizardForm.Font.PixelsPerInch >= 168 then begin          //175% scaling
+				IconSize := 64;
+			end else if WizardForm.Font.PixelsPerInch >= 144 then begin //150% scaling
+				IconSize := 48;
+			end else if WizardForm.Font.PixelsPerInch >= 120 then begin //125% scaling
+				IconSize := 32;
+			end else begin                                              //100% scaling
+				IconSize := 32;
+			end;
+			DrawIconEx(Canvas.Handle, 0, 0, Icon, IconSize, IconSize, 0, 0, DI_NORMAL);
+        end;
+    end;
+end;
+
+//4. COMPONENTS: Add panel with description on click, to the right of the list
+var
+	lblComponentDescription: TNewStaticText;
 
 procedure ComponentsListOnClick(pSender: TObject); forward;
-procedure SaveToUninstInf(const pText: AnsiString); forward;
-procedure CreateRunOnceEntry; forward;
-function RestartSetupAfterReboot(): Boolean; forward;
-procedure AssociationsCleanUp(); forward;
+
+procedure SelectComponentsFaceLift();
+var pnlDescription: TPanel;
+	lblDescription: TNewStaticText;
+begin
+	DebugMsg('SelectComponentsFaceLift','');
+
+	if WizardForm.ComponentsList.Width = WizardForm.SelectComponentsPage.Width then
+		WizardForm.ComponentsList.Width := Round(WizardForm.ComponentsList.Width * 0.6)
+	else
+		exit;
+	DebugMsg('SelectComponentsFaceLift','2');
+
+	WizardForm.ComponentsList.OnClick := @ComponentsListOnClick;
+
+	lblDescription := TNewStaticText.Create(WizardForm.ComponentsList.Parent)
+	with lblDescription do
+	begin
+		Left := WizardForm.ComponentsList.Left + WizardForm.ComponentsList.Width + ScaleX(16);
+		Top := WizardForm.ComponentsList.Top;
+		AutoSize := True;
+		Caption := CustomMessage('ComponentsDescription');
+	end;
+
+	pnlDescription := TPanel.Create(WizardForm.ComponentsList.Parent);
+	with pnlDescription do
+	begin
+		Parent := WizardForm.ComponentsList.Parent;
+		Left := WizardForm.ComponentsList.Left + WizardForm.ComponentsList.Width + ScaleX(8);
+		Width := WizardForm.TypesCombo.Width - WizardForm.ComponentsList.Width - ScaleX(8);
+		ParentColor := True;
+		BevelOuter := bvLowered;
+		BevelInner := bvRaised;
+		Top := WizardForm.ComponentsList.Top + Round(lblDescription.Height * 0.4);
+		Height := WizardForm.ComponentsList.Height - Round(lblDescription.Height * 0.4);
+	end;
+
+	lblDescription.Parent := WizardForm.ComponentsList.Parent; //place lblDescription above pnlDescription
+
+	lblComponentDescription := TNewStaticText.Create(pnlDescription);
+	with lblComponentDescription do
+	begin
+		Parent := pnlDescription;
+		Left := ScaleX(8);
+		WordWrap := True;
+		AutoSize := False;
+		Width := Parent.Width - ScaleX(16);
+		Height := Parent.Height - ScaleY(20);
+		Top := ScaleY(12);
+	end;
+end;
+
+procedure ComponentsListOnClick(pSender: TObject);
+var i,j: Integer;
+	Components: TArrayOfString;
+	ComponentDesc: String;
+begin
+	DebugMsg('ComponentsListOnClick','');
+
+	Components := ['Gimp','Deps','Debug','Dev','Ghostscript','Lua','Python','Translations','MyPaint','Gimp32'];
+	ComponentDesc := '';
+
+	for i := 0 to TNewCheckListBox(pSender).Items.Count - 1 do
+		if TNewCheckListBox(pSender).Selected[i] then
+		begin
+			for j := 0 to Length(Components) - 1 do
+			begin
+				if TNewCheckListBox(pSender).Items.Strings[i] = CustomMessage('Components' + Components[j]) then
+					ComponentDesc := CustomMessage('Components' + Components[j] + 'Description');
+			end;
+
+			if ComponentDesc <> '' then
+				break;
+		end;
+
+	lblComponentDescription.Caption := ComponentDesc;
+end;
+
+
+//5. TAKS (no customizations)
+
+
+//6. READY: Add formatting support to text box on ready page
+var
+	ReadyMemoRichText: String;
+
+procedure ReadyFaceLift();
+var rtfNewReadyMemo: TRichEditViewer;
+begin
+	DebugMsg('ReadyFaceLift','');
+	WizardForm.ReadyMemo.Visible := False;
+
+	rtfNewReadyMemo := TRichEditViewer.Create(WizardForm.ReadyMemo.Parent);
+	with rtfNewReadyMemo do
+	begin
+		Parent := WizardForm.ReadyMemo.Parent;
+		Scrollbars := ssVertical;
+		Color := WizardForm.Color;
+		BevelKind := bkFlat;
+		BorderStyle := bsNone;
+		UseRichEdit := True;
+		RTFText := ReadyMemoRichText;
+		ReadOnly := True;
+		Left := WizardForm.ReadyMemo.Left;
+		Top := WizardForm.ReadyMemo.Top;
+		Width := WizardForm.ReadyMemo.Width;
+		Height := WizardForm.ReadyMemo.Height;
+		Visible := True;
+	end;
+end;
+
+function CopyW(const S: String; const Start, Len: Integer): String; //work-around for unicode-related bug in Copy
+begin
+	Result := Copy(S, Start, Len);
+end;
+
+function Unicode2RTF(const pIn: String): String; //convert to RTF-compatible unicode
+var	i: Integer;
+	c: SmallInt;
+begin
+	Result := '';
+	for i := 1 to Length(pIn) do
+		if Ord(pIn[i]) <= 127 then
+		begin
+			Result := Result + pIn[i];
+		end else
+		begin
+			c := Ord(pIn[i]); //code points above 7FFF must be expressed as negative numbers
+			Result := Result + '\u' + IntToStr(c) + '?';
+		end;
+end;
 
 const
-	CP_ACP = 0;
-	CP_UTF8 = 65001;
+  RTFPara	  = '\par ';
+function ParseReadyMemoText(pSpaces,pText: String): String;
+var sTemp: String;
+begin
+	sTemp := CopyW(pText,Pos(#10,pText)+1,Length(pText));
+	sTemp := Replace('{','\{',sTemp);
+	sTemp := Replace('\','\\',sTemp);
+	sTemp := Replace(#13#10,RTFpara,sTemp);
+	sTemp := Replace(pSpaces,'',sTemp);
+	sTemp := '\b ' + CopyW(pText,1,Pos(#13,pText)-1) + '\par\sb0' +
+						'\li284\b0 ' + sTemp + '\par \pard';
 
-	COLOR_HOTLIGHT = 26;
+	Result := Unicode2RTF(sTemp);
+end;
 
-	PF_XMMI_INSTRUCTIONS_AVAILABLE = 6;
-
-	BITSPIXEL = 12;
-	PLANES = 14;
-
-	GIMP_URL = 'https://www.gimp.org/';
-
-	RTFHeader = '{\rtf1\deff0{\fonttbl{\f0\fswiss\fprq2\fcharset0 Tahoma;}{\f1\fnil\fcharset2 Symbol;}}\viewkind4\uc1\fs16';
+const
+  RTFHeader = '{\rtf1\deff0{\fonttbl{\f0\fswiss\fprq2\fcharset0 Segoe UI;}{\f1\fnil\fcharset2 Segoe UI Symbol;}}\viewkind4\uc1\fs18';
 	//RTFBullet = '{\pntext\f1\''B7\tab}';
-	RTFPara	  = '\par ';
+function UpdateReadyMemo(pSpace, pNewLine, pMemoUserInfo, pMemoDirInfo, pMemoTypeInfo, pMemoComponentsInfo, pMemoGroupInfo, pMemoTasksInfo: String): String;
+var sText: String;
+	bShowAssoc: Boolean;
+	i,j: Integer;
+begin
+	DebugMsg('UpdateReadyMemo','');
+	(* Prepare the text for new Ready Memo *)
 
-	RunOnceName = 'Resume GIMP {#VERSION} install';
+	sText := RTFHeader;
+	if pMemoDirInfo <> '' then
+		sText := sText + ParseReadyMemoText(pSpace,pMemoDirInfo) + '\sb100';
+	sText := sText + ParseReadyMemoText(pSpace,pMemoTypeInfo);
+	sText := sText + '\sb100' + ParseReadyMemoText(pSpace,pMemoComponentsInfo);
 
-	CONFIG_OVERRIDE_PARAM = 'configoverride';
+	If pMemoTasksInfo<>'' then
+		sText := sText + '\sb100' + ParseReadyMemoText(pSpace,pMemoTasksInfo);
 
-	UNINSTALL_MAX_WAIT_TIME = 10000;
+	ReadyMemoRichText := Copy(sText,1,Length(sText)-6) + '}';
+
+	Result := 'If you see this, something went wrong';
+end;
+
+
+//7.1 BEFORE INSTALL
+
+//Create restore point
+procedure RestorePoint();
+var
+  ResultCode: Integer;
+begin
+  StatusLabel(CustomMessage('CreatingRestorePoint'),'');
+  if not ShellExec('RunAs', 'powershell', ExpandConstant('Checkpoint-Computer -Description "GIMP_{#CUSTOM_GIMP_VERSION}_install" -RestorePointType APPLICATION_INSTALL'),
+                   '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+  begin
+    DebugMsg('RestorePoint','Failed to create restore point. Error code: ' + IntToStr(ResultCode));
+  end;
+end;
+
+
+//Unistall old version of GIMP (only if needed)
+const
+  UNINSTALL_MAX_WAIT_TIME = 10000;
 	UNINSTALL_CHECK_TIME    =   250;
 
 type
 	TRemoveOldGIMPResult = (rogContinue, rogRestartRequired, rogUninstallFailed, rogCantUninstall);
+procedure DoUninstall(const UninstStr, InstallDir: String; const pInfoLabel: TNewStaticText; var oResult: TRemoveOldGIMPResult);
+var InResult: TRemoveOldGIMPResult;
+	ResultCode, i: Integer;
+begin
+	InResult := oResult;
 
-var
-	lblComponentDescription: TNewStaticText;
+	DebugMsg('DoUninstall','Uninstall string: ' + UninstStr);
 
-	ReadyMemoRichText: String;
+	//when installing to same directory, assume that restart is required by default ...
+	if LowerCase(RemoveBackslashUnlessRoot(InstallDir)) = LowerCase(RemoveBackslashUnlessRoot(ExpandConstant('{app}'))) then
+		oResult := rogRestartRequired
+	else
+		oResult := InResult;
 
-	WelcomeBitmapBottom: TBitmapImage;
+	pInfoLabel.Caption := InstallDir;
 
-	//pgSimple: TWizardPage;
-	btnInstall, btnCustomize: TNewButton;
+	if not Exec('>',UninstStr,'',SW_SHOW,ewWaitUntilTerminated,ResultCode) then
+	begin
+		DebugMsg('DoUninstall','Exec('+UninstStr+') failed: ' + IntToStr(ResultCode));
 
-	InstallMode: (imNone, imSimple, imCustom, imRebootContinue);
+		if not DirExists(InstallDir) then //old install directory doesn't exist, assume it was deleted, and Registry info is orphaned
+		begin
+			DebugMsg('DoUninstall','Install directory doesn'#39't exist: ' + InstallDir + ', resuming install');
+			oResult := InResult
+		end else
+		begin
+			oResult := rogUninstallFailed;
+		end;
 
-	ConfigOverride: (coUndefined, coOverride, coDontOverride);
+		exit;
+	end;
 
-	Force32bitInstall: Boolean;
+	DebugMsg('DoUninstall','Exec succeeded, uninstaller result: ' + IntToStr(ResultCode));
 
-	asUninstInf: TArrayOfString; //uninst.inf contents (loaded at start of uninstall, executed at the end)
+	//... unless the complete installation directory was removed on uninstall
+	i := 0;
+	while i < (UNINSTALL_MAX_WAIT_TIME / UNINSTALL_CHECK_TIME) do
+	begin
+		if not DirExists(ExpandConstant('{app}')) then
+		begin
+			DebugMsg('DoUninstall','Existing GIMP directory removed, restoring previous restart requirement');
+			oResult := InResult; //restore previous result
+			break;
+		end;
+		DebugMsg('DoUninstall','Waiting for ' + ExpandConstant('{app}') + ' to disappear [' + IntToStr(i) + ']');
+		Sleep(UNINSTALL_CHECK_TIME); //it may take a few seconds for the uninstaller to remove the directory after it's exited
+		Inc(i);
+	end;
+end;
 
+function RemoveOldGIMPVersions(): TRemoveOldGIMPResult;
+var lblInfo1,lblInfo2: TNewStaticText;
+	RootKey: Integer;
+	OldPath, UninstallString, WhichStr: String;
+begin
+	Result := rogContinue;
 
-#include "util_MessageWithURL.isi"
+	lblInfo1 := TNewStaticText.Create(WizardForm.PreparingPage);
+	with lblInfo1 do
+	begin
+		Parent := WizardForm.PreparingPage;
+		Left := 0;
+		Top := 0;
+		AutoSize := True;
+		WordWrap := True;
+		Width := WizardForm.PreparingPage.ClientWidth;
 
+		Caption := CustomMessage('RemovingOldVersion');
+	end;
+
+	lblInfo2 := TNewStaticText.Create(WizardForm.PreparingPage);
+	with lblInfo2 do
+	begin
+		Parent := WizardForm.PreparingPage;
+		Left := 0;
+		AutoSize := True;
+		WordWrap := True;
+		Width := WizardForm.PreparingPage.ClientWidth;
+		Top := lblInfo1.Height + ScaleY(8);
+	end;
+
+	if ExpandConstant('{param:debugresume|0}') = '1' then
+		Result := rogRestartRequired; //for testing
+
+	if Is64BitInstallMode() then
+		RootKey := HKLM32
+	else
+		RootKey := HKLM;
+
+	if RegValueExists(RootKey,'Software\Microsoft\Windows\CurrentVersion\Uninstall\WinGimp-2.0_is1',
+	                  'Inno Setup: App Path') then
+	begin
+		if RegQueryStringValue(RootKey,'Software\Microsoft\Windows\CurrentVersion\Uninstall\WinGimp-2.0_is1',
+		                       'Inno Setup: App Path',OldPath) then
+		begin
+			DebugMsg('RemoveOldGIMPVersions','Found legacy GIMP install, removing');
+
+			if RegValueExists(RootKey,'Software\Microsoft\Windows\CurrentVersion\Uninstall\WinGimp-2.0_is1',
+			                  'QuietUninstallString') then
+				WhichStr := 'QuietUninstallString'
+			else if RegValueExists(RootKey,'Software\Microsoft\Windows\CurrentVersion\Uninstall\WinGimp-2.0_is1',
+			                       'UninstallString') then
+				WhichStr := 'UninstallString'
+			else
+			begin
+				Result := rogCantUninstall;
+				exit;
+			end;
+
+			if not RegQueryStringValue(RootKey,'Software\Microsoft\Windows\CurrentVersion\Uninstall\WinGimp-2.0_is1',
+			                           WhichStr,UninstallString) then
+			begin
+				Result := rogCantUninstall;
+				exit;
+			end;
+
+			if WhichStr = 'UninstallString' then
+				UninstallString := UninstallString + ' /SILENT';
+
+			UninstallString := UninstallString + ' /NORESTART';
+
+			DoUninstall(UninstallString, OldPath, lblInfo2, Result);
+		end;
+	end;
+
+	lblInfo1.Free;
+	lblInfo2.Free;
+end;
+
+procedure CreateRunOnceEntry; forward;
+
+function PrepareToInstall(var pNeedsRestart: Boolean): String;
+var	ChecksumBefore, ChecksumAfter: String;
+	RemoveResult: TRemoveOldGIMPResult;
+begin
+	ChecksumBefore := MakePendingFileRenameOperationsChecksum;
+
+  RemoveResult := RemoveOldGIMPVersions;
+
+	if RemoveResult = rogRestartRequired then //old version was uninstalled, but something was left behind, so to be safe a reboot
+	begin                                     //is enforced - this can only happen when reusing install directory
+
+		DebugMsg('PrepareToInstall','RemoveOldGIMPVersions requires restart');
+
+		ChecksumAfter := MakePendingFileRenameOperationsChecksum;
+		if (ChecksumBefore <> ChecksumAfter) or (ExpandConstant('{param:debugresume|0}') = '1') then
+		begin //this check is most likely redundant, since the uninstaller will be added to pending rename operations
+			CreateRunOnceEntry;
+			pNeedsRestart := True;
+			Result := CustomMessage('RebootRequiredFirst');
+		end;
+	end else
+	if RemoveResult = rogContinue then
+	begin
+		DebugMsg('PrepareToInstall','RemoveOldGIMPVersions finished successfully');
+		Result := ''; //old version was uninstalled successfully, nothing was left behind, so install can continue immediately
+	end else
+	if RemoveResult = rogUninstallFailed then
+	begin
+		DebugMsg('PrepareToInstall','RemoveOldGIMPVersions failed to uninstall old GIMP version');
+		Result := FmtMessage(CustomMessage('RemovingOldVersionFailed'),['{#CUSTOM_GIMP_VERSION}',ExpandConstant('{app}')]);
+	end else
+	if RemoveResult = rogCantUninstall then
+	begin
+		DebugMsg('PrepareToInstall','RemoveOldGIMPVersions failed to uninstall old GIMP version [1]');
+		Result := FmtMessage(CustomMessage('RemovingOldVersionCantUninstall'),['{#CUSTOM_GIMP_VERSION}',ExpandConstant('{app}')]);
+	end else
+	begin
+		DebugMsg('PrepareToInstall','Internal error 11');
+		Result := FmtMessage(CustomMessage('InternalError'),['11']); //should never happen
+	end;
+end;
+
+//remove .pdb files from previous installs
+//there's no built-in way in Inno to recursively delete files with wildcard+extension
+procedure RemoveDebugFilesFromDir(pDir: String; var pDirectories: TArrayOfString);
+var FindRec: TFindRec;
+begin
+	DebugMsg('RemoveDebugFilesFromDir', pDir);
+	WizardForm.FilenameLabel.Caption := pDir;
+	if FindFirst(AddBackSlash(pDir) + '*', FindRec) then
+	begin
+		try
+			repeat
+				if FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY = 0 then
+				begin
+					//Up to GIMP 3.0.2 we shipped only DWARF .debug symbols
+					if (Length(FindRec.Name) > 6) and (LowerCase(Copy(FindRec.Name, Length(FindRec.Name) - 5, 6)) = '.debug') then
+					begin
+						DebugMsg('RemoveDebugFilesFromDir', '> ' + FindRec.Name);
+						DeleteFile(AddBackSlash(pDir) + FindRec.Name);
+					end;
+
+					//Starting with GIMP 3.0.4 we ship native CodeView .pdb symbols
+					if (Length(FindRec.Name) > 4) and (LowerCase(Copy(FindRec.Name, Length(FindRec.Name) - 3, 4)) = '.pdb') then
+					begin
+						DebugMsg('RemoveDebugFilesFromDir', '> ' + FindRec.Name);
+						DeleteFile(AddBackSlash(pDir) + FindRec.Name);
+					end;
+				end else
+				begin
+					if (FindRec.Name <> '.') and (FindRec.Name <> '..') then
+					begin
+						SetArrayLength(pDirectories, GetArrayLength(pDirectories) + 1);
+						pDirectories[GetArrayLength(pDirectories) - 1] := AddBackSlash(pDir) + FindRec.Name;
+					end;
+				end;
+			until not FindNext(FindRec);
+		finally
+			FindClose(FindRec);
+		end;
+	end;
+end;
+
+procedure RemoveDebugFiles();
+var Directories: TArrayOfString;
+	Index: Integer;
+begin
+	SetArrayLength(Directories, 1);
+	Directories[0] := ExpandConstant('{app}');
+	Index := 0;
+
+	WizardForm.StatusLabel.Caption := CustomMessage('RemovingOldFiles');
+
+	repeat
+		RemoveDebugFilesFromDir(Directories[Index], Directories);
+		Inc(Index);
+	until Index = GetArrayLength(Directories);
+end;
+
+procedure AssociationsCleanUp(); forward;
+
+//Check if icon exists in registry
+function CheckRegValueExists(const SubKeyName, ValueName: String): Boolean;
+begin
+	Result := RegValueExists(HKEY_AUTO, SubKeyName, ValueName);
+	DebugMsg('CheckRegValueExists',SubKeyName + ', ' + ValueName + ': ' + BoolToStr(Result));
+end;
+
+//Legacy arch check
 function Check3264(const pWhich: String): Boolean;
 begin
 	if pWhich = '64' then //x64 or arm64
@@ -492,9 +1435,6 @@ begin
 	else
 		RaiseException('Unknown check');
 end;
-
-
-#include "util_general.isi"
 
 //some programs improperly install libraries to the System32 directory, which then causes problems with plugins
 //this function checks if such file exists in System32, and lets setup update the file when it exists
@@ -534,21 +1474,15 @@ begin
 	DebugMsg('BadSysDLL','Result: ' + BoolToStr(Result));
 end;
 
-
-function CheckRegValueExists(const SubKeyName, ValueName: String): Boolean;
-begin
-	Result := RegValueExists(HKEY_AUTO, SubKeyName, ValueName);
-	DebugMsg('CheckRegValueExists',SubKeyName + ', ' + ValueName + ': ' + BoolToStr(Result));
-end;
-
+//Override some 'etc' configs (if requested)
+const
+  CONFIG_OVERRIDE_PARAM = 'configoverride';
 
 function DoConfigOverride: Boolean;
 var i: Integer;
 begin
-
 	if ConfigOverride = coUndefined then
 	begin
-
 		DebugMsg('DoConfigOverride', 'First call');
 
 		Result := False;
@@ -561,11 +1495,10 @@ begin
 				ConfigOverride := coOverride;
 				break;
 			end;
-
 	end
 	else if ConfigOverride = coOverride then
 		Result := True
-	else
+  else
 		Result := False;
 
 	DebugMsg('DoConfigOverride', BoolToStr(Result));
@@ -577,12 +1510,12 @@ begin
 		Result := ExpandConstant('{src}\')
 	else
 		Result := ExpandConstant('{param:' + CONFIG_OVERRIDE_PARAM + '|<>}\');
-	DebugMsg('GetExternalConfDir', Result);
+
+  DebugMsg('GetExternalConfDir', Result);
 end;
 
 function CheckExternalConf(const pFile: String): Boolean;
 begin
-
 	if not DoConfigOverride then //no config override
 		Result := False
 	else
@@ -592,343 +1525,19 @@ begin
 		else
 			Result := False;
 	end;
+
 	DebugMsg('CheckExternalConf', pFile + ': ' + BoolToStr(Result));
 end;
 
 
-procedure PrepareInterp();
-var InterpFile,InterpContent,LuaBin: String;
-begin
-#ifdef PYTHON
-	if IsComponentSelected('py') then
-	begin
-		StatusLabel(CustomMessage('SettingUpPyGimp'),'');
-
-		InterpFile := ExpandConstant('{app}\lib\gimp\{#DIR_VER}\interpreters\pygimp.interp');
-        DebugMsg('PrepareInterp','Writing interpreter file for gimp-python: ' + InterpFile);
-
-#ifdef DEVEL
-	#define PYTHON="python.exe"
+//7.2 INSTALL: show GIMP text (aka billboard) above progress bar
+#if Defined(GIMP_UNSTABLE) && GIMP_UNSTABLE != ""
+const
+	GIMP_URL = 'https://gimp.org/downloads/devel/';
 #else
-	#define PYTHON="pythonw.exe"
+const
+	GIMP_URL = 'https://gimp.org/downloads/';
 #endif
-
-		InterpContent := 'python=' + ExpandConstant('{app}\bin\{#PYTHON}') + #10 +
-		          'python3=' + ExpandConstant('{app}\bin\{#PYTHON}') + #10 +
-		          '/usr/bin/python=' + ExpandConstant('{app}\bin\{#PYTHON}') + #10 +
-		          '/usr/bin/python3=' + ExpandConstant('{app}\bin\{#PYTHON}') + #10 +
-		          ':Python:E::py::python:'#10;
-
-		if not SaveStringToUTF8File(InterpFile,InterpContent,False) then
-		begin
-			DebugMsg('PrepareInterp','Problem writing the file. [' + InterpContent + ']');
-			SuppressibleMsgBox(CustomMessage('ErrorUpdatingPython') + ' (2)',mbInformation,mb_ok,IDOK);
-		end;
-
-	end;
-#endif
-
-#ifdef LUA
-	if IsComponentSelected('lua') then
-	begin
-		InterpFile := ExpandConstant('{app}\lib\gimp\{#DIR_VER}\interpreters\lua.interp');
-        DebugMsg('PrepareInterp','Writing interpreter file for lua: ' + InterpFile);
-
-		LuaBin := 'luajit.exe'
-
-		InterpContent := 'lua=' + ExpandConstant('{app}\bin\') + LuaBin + #10 +
-		          'luajit=' + ExpandConstant('{app}\bin\') + LuaBin + #10 +
-		          '/usr/bin/luajit=' + ExpandConstant('{app}\bin\') + LuaBin + #10 +
-		          '/usr/bin/lua=' + ExpandConstant('{app}\bin\') + LuaBin + #10 +
-		          ':Lua:E::lua::' + LuaBin + ':'#10;
-
-		if not SaveStringToUTF8File(InterpFile,InterpContent,False) then
-		begin
-			DebugMsg('PrepareInterp','Problem writing the file. [' + InterpContent + ']');
-			SuppressibleMsgBox(CustomMessage('ErrorUpdatingPython') + ' (2)',mbInformation,mb_ok,IDOK);
-		end;
-
-	end;
-#endif
-
-// not optional
-// !!! use comma for binfmt delimiter and full Windows path in interpreter field of binfmt
-begin
-	InterpFile := ExpandConstant('{app}\lib\gimp\{#DIR_VER}\interpreters\gimp-script-fu-interpreter.interp');
-			DebugMsg('PrepareInterp','Writing interpreter file for gimp-script-fu-interpreter: ' + InterpFile);
-
-	InterpContent := 'gimp-script-fu-interpreter=' + ExpandConstant('{app}\bin\gimp-script-fu-interpreter-3.0.exe') + #10 +
-						'gimp-script-fu-interpreter-3.0=' + ExpandConstant('{app}\bin\gimp-script-fu-interpreter-3.0.exe') + #10 +
-						'/usr/bin/gimp-script-fu-interpreter=' + ExpandConstant('{app}\bin\gimp-script-fu-interpreter-3.0.exe') + #10 +
-						',ScriptFu,E,,scm,,' + ExpandConstant('{app}\bin\gimp-script-fu-interpreter-3.0.exe') + ','#10;
-
-	if not SaveStringToUTF8File(InterpFile,InterpContent,False) then
-	begin
-		DebugMsg('PrepareInterp','Problem writing the file. [' + InterpContent + ']');
-		SuppressibleMsgBox(CustomMessage('ErrorUpdatingScriptFu') + ' (2)',mbInformation,mb_ok,IDOK);
-	end;
-end;
-
-end;
-
-
-procedure PrepareGimpEnvironment();
-var EnvFile,Env: String;
-begin
-
-	StatusLabel(CustomMessage('SettingUpEnvironment'),'');
-
-	//set PATH to be used by plug-ins
-	EnvFile := ExpandConstant('{app}\lib\gimp\{#DIR_VER}\environ\default.env');
-	DebugMsg('PrepareGimpEnvironment','Setting environment in ' + EnvFile);
-
-	Env := #10'PATH=${gimp_installation_dir}\bin';
-
-	if IsComponentSelected('gimp32on64') then
-	begin
-
-		Env := Env + ';${gimp_installation_dir}\32\bin' + #10;
-
-	end else
-	begin
-
-		Env := Env + #10;
-
-	end;
-
-	DebugMsg('PrepareGimpEnvironment','Appending ' + Env);
-
-	if not SaveStringToUTF8File(EnvFile,Env,True) then
-	begin
-		DebugMsg('PrepareGimpEnvironment','Problem appending');
-		SuppressibleMsgBox(FmtMessage(CustomMessage('ErrorChangingEnviron'),[EnvFile]),mbInformation,mb_ok,IDOK);
-	end;
-
-	//workaround for high-DPI awareness of Python plug-ins
-	if IsComponentSelected('py') then
-	begin
-		EnvFile := ExpandConstant('{app}\lib\gimp\{#DIR_VER}\environ\pygimp.env');
-		DebugMsg('PrepareGimpEnvironment','Setting environment in ' + EnvFile);
-
-		Env := '__COMPAT_LAYER=HIGHDPIAWARE' + #10
-
-		if not SaveStringToUTF8File(EnvFile,Env,True) then
-		begin
-			DebugMsg('PrepareGimpEnvironment','Problem appending');
-			SuppressibleMsgBox(FmtMessage(CustomMessage('ErrorChangingEnviron'),[EnvFile]),mbInformation,mb_ok,IDOK);
-		end;
-	end;
-
-	// Disable check-update when run with specific option
-        if ExpandConstant('{param:disablecheckupdate|false}') = 'true' then
-	begin
-		EnvFile := ExpandConstant('{app}\share\gimp\{#DIR_VER}\gimp-release');
-		DebugMsg('DisableCheckUpdate','Disabling check-update in ' + EnvFile);
-
-                Env := 'check-update=false'
-
-		if not SaveStringToUTF8File(EnvFile,Env,True) then
-		begin
-			DebugMsg('PrepareGimpEnvironment','Problem appending');
-			SuppressibleMsgBox(FmtMessage(CustomMessage('ErrorChangingEnviron'),[EnvFile]),mbInformation,mb_ok,IDOK);
-		end;
-	end;
-end;
-
-
-procedure CleanUpCustomWelcome();
-begin
-	WizardForm.NextButton.Visible := True;
-	btnInstall.Visible := False;
-	btnCustomize.Visible := False;
-
-	WizardForm.Bevel.Visible := True;
-	WelcomeBitmapBottom.Visible := False;
-end;
-
-
-procedure InstallOnClick(Sender: TObject);
-begin
-	DebugMsg('Install mode','Simple');
-	InstallMode := imSimple;
-
-	CleanUpCustomWelcome();
-
-	WizardForm.NextButton.OnClick(TNewButton(Sender).Parent);
-end;
-
-
-procedure CustomizeOnClick(Sender: TObject);
-begin
-	DebugMsg('Install mode','Custom');
-	InstallMode := imCustom;
-
-	CleanUpCustomWelcome();
-
-	WizardForm.NextButton.OnClick(TNewButton(Sender).Parent);
-end;
-
-
-function GetButtonWidth(const Texts: TArrayOfString; const Minimum: Integer): Integer;
-var MeasureLabel: TNewStaticText;
-	i: Integer;
-begin
-	MeasureLabel := TNewStaticText.Create(WizardForm);
-	with MeasureLabel do
-	begin
-		Parent := WizardForm;
-		Left := 0;
-		Top := 0;
-		AutoSize := True;
-	end;
-
-	Result := Minimum;
-
-	for i := 0 to GetArrayLength(Texts) - 1 do
-	begin
-		MeasureLabel.Caption := Texts[i];
-		if (MeasureLabel.Width + ScaleX(16)) > Result then
-			Result := (MeasureLabel.Width + ScaleX(16));
-	end;
-
-	MeasureLabel.Free;
-end;
-
-
-procedure InitCustomPages();
-var	i,ButtonWidth: Integer;
-	ButtonText: TArrayOfString;
-	MeasureLabel: TNewStaticText;
-	//lblInfo: TNewStaticText;
-begin
-	DebugMsg('InitCustomPages','wpLicense');
-
-	btnInstall := TNewButton.Create(WizardForm);
-	with btnInstall do
-	begin
-		Parent := WizardForm;
-		Width := WizardForm.NextButton.Width;
-		Height := WizardForm.NextButton.Height;
-		Left := WizardForm.NextButton.Left;
-		Top := WizardForm.NextButton.Top;
-		Caption := CustomMessage('Install');
-		Default := True;
-		Visible := False;
-
-		OnClick := @InstallOnClick;
-	end;
-
-	//used to measure text width
-	MeasureLabel := TNewStaticText.Create(WizardForm);
-	with MeasureLabel do
-	begin
-		Parent := WizardForm;
-		Left := 0;
-		Top := 0;
-		AutoSize := True;
-		Caption := CustomMessage('Customize');
-	end;
-
-	btnCustomize := TNewButton.Create(WizardForm);
-	with btnCustomize do
-	begin
-		Parent := WizardForm;
-		Width := WizardForm.NextButton.Width;
-
-		if Width < (MeasureLabel.Width + ScaleX(8)) then
-			Width := MeasureLabel.Width + ScaleX(8);
-
-		Height := WizardForm.NextButton.Height;
-		Left := WizardForm.ClientWidth - (WizardForm.CancelButton.Left + WizardForm.CancelButton.Width);
-		//Left := WizardForm.BackButton.Left;
-		Top := WizardForm.NextButton.Top;
-		Visible := False;
-
-		Caption := CustomMessage('Customize');
-
-		OnClick := @CustomizeOnClick;
-	end;
-
-	MeasureLabel.Free;
-
-end;
-
-
-procedure SelectComponentsFaceLift();
-var pnlDescription: TPanel;
-	lblDescription: TNewStaticText;
-begin
-	DebugMsg('SelectComponentsFaceLift','');
-
-	if WizardForm.ComponentsList.Width = WizardForm.SelectComponentsPage.Width then
-		WizardForm.ComponentsList.Width := Round(WizardForm.ComponentsList.Width * 0.6)
-	else
-		exit;
-	DebugMsg('SelectComponentsFaceLift','2');
-
-	WizardForm.ComponentsList.OnClick := @ComponentsListOnClick;
-
-	lblDescription := TNewStaticText.Create(WizardForm.ComponentsList.Parent)
-	with lblDescription do
-	begin
-		Left := WizardForm.ComponentsList.Left + WizardForm.ComponentsList.Width + ScaleX(16);
-		Top := WizardForm.ComponentsList.Top;
-		AutoSize := True;
-		Caption := CustomMessage('ComponentsDescription');
-	end;
-
-	pnlDescription := TPanel.Create(WizardForm.ComponentsList.Parent);
-	with pnlDescription do
-	begin
-		Parent := WizardForm.ComponentsList.Parent;
-		Left := WizardForm.ComponentsList.Left + WizardForm.ComponentsList.Width + ScaleX(8);
-		Width := WizardForm.TypesCombo.Width - WizardForm.ComponentsList.Width - ScaleX(8);
-		BevelOuter := bvLowered;
-		BevelInner := bvRaised;
-		Top := WizardForm.ComponentsList.Top + Round(lblDescription.Height * 0.4);
-		Height := WizardForm.ComponentsList.Height - Round(lblDescription.Height * 0.4);
-	end;
-
-	lblDescription.Parent := WizardForm.ComponentsList.Parent; //place lblDescription above pnlDescription
-
-	lblComponentDescription := TNewStaticText.Create(pnlDescription);
-	with lblComponentDescription do
-	begin
-		Parent := pnlDescription;
-		Left := ScaleX(8);
-		WordWrap := True;
-		AutoSize := False;
-		Width := Parent.Width - ScaleX(16);
-		Height := Parent.Height - ScaleY(20);
-		Top := ScaleY(12);
-	end;
-
-end;
-
-
-procedure ReadyFaceLift();
-var rtfNewReadyMemo: TRichEditViewer;
-begin
-	DebugMsg('ReadyFaceLift','');
-	WizardForm.ReadyMemo.Visible := False;
-
-	rtfNewReadyMemo := TRichEditViewer.Create(WizardForm.ReadyMemo.Parent);
-	with rtfNewReadyMemo do
-	begin
-		Parent := WizardForm.ReadyMemo.Parent;
-		Scrollbars := ssVertical;
-		Color := WizardForm.Color;
-		UseRichEdit := True;
-		RTFText := ReadyMemoRichText;
-		ReadOnly := True;
-		Left := WizardForm.ReadyMemo.Left;
-		Top := WizardForm.ReadyMemo.Top;
-		Width := WizardForm.ReadyMemo.Width;
-		Height := WizardForm.ReadyMemo.Height;
-		Visible := True;
-	end;
-end;
-
 
 procedure lblURL_OnClick(Sender: TObject);
 var ErrorCode: Integer;
@@ -936,12 +1545,12 @@ begin
 	ShellExecAsOriginalUser('',GIMP_URL,'','',SW_SHOW,ewNoWait,ErrorCode);
 end;
 
-
 function MeasureLabel(const pText: String): Integer; //WordWrap + AutoSize works better with TNewStaticText than with TLabel,
 var lblMeasure: TNewStaticText;                      //abuse this
 begin
 	lblMeasure := TNewStaticText.Create(WizardForm.InstallingPage);
-	with lblMeasure do
+
+  with lblMeasure do
 	begin
 		Parent := WizardForm.InstallingPage;
 
@@ -953,16 +1562,18 @@ begin
 
 		Result := Height;
 	end;
-	lblMeasure.Free;
-end;
 
+  lblMeasure.Free;
+end;
 
 procedure InstallingFaceLift();
 var lblMessage1,lblURL,lblMessage2: TLabel; //TNewStaticText doesn't support alignment
 begin
+	WizardForm.Bevel.Visible := False;
+
 	with WizardForm.ProgressGauge do
 	begin
-		Height := ScaleY(16);
+		Height := ScaleY(21);
 		Top := WizardForm.InstallingPage.ClientHeight - Top - Height;
 
 		WizardForm.StatusLabel.Top := Top - WizardForm.FilenameLabel.Height - ScaleY(4);
@@ -1022,579 +1633,145 @@ begin
 	                           (lblMessage1.Height + ScaleY(4) + lblURL.Height + ScaleY(4) + lblMessage2.Height) / 2);
 	lblURL.Top := lblMessage1.Top + lblMessage1.Height + ScaleY(4);
 	lblMessage2.Top := lblURL.Top + lblURL.Height + ScaleY(4);
-
 end;
 
 
-procedure ComponentsListOnClick(pSender: TObject);
-var i,j: Integer;
-	Components: TArrayOfString;
-	ComponentDesc: String;
+//7.3 AFTER INSTALL
+
+//Create .interp files
+procedure PrepareInterp();
+var InterpFile,InterpContent,LuaBin: String;
 begin
-	DebugMsg('ComponentsListOnClick','');
-
-	Components := ['Gimp','Deps','Debug','Translations','MyPaint','Python','Ghostscript','Lua','Gimp32'];
-	ComponentDesc := '';
-
-	for i := 0 to TNewCheckListBox(pSender).Items.Count - 1 do
-		if TNewCheckListBox(pSender).Selected[i] then
-		begin
-			for j := 0 to Length(Components) - 1 do
-			begin
-				if TNewCheckListBox(pSender).Items.Strings[i] = CustomMessage('Components' + Components[j]) then
-					ComponentDesc := CustomMessage('Components' + Components[j] + 'Description');
-			end;
-
-			if ComponentDesc <> '' then
-				break;
-		end;
-
-	lblComponentDescription.Caption := ComponentDesc;
-
-end;
-
-
-function CopyW(const S: String; const Start, Len: Integer): String; //work-around for unicode-related bug in Copy
-begin
-	Result := Copy(S, Start, Len);
-end;
-
-function Unicode2RTF(const pIn: String): String; //convert to RTF-compatible unicode
-var	i: Integer;
-	c: SmallInt;
-begin
-	Result := '';
-	for i := 1 to Length(pIn) do
-		if Ord(pIn[i]) <= 127 then
-		begin
-			Result := Result + pIn[i];
-		end else
-		begin
-			c := Ord(pIn[i]); //code points above 7FFF must be expressed as negative numbers
-			Result := Result + '\u' + IntToStr(c) + '?';
-		end;
-end;
-
-function ParseReadyMemoText(pSpaces,pText: String): String;
-var sTemp: String;
-begin
-
-	sTemp := CopyW(pText,Pos(#10,pText)+1,Length(pText));
-	sTemp := Replace('{','\{',sTemp);
-	sTemp := Replace('\','\\',sTemp);
-	sTemp := Replace(#13#10,RTFpara,sTemp);
-	sTemp := Replace(pSpaces,'',sTemp);
-	sTemp := '\b ' + CopyW(pText,1,Pos(#13,pText)-1) + '\par\sb0' +
-						'\li284\b0 ' + sTemp + '\par \pard';
-
-	Result := Unicode2RTF(sTemp);
-end;
-
-
-function UpdateReadyMemo(pSpace, pNewLine, pMemoUserInfo, pMemoDirInfo, pMemoTypeInfo, pMemoComponentsInfo, pMemoGroupInfo, pMemoTasksInfo: String): String;
-var sText: String;
-	bShowAssoc: Boolean;
-	i,j: Integer;
-begin
-	DebugMsg('UpdateReadyMemo','');
-	(* Prepare the text for new Ready Memo *)
-
-	sText := RTFHeader;
-	if pMemoDirInfo <> '' then
-		sText := sText + ParseReadyMemoText(pSpace,pMemoDirInfo) + '\sb100';
-	sText := sText + ParseReadyMemoText(pSpace,pMemoTypeInfo);
-	sText := sText + '\sb100' + ParseReadyMemoText(pSpace,pMemoComponentsInfo);
-
-	If pMemoTasksInfo<>'' then
-		sText := sText + '\sb100' + ParseReadyMemoText(pSpace,pMemoTasksInfo);
-
-	ReadyMemoRichText := Copy(sText,1,Length(sText)-6) + '}';
-
-	Result := 'If you see this, something went wrong';
-end;
-
-
-
-procedure UpdateWizardImages();
-var NewBitmap1,NewBitmap2: TFileStream;
-begin
-	WelcomeBitmapBottom := TBitmapImage.Create(WizardForm);
-	with WelcomeBitmapBottom do
+#ifdef PYTHON
+	if IsComponentSelected('py32') or IsComponentSelected('py64') or IsComponentSelected('pyARM64') then
 	begin
-		Left := 0;
-		Top := 0;
-		Parent := WizardForm;
-		Width := WizardForm.ClientWidth;
-		Height := WizardForm.ClientHeight;
-		Stretch := True;
-	end;
-
-	DebugMsg('UpdateWizardImages','Height: ' + IntToStr(WizardForm.WizardBitmapImage.Height));
-
-	if WizardForm.WizardBitmapImage.Height < 386 then //use smaller image when not using Large Fonts
-	begin
-		try
-			NewBitmap1 := TFileStream.Create(ExpandConstant('{tmp}\installsplash_small.bmp'),fmOpenRead);
-			WizardForm.WizardBitmapImage.Bitmap.LoadFromStream(NewBitmap1);
-			WelcomeBitmapBottom.Bitmap := WizardForm.WizardBitmapImage.Bitmap;
-			try
-				NewBitmap2 := TFileStream.Create(ExpandConstant('{tmp}\windows-installer-intro-small.bmp'),fmOpenRead);
-				WizardForm.WizardBitmapImage2.Bitmap.LoadFromStream(NewBitmap2);
-			except
-				DebugMsg('UpdateWizardImages','Error loading image: ' + GetExceptionMessage);
-			finally
-				if NewBitmap2 <> nil then
-					NewBitmap2.Free;
-			end;
-		except
-			DebugMsg('UpdateWizardImages','Error loading image: ' + GetExceptionMessage);
-		finally
-			if NewBitmap1 <> nil then
-				NewBitmap1.Free;
-		end;
-	end
-	else
-	begin
-		try
-			NewBitmap1 := TFileStream.Create(ExpandConstant('{tmp}\installsplash.bmp'),fmOpenRead);
-			WizardForm.WizardBitmapImage.Bitmap.LoadFromStream(NewBitmap1);
-			WelcomeBitmapBottom.Bitmap := WizardForm.WizardBitmapImage.Bitmap;
-		except
-			DebugMsg('UpdateWizardImages','Error loading image: ' + GetExceptionMessage);
-		finally
-			if NewBitmap1 <> nil then
-				NewBitmap1.Free;
-		end;
-	end;
-	WizardForm.WizardBitmapImage.Width := WizardForm.ClientWidth;
-	WizardForm.WizardBitmapImage.Height := WizardForm.ClientHeight;
-end;
-
-
-procedure DoUninstall(const UninstStr, InstallDir: String; const pInfoLabel: TNewStaticText; var oResult: TRemoveOldGIMPResult);
-var InResult: TRemoveOldGIMPResult;
-	ResultCode, i: Integer;
-begin
-	InResult := oResult;
-
-	DebugMsg('DoUninstall','Uninstall string: ' + UninstStr);
-
-	//when installing to same directory, assume that restart is required by default ...
-	if LowerCase(RemoveBackslashUnlessRoot(InstallDir)) = LowerCase(RemoveBackslashUnlessRoot(ExpandConstant('{app}'))) then
-		oResult := rogRestartRequired
-	else
-		oResult := InResult;
-
-	pInfoLabel.Caption := InstallDir;
-
-	if not Exec('>',UninstStr,'',SW_SHOW,ewWaitUntilTerminated,ResultCode) then
-	begin
-		DebugMsg('DoUninstall','Exec('+UninstStr+') failed: ' + IntToStr(ResultCode));
-
-		if not DirExists(InstallDir) then //old install directory doesn't exist, assume it was deleted, and Registry info is orphaned
-		begin
-			DebugMsg('DoUninstall','Install directory doesn'#39't exist: ' + InstallDir + ', resuming install');
-			oResult := InResult
-		end else
-		begin
-			oResult := rogUninstallFailed;
-		end;
-
-		exit;
-	end;
-
-	DebugMsg('DoUninstall','Exec succeeded, uninstaller result: ' + IntToStr(ResultCode));
-
-	//... unless the complete installation directory was removed on uninstall
-	i := 0;
-	while i < (UNINSTALL_MAX_WAIT_TIME / UNINSTALL_CHECK_TIME) do
-	begin
-		if not DirExists(ExpandConstant('{app}')) then
-		begin
-			DebugMsg('DoUninstall','Existing GIMP directory removed, restoring previous restart requirement');
-			oResult := InResult; //restore previous result
-			break;
-		end;
-		DebugMsg('DoUninstall','Waiting for ' + ExpandConstant('{app}') + ' to disappear [' + IntToStr(i) + ']');
-		Sleep(UNINSTALL_CHECK_TIME); //it may take a few seconds for the uninstaller to remove the directory after it's exited
-		Inc(i);
-	end;
-end;
-
-
-function RemoveOldGIMPVersions(): TRemoveOldGIMPResult;
-var lblInfo1,lblInfo2: TNewStaticText;
-	RootKey: Integer;
-	OldPath, UninstallString, WhichStr: String;
-begin
-	Result := rogContinue;
-
-	lblInfo1 := TNewStaticText.Create(WizardForm.PreparingPage);
-	with lblInfo1 do
-	begin
-		Parent := WizardForm.PreparingPage;
-		Left := 0;
-		Top := 0;
-		AutoSize := True;
-		WordWrap := True;
-		Width := WizardForm.PreparingPage.ClientWidth;
-
-		Caption := CustomMessage('RemovingOldVersion');
-	end;
-	lblInfo2 := TNewStaticText.Create(WizardForm.PreparingPage);
-	with lblInfo2 do
-	begin
-		Parent := WizardForm.PreparingPage;
-		Left := 0;
-		AutoSize := True;
-		WordWrap := True;
-		Width := WizardForm.PreparingPage.ClientWidth;
-		Top := lblInfo1.Height + ScaleY(8);
-	end;
-
-	if ExpandConstant('{param:debugresume|0}') = '1' then
-		Result := rogRestartRequired; //for testing
-
-	if Is64BitInstallMode() then
-		RootKey := HKLM32
-	else
-		RootKey := HKLM;
-
-	if RegValueExists(RootKey,'Software\Microsoft\Windows\CurrentVersion\Uninstall\WinGimp-2.0_is1',
-	                  'Inno Setup: App Path') then
-	begin
-		if RegQueryStringValue(RootKey,'Software\Microsoft\Windows\CurrentVersion\Uninstall\WinGimp-2.0_is1',
-		                       'Inno Setup: App Path',OldPath) then
-		begin
-			DebugMsg('RemoveOldGIMPVersions','Found legacy GIMP install, removing');
-
-			if RegValueExists(RootKey,'Software\Microsoft\Windows\CurrentVersion\Uninstall\WinGimp-2.0_is1',
-			                  'QuietUninstallString') then
-				WhichStr := 'QuietUninstallString'
-			else if RegValueExists(RootKey,'Software\Microsoft\Windows\CurrentVersion\Uninstall\WinGimp-2.0_is1',
-			                       'UninstallString') then
-				WhichStr := 'UninstallString'
-			else
-			begin
-				Result := rogCantUninstall;
-				exit;
-			end;
-
-			if not RegQueryStringValue(RootKey,'Software\Microsoft\Windows\CurrentVersion\Uninstall\WinGimp-2.0_is1',
-			                           WhichStr,UninstallString) then
-			begin
-				Result := rogCantUninstall;
-				exit;
-			end;
-
-			if WhichStr = 'UninstallString' then
-				UninstallString := UninstallString + ' /SILENT';
-
-			UninstallString := UninstallString + ' /NORESTART';
-
-			DoUninstall(UninstallString, OldPath, lblInfo2, Result);
-
-		end;
-
-	end;
-
-	lblInfo1.Free;
-	lblInfo2.Free;
-end;
-
-
-procedure InfoBeforeLikeLicense();
-begin
-	WizardForm.InfoBeforeClickLabel.Visible := False;
-	WizardForm.InfoBeforeMemo.Height := WizardForm.InfoBeforeMemo.Height + WizardForm.InfoBeforeMemo.Top - WizardForm.InfoBeforeClickLabel.Top;
-	WizardForm.InfoBeforeMemo.Top := WizardForm.InfoBeforeClickLabel.Top;
-end;
-
-
-procedure PrepareWelcomePage();
-begin
-	if not WizardSilent then
-	begin
-		WizardForm.NextButton.Visible := False;
-
-		btnInstall.Visible := True;
-		btnInstall.TabOrder := 1;
-		btnCustomize.Visible := True;
-
-		WizardForm.Bevel.Visible := False;
-		WizardForm.WelcomeLabel1.Visible := False;
-		WizardForm.WelcomeLabel2.Visible := False;
-
-		WelcomeBitmapBottom.Visible := True;
-	end;
-end;
-
-
-procedure CurPageChanged(pCurPageID: Integer);
-begin
-	DebugMsg('CurPageChanged','ID: '+IntToStr(pCurPageID));
-	case pCurPageID of
-		wpWelcome:
-			PrepareWelcomePage();
-		wpInfoBefore:
-			InfoBeforeLikeLicense();
-		wpSelectComponents:
-			SelectComponentsFaceLift();
-		wpReady:
-			ReadyFaceLift();
-		wpInstalling:
-			InstallingFaceLift();
-	end;
-end;
-
-
-function ShouldSkipPage(pPageID: Integer): Boolean;
-begin
-	DebugMsg('ShouldSkipPage','ID: '+IntToStr(pPageID));
-
-	Result := ((InstallMode = imSimple) or (InstallMode = imRebootContinue)) and (pPageID <> wpFinished);
-	                                                               //skip all pages except for the finished one if using simple
-	                                                               //install mode
-	if Result then
-		DebugMsg('ShouldSkipPage','Yes')
-	else
-		DebugMsg('ShouldSkipPage','No');
-
-end;
-
-
-procedure RemoveDebugFilesFromDir(pDir: String; var pDirectories: TArrayOfString);
-var FindRec: TFindRec;
-begin
-	DebugMsg('RemoveDebugFilesFromDir', pDir);
-	WizardForm.FilenameLabel.Caption := pDir;
-	if FindFirst(AddBackSlash(pDir) + '*', FindRec) then
-	begin
-		try
-			repeat
-				if FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY = 0 then
-				begin
-					if (Length(FindRec.Name) > 6) and (LowerCase(Copy(FindRec.Name, Length(FindRec.Name) - 5, 6)) = '.debug') then
-					begin
-						DebugMsg('RemoveDebugFilesFromDir', '> ' + FindRec.Name);
-						DeleteFile(AddBackSlash(pDir) + FindRec.Name);
-					end;
-				end else
-				begin
-					if (FindRec.Name <> '.') and (FindRec.Name <> '..') then
-					begin
-						SetArrayLength(pDirectories, GetArrayLength(pDirectories) + 1);
-						pDirectories[GetArrayLength(pDirectories) - 1] := AddBackSlash(pDir) + FindRec.Name;
-					end;
-				end;
-			until not FindNext(FindRec);
-		finally
-			FindClose(FindRec);
-		end;
-	end;
-end;
-
-//remove .debug files from previous installs
-//there's no built-in way in Inno to recursively delete files with wildcard+extension
-procedure RemoveDebugFiles();
-var Directories: TArrayOfString;
-	Index: Integer;
-begin
-	SetArrayLength(Directories, 1);
-	Directories[0] := ExpandConstant('{app}');
-	Index := 0;
-
-	WizardForm.StatusLabel.Caption := CustomMessage('RemovingOldFiles');
-
-	repeat
-		RemoveDebugFilesFromDir(Directories[Index], Directories);
-		Inc(Index);
-	until Index = GetArrayLength(Directories);
-end;
-
-
-procedure CurStepChanged(pCurStep: TSetupStep);
-begin
-	case pCurStep of
-		ssInstall:
-		begin
-			RemoveDebugFiles();
-			AssociationsCleanup();
-		end;
-		ssPostInstall:
-		begin
-			PrepareInterp();
-			PrepareGimpEnvironment();
-		end;
-	end;
-end;
-
-
-function PrepareToInstall(var pNeedsRestart: Boolean): String;
-var	ChecksumBefore, ChecksumAfter: String;
-	RemoveResult: TRemoveOldGIMPResult;
-begin
-
-	ChecksumBefore := MakePendingFileRenameOperationsChecksum;
-
-	RemoveResult := RemoveOldGIMPVersions;
-
-	if RemoveResult = rogRestartRequired then //old version was uninstalled, but something was left behind, so to be safe a reboot
-	begin                                     //is enforced - this can only happen when reusing install directory
-
-		DebugMsg('PrepareToInstall','RemoveOldGIMPVersions requires restart');
-
-		ChecksumAfter := MakePendingFileRenameOperationsChecksum;
-		if (ChecksumBefore <> ChecksumAfter) or (ExpandConstant('{param:debugresume|0}') = '1') then
-		begin //this check is most likely redundant, since the uninstaller will be added to pending rename operations
-			CreateRunOnceEntry;
-			pNeedsRestart := True;
-			Result := CustomMessage('RebootRequiredFirst');
-		end;
-	end else
-	if RemoveResult = rogContinue then
-	begin
-		DebugMsg('PrepareToInstall','RemoveOldGIMPVersions finished successfully');
-		Result := ''; //old version was uninstalled successfully, nothing was left behind, so install can continue immediately
-	end else
-	if RemoveResult = rogUninstallFailed then
-	begin
-		DebugMsg('PrepareToInstall','RemoveOldGIMPVersions failed to uninstall old GIMP version');
-		Result := FmtMessage(CustomMessage('RemovingOldVersionFailed'),['{#VERSION}',ExpandConstant('{app}')]);
-	end else
-	if RemoveResult = rogCantUninstall then
-	begin
-		DebugMsg('PrepareToInstall','RemoveOldGIMPVersions failed to uninstall old GIMP version [1]');
-		Result := FmtMessage(CustomMessage('RemovingOldVersionCantUninstall'),['{#VERSION}',ExpandConstant('{app}')]);
-	end else
-	begin
-		DebugMsg('PrepareToInstall','Internal error 11');
-		Result := FmtMessage(CustomMessage('InternalError'),['11']); //should never happen
-	end;
-
-end;
-
-
-procedure InitializeWizard();
-begin
-	UpdateWizardImages();
-	InitCustomPages();
-end;
-
-
-function BPPTooLowWarning(): Boolean;
-var hDC, bpp, pl: Integer;
-	Message,Buttons: TArrayOfString;
-begin
-	hDC := GetDC(0);
-	pl := GetDeviceCaps(hDC, PLANES);
-	bpp := GetDeviceCaps(hDC, BITSPIXEL);
-	ReleaseDC(0,hDC);
-
-	bpp := pl * bpp;
-
-	if bpp < 32 then
-	begin
-		SetArrayLength(Message,1);
-		SetArrayLength(Buttons,2);
-		Message[0] := CustomMessage('Require32BPP');
-		Buttons[0] := CustomMessage('Require32BPPContinue');
-		Buttons[1] := CustomMessage('Require32BPPExit');
-		if (not WizardSilent) and
-		   (MessageWithURL(Message, CustomMessage('Require32BPPTitle'), Buttons, mbError, 2, 2) = 2) then
-			Result := False
-		else
-			Result := True;
-	end
-	else
-		Result := True;
-end;
-
-
-procedure Check32bitOverride;
-var i: Integer;
-	old: String;
-begin
-	Force32bitInstall := False;
-
-	old := LowerCase(GetPreviousData('32bitMode',''));
-
-	if old = 'true' then //ignore command line if previous install is already present
-		Force32bitInstall := True
-	else if old = 'false' then
-		Force32bitInstall := False
-	else
-		for i := 0 to ParamCount do //not a bug (in script anyway) - ParamCount returns the index of last ParamStr element, not the actual count
-			if ParamStr(i) = '/32' then
-			begin
-				Force32bitInstall := True;
-				break;
-			end;
-
-	DebugMsg('Check32bitOverride',BoolToStr(Force32bitInstall) + '[' + old + ']');
-end;
-
-
-function InitializeSetup(): Boolean;
-#if (Defined(DEVEL) && DEVEL != "") || Defined(DEVEL_WARNING)
-var Message,Buttons: TArrayOfString;
+		StatusLabel(CustomMessage('SettingUpPyGimp'),'');
+
+		InterpFile := ExpandConstant('{app}\lib\gimp\{#GIMP_PKGCONFIG_VERSION}\interpreters\pygimp.interp');
+    DebugMsg('PrepareInterp','Writing interpreter file for gimp-python: ' + InterpFile);
+
+#if (Defined(GIMP_UNSTABLE) && GIMP_UNSTABLE != "") || (!Defined(GIMP_RELEASE) || GIMP_RELEASE=="")
+		//python.exe is prefered in unstable versions because of error output
+		#define PYTHON="python.exe"
+#else
+	  //pythonw.exe is prefered in stable releases because it works silently
+		#define PYTHON="pythonw.exe"
 #endif
-begin
-	ConfigOverride := coUndefined;
 
-	if not IsProcessorFeaturePresent(PF_XMMI_INSTRUCTIONS_AVAILABLE) then
-	begin
-		SuppressibleMsgBox(CustomMessage('SSERequired'), mbCriticalError, MB_OK, 0);
-		Result := false;
-		exit;
-	end;
+		InterpContent := 'python=' + ExpandConstant('{app}\bin\{#PYTHON}') + #10 +
+		                 'python3=' + ExpandConstant('{app}\bin\{#PYTHON}') + #10 +
+		                 '/usr/bin/python=' + ExpandConstant('{app}\bin\{#PYTHON}') + #10 +
+		                 '/usr/bin/python3=' + ExpandConstant('{app}\bin\{#PYTHON}') + #10 +
+		                 ':Python:E::py::python:'#10;
 
-	Check32bitOverride;
-
-	Result := RestartSetupAfterReboot(); //resume install after reboot - skip all setting pages, and install directly
-
-	if Result then
-		Result := BPPTooLowWarning();
-
-	if not Result then //no need to do anything else
-		exit;
-
-#if (Defined(DEVEL) && DEVEL != "") || Defined(DEVEL_WARNING)
-	Explode(Message, CustomMessage('DevelopmentWarning'), #13#10);
-	SetArrayLength(Buttons,2);
-	Buttons[0] := CustomMessage('DevelopmentButtonContinue');
-	Buttons[1] := CustomMessage('DevelopmentButtonExit');
-	if (not WizardSilent) and
-	   (MessageWithURL(Message, CustomMessage('DevelopmentWarningTitle'), Buttons, mbError, 2, 2) = 2) then
-	begin
-		Result := False;
-		Exit;
+		if not SaveStringToUTF8File(InterpFile,InterpContent,False) then
+		begin
+			DebugMsg('PrepareInterp','Problem writing the file. [' + InterpContent + ']');
+			SuppressibleMsgBox(CustomMessage('ErrorUpdatingPython') + ' (2)',mbInformation,mb_ok,IDOK);
+		end;
 	end;
 #endif
 
-	try
-		ExtractTemporaryFile('windows-installer-intro-small.bmp');
-		ExtractTemporaryFile('installsplash.bmp');
-		ExtractTemporaryFile('installsplash_small.bmp');
-	except
-		DebugMsg('InitializeSetup','Error extracting temporary file: ' + GetExceptionMessage);
-		MsgBox(CustomMessage('ErrorExtractingTemp') + #13#13 + GetExceptionMessage,mbError,MB_OK);
-		Result := False;
-		exit;
+#ifdef LUA
+	if IsComponentSelected('lua32') or IsComponentSelected('lua64') or IsComponentSelected('luaARM64') then
+	begin
+		InterpFile := ExpandConstant('{app}\lib\gimp\{#GIMP_PKGCONFIG_VERSION}\interpreters\lua.interp');
+    DebugMsg('PrepareInterp','Writing interpreter file for lua: ' + InterpFile);
+
+		LuaBin := 'luajit.exe'
+
+		InterpContent := 'lua=' + ExpandConstant('{app}\bin\') + LuaBin + #10 +
+		                 'luajit=' + ExpandConstant('{app}\bin\') + LuaBin + #10 +
+		                 '/usr/bin/luajit=' + ExpandConstant('{app}\bin\') + LuaBin + #10 +
+		                 '/usr/bin/lua=' + ExpandConstant('{app}\bin\') + LuaBin + #10 +
+		                 ':Lua:E::lua::' + LuaBin + ':'#10;
+
+		if not SaveStringToUTF8File(InterpFile,InterpContent,False) then
+		begin
+			DebugMsg('PrepareInterp','Problem writing the file. [' + InterpContent + ']');
+			SuppressibleMsgBox(CustomMessage('ErrorUpdatingPython') + ' (2)',mbInformation,mb_ok,IDOK);
+		end;
+	end;
+#endif
+
+// !!! use comma for binfmt delimiter and full Windows path in interpreter field of binfmt
+begin
+	InterpFile := ExpandConstant('{app}\lib\gimp\{#GIMP_PKGCONFIG_VERSION}\interpreters\gimp-script-fu-interpreter.interp');
+	DebugMsg('PrepareInterp','Writing interpreter file for gimp-script-fu-interpreter: ' + InterpFile);
+
+	InterpContent := 'gimp-script-fu-interpreter=' + ExpandConstant('{app}\bin\gimp-script-fu-interpreter-{#GIMP_PKGCONFIG_VERSION}.exe') + #10 +
+						       'gimp-script-fu-interpreter-{#GIMP_PKGCONFIG_VERSION}=' + ExpandConstant('{app}\bin\gimp-script-fu-interpreter-{#GIMP_PKGCONFIG_VERSION}.exe') + #10 +
+						       '/usr/bin/gimp-script-fu-interpreter=' + ExpandConstant('{app}\bin\gimp-script-fu-interpreter-{#GIMP_PKGCONFIG_VERSION}.exe') + #10 +
+						       ',ScriptFu,E,,scm,,' + ExpandConstant('{app}\bin\gimp-script-fu-interpreter-{#GIMP_PKGCONFIG_VERSION}.exe') + ','#10;
+
+	if not SaveStringToUTF8File(InterpFile,InterpContent,False) then
+	begin
+		DebugMsg('PrepareInterp','Problem writing the file. [' + InterpContent + ']');
+		SuppressibleMsgBox(CustomMessage('ErrorUpdatingScriptFu') + ' (2)',mbInformation,mb_ok,IDOK);
+	end;
+end;
+end; //PrepareInterp
+
+//Create .env files
+procedure PrepareGimpEnvironment();
+var EnvFile,Env,sTemp: String;
+begin
+	StatusLabel(CustomMessage('SettingUpEnvironment'),'');
+
+	//set PATH to be used by plug-ins
+	EnvFile := ExpandConstant('{app}\lib\gimp\{#GIMP_PKGCONFIG_VERSION}\environ\default.env');
+	DebugMsg('PrepareGimpEnvironment','Setting environment in ' + EnvFile);
+
+	Env := #10'PATH=${gimp_installation_dir}\bin';
+
+	if IsComponentSelected('gimp32on64') then
+	begin
+		Env := Env + ';${gimp_installation_dir}\32\bin' + #10;
+	end else
+	begin
+		Env := Env + #10;
 	end;
 
-	//if InstallMode <> imRebootContinue then
-	//	SuppressibleMsgBox(CustomMessage('UninstallWarning'),mbError,MB_OK,IDOK);
+	DebugMsg('PrepareGimpEnvironment','Appending ' + Env);
 
-end;
+	if not SaveStringToUTF8File(EnvFile,Env,True) then
+	begin
+		DebugMsg('PrepareGimpEnvironment','Problem appending');
+		SuppressibleMsgBox(FmtMessage(CustomMessage('ErrorChangingEnviron'),[EnvFile]),mbInformation,mb_ok,IDOK);
+	end;
 
+	// Set revision
+	EnvFile := ExpandConstant('{app}\share\gimp\{#GIMP_PKGCONFIG_VERSION}\gimp-release');
+	DebugMsg('PrepareGimpEnvironment','Setting revision number {#REVISION} in ' + EnvFile);
 
-procedure RegisterPreviousData(PreviousDataKey: Integer);
-begin
-	if Is64BitInstallMode() then
-		SetPreviousData(PreviousDataKey,'32BitMode',BoolToStr(Force32bitInstall));
-end;
+	//LoadStringFromUTF8File(EnvFile,Env);
+  //sTemp := Replace('=0','={#REVISION}',Env);
+	sTemp := '[package]' + #10 + 'revision={#REVISION}' + #10
 
+	if not SaveStringToUTF8File(EnvFile,sTemp,False) then
+	begin
+		DebugMsg('PrepareGimpEnvironment','Problem setting revision');
+		SuppressibleMsgBox(FmtMessage(CustomMessage('ErrorChangingEnviron'),[EnvFile]),mbInformation,mb_ok,IDOK);
+	end;
+
+	// Disable check-update when run with specific option
+  if ExpandConstant('{param:disablecheckupdate|false}') = 'true' then
+	begin
+		EnvFile := ExpandConstant('{app}\share\gimp\{#GIMP_PKGCONFIG_VERSION}\gimp-release');
+		DebugMsg('DisableCheckUpdate','Disabling check-update in ' + EnvFile);
+
+    Env := 'check-update=false'
+
+		if not SaveStringToUTF8File(EnvFile,Env,True) then
+		begin
+			DebugMsg('PrepareGimpEnvironment','Problem appending');
+			SuppressibleMsgBox(FmtMessage(CustomMessage('ErrorChangingEnviron'),[EnvFile]),mbInformation,mb_ok,IDOK);
+		end;
+	end;
+end;//PrepareGimpEnvironment
+
+//Unistaller info
+procedure SaveToUninstInf(const pText: AnsiString); forward;
 
 procedure SaveToUninstInf(const pText: AnsiString);
 var sUnInf: String;
@@ -1624,8 +1801,69 @@ begin
 	SaveStringToUTF8File(sUnInf,pText+#13#10,True);
 end;
 
+#include "util_uninst.isi"
+
+
+//8. DONE/FINAL PAGE (no customizations)
+
+
+//INITIALIZE AND ORDER INSTALLER PAGES
+procedure InitializeWizard();
+begin
+	UpdateWizardImages();
+	InitCustomPages();
+	NativeDirIcon();
+end;
+
+function ShouldSkipPage(pPageID: Integer): Boolean;
+begin
+	DebugMsg('ShouldSkipPage','ID: '+IntToStr(pPageID));
+
+	Result := ((InstallMode = imSimple) or (InstallMode = imRebootContinue)) and (pPageID <> wpFinished);
+	if Result then
+		DebugMsg('ShouldSkipPage','Yes')
+	else
+		DebugMsg('ShouldSkipPage','No');
+end;
+
+procedure CurPageChanged(pCurPageID: Integer);
+begin
+	DebugMsg('CurPageChanged','ID: '+IntToStr(pCurPageID));
+	case pCurPageID of
+		wpWelcome:
+			PrepareWelcomePage();
+		wpInfoBefore:
+			InfoBeforeLikeLicense();
+		wpSelectComponents:
+			SelectComponentsFaceLift();
+		wpReady:
+			ReadyFaceLift();
+		wpInstalling:
+			InstallingFaceLift();
+	end;
+end;
+
+procedure CurStepChanged(pCurStep: TSetupStep);
+begin
+	case pCurStep of
+		ssInstall:
+		begin
+			if IsAdminInstallMode() then begin
+				RestorePoint();
+			end;
+			RemoveDebugFiles();
+			AssociationsCleanup();
+		end;
+		ssPostInstall:
+		begin
+			PrepareInterp();
+			PrepareGimpEnvironment();
+		end;
+	end;
+end;
+
+//Reboot if needed
 #include "util_rebootcontinue.isi"
 
-#include "util_uninst.isi"
 
 #expr SaveToFile(AddBackslash(SourcePath) + "Preprocessed.iss")

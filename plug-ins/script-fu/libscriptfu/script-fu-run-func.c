@@ -21,9 +21,11 @@
 #include <glib.h>
 
 #include <libgimp/gimp.h>
+#include <libgimp/gimpui.h>
 
 #include "scheme-wrapper.h"       /* type "pointer" */
 
+#include "script-fu-lib.h"
 #include "script-fu-types.h"
 #include "script-fu-interface.h"  /* ScriptFu's GUI implementation. */
 #include "script-fu-dialog.h"     /* Gimp's GUI implementation. */
@@ -31,6 +33,7 @@
 #include "script-fu-scripts.h"    /* script_fu_find_script */
 #include "script-fu-command.h"
 #include "script-fu-version.h"
+#include "script-fu-progress.h"
 
 #include "script-fu-run-func.h"
 
@@ -62,7 +65,6 @@ GimpValueArray *
 script_fu_run_image_procedure (GimpProcedure        *procedure, /* GimpImageProcedure */
                                GimpRunMode           run_mode,
                                GimpImage            *image,
-                               guint                 n_drawables,
                                GimpDrawable        **drawables,
                                GimpProcedureConfig  *config,
                                gpointer              data)
@@ -79,7 +81,12 @@ script_fu_run_image_procedure (GimpProcedure        *procedure, /* GimpImageProc
 
   ts_set_run_mode (run_mode);
 
+  /* Need Gegl.  Also inits ui, needed when mode is interactive. */
+  gimp_ui_init ("script-fu");
+
   begin_interpret_default_dialect ();
+
+  script_fu_progress_init (gimp_procedure_get_menu_label (procedure));
 
   switch (run_mode)
     {
@@ -91,12 +98,12 @@ script_fu_run_image_procedure (GimpProcedure        *procedure, /* GimpImageProc
         if (n_specs > 1)
           {
             /* Let user choose "other" args in a dialog, then interpret. Maintain a config. */
-            result = script_fu_dialog_run (procedure, script, image, n_drawables, drawables, config);
+            result = script_fu_dialog_run_image_proc (procedure, script, image, drawables, config);
           }
         else
           {
             /* No "other" args for user to choose. No config to maintain. */
-            result = script_fu_interpret_image_proc (procedure, script, image, n_drawables, drawables, config);
+            result = script_fu_interpret_image_proc (procedure, script, image, drawables, config);
           }
         break;
       }
@@ -106,7 +113,7 @@ script_fu_run_image_procedure (GimpProcedure        *procedure, /* GimpImageProc
          * Use the given config, without interacting with user.
          * Since no user interaction, no config to maintain.
          */
-        result = script_fu_interpret_image_proc (procedure, script, image, n_drawables, drawables, config);
+        result = script_fu_interpret_image_proc (procedure, script, image, drawables, config);
         break;
       }
     case GIMP_RUN_WITH_LAST_VALS:
@@ -114,7 +121,7 @@ script_fu_run_image_procedure (GimpProcedure        *procedure, /* GimpImageProc
         /* User invoked from a menu "Filter>Run with last values".
          * Do not show dialog. config are already last values.
          */
-        result = script_fu_interpret_image_proc (procedure, script, image, n_drawables, drawables, config);
+        result = script_fu_interpret_image_proc (procedure, script, image, drawables, config);
         break;
       }
     default:
@@ -126,8 +133,93 @@ script_fu_run_image_procedure (GimpProcedure        *procedure, /* GimpImageProc
   return result;
 }
 
+/* The number of pspecs in a config's pspecs to skip, for a regular GimpProcedure.
+ * Skip procedure-name and run-mode.
+ */
+#define SF_ARGS_SKIPPED_REGULAR 2
 
-/* run_func for a GimpProcedure.
+/* run_func for a GimpProcedure
+ *
+ * Type is GimpRunFunc.
+ *
+ * Uses Gimp's config and gui.
+ *
+ * Since 3.0
+ */
+GimpValueArray *
+script_fu_run_regular_procedure (GimpProcedure        *procedure,
+                                 GimpProcedureConfig  *config,
+                                 gpointer              data)
+{
+
+  GimpValueArray *result = NULL;
+  SFScript       *script;
+  GimpRunMode     run_mode;
+
+  g_debug ("%s", G_STRFUNC);
+
+  script = script_fu_find_script (gimp_procedure_get_name (procedure));
+
+  if (! script)
+    return gimp_procedure_new_return_values (procedure, GIMP_PDB_CALLING_ERROR, NULL);
+
+  /* Unlike ImageProcedure, run-mode is a prop in the config. */
+  g_object_get (config, "run-mode", &run_mode, NULL);
+  ts_set_run_mode (run_mode);
+
+  /* Need Gegl.  Also inits ui, needed when mode is interactive. */
+  gimp_ui_init ("script-fu");
+
+  begin_interpret_default_dialect ();
+
+  script_fu_progress_init (gimp_procedure_get_menu_label (procedure));
+
+  switch (run_mode)
+    {
+    case GIMP_RUN_INTERACTIVE:
+      {
+        guint n_specs;
+
+        g_free (g_object_class_list_properties (G_OBJECT_GET_CLASS (config), &n_specs));
+        if (n_specs > SF_ARGS_SKIPPED_REGULAR)
+          {
+            /* Let user choose non-skipped args in a dialog, then interpret. Maintain a config. */
+            result = script_fu_dialog_run_regular_proc (procedure, script, config);
+          }
+        else
+          {
+            /* No args for user to choose. No config to maintain. */
+            result = script_fu_interpret_regular_proc (procedure, script, config);
+          }
+        break;
+      }
+    case GIMP_RUN_NONINTERACTIVE:
+      {
+        /* A call from another PDB procedure.
+         * Use the given config, without interacting with user.
+         * Since no user interaction, no config to maintain.
+         */
+        result = script_fu_interpret_regular_proc (procedure, script, config);
+        break;
+      }
+    case GIMP_RUN_WITH_LAST_VALS:
+      {
+        /* User invoked from a menu "Filter>Run with last values".
+         * Do not show dialog. config are already last values.
+         */
+        result = script_fu_interpret_regular_proc (procedure, script, config);
+        break;
+      }
+    default:
+      {
+        result = gimp_procedure_new_return_values (procedure, GIMP_PDB_CALLING_ERROR, NULL);
+      }
+    }
+
+  return result;
+}
+
+/* run_func for a GimpProcedure registered using Scheme "script-fu-register"
  *
  * Type is GimpRunFunc
  *
@@ -162,7 +254,12 @@ script_fu_run_procedure (GimpProcedure       *procedure,
 
   ts_set_run_mode (run_mode);
 
+  /* Need Gegl.  Also inits ui, needed when mode is interactive. */
+  gimp_ui_init ("script-fu");
+
   begin_interpret_default_dialect ();
+
+  script_fu_progress_init (gimp_procedure_get_menu_label (procedure));
 
   switch (run_mode)
     {
@@ -173,15 +270,23 @@ script_fu_run_procedure (GimpProcedure       *procedure,
         /*  First, try to collect the standard script arguments...  */
         min_args = script_fu_script_collect_standard_args (script, pspecs, n_pspecs, config);
 
-        /*  ...then acquire the rest of arguments (if any) with a dialog  */
+        /*  If plugin has more than the standard args. */
         if (script->n_args > min_args)
           {
-            status = script_fu_interface (script, min_args);
+            /* Get the rest of arguments with a dialog, and run the command.  */
+            status = script_fu_interface_dialog (script, min_args);
+
+            if (status == GIMP_PDB_EXECUTION_ERROR)
+              return gimp_procedure_new_return_values (procedure, status,
+                                                       script_fu_get_gerror ());
+
+            /* Else no error, or GIMP_PDB_CANCEL.
+             * GIMP_PDB_CALLING_ERROR is emitted prior to this.
+             * Break and return without an error message.
+             */
             break;
           }
-        /*  otherwise (if the script takes no more arguments), skip
-         *  this part and run the script directly (fallthrough)
-         */
+        /*  Else fallthrough to next case and run the script without dialog. */
       }
 
     case GIMP_RUN_NONINTERACTIVE:

@@ -33,7 +33,6 @@
 #include <libgimp/gimpbrushchooser.h>
 #include <libgimp/gimpdrawablechooser.h>
 #include <libgimp/gimpdrawablepreview.h>
-#include <libgimp/gimpexport.h>
 #include <libgimp/gimpfontchooser.h>
 #include <libgimp/gimpgradientchooser.h>
 #include <libgimp/gimpimagecombobox.h>
@@ -42,11 +41,12 @@
 #include <libgimp/gimppatternchooser.h>
 #include <libgimp/gimpprocbrowserdialog.h>
 #include <libgimp/gimpproceduredialog.h>
+#include <libgimp/gimpexportproceduredialog.h>
+#include <libgimp/gimpvectorloadproceduredialog.h>
 #include <libgimp/gimpprocview.h>
 #include <libgimp/gimpprogressbar.h>
 #include <libgimp/gimppropwidgets.h>
 #include <libgimp/gimpresourcechooser.h>
-#include <libgimp/gimpsaveproceduredialog.h>
 #include <libgimp/gimpzoompreview.h>
 
 #undef __GIMP_UI_H_INSIDE__
@@ -59,6 +59,8 @@ G_BEGIN_DECLS
 void        gimp_ui_init                          (const gchar *prog_name);
 
 void        gimp_window_set_transient             (GtkWindow   *window);
+void        gimp_window_set_transient_for         (GtkWindow   *window,
+                                                   GBytes      *handle);
 void        gimp_window_set_transient_for_display (GtkWindow   *window,
                                                    GimpDisplay *display);
 

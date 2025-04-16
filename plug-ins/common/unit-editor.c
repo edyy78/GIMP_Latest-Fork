@@ -36,13 +36,11 @@
 enum
 {
   SAVE,
-  IDENTIFIER,
+  NAME,
   FACTOR,
   DIGITS,
   SYMBOL,
   ABBREVIATION,
-  SINGULAR,
-  PLURAL,
   UNIT,
   USER_UNIT,
   NUM_COLUMNS
@@ -78,8 +76,8 @@ static GimpValueArray * editor_run              (GimpProcedure        *procedure
                                                  GimpProcedureConfig  *config,
                                                  gpointer              run_data);
 
-static GimpUnit new_unit_dialog                 (GtkWindow             *main_window,
-                                                 GimpUnit               template);
+static GimpUnit       * new_unit_dialog         (GtkWindow             *main_window,
+                                                 GimpUnit              *template);
 static void     on_app_activate                 (GApplication          *gapp,
                                                  gpointer               user_data);
 
@@ -113,8 +111,8 @@ static const UnitColumn columns[] =
 {
   { N_("Saved"),        N_("A unit definition will only be saved before "
                            "GIMP exits if this column is checked.")         },
-  { N_("ID"),           N_("This string will be used to identify a "
-                           "unit in GIMP's configuration files.")           },
+  { N_("Name"),         N_("The name to be used to identify this unit in "
+                           "the graphical interface")                       },
   { N_("Factor"),       N_("How many units make up an inch.")               },
   { N_("Digits"),       N_("This field is a hint for numerical input "
                            "fields. It specifies how many decimal digits "
@@ -126,8 +124,6 @@ static const UnitColumn columns[] =
                            "if doesn't have a symbol.")                     },
   { N_("Abbreviation"), N_("The unit's abbreviation (e.g. \"cm\" for "
                            "centimeters).")                                 },
-  { N_("Singular"),     N_("The unit's singular form.")                     },
-  { N_("Plural"),       N_("The unit's plural form.")                       }
 };
 
 static GActionEntry ACTIONS[] =
@@ -184,12 +180,12 @@ editor_create_procedure (GimpPlugIn  *plug_in,
                                       "Michael Natterer <mitch@gimp.org>",
                                       "2000");
 
-      GIMP_PROC_ARG_ENUM (procedure, "run-mode",
-                          "Run mode",
-                          "The run mode",
-                          GIMP_TYPE_RUN_MODE,
-                          GIMP_RUN_INTERACTIVE,
-                          G_PARAM_READWRITE);
+      gimp_procedure_add_enum_argument (procedure, "run-mode",
+                                       "Run mode",
+                                       "The run mode",
+                                       GIMP_TYPE_RUN_MODE,
+                                       GIMP_RUN_INTERACTIVE,
+                                       G_PARAM_READWRITE);
     }
 
   return procedure;
@@ -211,14 +207,12 @@ on_app_activate (GApplication *gapp, gpointer user_data)
 
   list_store = gtk_list_store_new (NUM_COLUMNS,
                                    G_TYPE_BOOLEAN,   /*  SAVE          */
-                                   G_TYPE_STRING,    /*  IDENTIFIER    */
+                                   G_TYPE_STRING,    /*  NAME          */
                                    G_TYPE_DOUBLE,    /*  FACTOR        */
                                    G_TYPE_INT,       /*  DIGITS        */
                                    G_TYPE_STRING,    /*  SYMBOL        */
                                    G_TYPE_STRING,    /*  ABBREVIATION  */
-                                   G_TYPE_STRING,    /*  SINGULAR      */
-                                   G_TYPE_STRING,    /*  PLURAL        */
-                                   GIMP_TYPE_UNIT,   /*  UNIT          */
+                                   G_TYPE_OBJECT,    /*  UNIT          */
                                    G_TYPE_BOOLEAN);  /*  USER_UNIT     */
 
   self->tv = gtk_tree_view_new_with_model (GTK_TREE_MODEL (list_store));
@@ -227,7 +221,7 @@ on_app_activate (GApplication *gapp, gpointer user_data)
   self->window = GTK_WINDOW (gtk_application_window_new (self->app));
   gtk_window_set_title (self->window, _("Unit Editor"));
   gtk_window_set_role (self->window, PLUG_IN_ROLE);
-  gimp_help_connect (GTK_WIDGET (self->window),
+  gimp_help_connect (GTK_WIDGET (self->window), NULL,
                      gimp_standard_help_func, PLUG_IN_PROC,
                      self->window, NULL);
 
@@ -409,24 +403,22 @@ editor_run (GimpProcedure        *procedure,
   return gimp_procedure_new_return_values (procedure, GIMP_PDB_SUCCESS, NULL);
 }
 
-static GimpUnit
+static GimpUnit *
 new_unit_dialog (GtkWindow *main_window,
-                 GimpUnit   template)
+                 GimpUnit  *template)
 {
   GtkWidget     *dialog;
   GtkWidget     *grid;
   GtkWidget     *entry;
   GtkWidget     *spinbutton;
 
-  GtkWidget     *identifier_entry;
+  GtkWidget     *name_entry;
   GtkAdjustment *factor_adj;
   GtkAdjustment *digits_adj;
   GtkWidget     *symbol_entry;
   GtkWidget     *abbreviation_entry;
-  GtkWidget     *singular_entry;
-  GtkWidget     *plural_entry;
 
-  GimpUnit       unit = GIMP_UNIT_PIXEL;
+  GimpUnit      *unit = NULL;
 
   dialog = gimp_dialog_new (_("Add a New Unit"), PLUG_IN_ROLE,
                             GTK_WIDGET (main_window), GTK_DIALOG_MODAL,
@@ -450,19 +442,19 @@ new_unit_dialog (GtkWindow *main_window,
                       grid, FALSE, FALSE, 0);
   gtk_widget_show (grid);
 
-  entry = identifier_entry = gtk_entry_new ();
-  if (template != GIMP_UNIT_PIXEL)
+  entry = name_entry = gtk_entry_new ();
+  if (template != gimp_unit_pixel ())
     {
       gtk_entry_set_text (GTK_ENTRY (entry),
-                          gimp_unit_get_identifier (template));
+                          gimp_unit_get_name (template));
     }
   gimp_grid_attach_aligned (GTK_GRID (grid), 0, 0,
-                            _("_ID:"), 0.0, 0.5,
+                            _("_Name:"), 0.0, 0.5,
                             entry, 1);
 
-  gimp_help_set_help_data (entry, gettext (columns[IDENTIFIER].help), NULL);
+  gimp_help_set_help_data (entry, gettext (columns[NAME].help), NULL);
 
-  factor_adj = gtk_adjustment_new ((template != GIMP_UNIT_PIXEL) ?
+  factor_adj = gtk_adjustment_new ((template != gimp_unit_pixel ()) ?
                                    gimp_unit_get_factor (template) : 1.0,
                                    GIMP_MIN_RESOLUTION, GIMP_MAX_RESOLUTION,
                                    0.01, 0.1, 0.0);
@@ -474,7 +466,7 @@ new_unit_dialog (GtkWindow *main_window,
 
   gimp_help_set_help_data (spinbutton, gettext (columns[FACTOR].help), NULL);
 
-  digits_adj = gtk_adjustment_new ((template != GIMP_UNIT_PIXEL) ?
+  digits_adj = gtk_adjustment_new ((template != gimp_unit_pixel ()) ?
                                    gimp_unit_get_digits (template) : 2.0,
                                    0, 5, 1, 1, 0);
   spinbutton = gimp_spin_button_new (digits_adj, 0, 0);
@@ -486,7 +478,7 @@ new_unit_dialog (GtkWindow *main_window,
   gimp_help_set_help_data (spinbutton, gettext (columns[DIGITS].help), NULL);
 
   entry = symbol_entry = gtk_entry_new ();
-  if (template != GIMP_UNIT_PIXEL)
+  if (template != gimp_unit_pixel ())
     {
       gtk_entry_set_text (GTK_ENTRY (entry),
                           gimp_unit_get_symbol (template));
@@ -498,7 +490,7 @@ new_unit_dialog (GtkWindow *main_window,
   gimp_help_set_help_data (entry, gettext (columns[SYMBOL].help), NULL);
 
   entry = abbreviation_entry = gtk_entry_new ();
-  if (template != GIMP_UNIT_PIXEL)
+  if (template != gimp_unit_pixel ())
     {
       gtk_entry_set_text (GTK_ENTRY (entry),
                           gimp_unit_get_abbreviation (template));
@@ -509,64 +501,32 @@ new_unit_dialog (GtkWindow *main_window,
 
   gimp_help_set_help_data (entry, gettext (columns[ABBREVIATION].help), NULL);
 
-  entry = singular_entry = gtk_entry_new ();
-  if (template != GIMP_UNIT_PIXEL)
-    {
-      gtk_entry_set_text (GTK_ENTRY (entry),
-                          gimp_unit_get_singular (template));
-    }
-  gimp_grid_attach_aligned (GTK_GRID (grid), 0, 5,
-                            _("Si_ngular:"), 0.0, 0.5,
-                            entry, 1);
-
-  gimp_help_set_help_data (entry, gettext (columns[SINGULAR].help), NULL);
-
-  entry = plural_entry = gtk_entry_new ();
-  if (template != GIMP_UNIT_PIXEL)
-    {
-      gtk_entry_set_text (GTK_ENTRY (entry),
-                          gimp_unit_get_plural (template));
-    }
-  gimp_grid_attach_aligned (GTK_GRID (grid), 0, 6,
-                            _("_Plural:"), 0.0, 0.5,
-                            entry, 1);
-
-  gimp_help_set_help_data (entry, gettext (columns[PLURAL].help), NULL);
-
   gtk_widget_show (dialog);
 
   while (TRUE)
     {
-      gchar   *identifier;
+      gchar   *name;
       gdouble  factor;
       gint     digits;
       gchar   *symbol;
       gchar   *abbreviation;
-      gchar   *singular;
-      gchar   *plural;
 
       if (gimp_dialog_run (GIMP_DIALOG (dialog)) != GTK_RESPONSE_OK)
         break;
 
-      identifier   = g_strdup (gtk_entry_get_text (GTK_ENTRY (identifier_entry)));
+      name         = g_strdup (gtk_entry_get_text (GTK_ENTRY (name_entry)));
       factor       = gtk_adjustment_get_value (factor_adj);
       digits       = gtk_adjustment_get_value (digits_adj);
       symbol       = g_strdup (gtk_entry_get_text (GTK_ENTRY (symbol_entry)));
       abbreviation = g_strdup (gtk_entry_get_text (GTK_ENTRY (abbreviation_entry)));
-      singular     = g_strdup (gtk_entry_get_text (GTK_ENTRY (singular_entry)));
-      plural       = g_strdup (gtk_entry_get_text (GTK_ENTRY (plural_entry)));
 
-      identifier   = g_strstrip (identifier);
+      name         = g_strstrip (name);
       symbol       = g_strstrip (symbol);
       abbreviation = g_strstrip (abbreviation);
-      singular     = g_strstrip (singular);
-      plural       = g_strstrip (plural);
 
-      if (! strlen (identifier)   ||
-          ! strlen (symbol)       ||
-          ! strlen (abbreviation) ||
-          ! strlen (singular)     ||
-          ! strlen (plural))
+      if (! strlen (name)   ||
+          ! strlen (symbol) ||
+          ! strlen (abbreviation))
         {
           GtkWidget *msg = gtk_message_dialog_new (GTK_WINDOW (dialog), 0,
                                                    GTK_MESSAGE_ERROR,
@@ -581,15 +541,11 @@ new_unit_dialog (GtkWindow *main_window,
           continue;
         }
 
-      unit = gimp_unit_new (identifier,
-                            factor, digits,
-                            symbol, abbreviation, singular, plural);
+      unit = gimp_unit_new (name, factor, digits, symbol, abbreviation);
 
-      g_free (identifier);
+      g_free (name);
       g_free (symbol);
       g_free (abbreviation);
-      g_free (singular);
-      g_free (plural);
 
       break;
     }
@@ -605,11 +561,11 @@ new_unit_action (GSimpleAction *action,
                  gpointer       user_data)
 {
   GimpUnitEditor   *self = GIMP_UNIT_EDITOR (user_data);
-  GimpUnit          unit;
+  GimpUnit         *unit;
 
-  unit = new_unit_dialog (self->window, GIMP_UNIT_PIXEL);
+  unit = new_unit_dialog (self->window, gimp_unit_pixel ());
 
-  if (unit != GIMP_UNIT_PIXEL)
+  if (unit != NULL)
     {
       GtkTreeModel *model;
       GtkTreeIter   iter;
@@ -620,7 +576,7 @@ new_unit_action (GSimpleAction *action,
 
       if (gtk_tree_model_get_iter_first (model, &iter) &&
           gtk_tree_model_iter_nth_child (model, &iter,
-                                         NULL, unit - GIMP_UNIT_INCH))
+                                         NULL, gimp_unit_get_id (unit) - GIMP_UNIT_INCH))
         {
           GtkTreeSelection *selection;
           GtkAdjustment *adj;
@@ -649,15 +605,15 @@ duplicate_unit_action (GSimpleAction *action,
 
   if (gtk_tree_selection_get_selected (sel, NULL, &iter))
     {
-      GimpUnit unit;
+      GimpUnit *unit;
 
       gtk_tree_model_get (model, &iter,
-                          UNIT, &unit,
+                          UNIT,  &unit,
                           -1);
 
       unit = new_unit_dialog (self->window, unit);
 
-      if (unit != GIMP_UNIT_PIXEL)
+      if (unit != NULL)
         {
           GtkTreeIter iter;
 
@@ -665,7 +621,7 @@ duplicate_unit_action (GSimpleAction *action,
 
           if (gtk_tree_model_get_iter_first (model, &iter) &&
               gtk_tree_model_iter_nth_child (model, &iter,
-                                             NULL, unit - GIMP_UNIT_INCH))
+                                             NULL, gimp_unit_get_id (unit) - GIMP_UNIT_INCH))
             {
               GtkAdjustment *adj;
 
@@ -696,7 +652,7 @@ saved_toggled_callback (GtkCellRendererToggle *celltoggle,
   GtkTreePath *path;
   GtkTreeIter  iter;
   gboolean     saved;
-  GimpUnit     unit;
+  GimpUnit    *unit;
 
   path = gtk_tree_path_new_from_string (path_string);
 
@@ -712,7 +668,7 @@ saved_toggled_callback (GtkCellRendererToggle *celltoggle,
                       UNIT, &unit,
                       -1);
 
-  if (unit >= gimp_unit_get_number_of_built_in_units ())
+  if (! gimp_unit_is_built_in (unit))
     {
       gimp_unit_set_deletion_flag (unit, saved);
       gtk_list_store_set (GTK_LIST_STORE (list_store), &iter,
@@ -726,32 +682,28 @@ unit_list_init (GtkTreeView *tv)
 {
   GtkListStore *list_store;
   GtkTreeIter   iter;
-  gint          num_units;
-  GimpUnit      unit;
+  GimpUnit     *unit = gimp_unit_get_by_id (GIMP_UNIT_INCH);
+  gint          i    = GIMP_UNIT_INCH + 1;
 
   list_store = GTK_LIST_STORE (gtk_tree_view_get_model (tv));
 
   gtk_list_store_clear (list_store);
 
-  num_units = gimp_unit_get_number_of_units ();
-
-  for (unit = GIMP_UNIT_INCH; unit < num_units; unit++)
+  while (unit != NULL)
     {
-      gboolean user_unit = (unit >= gimp_unit_get_number_of_built_in_units ());
-
       gtk_list_store_append (list_store, &iter);
       gtk_list_store_set (list_store, &iter,
                           SAVE,         ! gimp_unit_get_deletion_flag (unit),
-                          IDENTIFIER,   gimp_unit_get_identifier (unit),
+                          NAME,         gimp_unit_get_name (unit),
                           FACTOR,       gimp_unit_get_factor (unit),
                           DIGITS,       gimp_unit_get_digits (unit),
                           SYMBOL,       gimp_unit_get_symbol (unit),
                           ABBREVIATION, gimp_unit_get_abbreviation (unit),
-                          SINGULAR,     gimp_unit_get_singular (unit),
-                          PLURAL,       gimp_unit_get_plural (unit),
                           UNIT,         unit,
-                          USER_UNIT,    user_unit,
+                          USER_UNIT,    ! gimp_unit_is_built_in (unit),
                           -1);
+
+      unit = gimp_unit_get_by_id (i++);
     }
 
   if (gtk_tree_model_get_iter_first (GTK_TREE_MODEL (list_store), &iter))

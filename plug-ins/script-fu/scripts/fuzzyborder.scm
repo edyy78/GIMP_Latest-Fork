@@ -23,7 +23,7 @@
 ; Define the function:
 
 (define (script-fu-fuzzy-border inImage
-                                inLayer
+                                inLayers
                                 inColor
                                 inSize
                                 inBlur
@@ -48,6 +48,7 @@
        (theHeight (car (gimp-image-get-height inImage)))
        (theImage (if (= inCopy TRUE) (car (gimp-image-duplicate inImage))
                                       inImage))
+       (inLayer (vector-ref inLayers 0))
        (theLayer 0)
        )
 
@@ -66,10 +67,10 @@
     )
 
     (set! theLayer (car (gimp-layer-new theImage
+                                        "layer 1"
                                         theWidth
                                         theHeight
                                         RGBA-IMAGE
-                                        "layer 1"
                                         100
                                         LAYER-MODE-NORMAL)))
 
@@ -84,11 +85,7 @@
                       (/ theHeight inGranu)
                       TRUE)
 
-    (plug-in-spread RUN-NONINTERACTIVE
-                    theImage
-                    theLayer
-                    (/ inSize inGranu)
-                    (/ inSize inGranu))
+    (gimp-drawable-merge-new-filter theLayer "gegl:noise-spread" 0 LAYER-MODE-REPLACE 1.0 "amount-x" (/ inSize inGranu) "amount-y" (/ inSize inGranu) "seed" (msrg-rand))
     (chris-color-edge theImage theLayer inColor 1)
     (gimp-layer-scale theLayer theWidth theHeight TRUE)
 
@@ -103,13 +100,12 @@
     (chris-color-edge theImage theLayer inColor 1)
 
     (if (= inBlur TRUE)
-        (plug-in-gauss-rle RUN-NONINTERACTIVE
-                           theImage theLayer inSize TRUE TRUE)
+        (gimp-drawable-merge-new-filter theLayer "gegl:gaussian-blur" 0 LAYER-MODE-REPLACE 1.0 "std-dev-x" (* 0.32 inSize) "std-dev-y" (* 0.32 inSize) "filter" "auto")
     )
     (if (= inShadow TRUE)
         (begin
           (gimp-image-insert-layer theImage
-                                   (car (gimp-layer-copy theLayer FALSE)) 0 -1)
+                                   (car (gimp-layer-copy theLayer)) 0 -1)
           (gimp-layer-scale theLayer
                             (- theWidth inSize) (- theHeight inSize) TRUE)
           (gimp-drawable-desaturate theLayer DESATURATE-LIGHTNESS)
@@ -120,12 +116,7 @@
                              theHeight
                              (/ inSize 2)
                              (/ inSize 2))
-          (plug-in-gauss-rle RUN-NONINTERACTIVE
-                             theImage
-                             theLayer
-                             (/ inSize 2)
-                             TRUE
-                             TRUE)
+          (gimp-drawable-merge-new-filter theLayer "gegl:gaussian-blur" 0 LAYER-MODE-REPLACE 1.0 "std-dev-x" (* 0.32 (/ inSize 2)) "std-dev-y" (* 0.32 (/ inSize 2)) "filter" "auto")
           (gimp-layer-set-opacity theLayer inShadWeight)
         )
     )
@@ -145,15 +136,14 @@
   )
 )
 
-(script-fu-register "script-fu-fuzzy-border"
+(script-fu-register-filter "script-fu-fuzzy-border"
   _"_Fuzzy Border..."
   _"Add a jagged, fuzzy border to an image"
   "Chris Gutteridge"
   "1998, Chris Gutteridge / ECS dept, University of Southampton, England."
   "3rd April 1998"
   "RGB* GRAY*"
-  SF-IMAGE      "The image"               0
-  SF-DRAWABLE   "The layer"               0
+  SF-ONE-OR-MORE-DRAWABLE
   SF-COLOR      _"Color"                  "white"
   SF-ADJUSTMENT _"Border size"            '(16 1 300 1 10 0 1)
   SF-TOGGLE     _"Blur border"            TRUE

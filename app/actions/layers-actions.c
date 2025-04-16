@@ -92,7 +92,7 @@ static const GimpActionEntry layers_actions[] =
     GIMP_HELP_LAYER_NEW },
 
   { "layers-duplicate", GIMP_ICON_OBJECT_DUPLICATE,
-    NC_("layers-action", "D_uplicate Layer"), NULL, { "<primary><shift>D", NULL },
+    NC_("layers-action", "D_uplicate Layers"), NULL, { "<primary><shift>D", NULL },
     NC_("layers-action",
         "Create duplicates of selected layers and add them to the image"),
     layers_duplicate_cmd_callback,
@@ -105,26 +105,26 @@ static const GimpActionEntry layers_actions[] =
     GIMP_HELP_LAYER_DELETE },
 
   { "layers-raise", GIMP_ICON_GO_UP,
-    NC_("layers-action", "_Raise Layer"), NULL, { NULL },
-    NC_("layers-action", "Raise this layer one step in the layer stack"),
+    NC_("layers-action", "_Raise Layers"), NULL, { NULL },
+    NC_("layers-action", "Raise the selected layers one step in the layer stack"),
     layers_raise_cmd_callback,
     GIMP_HELP_LAYER_RAISE },
 
   { "layers-raise-to-top", GIMP_ICON_GO_TOP,
-    NC_("layers-action", "Layer to _Top"), NULL, { NULL },
-    NC_("layers-action", "Move this layer to the top of the layer stack"),
+    NC_("layers-action", "Layers to _Top"), NULL, { NULL },
+    NC_("layers-action", "Move the selected layers to the top of the layer stack"),
     layers_raise_to_top_cmd_callback,
     GIMP_HELP_LAYER_RAISE_TO_TOP },
 
   { "layers-lower", GIMP_ICON_GO_DOWN,
-    NC_("layers-action", "_Lower Layer"), NULL, { NULL },
-    NC_("layers-action", "Lower this layer one step in the layer stack"),
+    NC_("layers-action", "_Lower Layers"), NULL, { NULL },
+    NC_("layers-action", "Lower the selected layers one step in the layer stack"),
     layers_lower_cmd_callback,
     GIMP_HELP_LAYER_LOWER },
 
   { "layers-lower-to-bottom", GIMP_ICON_GO_BOTTOM,
-    NC_("layers-action", "Layer to _Bottom"), NULL, { NULL },
-    NC_("layers-action", "Move this layer to the bottom of the layer stack"),
+    NC_("layers-action", "Layers to _Bottom"), NULL, { NULL },
+    NC_("layers-action", "Move the selected layers to the bottom of the layer stack"),
     layers_lower_to_bottom_cmd_callback,
     GIMP_HELP_LAYER_LOWER_TO_BOTTOM },
 
@@ -275,7 +275,7 @@ static const GimpToggleActionEntry layers_toggle_actions[] =
 
   { "layers-mask-disable", NULL,
     NC_("layers-action", "_Disable Layer Masks"), NULL, { NULL },
-    NC_("layers-action", "Dismiss the effect of the layer mask"),
+    NC_("layers-action", "Dismiss the effect of the layer masks"),
     layers_mask_disable_cmd_callback,
     FALSE,
     GIMP_HELP_LAYER_MASK_DISABLE },
@@ -321,6 +321,12 @@ static const GimpRadioActionEntry layers_blend_space_actions[] =
     GIMP_LAYER_COLOR_SPACE_RGB_LINEAR,
     NULL },
 
+  { "layers-blend-space-rgb-non-linear", NULL,
+    NC_("layers-action", "RGB (from color profile)"), NULL, { NULL },
+    NC_("layers-action", "Layer Blend Space: RGB (from color profile)"),
+    GIMP_LAYER_COLOR_SPACE_RGB_NON_LINEAR,
+    NULL },
+
   { "layers-blend-space-rgb-perceptual", NULL,
     NC_("layers-action", "RGB (perceptual)"), NULL, { NULL },
     NC_("layers-action", "Layer Blend Space: RGB (perceptual)"),
@@ -340,6 +346,12 @@ static const GimpRadioActionEntry layers_composite_space_actions[] =
     NC_("layers-action", "RGB (linear)"), NULL, { NULL },
     NC_("layers-action", "Layer Composite Space: RGB (linear)"),
     GIMP_LAYER_COLOR_SPACE_RGB_LINEAR,
+    NULL },
+
+  { "layers-composite-space-rgb-non-linear", NULL,
+    NC_("layers-action", "RGB (from color profile)"), NULL, { NULL },
+    NC_("layers-action", "Layer Composite Space: RGB (from color profile)"),
+    GIMP_LAYER_COLOR_SPACE_RGB_NON_LINEAR,
     NULL },
 
   { "layers-composite-space-rgb-perceptual", NULL,
@@ -442,13 +454,13 @@ static const GimpEnumActionEntry layers_color_tag_actions[] =
 static const GimpEnumActionEntry layers_mask_apply_actions[] =
 {
   { "layers-mask-apply", NULL,
-    NC_("layers-action", "Apply Layer _Mask"), NULL, { NULL },
-    NC_("layers-action", "Apply the effect of the layer mask and remove it"),
+    NC_("layers-action", "Apply Layer _Masks"), NULL, { NULL },
+    NC_("layers-action", "Apply the effect of the layer masks and remove them"),
     GIMP_MASK_APPLY, FALSE,
     GIMP_HELP_LAYER_MASK_APPLY },
 
   { "layers-mask-delete", GIMP_ICON_EDIT_DELETE,
-    NC_("layers-action", "Delete Layer Mas_k"), NULL, { NULL },
+    NC_("layers-action", "Delete Layer Mas_ks"), NULL, { NULL },
     NC_("layers-action", "Remove layer masks and their effect"),
     GIMP_MASK_DISCARD, FALSE,
     GIMP_HELP_LAYER_MASK_DELETE }
@@ -528,14 +540,30 @@ static const GimpEnumActionEntry layers_select_actions[] =
 
   { "layers-select-previous", NULL,
     NC_("layers-action", "Select _Previous Layers"), NULL, { "Prior", NULL },
-    NC_("layers-action", "Select the layers above the current layers"),
+    NC_("layers-action",
+        "Select the layers above each currently selected layer. "
+        "Layers will not be selected outside their current group level."),
     GIMP_ACTION_SELECT_PREVIOUS, FALSE,
     GIMP_HELP_LAYER_PREVIOUS },
 
   { "layers-select-next", NULL,
     NC_("layers-action", "Select _Next Layers"), NULL, { "Next", NULL },
-    NC_("layers-action", "Select the layers below the current layers"),
+    NC_("layers-action",
+        "Select the layers below each currently selected layer. "
+        "Layers will not be selected outside their current group level."),
     GIMP_ACTION_SELECT_NEXT, FALSE,
+    GIMP_HELP_LAYER_NEXT },
+
+  { "layers-select-flattened-previous", NULL,
+    NC_("layers-action", "Select Previous Layers (flattened view)"), NULL, { NULL },
+    NC_("layers-action", "Select the layers above each currently selected layer"),
+    GIMP_ACTION_SELECT_FLAT_PREVIOUS, FALSE,
+    GIMP_HELP_LAYER_PREVIOUS },
+
+  { "layers-select-flattened-next", NULL,
+    NC_("layers-action", "Select Next Layers (flattened view)"), NULL, { NULL },
+    NC_("layers-action", "Select the layers below each currently selected layer"),
+    GIMP_ACTION_SELECT_FLAT_NEXT, FALSE,
     GIMP_HELP_LAYER_NEXT }
 };
 
@@ -737,6 +765,9 @@ layers_actions_update (GimpActionGroup *group,
   gboolean       last_mode      = FALSE;
   gboolean       first_mode     = FALSE;
 
+  gboolean       first_selected = FALSE; /* First layer is selected  */
+  gboolean       last_selected  = FALSE; /* Last layer is selected   */
+
   gboolean       have_masks     = FALSE; /* At least 1 selected layer has a mask.             */
   gboolean       have_no_masks  = FALSE; /* At least 1 selected layer has no mask.            */
   gboolean       have_groups    = FALSE; /* At least 1 selected layer is a group.             */
@@ -838,6 +869,11 @@ layers_actions_update (GimpActionGroup *group,
             {
               GList *next_visible;
 
+              if (gimp_item_get_index (iter2->data) == 0)
+                first_selected = TRUE;
+              if (gimp_item_get_index (iter2->data) == n_layers - 1)
+                last_selected = TRUE;
+
               if (g_list_previous (iter2))
                 have_prev = TRUE;
 
@@ -896,6 +932,8 @@ layers_actions_update (GimpActionGroup *group,
               action = "layers-blend-space-auto"; break;
             case GIMP_LAYER_COLOR_SPACE_RGB_LINEAR:
               action = "layers-blend-space-rgb-linear"; break;
+            case GIMP_LAYER_COLOR_SPACE_RGB_NON_LINEAR:
+              action = "layers-blend-space-rgb-non-linear"; break;
             case GIMP_LAYER_COLOR_SPACE_RGB_PERCEPTUAL:
               action = "layers-blend-space-rgb-perceptual"; break;
             default:
@@ -911,6 +949,8 @@ layers_actions_update (GimpActionGroup *group,
               action = "layers-composite-space-auto"; break;
             case GIMP_LAYER_COLOR_SPACE_RGB_LINEAR:
               action = "layers-composite-space-rgb-linear"; break;
+            case GIMP_LAYER_COLOR_SPACE_RGB_NON_LINEAR:
+              action = "layers-composite-space-rgb-non-linear"; break;
             case GIMP_LAYER_COLOR_SPACE_RGB_PERCEPTUAL:
               action = "layers-composite-space-rgb-perceptual"; break;
             default:
@@ -982,9 +1022,9 @@ layers_actions_update (GimpActionGroup *group,
   SET_SENSITIVE ("layers-select-previous",  n_selected_layers > 0 && !fs && !ac && have_prev);
   SET_SENSITIVE ("layers-select-next",      n_selected_layers > 0 && !fs && !ac && have_next);
 
-  SET_SENSITIVE ("layers-raise",            n_selected_layers > 0 && !fs && !ac && have_prev);
+  SET_SENSITIVE ("layers-raise",            n_selected_layers > 0 && !fs && !ac && have_prev && !first_selected);
   SET_SENSITIVE ("layers-raise-to-top",     n_selected_layers > 0 && !fs && !ac && have_prev);
-  SET_SENSITIVE ("layers-lower",            n_selected_layers > 0 && !fs && !ac && have_next);
+  SET_SENSITIVE ("layers-lower",            n_selected_layers > 0 && !fs && !ac && have_next && !last_selected);
   SET_SENSITIVE ("layers-lower-to-bottom",  n_selected_layers > 0 && !fs && !ac && have_next);
 
   SET_VISIBLE   ("layers-anchor",            fs && !ac);
@@ -1016,10 +1056,12 @@ layers_actions_update (GimpActionGroup *group,
 
   SET_SENSITIVE ("layers-blend-space-auto",           n_selected_layers && bs_mutable);
   SET_SENSITIVE ("layers-blend-space-rgb-linear",     n_selected_layers && bs_mutable);
+  SET_SENSITIVE ("layers-blend-space-rgb-non-linear", n_selected_layers && bs_mutable);
   SET_SENSITIVE ("layers-blend-space-rgb-perceptual", n_selected_layers && bs_mutable);
 
   SET_SENSITIVE ("layers-composite-space-auto",           n_selected_layers && cs_mutable);
   SET_SENSITIVE ("layers-composite-space-rgb-linear",     n_selected_layers && cs_mutable);
+  SET_SENSITIVE ("layers-composite-space-rgb-non-linear", n_selected_layers && cs_mutable);
   SET_SENSITIVE ("layers-composite-space-rgb-perceptual", n_selected_layers && cs_mutable);
 
   SET_SENSITIVE ("layers-composite-mode-auto",             n_selected_layers && cm_mutable);

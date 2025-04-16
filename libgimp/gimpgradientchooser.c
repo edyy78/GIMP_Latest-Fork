@@ -49,7 +49,7 @@ typedef struct
   gint     allocation_width;
 
   gdouble *data;
-  gint     n_samples;
+  gsize    n_samples;
 } GimpGradientPreviewData;
 
 struct _GimpGradientChooser
@@ -126,16 +126,12 @@ gimp_gradient_chooser_init (GimpGradientChooser *self)
                     G_CALLBACK (gimp_gradient_select_preview_draw_handler),
                     self);
 
-  g_signal_connect (self, "resource-set",
-                    G_CALLBACK (gimp_gradient_select_model_change_handler),
-                    self);
-
   gtk_widget_show_all (GTK_WIDGET (self));
 
-  gimp_resource_chooser_set_drag_target (GIMP_RESOURCE_CHOOSER (self),
+  _gimp_resource_chooser_set_drag_target (GIMP_RESOURCE_CHOOSER (self),
                                          self->preview, &drag_target);
 
-  gimp_resource_chooser_set_clickable (GIMP_RESOURCE_CHOOSER (self), button);
+  _gimp_resource_chooser_set_clickable (GIMP_RESOURCE_CHOOSER (self), button);
 }
 
 /* Called when dialog is closed and owning ResourceSelect button is disposed. */
@@ -176,22 +172,24 @@ gimp_gradient_chooser_draw_interior (GimpResourceChooser *self)
 GtkWidget *
 gimp_gradient_chooser_new (const gchar  *title,
                            const gchar  *label,
-                           GimpResource *gradient)
+                           GimpGradient *gradient)
 {
   GtkWidget *self;
 
+  g_return_val_if_fail (gradient == NULL || GIMP_IS_GRADIENT (gradient), NULL);
+
   if (gradient == NULL)
-    gradient = GIMP_RESOURCE (gimp_context_get_gradient ());
+    gradient = gimp_context_get_gradient ();
 
   if (title)
     self = g_object_new (GIMP_TYPE_GRADIENT_CHOOSER,
                          "title",    title,
-                         "label",     label,
+                         "label",    label,
                          "resource", gradient,
                          NULL);
   else
     self = g_object_new (GIMP_TYPE_GRADIENT_CHOOSER,
-                         "label",     label,
+                         "label",    label,
                          "resource", gradient,
                          NULL);
 
@@ -215,24 +213,30 @@ gimp_gradient_chooser_new (const gchar  *title,
 static gboolean
 get_gradient_data (GimpGradient  *gradient,
                    gint           allocation_width,
-                   gint          *sample_count,
+                   gsize         *sample_count,
                    gdouble      **sample_array)
 {
-  gboolean  result;
-  gdouble  *samples;
-  gint      n_samples;
+  gboolean    result = FALSE;
+  GeglColor **samples;
 
-  result = gimp_gradient_get_uniform_samples (gradient,
-                                              allocation_width,
-                                              FALSE,  /* not reversed. */
-                                              &n_samples,
-                                              &samples);
+  samples = gimp_gradient_get_uniform_samples (gradient, allocation_width,
+                                               FALSE  /* not reversed. */);
 
-  if (result)
+  if (samples)
     {
+      gdouble *dsamples;
+
       /* Return array of samples to dereferenced handles. */
-      *sample_array = samples;
-      *sample_count = n_samples;
+      *sample_count = gimp_color_array_get_length (samples);;
+      *sample_array = dsamples = g_new0 (gdouble, *sample_count * 4);
+      for (gint i = 0; samples[i] != NULL; i++)
+        {
+          gegl_color_get_pixel (samples[i], babl_format ("R'G'B'A double"), dsamples);
+          dsamples += 4;
+        }
+      gimp_color_array_free (samples);
+
+      result = TRUE;
     }
 
   /* When result is true, caller must free the array. */
@@ -248,6 +252,13 @@ gimp_gradient_select_preview_size_allocate (GtkWidget           *widget,
 {
   /* Width needed to draw preview. */
   local_grad_data_set_allocation_width (self, allocation->width);
+
+  g_signal_handlers_disconnect_by_func (self,
+                                        G_CALLBACK (gimp_gradient_select_model_change_handler),
+                                        self);
+  g_signal_connect (self, "resource-set",
+                    G_CALLBACK (gimp_gradient_select_model_change_handler),
+                    self);
 }
 
 /* Draw array of samples.
@@ -278,13 +289,14 @@ gimp_gradient_select_preview_draw (cairo_t *cr,
        x < src_width;
        x++, src += 4, dest += 4)
     {
-      GimpRGB color;
-      guchar  r, g, b, a;
+      GeglColor *color = gegl_color_new ("black");
+      guchar     rgba[4];
 
-      gimp_rgba_set (&color, src[0], src[1], src[2], src[3]);
-      gimp_rgba_get_uchar (&color, &r, &g, &b, &a);
+      gegl_color_set_pixel (color, babl_format ("R'G'B'A double"), src);
+      gegl_color_get_pixel (color, babl_format ("R'G'B'A u8"), rgba);
 
-      GIMP_CAIRO_ARGB32_SET_PIXEL (dest, r, g, b, a);
+      GIMP_CAIRO_ARGB32_SET_PIXEL (dest, rgba[0], rgba[1], rgba[2], rgba[3]);
+      g_object_unref (color);
     }
 
   cairo_surface_mark_dirty (surface);
@@ -335,7 +347,7 @@ gimp_gradient_select_preview_draw_handler (GtkWidget           *widget,
 
   /* Width in pixels of src, since BPP is 4. */
   gimp_gradient_select_preview_draw (cr,
-                                     self->local_grad_data->n_samples / 4,
+                                     self->local_grad_data->n_samples,
                                      self->local_grad_data->allocation_width,
                                      self->local_grad_data->data);
 
@@ -393,7 +405,7 @@ static gboolean
 local_grad_data_refresh (GimpGradientChooser *self, GimpGradient *gradient)
 {
   gdouble *src;
-  gint     n_samples;
+  gsize    n_samples;
 
   /* Must not be called before widget is allocated. */
   g_assert (self->local_grad_data->allocation_width != 0);

@@ -68,6 +68,27 @@ void            gimp_choice_set_sensitive     (GimpChoice   *choice,
                                                gboolean      sensitive);
 
 
+/*
+ * GIMP_TYPE_PARAM_CHOICE
+ */
+
+#define GIMP_TYPE_PARAM_CHOICE           (gimp_param_choice_get_type ())
+#define GIMP_IS_PARAM_SPEC_CHOICE(pspec) (G_TYPE_CHECK_INSTANCE_TYPE ((pspec), GIMP_TYPE_PARAM_CHOICE))
+
+
+GType        gimp_param_choice_get_type         (void) G_GNUC_CONST;
+
+GParamSpec * gimp_param_spec_choice             (const gchar  *name,
+                                                 const gchar  *nick,
+                                                 const gchar  *blurb,
+                                                 GimpChoice   *choice,
+                                                 const gchar  *default_value,
+                                                 GParamFlags   flags);
+
+GimpChoice  * gimp_param_spec_choice_get_choice  (GParamSpec *pspec);
+const gchar * gimp_param_spec_choice_get_default (GParamSpec *pspec);
+
+
 G_END_DECLS
 
 #endif /* __GIMP_CHOICE_H__ */

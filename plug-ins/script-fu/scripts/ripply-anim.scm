@@ -8,7 +8,7 @@
 ;
 
 (define (script-fu-ripply-anim image drawables displacement num-frames edge-type)
-  (let* ((drawable (aref (cadr (gimp-image-get-selected-drawables image)) 0))
+  (let* ((drawable (vector-ref (car (gimp-image-get-selected-drawables image)) 0))
          (width (car (gimp-drawable-get-width drawable)))
          (height (car (gimp-drawable-get-height drawable)))
          (work-image (car (gimp-image-new width
@@ -16,10 +16,10 @@
                                           (quotient (car (gimp-drawable-type drawable))
                                                     2))))
          (map-layer (car (gimp-layer-new work-image
+                                         "Ripple Map"
                                          width
                                          height
                                          (car (gimp-drawable-type drawable))
-                                         "Ripple Map"
                                          100
                                          LAYER-MODE-NORMAL))))
     (gimp-context-push)
@@ -31,11 +31,13 @@
     (gimp-context-set-background '(127 127 127))
     (gimp-image-insert-layer work-image map-layer 0 0)
     (gimp-drawable-edit-fill map-layer FILL-BACKGROUND)
-    (plug-in-noisify RUN-NONINTERACTIVE work-image map-layer FALSE 1.0 1.0 1.0 0.0)
-    (plug-in-tile RUN-NONINTERACTIVE work-image 1 (vector map-layer) (* width 3) (* height 3) FALSE)
-    (plug-in-gauss-iir RUN-NONINTERACTIVE work-image map-layer 35 TRUE TRUE)
+    (gimp-drawable-merge-new-filter map-layer "gegl:noise-rgb" 0 LAYER-MODE-REPLACE 1.0
+                                    "independent" FALSE "red" 1.0 "alpha" 0.0
+                                    "correlated" FALSE "seed" (msrg-rand) "linear" TRUE)
+    (plug-in-tile #:run-mode RUN-NONINTERACTIVE #:image work-image #:drawables (vector map-layer) #:new-width (* width 3) #:new-height (* height 3) #:new-image FALSE)
+    (gimp-drawable-merge-new-filter map-layer "gegl:gaussian-blur" 0 LAYER-MODE-REPLACE 1.0 "std-dev-x" 11.2 "std-dev-y" 11.2 "filter" "auto")
     (gimp-drawable-equalize map-layer TRUE)
-    (plug-in-gauss-rle RUN-NONINTERACTIVE work-image map-layer 5 TRUE TRUE)
+    (gimp-drawable-merge-new-filter map-layer "gegl:gaussian-blur" 0 LAYER-MODE-REPLACE 1.0 "std-dev-x" 1.6 "std-dev-y" 1.6 "filter" "auto")
     (gimp-drawable-equalize map-layer TRUE)
     (gimp-image-crop work-image width height width height)
 
@@ -49,13 +51,24 @@
                                              (number->string (+ 1 (- num-frames
                                                                      remaining-frames)))
                                              " (replace)"))
-          (plug-in-displace RUN-NONINTERACTIVE work-image frame-layer
-                            displacement displacement
-                            TRUE TRUE map-layer map-layer (+ edge-type 1))
+          (let* ((abyss "black")
+                 (filter (car (gimp-drawable-filter-new frame-layer "gegl:displace" ""))))
+
+            (if (= edge-type 0) (set! abyss "loop"))
+            (if (= edge-type 1) (set! abyss "clamp"))
+
+            (gimp-drawable-filter-configure filter LAYER-MODE-REPLACE 1.0
+                                            "amount-x" displacement "amount-x" displacement "abyss-policy" abyss
+                                            "sampler-type" "cubic" "displace-mode" "cartesian")
+            (gimp-drawable-filter-set-aux-input filter "aux" map-layer)
+            (gimp-drawable-filter-set-aux-input filter "aux2" map-layer)
+            (gimp-drawable-merge-filter frame-layer filter)
+          )
           (gimp-item-set-visible frame-layer TRUE))
         (gimp-drawable-offset map-layer
                               TRUE
-                              OFFSET-BACKGROUND
+                              OFFSET-COLOR
+                              (car (gimp-context-get-background))
                               (/ width num-frames)
                               (/ height num-frames))
         (loop (- remaining-frames 1))))

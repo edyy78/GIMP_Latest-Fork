@@ -16,16 +16,15 @@
 
 (define (script-fu-reverse-layers img drawables)
   (let* (
-        (layers (gimp-image-get-layers img))
-        (num-layers (car layers))
-        (layer-array (cadr layers))
+        (layer-array (car (gimp-image-get-layers img)))
+        (num-layers (vector-length layer-array))
         (i (- num-layers 1))
         )
 
     (gimp-image-undo-group-start img)
 
     (while (>= i 0)
-           (let ((layer (aref layer-array i)))
+           (let ((layer (vector-ref layer-array i)))
              (if (= (car (gimp-layer-is-floating-sel layer)) FALSE)
                  (gimp-image-lower-item-to-bottom img layer))
            )

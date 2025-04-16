@@ -93,22 +93,6 @@ gimp_gegl_get_op_enum_type (const gchar *operation,
   return G_TYPE_FROM_CLASS (G_PARAM_SPEC_ENUM (pspec)->enum_class);
 }
 
-GeglColor *
-gimp_gegl_color_new (const GimpRGB *rgb,
-                     const Babl    *space)
-{
-  GeglColor *color;
-
-  g_return_val_if_fail (rgb != NULL, NULL);
-
-  color = gegl_color_new (NULL);
-  gegl_color_set_pixel (color,
-                        babl_format_with_space ("R'G'B'A double", space),
-                        rgb);
-
-  return color;
-}
-
 static void
 gimp_gegl_progress_callback (GObject      *object,
                              gdouble       value,
@@ -551,6 +535,8 @@ gimp_gegl_op_blacklisted (const gchar *name,
     "gegl:high-pass",
     "gegl:hue-chroma",
     "gegl:illusion",
+    "gegl:json:dropshadow2",
+    "gegl:json:grey2",
     "gegl:image-gradient",
     "gegl:invert-linear",
     "gegl:invert-gamma",
@@ -630,7 +616,7 @@ gimp_gegl_op_blacklisted (const gchar *name,
     "gegl:ditto", /* pointless */
     "gegl:fill-path",
     "gegl:gray", /* we use gimp's op */
-    "gegl:hstack", /* pointless */
+    "gegl:hstack", /* deleted from GEGL and replaced by gegl:pack */
     "gegl:introspect", /* pointless */
     "gegl:layer", /* we use gimp's ops */
     "gegl:lcms-from-profile", /* not usable here */
@@ -640,6 +626,7 @@ gimp_gegl_op_blacklisted (const gchar *name,
     "gegl:matting-global", /* used in the foreground select tool */
     "gegl:matting-levin", /* used in the foreground select tool */
     "gegl:opacity", /* poinless */
+    "gegl:pack", /* pointless */
     "gegl:path",
     "gegl:posterize", /* we use gimp's op */
     "gegl:radial-gradient", /* we use the blend tool */

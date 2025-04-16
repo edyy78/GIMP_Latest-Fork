@@ -23,7 +23,7 @@
 
 
 (define (script-fu-xach-effect image
-                               drawable
+                               drawables
                                hl-offset-x
                                hl-offset-y
                                hl-color
@@ -35,6 +35,7 @@
                                ds-offset-y
                                keep-selection)
   (let* (
+        (drawable (vector-ref drawables 0))
         (ds-blur (max ds-blur 0))
         (ds-opacity (min ds-opacity 100))
         (ds-opacity (max ds-opacity 0))
@@ -65,7 +66,7 @@
           (set! from-selection TRUE)
           (set! active-selection (car (gimp-selection-save image)))))
 
-    (set! hl-layer (car (gimp-layer-new image image-width image-height type _"Highlight" 100 LAYER-MODE-NORMAL)))
+    (set! hl-layer (car (gimp-layer-new image _"Highlight" image-width image-height type 100 LAYER-MODE-NORMAL)))
     (gimp-image-insert-layer image hl-layer 0 -1)
 
     (gimp-selection-none image)
@@ -86,10 +87,10 @@
     (gimp-drawable-edit-fill mask FILL-BACKGROUND)
 
     (set! shadow-layer (car (gimp-layer-new image
+                                            _"Shadow"
                                             image-width
                                             image-height
                                             type
-                                            _"Shadow"
                                             ds-opacity
                                             LAYER-MODE-NORMAL)))
     (gimp-image-insert-layer image shadow-layer 0 -1)
@@ -100,7 +101,8 @@
     (gimp-context-set-background ds-color)
     (gimp-drawable-edit-fill shadow-layer FILL-BACKGROUND)
     (gimp-selection-none image)
-    (plug-in-gauss-rle RUN-NONINTERACTIVE image shadow-layer ds-blur TRUE TRUE)
+    (gimp-drawable-merge-new-filter shadow-layer "gegl:gaussian-blur" 0 LAYER-MODE-REPLACE 1.0
+                                    "std-dev-x" (* 0.32 ds-blur) "std-dev-y" (* 0.32 ds-blur) "filter" "auto")
     (gimp-image-select-item image CHANNEL-OP-REPLACE active-selection)
     (gimp-drawable-edit-clear shadow-layer)
     (gimp-image-lower-item image shadow-layer)
@@ -108,7 +110,7 @@
     (if (= keep-selection FALSE)
         (gimp-selection-none image))
 
-    (gimp-image-set-selected-layers image 1 (vector drawable))
+    (gimp-image-set-selected-layers image (vector drawable))
     (gimp-image-remove-channel image active-selection)
     (gimp-image-undo-group-end image)
     (gimp-displays-flush)
@@ -117,15 +119,14 @@
   )
 )
 
-(script-fu-register "script-fu-xach-effect"
+(script-fu-register-filter "script-fu-xach-effect"
   _"_Xach-Effect..."
   _"Add a subtle translucent 3D effect to the selected region (or alpha)"
   "Adrian Likins <adrian@gimp.org>"
   "Adrian Likins"
   "9/28/97"
   "RGB* GRAY*"
-  SF-IMAGE       "Image"                   0
-  SF-DRAWABLE    "Drawable"                0
+  SF-ONE-OR-MORE-DRAWABLE
   SF-ADJUSTMENT _"Highlight X offset"      '(-1 -100 100 1 10 0 1)
   SF-ADJUSTMENT _"Highlight Y offset"      '(-1 -100 100 1 10 0 1)
   SF-COLOR      _"Highlight color"         "white"

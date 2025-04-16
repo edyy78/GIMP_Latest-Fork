@@ -40,7 +40,7 @@
 #include "gimp-intl.h"
 
 
-#define PLUG_IN_RC_FILE_VERSION 13
+#define PLUG_IN_RC_FILE_VERSION 15
 
 
 /*
@@ -92,6 +92,7 @@ enum
   MIME_TYPES,
   HANDLES_REMOTE,
   HANDLES_RAW,
+  HANDLES_VECTOR,
   THUMB_LOADER,
   BATCH_INTERPRETER,
 };
@@ -162,6 +163,8 @@ plug_in_rc_parse (Gimp    *gimp,
                               "handles-remote", GINT_TO_POINTER (HANDLES_REMOTE));
   g_scanner_scope_add_symbol (scanner, LOAD_PROC,
                               "handles-raw", GINT_TO_POINTER (HANDLES_RAW));
+  g_scanner_scope_add_symbol (scanner, LOAD_PROC,
+                              "handles-vector", GINT_TO_POINTER (HANDLES_VECTOR));
   g_scanner_scope_add_symbol (scanner, LOAD_PROC,
                               "thumb-loader", GINT_TO_POINTER (THUMB_LOADER));
 
@@ -402,7 +405,7 @@ plug_in_procedure_deserialize (GScanner             *scanner,
     }
 
   if (proc_type != GIMP_PDB_PROC_TYPE_PLUGIN &&
-      proc_type != GIMP_PDB_PROC_TYPE_EXTENSION)
+      proc_type != GIMP_PDB_PROC_TYPE_PERSISTENT)
     {
       g_free (str);
       g_scanner_error (scanner, "procedure type %d is out of range",
@@ -717,6 +720,10 @@ plug_in_file_or_batch_proc_deserialize (GScanner            *scanner,
               gimp_plug_in_procedure_set_handles_raw (proc);
               break;
 
+            case HANDLES_VECTOR:
+              gimp_plug_in_procedure_set_handles_vector (proc);
+              break;
+
             case THUMB_LOADER:
                 {
                   gchar *thumb_loader;
@@ -885,13 +892,13 @@ plug_in_proc_arg_deserialize (GScanner      *scanner,
         }
       break;
 
-    case GP_PARAM_DEF_TYPE_FLOAT:
-      if (! gimp_scanner_parse_float (scanner,
-                                      &param_def.meta.m_float.min_val) ||
-          ! gimp_scanner_parse_float (scanner,
-                                      &param_def.meta.m_float.max_val) ||
-          ! gimp_scanner_parse_float (scanner,
-                                      &param_def.meta.m_float.default_val))
+    case GP_PARAM_DEF_TYPE_DOUBLE:
+      if (! gimp_scanner_parse_double (scanner,
+                                       &param_def.meta.m_double.min_val) ||
+          ! gimp_scanner_parse_double (scanner,
+                                       &param_def.meta.m_double.max_val) ||
+          ! gimp_scanner_parse_double (scanner,
+                                       &param_def.meta.m_double.default_val))
         {
           token = G_TOKEN_FLOAT;
           goto error;
@@ -903,27 +910,6 @@ plug_in_proc_arg_deserialize (GScanner      *scanner,
                                        &param_def.meta.m_string.default_val))
         {
           token = G_TOKEN_STRING;
-          goto error;
-        }
-      break;
-
-    case GP_PARAM_DEF_TYPE_COLOR:
-      if (! gimp_scanner_parse_int (scanner,
-                                    &param_def.meta.m_color.has_alpha))
-        {
-          token = G_TOKEN_INT;
-          goto error;
-        }
-      if (! gimp_scanner_parse_float (scanner,
-                                      &param_def.meta.m_color.default_val.r) ||
-          ! gimp_scanner_parse_float (scanner,
-                                      &param_def.meta.m_color.default_val.g) ||
-          ! gimp_scanner_parse_float (scanner,
-                                      &param_def.meta.m_color.default_val.b) ||
-          ! gimp_scanner_parse_float (scanner,
-                                      &param_def.meta.m_color.default_val.a))
-        {
-          token = G_TOKEN_FLOAT;
           goto error;
         }
       break;
@@ -944,11 +930,21 @@ plug_in_proc_arg_deserialize (GScanner      *scanner,
               goto error;
             }
 
-          if (! gimp_scanner_parse_int (scanner, &bpp)                         ||
-              bpp > 40                                                         ||
-              ! gimp_scanner_parse_data (scanner, bpp, &data)                  ||
-              ! gimp_scanner_parse_string (scanner, &encoding)                 ||
-              ! gimp_scanner_parse_int (scanner, &profile_size))
+          if (g_scanner_peek_next_token (scanner) == G_TOKEN_IDENTIFIER)
+            {
+              if (g_strcmp0 (scanner->next_value.v_identifier, "NULL") != 0)
+                {
+                  token = G_TOKEN_INT;
+                  goto error;
+                }
+              g_scanner_get_next_token (scanner);
+              /* NULL default color. Skip. */
+            }
+          else if (! gimp_scanner_parse_int (scanner, &bpp)                         ||
+                   bpp > 40                                                         ||
+                   ! gimp_scanner_parse_data (scanner, bpp, &data)                  ||
+                   ! gimp_scanner_parse_string (scanner, &encoding)                 ||
+                   ! gimp_scanner_parse_int (scanner, &profile_size))
             {
               g_free (data);
               g_free (encoding);
@@ -969,10 +965,10 @@ plug_in_proc_arg_deserialize (GScanner      *scanner,
               default_val = g_new0 (GPParamColor, 1);
 
               memcpy (default_val->data, data, bpp);
-              default_val->size         = bpp;
-              default_val->encoding     = encoding;
-              default_val->profile_size = profile_size;
-              default_val->profile_data = profile_data;
+              default_val->size                = bpp;
+              default_val->format.encoding     = encoding;
+              default_val->format.profile_size = profile_size;
+              default_val->format.profile_data = profile_data;
             }
           else
             {
@@ -997,6 +993,39 @@ plug_in_proc_arg_deserialize (GScanner      *scanner,
     case GP_PARAM_DEF_TYPE_ID_ARRAY:
       if (! gimp_scanner_parse_string (scanner,
                                        &param_def.meta.m_id_array.type_name))
+        {
+          token = G_TOKEN_STRING;
+          goto error;
+        }
+      break;
+
+    case GP_PARAM_DEF_TYPE_EXPORT_OPTIONS:
+      break;
+
+    case GP_PARAM_DEF_TYPE_RESOURCE:
+      if (! gimp_scanner_parse_int (scanner,
+                                    &param_def.meta.m_resource.none_ok) ||
+          ! gimp_scanner_parse_int (scanner,
+                                    &param_def.meta.m_resource.default_to_context) ||
+          ! gimp_scanner_parse_int (scanner,
+                                    &param_def.meta.m_resource.default_resource_id))
+        {
+          token = G_TOKEN_INT;
+          goto error;
+        }
+      break;
+
+    case GP_PARAM_DEF_TYPE_FILE:
+      if (! gimp_scanner_parse_int (scanner,
+                                    (gint *) &param_def.meta.m_file.action) ||
+          ! gimp_scanner_parse_int (scanner,
+                                    &param_def.meta.m_file.none_ok))
+        {
+          token = G_TOKEN_INT;
+          goto error;
+        }
+      if (! gimp_scanner_parse_string (scanner,
+                                       &param_def.meta.m_file.default_uri))
         {
           token = G_TOKEN_STRING;
           goto error;
@@ -1036,7 +1065,7 @@ plug_in_proc_arg_deserialize (GScanner      *scanner,
       break;
 
     case GP_PARAM_DEF_TYPE_BOOLEAN:
-    case GP_PARAM_DEF_TYPE_FLOAT:
+    case GP_PARAM_DEF_TYPE_DOUBLE:
       break;
 
     case GP_PARAM_DEF_TYPE_STRING:
@@ -1046,13 +1075,12 @@ plug_in_proc_arg_deserialize (GScanner      *scanner,
     case GP_PARAM_DEF_TYPE_GEGL_COLOR:
       if (param_def.meta.m_gegl_color.default_val)
         {
-          g_free (param_def.meta.m_gegl_color.default_val->encoding);
-          g_free (param_def.meta.m_gegl_color.default_val->profile_data);
+          g_free (param_def.meta.m_gegl_color.default_val->format.encoding);
+          g_free (param_def.meta.m_gegl_color.default_val->format.profile_data);
           g_free (param_def.meta.m_gegl_color.default_val);
         }
       break;
 
-    case GP_PARAM_DEF_TYPE_COLOR:
     case GP_PARAM_DEF_TYPE_ID:
       break;
 
@@ -1063,6 +1091,16 @@ plug_in_proc_arg_deserialize (GScanner      *scanner,
 
     case GP_PARAM_DEF_TYPE_ID_ARRAY:
       g_free (param_def.meta.m_id_array.type_name);
+      break;
+
+    case GP_PARAM_DEF_TYPE_EXPORT_OPTIONS:
+      break;
+
+    case GP_PARAM_DEF_TYPE_RESOURCE:
+      break;
+
+    case GP_PARAM_DEF_TYPE_FILE:
+      g_free (param_def.meta.m_file.default_uri);
       break;
     }
 
@@ -1185,13 +1223,13 @@ plug_in_rc_write_proc_arg (GimpConfigWriter *writer,
                                  param_def.meta.m_boolean.default_val);
       break;
 
-    case GP_PARAM_DEF_TYPE_FLOAT:
+    case GP_PARAM_DEF_TYPE_DOUBLE:
       g_ascii_dtostr (buf[0], sizeof (buf[0]),
-                      param_def.meta.m_float.min_val);
+                      param_def.meta.m_double.min_val);
       g_ascii_dtostr (buf[1], sizeof (buf[1]),
-                      param_def.meta.m_float.max_val),
+                      param_def.meta.m_double.max_val),
       g_ascii_dtostr (buf[2], sizeof (buf[2]),
-                      param_def.meta.m_float.default_val);
+                      param_def.meta.m_double.default_val);
       gimp_config_writer_printf (writer, "%s %s %s",
                                  buf[0], buf[1], buf[2]);
       break;
@@ -1199,20 +1237,6 @@ plug_in_rc_write_proc_arg (GimpConfigWriter *writer,
     case GP_PARAM_DEF_TYPE_STRING:
       gimp_config_writer_string (writer,
                                  param_def.meta.m_string.default_val);
-      break;
-
-    case GP_PARAM_DEF_TYPE_COLOR:
-      g_ascii_dtostr (buf[0], sizeof (buf[0]),
-                      param_def.meta.m_color.default_val.r);
-      g_ascii_dtostr (buf[1], sizeof (buf[1]),
-                      param_def.meta.m_color.default_val.g),
-      g_ascii_dtostr (buf[2], sizeof (buf[2]),
-                      param_def.meta.m_color.default_val.b);
-      g_ascii_dtostr (buf[3], sizeof (buf[3]),
-                      param_def.meta.m_color.default_val.a);
-      gimp_config_writer_printf (writer, "%d %s %s %s %s",
-                                 param_def.meta.m_color.has_alpha,
-                                 buf[0], buf[1], buf[2], buf[3]);
       break;
 
     case GP_PARAM_DEF_TYPE_GEGL_COLOR:
@@ -1231,9 +1255,9 @@ plug_in_rc_write_proc_arg (GimpConfigWriter *writer,
             {
               bpp          = param_def.meta.m_gegl_color.default_val->size;
               data         = param_def.meta.m_gegl_color.default_val->data;
-              encoding     = param_def.meta.m_gegl_color.default_val->encoding;
-              profile_size = param_def.meta.m_gegl_color.default_val->profile_size;
-              profile_data = param_def.meta.m_gegl_color.default_val->profile_data;
+              encoding     = param_def.meta.m_gegl_color.default_val->format.encoding;
+              profile_size = param_def.meta.m_gegl_color.default_val->format.profile_size;
+              profile_data = param_def.meta.m_gegl_color.default_val->format.profile_data;
 
               gimp_config_writer_printf (writer, "%d", bpp);
               gimp_config_writer_data (writer, bpp, data);
@@ -1258,6 +1282,24 @@ plug_in_rc_write_proc_arg (GimpConfigWriter *writer,
     case GP_PARAM_DEF_TYPE_ID_ARRAY:
       gimp_config_writer_string (writer,
                                  param_def.meta.m_id_array.type_name);
+      break;
+
+    case GP_PARAM_DEF_TYPE_EXPORT_OPTIONS:
+      break;
+
+    case GP_PARAM_DEF_TYPE_RESOURCE:
+      gimp_config_writer_printf (writer, "%d %d %d",
+                                 param_def.meta.m_resource.none_ok,
+                                 param_def.meta.m_resource.default_to_context,
+                                 param_def.meta.m_resource.default_resource_id);
+      break;
+
+    case GP_PARAM_DEF_TYPE_FILE:
+      gimp_config_writer_printf (writer, "%d %d",
+                                 param_def.meta.m_file.action,
+                                 param_def.meta.m_file.none_ok);
+      gimp_config_writer_string (writer,
+                                 param_def.meta.m_file.default_uri);
       break;
     }
 
@@ -1431,6 +1473,12 @@ plug_in_rc_write (GSList  *plug_in_defs,
                   if (proc->handles_raw && ! proc->image_types)
                     {
                       gimp_config_writer_open (writer, "handles-raw");
+                      gimp_config_writer_close (writer);
+                    }
+
+                  if (proc->handles_vector)
+                    {
+                      gimp_config_writer_open (writer, "handles-vector");
                       gimp_config_writer_close (writer);
                     }
 

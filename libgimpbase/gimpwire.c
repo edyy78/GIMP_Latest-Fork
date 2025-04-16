@@ -125,7 +125,14 @@ gimp_wire_read (GIOChannel *channel,
             }
           while (G_UNLIKELY (status == G_IO_STATUS_AGAIN));
 
-          if (G_UNLIKELY (status != G_IO_STATUS_NORMAL))
+          if (G_UNLIKELY (bytes == 0 && status == G_IO_STATUS_EOF))
+            {
+              g_warning ("%s: gimp_wire_read(): unexpected EOF",
+                         g_get_prgname ());
+              wire_error_val = TRUE;
+              return FALSE;
+            }
+          else if (G_UNLIKELY (status != G_IO_STATUS_NORMAL))
             {
               if (error)
                 {
@@ -139,14 +146,6 @@ gimp_wire_read (GIOChannel *channel,
                              g_get_prgname ());
                 }
 
-              wire_error_val = TRUE;
-              return FALSE;
-            }
-
-          if (G_UNLIKELY (bytes == 0))
-            {
-              g_warning ("%s: gimp_wire_read(): unexpected EOF",
-                         g_get_prgname ());
               wire_error_val = TRUE;
               return FALSE;
             }
@@ -481,18 +480,6 @@ _gimp_wire_read_string (GIOChannel  *channel,
 }
 
 gboolean
-_gimp_wire_read_color (GIOChannel *channel,
-                       GimpRGB    *data,
-                       gint        count,
-                       gpointer    user_data)
-{
-  g_return_val_if_fail (count >= 0, FALSE);
-
-  return _gimp_wire_read_double (channel,
-                                 (gdouble *) data, 4 * count, user_data);
-}
-
-gboolean
 _gimp_wire_read_gegl_color (GIOChannel  *channel,
                             GBytes     **pixel_data,
                             GBytes     **icc_data,
@@ -713,18 +700,6 @@ _gimp_wire_write_string (GIOChannel  *channel,
     }
 
   return TRUE;
-}
-
-gboolean
-_gimp_wire_write_color (GIOChannel    *channel,
-                        const GimpRGB *data,
-                        gint           count,
-                        gpointer       user_data)
-{
-  g_return_val_if_fail (count >= 0, FALSE);
-
-  return _gimp_wire_write_double (channel,
-                                  (gdouble *) data, 4 * count, user_data);
 }
 
 gboolean

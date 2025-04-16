@@ -87,17 +87,9 @@ class StringEnum:
             return key
         raise AttributeError("No such key string " + key)
 
-
-output_format_enum = StringEnum(
-    "pixel count", _("Pixel count"),
-    "normalized", _("Normalized"),
-    "percent", _("Percent")
-)
-
-
 def histogram_export(procedure, img, layers, gio_file,
                      bucket_size, sample_average, output_format):
-    layers = img.list_selected_layers()
+    layers = img.get_selected_layers()
     layer = layers[0]
     if sample_average:
         new_img = img.duplicate()
@@ -114,7 +106,7 @@ def histogram_export(procedure, img, layers, gio_file,
         channels_gimp += [Gimp.HistogramChannel.ALPHA]
 
     try:
-        with open(gio_file.get_path(), "wt") as hfile:
+        with open(gio_file.get_path(), "wt", newline="") as hfile:
             writer = csv.writer(hfile)
             histo_proc = Gimp.get_pdb().lookup_procedure('gimp-drawable-histogram')
             histo_config = histo_proc.create_config()
@@ -139,12 +131,12 @@ def histogram_export(procedure, img, layers, gio_file,
                     histo_config.set_property('channel', channel)
                     result = histo_proc.run(histo_config)
 
-                    if output_format == output_format_enum.pixel_count:
+                    if output_format == "pixel-count":
                         count = int(result.index(5))
                     else:
                         pixels = result.index(4)
                         count = (result.index(5) / pixels) if pixels else 0
-                        if output_format == output_format_enum.percent:
+                        if output_format == "percent":
                             count = "%.2f%%" % (count * 100)
                     row.append(str(count))
                 writer.writerow(row)
@@ -171,12 +163,14 @@ def histogram_export(procedure, img, layers, gio_file,
 
     return procedure.new_return_values(Gimp.PDBStatusType.SUCCESS, GLib.Error())
 
-
-def run(procedure, run_mode, image, n_layers, layers, config, data):
+def run(procedure, run_mode, image, layers, config, data):
     if run_mode == Gimp.RunMode.INTERACTIVE:
-        GimpUi.init("histogram-export.py")
+        GimpUi.init("python-fu-histogram-export")
 
         dialog = GimpUi.ProcedureDialog.new(procedure, config, _("Histogram Export..."))
+
+        radio_frame = dialog.get_widget("output-format", GimpUi.IntRadioFrame)
+
         dialog.fill(None)
 
         if not dialog.run():
@@ -200,42 +194,16 @@ def run(procedure, run_mode, image, n_layers, layers, config, data):
 
 
 class HistogramExport(Gimp.PlugIn):
-
-    ## Parameters ##
-    __gproperties__ = {
-        # TODO: GFile props still don't have labels + only load existing files
-        # (here we likely want to create a new file).
-        "file": (Gio.File,
-                 _("Histogram File"),
-                 "Histogram export file",
-                 GObject.ParamFlags.READWRITE),
-        "bucket-size":  (float,
-                         _("_Bucket Size"),
-                         "Bucket Size",
-                         0.001, 1.0, 0.01,
-                         GObject.ParamFlags.READWRITE),
-        "sample-average": (bool,
-                           _("Sample _Average"),
-                           "Sample Average",
-                           False,
-                           GObject.ParamFlags.READWRITE),
-        "output-format": (str,
-                          _("Output _format"),
-                          "Output format: 'pixel count', 'normalized', 'percent'",
-                          "pixel count",
-                          GObject.ParamFlags.READWRITE),
-    }
-
     ## GimpPlugIn virtual methods ##
     def do_set_i18n(self, procname):
         return True, 'gimp30-python', None
 
     def do_query_procedures(self):
-        return ['histogram-export']
+        return ['python-fu-histogram-export']
 
     def do_create_procedure(self, name):
         procedure = None
-        if name == 'histogram-export':
+        if name == 'python-fu-histogram-export':
             procedure = Gimp.ImageProcedure.new(self, name,
                                                 Gimp.PDBProcType.PLUGIN,
                                                 run, None)
@@ -251,10 +219,21 @@ class HistogramExport(Gimp.PlugIn):
                                       "2014")
             procedure.add_menu_path("<Image>/Colors/Info/")
 
-            procedure.add_argument_from_property(self, "file")
-            procedure.add_argument_from_property(self, "bucket-size")
-            procedure.add_argument_from_property(self, "sample-average")
-            procedure.add_argument_from_property(self, "output-format")
+            # TODO: GFile props still don't have labels + only load existing files
+            # (here we likely want to create a new file).
+            procedure.add_file_argument ("file", _("Histogram File"),
+                                         _("Histogram export file"), Gimp.FileChooserAction.SAVE,
+                                         False, None, GObject.ParamFlags.READWRITE)
+            procedure.add_double_argument ("bucket-size", _("_Bucket Size"), _("Bucket Size"),
+                                           0.001, 1.0, 0.01, GObject.ParamFlags.READWRITE)
+            procedure.add_boolean_argument ("sample-average", _("Sample _Average"), _("Sample Average"),
+                                            False, GObject.ParamFlags.READWRITE)
+            choice = Gimp.Choice.new()
+            choice.add("pixel-count", 0, _("Pixel Count"), "")
+            choice.add("normalized", 1, _("Normalized"), "")
+            choice.add("percent", 2, _("Percent"), "")
+            procedure.add_choice_argument ("output-format", _("Output _format"), _("Output format"),
+                                           choice, "percent", GObject.ParamFlags.READWRITE)
 
         return procedure
 

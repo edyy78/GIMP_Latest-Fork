@@ -446,16 +446,12 @@ dump_describe_param (GParamSpec *param_spec)
                                param_spec->name);
     }
 
-  if (GIMP_IS_PARAM_SPEC_RGB (param_spec))
+  if (GIMP_IS_PARAM_SPEC_COLOR (param_spec))
     {
-      if (gimp_param_spec_rgb_has_alpha (param_spec))
-        values =
-          "The color is specified in the form (color-rgba red green blue "
-          "alpha) with channel values as floats in the range of 0.0 to 1.0.";
+      if (gimp_param_spec_color_has_alpha (param_spec))
+        values = "The color is specified as opaque GeglColor (any Alpha channel is ignored).";
       else
-        values =
-          "The color is specified in the form (color-rgb red green blue) "
-          "with channel values as floats in the range of 0.0 to 1.0.";
+        values = "The color is specified as GeglColor.";
     }
   else if (GIMP_IS_PARAM_SPEC_MEMSIZE (param_spec))
     {
@@ -510,9 +506,18 @@ dump_describe_param (GParamSpec *param_spec)
     }
   else if (GIMP_IS_PARAM_SPEC_UNIT (param_spec))
     {
-      values =
-        "The unit can be one inches, millimeters, points or picas plus "
-        "those in your user units database.";
+      if (gimp_param_spec_unit_pixel_allowed (param_spec) && gimp_param_spec_unit_percent_allowed (param_spec))
+        values = "The unit can be one inches, millimeters, points or picas plus "
+                 "those in your user units database. Pixel And Percent units are allowed too.";
+      else if (gimp_param_spec_unit_pixel_allowed (param_spec))
+        values = "The unit can be one inches, millimeters, points or picas plus "
+                 "those in your user units database. Pixel unit is allowed too.";
+      else if (gimp_param_spec_unit_percent_allowed (param_spec))
+        values = "The unit can be one inches, millimeters, points or picas plus "
+                 "those in your user units database. Percent unit is allowed too.";
+      else
+        values = "The unit can be one inches, millimeters, points or picas plus "
+                 "those in your user units database.";
     }
   else if (g_type_is_a (param_spec->value_type, GIMP_TYPE_CONFIG))
     {

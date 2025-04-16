@@ -186,12 +186,12 @@ browser_create_procedure (GimpPlugIn  *plug_in,
                                       "Andy Thomas",
                                       "1999");
 
-      GIMP_PROC_ARG_ENUM (procedure, "run-mode",
-                          "Run mode",
-                          "The run mode",
-                          GIMP_TYPE_RUN_MODE,
-                          GIMP_RUN_INTERACTIVE,
-                          G_PARAM_READWRITE);
+      gimp_procedure_add_enum_argument (procedure, "run-mode",
+                                        "Run mode",
+                                        "The run mode",
+                                        GIMP_TYPE_RUN_MODE,
+                                        GIMP_RUN_INTERACTIVE,
+                                        G_PARAM_READWRITE);
     }
 
   return procedure;
@@ -423,9 +423,9 @@ browser_search (GimpBrowser   *gimp_browser,
       const gint        *time_ints;
       gint               i;
 
-      accel_strs     = GIMP_VALUES_GET_STRV (return_vals, 2);
-      prog_strs      = GIMP_VALUES_GET_STRV (return_vals, 3);
-      time_ints      = GIMP_VALUES_GET_INT32_ARRAY  (return_vals, 5);
+      accel_strs = GIMP_VALUES_GET_STRV (return_vals, 2);
+      prog_strs  = GIMP_VALUES_GET_STRV (return_vals, 3);
+      time_ints  = GIMP_VALUES_GET_INT32_ARRAY (return_vals, 4, NULL);
 
       for (i = 0; i < num_plugins; i++)
         {

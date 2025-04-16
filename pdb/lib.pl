@@ -107,6 +107,7 @@ sub generate_fun {
     # Find the return argument (defaults to the first arg if not
     # explicitly set
     my $retarg  = undef;
+    my $retarg_len  = undef;
     $retvoid = 0;
     foreach (@outargs) {
         $retarg = $_, last if exists $_->{retval};
@@ -135,7 +136,8 @@ sub generate_fun {
         $retarg->{retval} = 1;
 
         if (exists $argtype->{array}) {
-            $annotate = " (array length=$retarg->{array}->{name})";
+            $retarg_len = $retarg->{array}->{name};
+            $annotate   = " (array length=$retarg_len)";
         }
         if (exists $retarg->{none_ok}) {
             $annotate .= " (nullable)";
@@ -162,8 +164,10 @@ sub generate_fun {
 
         unless ($retdesc =~ /[\.\!\?]$/) { $retdesc .= '.' }
 
-        if ($retarg->{type} eq 'string') {
-            $retdesc .= "\n *          The returned value must be freed with g_free().";
+        my $array_test = $retarg->{type};
+        $array_test =~ s/array$//g;
+        if ($retarg->{type} eq 'colorarray') {
+            $retdesc .= "\n *          The returned value must be freed with gimp_color_array_free().";
         }
         elsif ($retarg->{type} eq 'strv') {
             $retdesc .= "\n *          The returned value must be freed with g_strfreev().";
@@ -171,7 +175,7 @@ sub generate_fun {
         elsif ($retarg->{type} eq 'param') {
             $retdesc .= "\n *          The returned value must be freed with g_param_spec_unref().";
         }
-        elsif (exists $argtype->{array}) {
+        elsif ($retarg->{type} eq 'string' || $retarg->{type} ne $array_test) {
             $retdesc .= "\n *          The returned value must be freed with g_free().";
         }
     }
@@ -184,6 +188,7 @@ sub generate_fun {
     my $arglist = "";
     my $argdesc = "";
     my $sincedesc = "";
+    my $inargs_testing = "";
     my $value_array = "";
     my $arg_array = "";
     my $argc = 0;
@@ -195,29 +200,62 @@ sub generate_fun {
         my $var_len;
         my $value;
 
-        # This gets passed to gimp_value_array_new_with_types()
-        if ($type eq 'enum') {
-            $enum_type = $typeinfo[0];
-            $enum_type =~ s/([a-z])([A-Z])/$1_$2/g;
-            $enum_type =~ s/([A-Z]+)([A-Z])/$1_$2/g;
-            $enum_type =~ tr/[a-z]/[A-Z]/;
-            $enum_type =~ s/^GIMP/GIMP_TYPE/;
-            $enum_type =~ s/^GEGL/GEGL_TYPE/;
+        if (exists $_->{nopdb}) {
+            $argc--;
 
-            $value_array .= "$enum_type, ";
+            if (defined $typeinfo[0]) {
+                $min = ($typeinfo[1] eq '<') ? ($typeinfo[0] + 1) : $typeinfo[0];
+                # gsize is positive, no need to test for >= 0.
+                if ($min > 0) {
+                    if ($rettype eq 'void') {
+                        # void rettype is in fact boolean.
+                        $inargs_testing .= "\n" . ' ' x 2 . "g_return_val_if_fail ($_->{name} >= $min, FALSE);";
+                    }
+                    else {
+                        # TODO: I should in fact test the exact return
+                        # type. E.g. it could be int or float. But since
+                        # we have no such case (while also generating in
+                        # argument testing) so far, I took the easy way
+                        # out. To be completed if needed.
+                        $inargs_testing .= "\n" . ' ' x 2 . "g_return_val_if_fail ($_->{name} >= $min, NULL);";
+                    }
+                }
+            }
+            if (defined $typeinfo[2]) {
+                $max = ($typeinfo[3] eq '<') ? ($typeinfo[2] - 1) : $typeinfo[2];
+                if ($rettype eq 'void') {
+                    $inargs_testing .= "\n" . ' ' x 2 . "g_return_val_if_fail ($_->{name} <= $max, FALSE);";
+                }
+                else {
+                    $inargs_testing .= "\n" . ' ' x 2 . "g_return_val_if_fail ($_->{name} <= $max, NULL);";
+                }
+            }
         }
         else {
-            $value_array .= "$arg->{gtype}, ";
-        }
+            # This gets passed to gimp_value_array_new_with_types()
+            if ($type eq 'enum') {
+                $enum_type = $typeinfo[0];
+                $enum_type =~ s/([a-z])([A-Z])/$1_$2/g;
+                $enum_type =~ s/([A-Z]+)([A-Z])/$1_$2/g;
+                $enum_type =~ tr/[a-z]/[A-Z]/;
+                $enum_type =~ s/^GIMP/GIMP_TYPE/;
+                $enum_type =~ s/^GEGL/GEGL_TYPE/;
 
-        if (exists $_->{array}) {
-            $value_array .= "NULL";
-        }
-        else {
-            $value_array .= "$var";
-        }
+                $value_array .= "$enum_type, ";
+            }
+            else {
+                $value_array .= "$arg->{gtype}, ";
+            }
 
-        $value_array .= ",\n" . " " x 42;
+            if (exists $_->{array}) {
+                $value_array .= "NULL";
+            }
+            else {
+                $value_array .= "$var";
+            }
+
+            $value_array .= ",\n" . " " x 42;
+        }
 
         if (exists $_->{array}) {
             my $arrayarg = $_->{array};
@@ -245,7 +283,7 @@ sub generate_fun {
         $argdesc .= ":";
 
         if (exists $arg->{array}) {
-            $argdesc .= " (array length=$inargs[$argc - 1]->{name})";
+            $argdesc .= " (array length=$var_len)";
         }
 
         if (exists $arg->{in_annotate}) {
@@ -265,6 +303,10 @@ sub generate_fun {
         $argdesc .= "\n";
 
         $argc++;
+    }
+
+    if ($inargs_testing ne "") {
+        $inargs_testing .= "\n";
     }
 
     # This marshals the return value(s)
@@ -365,7 +407,8 @@ CODE
             my $var;
 
             # The return value variable
-            $var = "";
+            $var     = "";
+            $var_len = $retarg_len;
 
             unless (exists $_->{retval}) {
                 $var .= '*';
@@ -384,7 +427,14 @@ CODE
                 }
 
                 if (exists $arg->{array}) {
-                    $argdesc .= " (array length=$outargs[$argc - 2]->{name})";
+                    my $arrayarg = $_->{array};
+                    if (exists $arrayarg->{name}) {
+                        $var_len = $arrayarg->{name};
+                    }
+                    else {
+                        $var_len = 'num_' . $_->{libname};
+                    }
+                    $argdesc .= " (array length=$var_len)";
                 }
 
                 if (exists $arg->{out_annotate}) {
@@ -397,10 +447,16 @@ CODE
             $var = exists $_->{retval} ? "" : '*';
             $var .= $_->{libname};
 
+            if (exists $_->{nopdb}) {
+                $argc--;
+            }
+
             $value = "return_vals, $argc";
 
-            $return_marshal .= ' ' x 2 if $#outargs;
-            $return_marshal .= eval qq/"    $arg->{dup_value_func};\n"/;
+            if (! exists $_->{nopdb}) {
+                $return_marshal .= ' ' x 2 if $#outargs;
+                $return_marshal .= eval qq/"    $arg->{dup_value_func};\n"/;
+            }
 
             if ($argdesc) {
                 unless ($argdesc =~ /[\.\!\?]$/) { $argdesc .= '.' }
@@ -530,7 +586,7 @@ $wrapped$funcname ($clist)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;$return_args
-
+$inargs_testing
   args = gimp_value_array_new_from_types (NULL,
                                           ${value_array}G_TYPE_NONE);
 $arg_array

@@ -1,8 +1,8 @@
 /* bmp.c                                          */
 /* Version 0.52                                   */
 /* This is a File input and output filter for the */
-/* Gimp. It loads and saves images in windows(TM) */
-/* bitmap format.                                 */
+/* Gimp. It loads and exports images in the       */
+/* windows(TM) bitmap format.                     */
 /* Some Parts that deal with the interaction with */
 /* GIMP are taken from the GIF plugin by          */
 /* Peter Mattis & Spencer Kimball and from the    */
@@ -61,7 +61,7 @@
 
 #include "bmp.h"
 #include "bmp-load.h"
-#include "bmp-save.h"
+#include "bmp-export.h"
 
 #include "libgimp/stdplugins-intl.h"
 
@@ -96,12 +96,11 @@ static GimpValueArray * bmp_load             (GimpProcedure         *procedure,
                                               GimpMetadataLoadFlags *flags,
                                               GimpProcedureConfig   *config,
                                               gpointer               run_data);
-static GimpValueArray * bmp_save             (GimpProcedure         *procedure,
+static GimpValueArray * bmp_export           (GimpProcedure         *procedure,
                                               GimpRunMode            run_mode,
                                               GimpImage             *image,
-                                              gint                   n_drawables,
-                                              GimpDrawable         **drawables,
                                               GFile                 *file,
+                                              GimpExportOptions     *options,
                                               GimpMetadata          *metadata,
                                               GimpProcedureConfig   *config,
                                               gpointer               run_data);
@@ -135,7 +134,7 @@ bmp_query_procedures (GimpPlugIn *plug_in)
   GList *list = NULL;
 
   list = g_list_append (list, g_strdup (LOAD_PROC));
-  list = g_list_append (list, g_strdup (SAVE_PROC));
+  list = g_list_append (list, g_strdup (EXPORT_PROC));
 
   return list;
 }
@@ -170,11 +169,11 @@ bmp_create_procedure (GimpPlugIn  *plug_in,
       gimp_file_procedure_set_magics (GIMP_FILE_PROCEDURE (procedure),
                                       "0,string,BM");
     }
-  else if (! strcmp (name, SAVE_PROC))
+  else if (! strcmp (name, EXPORT_PROC))
     {
-      procedure = gimp_save_procedure_new (plug_in, name,
-                                           GIMP_PDB_PROC_TYPE_PLUGIN,
-                                           FALSE, bmp_save, NULL, NULL);
+      procedure = gimp_export_procedure_new (plug_in, name,
+                                             GIMP_PDB_PROC_TYPE_PLUGIN,
+                                             FALSE, bmp_export, NULL, NULL);
 
       gimp_procedure_set_image_types (procedure, "INDEXED, GRAY, RGB*");
 
@@ -196,27 +195,39 @@ bmp_create_procedure (GimpPlugIn  *plug_in,
       gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
                                           "bmp");
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "use-rle",
-                             _("Ru_n-Length Encoded"),
-                             _("Use run-length-encoding compression "
-                               "(only valid for 4 and 8-bit indexed images)"),
-                             FALSE,
-                             G_PARAM_READWRITE);
+      gimp_export_procedure_set_capabilities (GIMP_EXPORT_PROCEDURE (procedure),
+                                              GIMP_EXPORT_CAN_HANDLE_RGB   |
+                                              GIMP_EXPORT_CAN_HANDLE_GRAY  |
+                                              GIMP_EXPORT_CAN_HANDLE_ALPHA |
+                                              GIMP_EXPORT_CAN_HANDLE_INDEXED,
+                                              NULL, NULL, NULL);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "write-color-space",
-                             _("_Write color space information"),
-                             _("Whether or not to write BITMAPV5HEADER "
-                               "color space data"),
-                             TRUE,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "use-rle",
+                                           _("Ru_n-Length Encoded"),
+                                           _("Use run-length-encoding compression "
+                                             "(only valid for 4 and 8-bit indexed images)"),
+                                           FALSE,
+                                           G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "rgb-format",
-                         _("R_GB format"),
-                         _("Export format for RGB images "
-                           "(0=RGB_565, 1=RGBA_5551, 2=RGB_555, 3=RGB_888, "
-                           "4=RGBA_8888, 5=RGBX_8888)"),
-                         0, 5, 3,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "write-color-space",
+                                           _("_Write color space information"),
+                                           _("Whether or not to write BITMAPV5HEADER "
+                                             "color space data"),
+                                           TRUE,
+                                           G_PARAM_READWRITE);
+
+      gimp_procedure_add_choice_argument (procedure, "rgb-format",
+                                          _("R_GB format"),
+                                          _("Export format for RGB images"),
+                                          gimp_choice_new_with_values ("rgb-565",   RGB_565,   _("16 bit (R5 G6 B5)"),    NULL,
+                                                                       "rgba-5551", RGBA_5551, _("16 bit (A1 R5 G5 B5)"), NULL,
+                                                                       "rgb-555",   RGB_555,   _("16 bit (X1 R5 G5 B5)"), NULL,
+                                                                       "rgb-888",   RGB_888,   _("24 bit (R8 G8 B8)"),    NULL,
+                                                                       "rgba-8888", RGBA_8888, _("32 bit (A8 R8 G8 B8)"), NULL,
+                                                                       "rgbx-8888", RGBX_8888, _("32 bit (X8 R8 G8 B8)"),  NULL,
+                                                                       NULL),
+                                          "rgb-888",
+                                          G_PARAM_READWRITE);
     }
 
   return procedure;
@@ -254,63 +265,35 @@ bmp_load (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
-bmp_save (GimpProcedure        *procedure,
-          GimpRunMode           run_mode,
-          GimpImage            *image,
-          gint                  n_drawables,
-          GimpDrawable        **drawables,
-          GFile                *file,
-          GimpMetadata         *metadata,
-          GimpProcedureConfig  *config,
-          gpointer              run_data)
+bmp_export (GimpProcedure        *procedure,
+            GimpRunMode           run_mode,
+            GimpImage            *image,
+            GFile                *file,
+            GimpExportOptions    *options,
+            GimpMetadata         *metadata,
+            GimpProcedureConfig  *config,
+            gpointer              run_data)
 {
   GimpPDBStatusType  status = GIMP_PDB_SUCCESS;
-  GimpExportReturn   export = GIMP_EXPORT_CANCEL;
-  GError            *error = NULL;
+  GimpExportReturn   export = GIMP_EXPORT_IGNORE;
+  GList             *drawables;
+  GError            *error  = NULL;
 
   gegl_init (NULL, NULL);
 
-  switch (run_mode)
-    {
-    case GIMP_RUN_INTERACTIVE:
-    case GIMP_RUN_WITH_LAST_VALS:
-      gimp_ui_init (PLUG_IN_BINARY);
+  if (run_mode == GIMP_RUN_INTERACTIVE)
+    gimp_ui_init (PLUG_IN_BINARY);
 
-      export = gimp_export_image (&image, &n_drawables, &drawables, "BMP",
-                                  GIMP_EXPORT_CAN_HANDLE_RGB   |
-                                  GIMP_EXPORT_CAN_HANDLE_GRAY  |
-                                  GIMP_EXPORT_CAN_HANDLE_ALPHA |
-                                  GIMP_EXPORT_CAN_HANDLE_INDEXED);
+  export    = gimp_export_options_get_image (options, &image);
+  drawables = gimp_image_list_layers (image);
 
-      if (export == GIMP_EXPORT_CANCEL)
-        return gimp_procedure_new_return_values (procedure,
-                                                 GIMP_PDB_CANCEL,
-                                                 NULL);
-      break;
-
-    default:
-      break;
-    }
-
-  if (n_drawables != 1)
-    {
-      g_set_error (&error, G_FILE_ERROR, 0,
-                   _("BMP format does not support multiple layers."));
-
-      return gimp_procedure_new_return_values (procedure,
-                                               GIMP_PDB_CALLING_ERROR,
-                                               error);
-    }
-
-  status = save_image (file, image, drawables[0], run_mode,
-                       procedure, G_OBJECT (config),
-                       &error);
+  status = export_image (file, image, drawables->data, run_mode,
+                         procedure, G_OBJECT (config),
+                         &error);
 
   if (export == GIMP_EXPORT_EXPORT)
-    {
-      gimp_image_delete (image);
-      g_free (drawables);
-    }
+    gimp_image_delete (image);
 
+  g_list_free (drawables);
   return gimp_procedure_new_return_values (procedure, status, error);
 }

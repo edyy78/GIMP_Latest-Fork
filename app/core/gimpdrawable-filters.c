@@ -58,7 +58,7 @@ gimp_drawable_get_filters (GimpDrawable *drawable)
 }
 
 gboolean
-gimp_drawable_has_filters (GimpDrawable *drawable)
+gimp_drawable_has_visible_filters (GimpDrawable *drawable)
 {
   GList *list;
 
@@ -116,28 +116,6 @@ gimp_drawable_clear_filters (GimpDrawable *drawable)
 }
 
 void
-gimp_drawable_remove_last_filter (GimpDrawable *drawable)
-{
-  GimpDrawableFilter *filter = NULL;
-
-  if (! GIMP_IS_DRAWABLE (drawable))
-    return;
-
-  if (gimp_drawable_has_filters (drawable))
-    {
-      filter = GIMP_LIST (drawable->private->filter_stack)->queue->head->data;
-
-      if (GIMP_IS_DRAWABLE_FILTER (filter))
-        {
-          gimp_drawable_remove_filter (drawable,
-                                       GIMP_FILTER (filter));
-
-          gimp_drawable_filters_changed (drawable);
-        }
-    }
-}
-
-void
 gimp_drawable_merge_filters (GimpDrawable *drawable)
 {
   GList       *list;
@@ -159,19 +137,50 @@ gimp_drawable_merge_filters (GimpDrawable *drawable)
   gimp_image_undo_group_start (image, GIMP_UNDO_GROUP_DRAWABLE,
                                _("Rasterize filters"));
 
-  while ((list = GIMP_LIST (drawable->private->filter_stack)->queue->tail))
+  /* We do not commit filters individually because we'd end up in the
+   * situation where we'd force cast back to the image's precision after
+   * every effect. See #12614.
+   * Instead we get the result of the top filter and change the
+   * drawable's buffer.
+   */
+  if (GIMP_LIST (drawable->private->filter_stack)->queue->head)
     {
-      if (GIMP_IS_DRAWABLE_FILTER (list->data))
+      GimpDrawableFilter *top_filter = NULL;
+
+      for (list = GIMP_LIST (drawable->private->filter_stack)->queue->tail;
+           list;
+           list = list->prev)
         {
-          GimpDrawableFilter *filter = list->data;
+          if (GIMP_IS_DRAWABLE_FILTER (list->data) &&
+              gimp_filter_get_active (GIMP_FILTER (list->data)))
+            top_filter = list->data;
+        }
 
+      if (top_filter)
+        {
+          GimpApplicator *applicator;
+          GeglNode       *graph;
+          GeglNode       *output;
+          GeglRectangle   output_rect;
+
+          graph       = gimp_filter_stack_get_graph (GIMP_FILTER_STACK (drawable->private->filter_stack));
+          output      = gegl_node_get_output_proxy (graph, "output");
+          output_rect = gegl_node_get_bounding_box (output);
+          buffer      = gegl_buffer_new (&output_rect, gimp_drawable_get_format (drawable));
+
+          applicator  = gimp_filter_get_applicator (GIMP_FILTER (top_filter));
+          gimp_applicator_set_dest_buffer (applicator, buffer);
+          gimp_applicator_blit (applicator, gegl_buffer_get_extent (buffer));
+          gimp_drawable_set_buffer (drawable, TRUE, NULL, buffer);
+          g_clear_object (&buffer);
+        }
+
+      while ((list = GIMP_LIST (drawable->private->filter_stack)->queue->tail))
+        {
           gimp_image_undo_push_filter_remove (gimp_item_get_image (GIMP_ITEM (drawable)),
-                                              _("Merge filter"), drawable, filter);
+                                              _("Merge filter"), drawable, list->data);
 
-          if (gimp_filter_get_active (GIMP_FILTER (filter)))
-            gimp_drawable_filter_commit (filter, FALSE, NULL, TRUE);
-          else
-            gimp_drawable_remove_filter (drawable, GIMP_FILTER (filter));
+          gimp_drawable_remove_filter (drawable, GIMP_FILTER (list->data));
         }
     }
 
@@ -182,6 +191,7 @@ gimp_drawable_merge_filters (GimpDrawable *drawable)
   gimp_drawable_set_buffer (GIMP_DRAWABLE (gimp_image_get_mask (image)),
                             FALSE, NULL, buffer);
   g_object_unref (buffer);
+  g_object_ref_sink (selection);
   g_object_unref (selection);
 
   gimp_drawable_filters_changed (drawable);

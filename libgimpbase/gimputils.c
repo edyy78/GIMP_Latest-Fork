@@ -1317,16 +1317,12 @@ gimp_stack_trace_print (const gchar   *prog_name,
       /* Child process. */
       gchar *args[9] = { "gdb", "-batch",
                          "-ex", "info threads",
-                         /* We used to be able to ask for the full
-                          * backtrace of all threads, but a bug,
-                          * possibly in gdb, could lock the whole GIMP
-                          * process. So for now, let's just have a
-                          * backtrace of the main process (most bugs
-                          * happen here anyway).
-                          * See issue #7539.
+                         /* A bug, possibly in gdb, could lock the whole
+                          * GIMP process with a full thread backtrace in
+                          * some conditions. We aren't sure if it still
+                          * exists. See issue #7539.
                           */
-                         /*"-ex", "thread apply all backtrace full",*/
-                         "-ex", "backtrace full",
+                         "-ex", "thread apply all backtrace full",
                          (gchar *) prog_name, NULL, NULL };
 
       if (prog_name == NULL)
@@ -1529,7 +1525,8 @@ void
 gimp_stack_trace_query (const gchar *prog_name)
 {
 #ifndef G_OS_WIN32
-  gchar buf[16];
+  gchar    buf[16];
+  gboolean eof = FALSE;
 
  retry:
 
@@ -1541,25 +1538,41 @@ gimp_stack_trace_query (const gchar *prog_name)
   fflush (stdout);
 
   if (isatty(0) && isatty(1))
-    fgets (buf, 8, stdin);
+    eof = (fgets (buf, 8, stdin) == NULL);
   else
     strcpy (buf, "E\n");
 
+  if (eof)
+    strcpy (buf, "S\n");
+
   if ((buf[0] == 'E' || buf[0] == 'e')
       && buf[1] == '\n')
-    _exit (0);
+    {
+      _exit (0);
+    }
   else if ((buf[0] == 'P' || buf[0] == 'p')
            && buf[1] == '\n')
-    return;
+    {
+      return;
+    }
   else if ((buf[0] == 'S' || buf[0] == 's')
            && buf[1] == '\n')
     {
       if (! gimp_stack_trace_print (prog_name, stdout, NULL))
         g_fprintf (stderr, "%s\n", "Stack trace not available on your system.");
-      goto retry;
+
+      if (eof)
+        /* As a special exception, if we get an EOF (or a reading error)
+         * on stdin, we just output the stacktrace and exit.
+         */
+        _exit (0);
+      else
+        goto retry;
     }
   else
-    goto retry;
+    {
+      goto retry;
+    }
 #endif
 }
 

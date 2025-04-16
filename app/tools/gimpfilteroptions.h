@@ -43,7 +43,8 @@ struct _GimpFilterOptions
   gboolean           controller;
 
   gboolean           blending_options_expanded;
-  gboolean           color_options_expanded;
+
+  gboolean           merge_filter;
 };
 
 struct _GimpFilterOptionsClass

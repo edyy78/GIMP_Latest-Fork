@@ -33,7 +33,7 @@
 #include "libgimp/stdplugins-intl.h"
 
 #define LOAD_PROC       "file-jpegxl-load"
-#define SAVE_PROC       "file-jpegxl-save"
+#define EXPORT_PROC     "file-jpegxl-export"
 #define PLUG_IN_BINARY  "file-jpegxl"
 
 typedef struct _JpegXL      JpegXL;
@@ -66,20 +66,19 @@ static GimpValueArray *jpegxl_load              (GimpProcedure         *procedur
                                                  GimpMetadataLoadFlags *flags,
                                                  GimpProcedureConfig   *config,
                                                  gpointer               run_data);
-static GimpValueArray *jpegxl_save              (GimpProcedure         *procedure,
+static GimpValueArray *jpegxl_export            (GimpProcedure         *procedure,
                                                  GimpRunMode            run_mode,
                                                  GimpImage             *image,
-                                                 gint                   n_drawables,
-                                                 GimpDrawable         **drawables,
                                                  GFile                 *file,
+                                                 GimpExportOptions     *options,
                                                  GimpMetadata          *metadata,
                                                  GimpProcedureConfig   *config,
                                                  gpointer               run_data);
 
 static void      create_cmyk_layer              (GimpImage             *image,
                                                  GimpLayer             *layer,
+                                                 const gchar           *type_format,
                                                  const Babl            *space,
-                                                 const Babl            *type,
                                                  gpointer               picture_buffer,
                                                  gpointer               key_buffer,
                                                  gint                   bit_depth,
@@ -122,7 +121,7 @@ jpegxl_query_procedures (GimpPlugIn *plug_in)
   GList *list = NULL;
 
   list = g_list_append (list, g_strdup (LOAD_PROC));
-  list = g_list_append (list, g_strdup (SAVE_PROC));
+  list = g_list_append (list, g_strdup (EXPORT_PROC));
 
   return list;
 }
@@ -158,11 +157,11 @@ jpegxl_create_procedure (GimpPlugIn  *plug_in,
                                       "0,string,\xFF\x0A,0,string,\\000\\000\\000\x0CJXL\\040\\015\\012\x87\\012");
 
     }
-  else if (! strcmp (name, SAVE_PROC))
+  else if (! strcmp (name, EXPORT_PROC))
     {
-      procedure = gimp_save_procedure_new (plug_in, name,
-                                           GIMP_PDB_PROC_TYPE_PLUGIN,
-                                           FALSE, jpegxl_save, NULL, NULL);
+      procedure = gimp_export_procedure_new (plug_in, name,
+                                             GIMP_PDB_PROC_TYPE_PLUGIN,
+                                             FALSE, jpegxl_export, NULL, NULL);
 
       gimp_procedure_set_image_types (procedure, "RGB*, GRAY*");
 
@@ -184,54 +183,63 @@ jpegxl_create_procedure (GimpPlugIn  *plug_in,
       gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
                                           "jxl");
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "lossless",
-                             _("L_ossless"),
-                             _("Use lossless compression"),
-                             FALSE,
-                             G_PARAM_READWRITE);
+      gimp_export_procedure_set_capabilities (GIMP_EXPORT_PROCEDURE (procedure),
+                                              GIMP_EXPORT_CAN_HANDLE_RGB  |
+                                              GIMP_EXPORT_CAN_HANDLE_GRAY |
+                                              GIMP_EXPORT_CAN_HANDLE_ALPHA,
+                                              NULL, NULL, NULL);
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "compression",
-                            _("Co_mpression/maxError"),
-                            _("Max. butteraugli distance, lower = higher quality. Range: 0 .. 15. 1.0 = visually lossless."),
-                            0.1, 15, 1,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "lossless",
+                                           _("L_ossless"),
+                                           _("Use lossless compression"),
+                                           FALSE,
+                                           G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "save-bit-depth",
-                         _("_Bit depth"),
-                         _("Bit depth of exported image"),
-                         8, 16, 8,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "compression",
+                                          _("Co_mpression/maxError"),
+                                          _("Max. butteraugli distance, lower = higher quality. Range: 0 .. 15. 1.0 = visually lossless."),
+                                          0.1, 15, 1,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "speed",
-                         _("Effort/S_peed"),
-                         _("Encoder effort setting"),
-                         1, 9,
-                         7,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "save-bit-depth",
+                                       _("_Bit depth"),
+                                       _("Bit depth of exported image"),
+                                       8, 16, 8,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "uses-original-profile",
-                             _("Save ori_ginal profile"),
-                             _("Store ICC profile to exported JXL file"),
-                             FALSE,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_choice_argument (procedure, "speed",
+                                          _("Effort/S_peed"),
+                                          _("Encoder effort setting"),
+                                          gimp_choice_new_with_values ("lightning", 1, _("lightning (fastest)"), NULL,
+                                                                       "thunder",   2, _("thunder"),             NULL,
+                                                                       "falcon",    3, _("falcon (faster)"),     NULL,
+                                                                       "cheetah",   4, _("cheetah"),             NULL,
+                                                                       "hare",      5, _("hare"),                NULL,
+                                                                       "wombat",    6, _("wombat"),              NULL,
+                                                                       "squirrel",  7, _("squirrel"),            NULL,
+                                                                       "kitten",    8, _("kitten"),              NULL,
+                                                                       "tortoise",  9, _("tortoise (slower)"),   NULL,
+                                                                       NULL),
+                                          "squirrel",
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "cmyk",
-                             _("Export as CMY_K"),
-                             _("Create a CMYK JPEG XL image using the soft-proofing color profile"),
-                             FALSE,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "cmyk",
+                                           _("Export as CMY_K"),
+                                           _("Create a CMYK JPEG XL image using the soft-proofing color profile"),
+                                           FALSE,
+                                           G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "save-exif",
-                             _("Save Exi_f"),
-                             _("Toggle saving Exif data"),
-                             gimp_export_exif (),
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "include-exif",
+                                           _("Save Exi_f"),
+                                           _("Toggle saving Exif data"),
+                                           gimp_export_exif (),
+                                           G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "save-xmp",
-                             _("Save _XMP"),
-                             _("Toggle saving XMP data"),
-                             gimp_export_xmp (),
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "include-xmp",
+                                           _("Save _XMP"),
+                                           _("Toggle saving XMP data"),
+                                           gimp_export_xmp (),
+                                           G_PARAM_READWRITE);
     }
 
   return procedure;
@@ -243,14 +251,14 @@ jpegxl_create_procedure (GimpPlugIn  *plug_in,
  * the final layer buffer.
  */
 static void
-create_cmyk_layer (GimpImage  *image,
-                   GimpLayer  *layer,
-                   const Babl *type,
-                   const Babl *space,
-                   gpointer    cmy_data,
-                   gpointer    key_data,
-                   gint        bit_depth,
-                   gboolean    has_alpha)
+create_cmyk_layer (GimpImage   *image,
+                   GimpLayer   *layer,
+                   const gchar *type_format,
+                   const Babl  *space,
+                   gpointer     cmy_data,
+                   gpointer     key_data,
+                   gint         bit_depth,
+                   gboolean     has_alpha)
 {
   const Babl         *cmy_format   = NULL;
   const Babl         *cmyka_format = NULL;
@@ -265,6 +273,10 @@ create_cmyk_layer (GimpImage  *image,
   gint                width;
   gint                height;
   gint                n_components = 3;
+  const Babl         *type         = babl_type (type_format);
+  GString            *rgb_type     = g_string_new (NULL);
+  GString            *cmy_type     = g_string_new (NULL);
+  GString            *cmyka_type   = g_string_new (NULL);
 
   width  = gimp_image_get_width (image);
   height = gimp_image_get_height (image);
@@ -275,20 +287,13 @@ create_cmyk_layer (GimpImage  *image,
   gimp_image_insert_layer (image, layer, NULL, 0);
   output_buffer = gimp_drawable_get_buffer (GIMP_DRAWABLE (layer));
 
-  if (bit_depth == 1)
-    rgb_format = babl_format (has_alpha ? "R'G'B'A u8" : "R'G'B' u8");
-  else
-    rgb_format = babl_format (has_alpha ? "R'G'B'A u16" : "R'G'B' u16");
+  g_string_printf (rgb_type, has_alpha ? "R'G'B'A %s" : "R'G'B' %s", type_format);
+  g_string_printf (cmy_type, "cmyk %s", type_format);
+  g_string_printf (cmyka_type, "cmykA %s", type_format);
 
-  if (bit_depth == 1)
-    cmy_format = babl_format_with_space ("cmyk u8", space);
-  else
-    cmy_format = babl_format_with_space ("cmyk u16", space);
-
-  if (bit_depth == 1)
-    cmyka_format = babl_format_with_space ("cmykA u8", space);
-  else
-    cmyka_format = babl_format_with_space ("cmykA u16", space);
+  rgb_format = babl_format (rgb_type->str);
+  cmy_format = babl_format_with_space ( cmy_type->str, space);
+  cmyka_format = babl_format_with_space ( cmyka_type->str, space);
 
   key_format = babl_format_new (babl_model ("Y"),
                                 type,
@@ -389,6 +394,10 @@ create_cmyk_layer (GimpImage  *image,
   g_object_unref (cmy_buffer);
   g_object_unref (key_buffer);
   g_free (key_data);
+
+  g_string_free (cmyka_type, TRUE);
+  g_string_free (cmy_type, TRUE);
+  g_string_free (rgb_type, TRUE);
 }
 
 static GimpImage *
@@ -419,13 +428,12 @@ load_image (GFile                 *file,
   gpointer          picture_buffer;
   gpointer          key_buffer      = NULL;
   gboolean          is_cmyk         = FALSE;
-  gboolean          has_alpha       = FALSE;
   gint              cmyk_channel_id = -1;
   GimpImage        *image;
   GimpLayer        *layer;
   GeglBuffer       *buffer;
   const Babl       *space           = NULL;
-  const Babl       *type;
+  const gchar      *type;
   GimpPrecision     precision_linear;
   GimpPrecision     precision_non_linear;
   uint32_t          i;
@@ -592,7 +600,7 @@ load_image (GFile                 *file,
       channel_depth = 4;
       precision_linear = GIMP_PRECISION_FLOAT_LINEAR;
       precision_non_linear = GIMP_PRECISION_FLOAT_NON_LINEAR;
-      type = babl_type ("float");
+      type = "float";
     }
   else if (basicinfo.bits_per_sample <= 8)
     {
@@ -600,15 +608,23 @@ load_image (GFile                 *file,
       channel_depth = 1;
       precision_linear = GIMP_PRECISION_U8_LINEAR;
       precision_non_linear = GIMP_PRECISION_U8_NON_LINEAR;
-      type = babl_type ("u8");
+      type = "u8";
     }
-  else
+  else if (basicinfo.exponent_bits_per_sample == 0)
     {
       pixel_format.data_type = JXL_TYPE_UINT16;
       channel_depth = 2;
       precision_linear = GIMP_PRECISION_U16_LINEAR;
       precision_non_linear = GIMP_PRECISION_U16_NON_LINEAR;
-      type = babl_type ("u16");
+      type = "u16";
+    }
+  else
+    {
+      pixel_format.data_type = JXL_TYPE_FLOAT16;
+      channel_depth = 2;
+      precision_linear = GIMP_PRECISION_HALF_LINEAR;
+      precision_non_linear = GIMP_PRECISION_HALF_NON_LINEAR;
+      type = "half";
     }
 
   if (basicinfo.num_color_channels == 1) /* grayscale */
@@ -622,7 +638,7 @@ load_image (GFile                 *file,
           pixel_format.num_channels = 1;
         }
     }
-  else /* RGB */
+  else /* RGB or CMYK */
     {
 
       if (basicinfo.alpha_bits > 0) /* RGB with alpha */
@@ -633,34 +649,26 @@ load_image (GFile                 *file,
         {
           pixel_format.num_channels = 3;
         }
-    }
 
-  /* Check for extra channels */
-  for (i = 0; i < basicinfo.num_extra_channels; i++)
-    {
-      JxlExtraChannelInfo extra;
-
-      if (JXL_DEC_SUCCESS != JxlDecoderGetExtraChannelInfo (decoder, i, &extra))
-        break;
-
-      /* K channel for CMYK images */
-      if (extra.type == JXL_CHANNEL_BLACK)
+      /* search if BLACK (K) channel is present (CMYK detection) */
+      for (i = 0; i < basicinfo.num_extra_channels; i++)
         {
-          is_cmyk = TRUE;
-          cmyk_channel_id = i;
-          if (pixel_format.num_channels < 3)
-            pixel_format.num_channels = 3;
-        }
-      /* Confirm presence of alpha channel */
-      if (extra.type == JXL_CHANNEL_ALPHA)
-        {
-          has_alpha = TRUE;
-          pixel_format.num_channels = 4;
+          JxlExtraChannelInfo extra;
+
+          if (JXL_DEC_SUCCESS != JxlDecoderGetExtraChannelInfo (decoder, i, &extra))
+            break;
+
+          if (extra.type == JXL_CHANNEL_BLACK)
+            {
+              is_cmyk = TRUE;
+              cmyk_channel_id = i;
+              extra_channel_size = channel_depth * (size_t) basicinfo.xsize * (size_t) basicinfo.ysize;
+              break;
+            }
         }
     }
 
   result_size = channel_depth * pixel_format.num_channels * (size_t) basicinfo.xsize * (size_t) basicinfo.ysize;
-  extra_channel_size = channel_depth * basicinfo.num_extra_channels * (size_t) basicinfo.xsize * (size_t) basicinfo.ysize;
   result_size += extra_channel_size;
 
 
@@ -915,7 +923,7 @@ load_image (GFile                 *file,
   if (is_cmyk)
     {
       create_cmyk_layer (image, layer, type, space, picture_buffer,
-                         key_buffer, channel_depth, has_alpha);
+                         key_buffer, channel_depth, basicinfo.alpha_bits > 0);
     }
   else
     {
@@ -1329,12 +1337,12 @@ extract_cmyk (GeglBuffer *buffer,
 }
 
 static gboolean
-save_image (GFile               *file,
-            GimpProcedureConfig *config,
-            GimpImage           *image,
-            GimpDrawable        *drawable,
-            GimpMetadata        *metadata,
-            GError             **error)
+export_image (GFile               *file,
+              GimpProcedureConfig *config,
+              GimpImage           *image,
+              GimpDrawable        *drawable,
+              GimpMetadata        *metadata,
+              GError             **error)
 {
   JxlEncoder              *encoder;
   void                    *runner;
@@ -1375,7 +1383,6 @@ save_image (GFile               *file,
   gint                     speed = 7;
   gint                     bit_depth = 8;
   gboolean                 cmyk = FALSE;
-  gboolean                 uses_original_profile = FALSE;
   gboolean                 save_exif = FALSE;
   gboolean                 save_xmp = FALSE;
 
@@ -1385,30 +1392,18 @@ save_image (GFile               *file,
   g_object_get (config,
                 "lossless",              &lossless,
                 "compression",           &compression,
-                "speed",                 &speed,
                 "save-bit-depth",        &bit_depth,
                 "cmyk",                  &cmyk,
-                "uses-original-profile", &uses_original_profile,
-                "save-exif",             &save_exif,
-                "save-xmp",              &save_xmp,
+                "include-exif",          &save_exif,
+                "include-xmp",           &save_xmp,
                 NULL);
+  speed = gimp_procedure_config_get_choice_id (GIMP_PROCEDURE_CONFIG (config),
+                                               "speed");
 
-  if (lossless || cmyk)
+  if (cmyk)
     {
-      /* JPEG XL developers recommend enabling uses_original_profile
-       * for better lossless compression efficiency.
-       * Profile must be saved for CMYK export */
-      uses_original_profile = TRUE;
-    }
-  else
-    {
-      /* 0.1 is actually minimal value for lossy in libjxl 0.5
-       * 0.01 is allowed in libjxl 0.6 but
-       * using too low value with lossy compression is not wise */
-      if (compression < 0.1)
-        {
-          compression = 0.1;
-        }
+      /* CMYK is allways saved as lossless */
+      lossless = TRUE;
     }
 
   drawable_type   = gimp_drawable_type (drawable);
@@ -1417,7 +1412,7 @@ save_image (GFile               *file,
 
   JxlEncoderInitBasicInfo(&output_info);
 
-  if (uses_original_profile)
+  if (lossless)
     {
       output_info.uses_original_profile = JXL_TRUE;
 
@@ -1449,6 +1444,14 @@ save_image (GFile               *file,
     }
   else
     {
+      /* 0.1 is actually minimal value for lossy in libjxl 0.5
+       * 0.01 is allowed in libjxl 0.6 but
+       * using too low value with lossy compression is not wise */
+      if (compression < 0.1)
+        {
+          compression = 0.1;
+        }
+
       output_info.uses_original_profile = JXL_FALSE;
       space = babl_space ("sRGB");
       out_linear = FALSE;
@@ -1514,7 +1517,7 @@ save_image (GFile               *file,
       switch (drawable_type)
         {
         case GIMP_GRAYA_IMAGE:
-          if (uses_original_profile && out_linear)
+          if (lossless && out_linear)
             {
               file_format = babl_format ( (bit_depth > 8) ? "YA u16" : "YA u8");
               JxlColorEncodingSetToLinearSRGB (&color_profile, JXL_TRUE);
@@ -1530,10 +1533,14 @@ save_image (GFile               *file,
           output_info.alpha_exponent_bits = 0;
           output_info.num_extra_channels = 1;
 
-          uses_original_profile = FALSE;
+          if (profile)
+            {
+              g_object_unref (profile);
+              profile = NULL;
+            }
           break;
         case GIMP_GRAY_IMAGE:
-          if (uses_original_profile && out_linear)
+          if (lossless && out_linear)
             {
               file_format = babl_format ( (bit_depth > 8) ? "Y u16" : "Y u8");
               JxlColorEncodingSetToLinearSRGB (&color_profile, JXL_TRUE);
@@ -1547,7 +1554,11 @@ save_image (GFile               *file,
           output_info.num_color_channels = 1;
           output_info.alpha_bits = 0;
 
-          uses_original_profile = FALSE;
+          if (profile)
+            {
+              g_object_unref (profile);
+              profile = NULL;
+            }
           break;
         case GIMP_RGBA_IMAGE:
           if (bit_depth > 8)
@@ -1699,7 +1710,7 @@ save_image (GFile               *file,
       return FALSE;
     }
 
-  if (uses_original_profile)
+  if (profile)
     {
       const uint8_t *icc_data = NULL;
       size_t         icc_length = 0;
@@ -1721,12 +1732,6 @@ save_image (GFile               *file,
     }
   else
     {
-      if (profile)
-        {
-          g_object_unref (profile);
-          profile = NULL;
-        }
-
       status = JxlEncoderSetColorEncoding (encoder, &color_profile);
       if (status != JXL_ENC_SUCCESS)
         {
@@ -1990,14 +1995,13 @@ save_dialog (GimpImage     *image,
   GtkWidget        *dialog;
   GtkListStore     *store;
   GtkWidget        *compression_scale;
-  GtkWidget        *orig_profile_check;
   GtkWidget        *profile_label;
   GimpColorProfile *cmyk_profile = NULL;
   gboolean          run;
 
-  dialog = gimp_save_procedure_dialog_new (GIMP_SAVE_PROCEDURE (procedure),
-                                           GIMP_PROCEDURE_CONFIG (config),
-                                           image);
+  dialog = gimp_export_procedure_dialog_new (GIMP_EXPORT_PROCEDURE (procedure),
+                                             GIMP_PROCEDURE_CONFIG (config),
+                                             image);
 
   gimp_procedure_dialog_get_widget (GIMP_PROCEDURE_DIALOG (dialog),
                                     "lossless", GTK_TYPE_CHECK_BUTTON);
@@ -2010,20 +2014,6 @@ save_dialog (GimpImage     *image,
                           compression_scale, "sensitive",
                           G_BINDING_SYNC_CREATE |
                           G_BINDING_INVERT_BOOLEAN);
-
-  store = gimp_int_store_new (_("lightning (fastest)"), 1,
-                              _("thunder"),             2,
-                              _("falcon (faster)"),     3,
-                              _("cheetah"),             4,
-                              _("hare"),                5,
-                              _("wombat"),              6,
-                              _("squirrel"),            7,
-                              _("kitten"),              8,
-                              _("tortoise (slower)"),   9,
-                              NULL);
-
-  gimp_procedure_dialog_get_int_combo (GIMP_PROCEDURE_DIALOG (dialog),
-                                       "speed", GIMP_INT_STORE (store));
 
   store = gimp_int_store_new (_("8 bit/channel"),   8,
                               _("16 bit/channel"), 16,
@@ -2078,21 +2068,11 @@ save_dialog (GimpImage     *image,
                                        cmyk_profile != NULL,
                                        NULL, NULL, FALSE);
 
-  orig_profile_check = gimp_procedure_dialog_get_widget (GIMP_PROCEDURE_DIALOG (dialog),
-                                                         "uses-original-profile",
-                                                         GTK_TYPE_CHECK_BUTTON);
-
-  g_object_bind_property (config,             "lossless",
-                          orig_profile_check, "sensitive",
-                          G_BINDING_SYNC_CREATE |
-                          G_BINDING_INVERT_BOOLEAN);
-
   gimp_procedure_dialog_fill (GIMP_PROCEDURE_DIALOG (dialog),
                               "lossless", "compression",
                               "speed", "save-bit-depth",
                               "cmyk-frame",
-                              "uses-original-profile",
-                              "save-exif", "save-xmp",
+                              "include-exif", "include-xmp",
                               NULL);
 
   run = gimp_procedure_dialog_run (GIMP_PROCEDURE_DIALOG (dialog));
@@ -2104,62 +2084,34 @@ save_dialog (GimpImage     *image,
 
 
 static GimpValueArray *
-jpegxl_save (GimpProcedure        *procedure,
-             GimpRunMode           run_mode,
-             GimpImage            *image,
-             gint                  n_drawables,
-             GimpDrawable        **drawables,
-             GFile                *file,
-             GimpMetadata         *metadata,
-             GimpProcedureConfig  *config,
-             gpointer              run_data)
+jpegxl_export (GimpProcedure        *procedure,
+               GimpRunMode           run_mode,
+               GimpImage            *image,
+               GFile                *file,
+               GimpExportOptions    *options,
+               GimpMetadata         *metadata,
+               GimpProcedureConfig  *config,
+               gpointer              run_data)
 {
   GimpPDBStatusType  status = GIMP_PDB_SUCCESS;
-  GimpExportReturn   export = GIMP_EXPORT_CANCEL;
+  GimpExportReturn   export = GIMP_EXPORT_IGNORE;
+  GList             *drawables;
   GError            *error  = NULL;
 
   gegl_init (NULL, NULL);
 
-  switch (run_mode)
-    {
-    case GIMP_RUN_INTERACTIVE:
-    case GIMP_RUN_WITH_LAST_VALS:
-      gimp_ui_init (PLUG_IN_BINARY);
-
-      export = gimp_export_image (&image, &n_drawables, &drawables, "JPEG XL",
-                                  GIMP_EXPORT_CAN_HANDLE_RGB |
-                                  GIMP_EXPORT_CAN_HANDLE_GRAY |
-                                  GIMP_EXPORT_CAN_HANDLE_ALPHA);
-
-      if (export == GIMP_EXPORT_CANCEL)
-        {
-          return gimp_procedure_new_return_values (procedure,
-                 GIMP_PDB_CANCEL,
-                 NULL);
-        }
-      break;
-
-    default:
-      break;
-    }
-
-  if (n_drawables < 1)
-    {
-      g_set_error (&error, G_FILE_ERROR, 0,
-                   "No drawables to export");
-
-      return gimp_procedure_new_return_values (procedure,
-             GIMP_PDB_CALLING_ERROR,
-             error);
-    }
-
   if (run_mode == GIMP_RUN_INTERACTIVE)
     {
+      gimp_ui_init (PLUG_IN_BINARY);
+
       if (! save_dialog (image, procedure, G_OBJECT (config)))
         {
           status = GIMP_PDB_CANCEL;
         }
     }
+
+  export = gimp_export_options_get_image (options, &image);
+  drawables = gimp_image_list_layers (image);
 
   if (status == GIMP_PDB_SUCCESS)
     {
@@ -2167,7 +2119,7 @@ jpegxl_save (GimpProcedure        *procedure,
 
       GimpMetadata *metadata = gimp_image_metadata_save_prepare (image, "image/jxl", &metadata_flags);
 
-      if (! save_image (file, config, image, drawables[0], metadata, &error))
+      if (! export_image (file, config, image, drawables->data, metadata, &error))
         {
           status = GIMP_PDB_EXECUTION_ERROR;
         }
@@ -2179,10 +2131,8 @@ jpegxl_save (GimpProcedure        *procedure,
     }
 
   if (export == GIMP_EXPORT_EXPORT)
-    {
-      g_free (drawables);
-      gimp_image_delete (image);
-    }
+    gimp_image_delete (image);
 
+  g_list_free (drawables);
   return gimp_procedure_new_return_values (procedure, status, error);
 }

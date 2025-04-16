@@ -78,9 +78,10 @@ gimp_gradient_new (const gchar *name)
  *
  * Returns the gradient with the given name.
  *
- * Returns the gradient with the given name.
+ * Returns an existing gradient having the given name. Returns %NULL
+ * when no gradient exists of that name.
  *
- * Returns: (transfer none): The gradient.
+ * Returns: (nullable) (transfer none): The gradient.
  *
  * Since: 3.0
  **/
@@ -149,32 +150,29 @@ gimp_gradient_get_number_of_segments (GimpGradient *gradient)
  * @gradient: The gradient.
  * @num_samples: The number of samples to take.
  * @reverse: Use the reverse gradient.
- * @num_color_samples: (out): Length of the color_samples array (4 * num_samples).
- * @color_samples: (out) (array length=num_color_samples) (element-type gdouble) (transfer full): Color samples: { R1, G1, B1, A1, ..., Rn, Gn, Bn, An }.
  *
  * Sample the gradient in uniform parts.
  *
  * Samples colors uniformly across the gradient. It returns a list of
- * floating-point values which correspond to the RGBA values for each
- * sample. The minimum number of samples to take is 2, in which case
- * the returned colors will correspond to the { 0.0, 1.0 } positions in
- * the gradient. For example, if the number of samples is 3, the
- * procedure will return the colors at positions { 0.0, 0.5, 1.0 }.
+ * colors for each sample. The minimum number of samples to take is 2,
+ * in which case the returned colors will correspond to the `{ 0.0, 1.0
+ * }` positions in the gradient. For example, if the number of samples
+ * is 3, the procedure will return the colors at positions `{ 0.0, 0.5,
+ * 1.0 }`.
  *
- * Returns: TRUE on success.
+ * Returns: (array zero-terminated=1) (transfer full): Color samples.
+ *          The returned value must be freed with gimp_color_array_free().
  *
  * Since: 2.2
  **/
-gboolean
-gimp_gradient_get_uniform_samples (GimpGradient  *gradient,
-                                   gint           num_samples,
-                                   gboolean       reverse,
-                                   gint          *num_color_samples,
-                                   gdouble      **color_samples)
+GeglColor **
+gimp_gradient_get_uniform_samples (GimpGradient *gradient,
+                                   gint          num_samples,
+                                   gboolean      reverse)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
-  gboolean success = TRUE;
+  GeglColor **color_samples = NULL;
 
   args = gimp_value_array_new_from_types (NULL,
                                           GIMP_TYPE_GRADIENT, gradient,
@@ -187,20 +185,12 @@ gimp_gradient_get_uniform_samples (GimpGradient  *gradient,
                                                args);
   gimp_value_array_unref (args);
 
-  *num_color_samples = 0;
-  *color_samples = NULL;
-
-  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
-
-  if (success)
-    {
-      *num_color_samples = GIMP_VALUES_GET_INT (return_vals, 1);
-      *color_samples = GIMP_VALUES_DUP_FLOAT_ARRAY (return_vals, 2);
-    }
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    color_samples = gimp_color_array_copy (g_value_get_boxed (gimp_value_array_index (return_vals, 1)));
 
   gimp_value_array_unref (return_vals);
 
-  return success;
+  return color_samples;
 }
 
 /**
@@ -209,59 +199,49 @@ gimp_gradient_get_uniform_samples (GimpGradient  *gradient,
  * @num_samples: The number of samples to take.
  * @positions: (array length=num_samples) (element-type gdouble): The list of positions to sample along the gradient.
  * @reverse: Use the reverse gradient.
- * @num_color_samples: (out): Length of the color_samples array (4 * num_samples).
- * @color_samples: (out) (array length=num_color_samples) (element-type gdouble) (transfer full): Color samples: { R1, G1, B1, A1, ..., Rn, Gn, Bn, An }.
  *
  * Sample the gradient in custom positions.
  *
  * Samples the color of the gradient at positions from a list. The left
  * endpoint of the gradient corresponds to position 0.0, and the right
- * endpoint corresponds to 1.0. Returns a list of floating-point
- * values, four for each sample (RGBA.)
+ * endpoint corresponds to 1.0. Returns a list of colors, one for each
+ * sample.
  *
- * Returns: TRUE on success.
+ * Returns: (array zero-terminated=1) (transfer full): Color samples.
+ *          The returned value must be freed with gimp_color_array_free().
  *
  * Since: 2.2
  **/
-gboolean
-gimp_gradient_get_custom_samples (GimpGradient   *gradient,
-                                  gint            num_samples,
-                                  const gdouble  *positions,
-                                  gboolean        reverse,
-                                  gint           *num_color_samples,
-                                  gdouble       **color_samples)
+GeglColor **
+gimp_gradient_get_custom_samples (GimpGradient  *gradient,
+                                  gsize          num_samples,
+                                  const gdouble *positions,
+                                  gboolean       reverse)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
-  gboolean success = TRUE;
+  GeglColor **color_samples = NULL;
+
+  g_return_val_if_fail (num_samples >= 1, NULL);
 
   args = gimp_value_array_new_from_types (NULL,
                                           GIMP_TYPE_GRADIENT, gradient,
-                                          G_TYPE_INT, num_samples,
-                                          GIMP_TYPE_FLOAT_ARRAY, NULL,
+                                          GIMP_TYPE_DOUBLE_ARRAY, NULL,
                                           G_TYPE_BOOLEAN, reverse,
                                           G_TYPE_NONE);
-  gimp_value_set_float_array (gimp_value_array_index (args, 2), positions, num_samples);
+  gimp_value_set_double_array (gimp_value_array_index (args, 1), positions, num_samples);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
                                                "gimp-gradient-get-custom-samples",
                                                args);
   gimp_value_array_unref (args);
 
-  *num_color_samples = 0;
-  *color_samples = NULL;
-
-  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
-
-  if (success)
-    {
-      *num_color_samples = GIMP_VALUES_GET_INT (return_vals, 1);
-      *color_samples = GIMP_VALUES_DUP_FLOAT_ARRAY (return_vals, 2);
-    }
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    color_samples = gimp_color_array_copy (g_value_get_boxed (gimp_value_array_index (return_vals, 1)));
 
   gimp_value_array_unref (return_vals);
 
-  return success;
+  return color_samples;
 }
 
 /**

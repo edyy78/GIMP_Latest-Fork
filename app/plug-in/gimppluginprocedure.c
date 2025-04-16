@@ -142,6 +142,7 @@ gimp_plug_in_procedure_init (GimpPlugInProcedure *proc)
   GIMP_PROCEDURE (proc)->proc_type = GIMP_PDB_PROC_TYPE_PLUGIN;
 
   proc->icon_data_length = -1;
+  proc->sensitivity_mask = GIMP_PROCEDURE_SENSITIVE_DRAWABLE | GIMP_PROCEDURE_SENSITIVE_DRAWABLES;
 }
 
 static void
@@ -318,37 +319,45 @@ gimp_plug_in_procedure_get_sensitive (GimpProcedure  *procedure,
       image_type = gimp_babl_format_get_image_type (format);
     }
 
-  switch (image_type)
+  if (proc->image_types_val)
     {
-    case GIMP_RGB_IMAGE:
-      sensitive = proc->image_types_val & GIMP_PLUG_IN_RGB_IMAGE;
-      break;
-    case GIMP_RGBA_IMAGE:
-      sensitive = proc->image_types_val & GIMP_PLUG_IN_RGBA_IMAGE;
-      break;
-    case GIMP_GRAY_IMAGE:
-      sensitive = proc->image_types_val & GIMP_PLUG_IN_GRAY_IMAGE;
-      break;
-    case GIMP_GRAYA_IMAGE:
-      sensitive = proc->image_types_val & GIMP_PLUG_IN_GRAYA_IMAGE;
-      break;
-    case GIMP_INDEXED_IMAGE:
-      sensitive = proc->image_types_val & GIMP_PLUG_IN_INDEXED_IMAGE;
-      break;
-    case GIMP_INDEXEDA_IMAGE:
-      sensitive = proc->image_types_val & GIMP_PLUG_IN_INDEXEDA_IMAGE;
-      break;
-    default:
-      break;
+      switch (image_type)
+        {
+        case GIMP_RGB_IMAGE:
+          sensitive = proc->image_types_val & GIMP_PLUG_IN_RGB_IMAGE;
+          break;
+        case GIMP_RGBA_IMAGE:
+          sensitive = proc->image_types_val & GIMP_PLUG_IN_RGBA_IMAGE;
+          break;
+        case GIMP_GRAY_IMAGE:
+          sensitive = proc->image_types_val & GIMP_PLUG_IN_GRAY_IMAGE;
+          break;
+        case GIMP_GRAYA_IMAGE:
+          sensitive = proc->image_types_val & GIMP_PLUG_IN_GRAYA_IMAGE;
+          break;
+        case GIMP_INDEXED_IMAGE:
+          sensitive = proc->image_types_val & GIMP_PLUG_IN_INDEXED_IMAGE;
+          break;
+        case GIMP_INDEXEDA_IMAGE:
+          sensitive = proc->image_types_val & GIMP_PLUG_IN_INDEXEDA_IMAGE;
+          break;
+        default:
+          sensitive = FALSE;
+          break;
+        }
+    }
+  else
+    {
+      sensitive = (image_type != -1);
     }
 
   if (! image &&
       (proc->sensitivity_mask & GIMP_PROCEDURE_SENSITIVE_NO_IMAGE) != 0)
     sensitive = TRUE;
-  else if (g_list_length (drawables) == 1 && proc->sensitivity_mask != 0 &&
+  else if (g_list_length (drawables) == 1 &&
            (proc->sensitivity_mask & GIMP_PROCEDURE_SENSITIVE_DRAWABLE) == 0)
     sensitive = FALSE;
-  else if (g_list_length (drawables) == 0 &&
+  else if (image && g_list_length (drawables) == 0 &&
            (proc->sensitivity_mask & GIMP_PROCEDURE_SENSITIVE_NO_DRAWABLES) == 0)
     sensitive = FALSE;
   else if (g_list_length (drawables) > 1 &&
@@ -447,13 +456,6 @@ GIMP_IS_PARAM_SPEC_RUN_MODE (GParamSpec *pspec)
           pspec->value_type == GIMP_TYPE_RUN_MODE);
 }
 
-static inline gboolean
-GIMP_IS_PARAM_SPEC_FILE (GParamSpec *pspec)
-{
-  return (G_IS_PARAM_SPEC_OBJECT (pspec) &&
-          pspec->value_type == G_TYPE_FILE);
-}
-
 static gboolean
 gimp_plug_in_procedure_validate_args (GimpPlugInProcedure *proc,
                                       Gimp                *gimp,
@@ -517,7 +519,7 @@ gimp_plug_in_procedure_new (GimpPDBProcType  proc_type,
   GimpPlugInProcedure *proc;
 
   g_return_val_if_fail (proc_type == GIMP_PDB_PROC_TYPE_PLUGIN ||
-                        proc_type == GIMP_PDB_PROC_TYPE_EXTENSION, NULL);
+                        proc_type == GIMP_PDB_PROC_TYPE_PERSISTENT, NULL);
   g_return_val_if_fail (G_IS_FILE (file), NULL);
 
   proc = g_object_new (GIMP_TYPE_PLUG_IN_PROCEDURE, NULL);
@@ -669,54 +671,50 @@ gimp_plug_in_procedure_add_menu_path (GimpPlugInProcedure  *proc,
     }
   else if (g_str_has_prefix (menu_path, "<Layers>"))
     {
-      if ((procedure->num_args < 4)                          ||
+      if ((procedure->num_args < 3)                          ||
           ! GIMP_IS_PARAM_SPEC_RUN_MODE (procedure->args[0]) ||
           ! GIMP_IS_PARAM_SPEC_IMAGE    (procedure->args[1]) ||
-          ! (G_TYPE_FROM_INSTANCE       (procedure->args[3])
-                           == GIMP_TYPE_PARAM_OBJECT_ARRAY))
+          ! (G_TYPE_FROM_INSTANCE       (procedure->args[2]) == GIMP_TYPE_PARAM_CORE_OBJECT_ARRAY))
         {
-          required = "GimpRunMode, GimpImage, length, array of (GimpLayer | GimpDrawable)";
+          required = "GimpRunMode, GimpImage, NULL-terminated array of (GimpLayer | GimpDrawable)";
           goto failure;
         }
       else
         {
-          GimpParamSpecObjectArray *spec = GIMP_PARAM_SPEC_OBJECT_ARRAY (procedure->args[3]);
-          const gchar *type_name  = g_type_name (spec->object_type);
+          const gchar *type_name = g_type_name (gimp_param_spec_core_object_array_get_object_type (procedure->args[2]));
 
           if (g_strcmp0 (type_name, "GimpDrawable") != 0 &&
               g_strcmp0 (type_name, "GimpLayer")    != 0)
             {
-              required = "GimpRunMode, GimpImage, length, array of (GimpLayer | GimpDrawable)";
+              required = "GimpRunMode, GimpImage, NULL-terminated array of (GimpLayer | GimpDrawable)";
               goto failure;
             }
         }
     }
   else if (g_str_has_prefix (menu_path, "<Channels>"))
     {
-      if ((procedure->num_args < 4)                          ||
+      if ((procedure->num_args < 3)                          ||
           ! GIMP_IS_PARAM_SPEC_RUN_MODE (procedure->args[0]) ||
           ! GIMP_IS_PARAM_SPEC_IMAGE    (procedure->args[1]) ||
-          ! (G_TYPE_FROM_INSTANCE       (procedure->args[3])
-                           == GIMP_TYPE_PARAM_OBJECT_ARRAY))
+          ! (G_TYPE_FROM_INSTANCE       (procedure->args[2]) == GIMP_TYPE_PARAM_CORE_OBJECT_ARRAY))
         {
-          required = "GimpRunMode, GimpImage, length, array of (GimpChannel | GimpDrawable)";
+          required = "GimpRunMode, GimpImage, NULL-terminated array of (GimpChannel | GimpDrawable)";
           goto failure;
         }
       else
         {
-          GimpParamSpecObjectArray *spec = GIMP_PARAM_SPEC_OBJECT_ARRAY (procedure->args[3]);
-          const gchar *type_name  = g_type_name (spec->object_type);
+          const gchar *type_name = g_type_name (gimp_param_spec_core_object_array_get_object_type (procedure->args[2]));
 
           if (g_strcmp0 (type_name, "GimpDrawable") != 0 &&
               g_strcmp0 (type_name, "GimpChannel")  != 0)
             {
-              required = "GimpRunMode, GimpImage, length, array of (GimpChannel | GimpDrawable)";
+              required = "GimpRunMode, GimpImage, NULL-terminated array of (GimpChannel | GimpDrawable)";
               goto failure;
             }
         }
     }
   else if (g_str_has_prefix (menu_path, "<Colormap>") ||
-           g_str_has_prefix (menu_path, "<Vectors>"))
+           g_str_has_prefix (menu_path, "<Paths>"))
     {
       if ((procedure->num_args < 2)                          ||
           ! GIMP_IS_PARAM_SPEC_RUN_MODE (procedure->args[0]) ||
@@ -752,7 +750,7 @@ gimp_plug_in_procedure_add_menu_path (GimpPlugInProcedure  *proc,
                    "attempted to install procedure \"%s\" "
                    "in the invalid menu location \"%s\".\n"
                    "Use either \"<Image>\", "
-                   "\"<Layers>\", \"<Channels>\", \"<Vectors>\", "
+                   "\"<Layers>\", \"<Channels>\", \"<Paths>\", "
                    "\"<Colormap>\", \"<Brushes>\", \"<Dynamics>\", "
                    "\"<MyPaintBrushes>\", \"<Gradients>\", \"<Palettes>\", "
                    "\"<Patterns>\", \"<ToolPresets>\", \"<Fonts>\" "
@@ -839,6 +837,7 @@ gimp_plug_in_procedure_take_icon (GimpPlugInProcedure  *proc,
   switch (proc->icon_type)
     {
       GdkPixbufLoader *loader;
+      gchar           *path;
 
     case GIMP_ICON_TYPE_ICON_NAME:
       proc->icon_data_length = -1;
@@ -881,8 +880,12 @@ gimp_plug_in_procedure_take_icon (GimpPlugInProcedure  *proc,
       proc->icon_data_length = -1;
       proc->icon_data        = icon_data;
 
-      icon_pixbuf = gdk_pixbuf_new_from_file ((gchar *) proc->icon_data,
-                                              error);
+      path = g_filename_from_uri ((const gchar *) proc->icon_data, NULL, error);
+      if (path != NULL)
+        {
+          icon_pixbuf = gdk_pixbuf_new_from_file (path, error);
+          g_free (path);
+        }
 
       if (! icon_pixbuf)
         success = FALSE;
@@ -1097,7 +1100,10 @@ gimp_plug_in_procedure_set_sensitivity_mask (GimpPlugInProcedure *proc,
 {
   g_return_if_fail (GIMP_IS_PLUG_IN_PROCEDURE (proc));
 
-  proc->sensitivity_mask = sensitivity_mask;
+  if (sensitivity_mask == 0)
+    proc->sensitivity_mask = GIMP_PROCEDURE_SENSITIVE_DRAWABLE | GIMP_PROCEDURE_SENSITIVE_DRAWABLES;
+  else
+    proc->sensitivity_mask = sensitivity_mask;
 }
 
 static GSList *
@@ -1250,6 +1256,14 @@ gimp_plug_in_procedure_set_handles_raw (GimpPlugInProcedure *proc)
   g_return_if_fail (GIMP_IS_PLUG_IN_PROCEDURE (proc));
 
   proc->handles_raw = TRUE;
+}
+
+void
+gimp_plug_in_procedure_set_handles_vector (GimpPlugInProcedure *proc)
+{
+  g_return_if_fail (GIMP_IS_PLUG_IN_PROCEDURE (proc));
+
+  proc->handles_vector = TRUE;
 }
 
 void

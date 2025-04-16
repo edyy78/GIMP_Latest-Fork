@@ -24,6 +24,15 @@
 #include "gimpfileprocedure.h"
 
 
+/**
+ * GimpFileProcedure:
+ *
+ * File procedures implement file support. They cannot be created directly.
+ * Instead, you will create an instance of one of the sublasses (such as export
+ * or load procedures). This provides a common interface for file-related
+ * functions on these objects.
+ **/
+
 typedef struct _GimpFileProcedurePrivate
 {
   gchar    *format_name;
@@ -67,12 +76,12 @@ gimp_file_procedure_constructed (GObject *object)
 
   G_OBJECT_CLASS (parent_class)->constructed (object);
 
-  GIMP_PROC_ARG_ENUM (procedure, "run-mode",
-                      "Run mode",
-                      "The run mode",
-                      GIMP_TYPE_RUN_MODE,
-                      GIMP_RUN_NONINTERACTIVE,
-                      G_PARAM_READWRITE);
+  gimp_procedure_add_enum_argument (procedure, "run-mode",
+                                    "Run mode",
+                                    "The run mode",
+                                    GIMP_TYPE_RUN_MODE,
+                                    GIMP_RUN_NONINTERACTIVE,
+                                    G_PARAM_READWRITE);
 }
 
 static void
@@ -105,7 +114,7 @@ gimp_file_procedure_finalize (GObject *object)
  *
  * This name can be used for any public-facing strings, such as
  * graphical interface labels. An example usage would be
- * %GimpSaveProcedureDialog title looking like "Export Image as %s".
+ * %GimpExportProcedureDialog title looking like "Export Image as %s".
  *
  * Note that since the format name is public-facing, it is recommended
  * to localize it at runtime, for instance through gettext, like:

@@ -204,7 +204,7 @@ keyboard_zoom_focus (gconstpointer data)
   factor_before_zoom = gimp_zoom_model_get_factor (shell->zoom);
 
   /* Do the zoom */
-  gimp_test_utils_synthesize_key_event (GTK_WIDGET (window), GDK_KEY_plus);
+  gimp_test_utils_synthesize_key_event (GTK_WIDGET (shell), GDK_KEY_plus);
   gimp_test_run_mainloop_until_idle ();
 
   /* Make sure the zoom focus point remained fixed */
@@ -682,13 +682,18 @@ repeatedly_switch_window_mode (gconstpointer data)
 static void
 window_roles (gconstpointer data)
 {
-  GdkMonitor     *monitor        = NULL;
-  GtkWidget      *dock           = NULL;
-  GtkWidget      *toolbox        = NULL;
-  GimpDockWindow *dock_window    = NULL;
-  GimpDockWindow *toolbox_window = NULL;
+  Gimp              *gimp           = GIMP (data);
+  GimpDisplay       *display        = GIMP_DISPLAY (gimp_get_display_iter (gimp)->data);
+  GimpDisplayShell  *shell          = gimp_display_get_shell (display);
+  GimpImageWindow   *window         = gimp_display_shell_get_window (shell);
+  GdkMonitor        *monitor        = NULL;
+  GtkWidget         *dock           = NULL;
+  GtkWidget         *toolbox        = NULL;
+  GimpDockWindow    *dock_window    = NULL;
+  GimpDockWindow    *toolbox_window = NULL;
 
-  monitor        = gdk_display_get_primary_monitor (gdk_display_get_default ());
+  monitor        = gdk_display_get_monitor_at_window(gdk_display_get_default (), gtk_widget_get_window(GTK_WIDGET(window)));
+
   dock           = gimp_dock_with_window_new (gimp_dialog_factory_get_singleton (),
                                               monitor,
                                               FALSE /*toolbox*/);

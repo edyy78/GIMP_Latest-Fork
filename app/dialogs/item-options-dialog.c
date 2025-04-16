@@ -67,13 +67,14 @@ struct _ItemOptionsDialog
 
 /*  local function prototypes  */
 
-static void        item_options_dialog_free     (ItemOptionsDialog *private);
-static void        item_options_dialog_response (GtkWidget         *dialog,
-                                                 gint               response_id,
-                                                 ItemOptionsDialog *private);
-static GtkWidget * check_button_with_icon_new    (const gchar      *label,
-                                                  const gchar      *icon_name,
-                                                  GtkBox           *vbox);
+static void        item_options_dialog_free          (ItemOptionsDialog *private);
+static void        item_options_dialog_response      (GtkWidget         *dialog,
+                                                      gint               response_id,
+                                                      ItemOptionsDialog *private);
+static GtkWidget * check_button_with_icon_new        (const gchar       *label,
+                                                      const gchar       *icon_name,
+                                                      GtkBox            *vbox);
+static gint        check_button_get_bold_label_width (const gchar       *text);
 
 
 /*  public functions  */
@@ -194,6 +195,8 @@ item_options_dialog_new (GimpImage               *image,
       gimp_grid_attach_aligned (GTK_GRID (grid), 0, private->grid_row++,
                                 name_label, 0.0, 0.5,
                                 private->name_entry, 1);
+      /* Make the item name entry field have focus on creation */
+      gtk_widget_grab_focus (private->name_entry);
 
       radio_box = gimp_enum_radio_box_new (GIMP_TYPE_COLOR_TAG,
                                            G_CALLBACK (gimp_radio_button_update),
@@ -216,7 +219,7 @@ item_options_dialog_new (GimpImage               *image,
            list = g_list_next (list))
         {
           GimpColorTag  color_tag;
-          GimpRGB       rgb;
+          GeglColor    *rgb = gegl_color_new ("none");
           GtkWidget    *image;
 
           radio = list->data;
@@ -228,25 +231,22 @@ item_options_dialog_new (GimpImage               *image,
           color_tag = GPOINTER_TO_INT (g_object_get_data (G_OBJECT (radio),
                                                           "gimp-item-data"));
 
-          if (gimp_get_color_tag_color (color_tag, &rgb, FALSE))
+          if (gimp_get_color_tag_color (color_tag, rgb, FALSE))
             {
-              GeglColor *color = gegl_color_new (NULL);
-              gint       w, h;
+              gint w, h;
 
-              gegl_color_set_pixel (color, babl_format ("R'G'B'A double"), &rgb);
-              image = gimp_color_area_new (color, GIMP_COLOR_AREA_FLAT, 0);
+              image = gimp_color_area_new (rgb, GIMP_COLOR_AREA_FLAT, 0);
               gimp_color_area_set_color_config (GIMP_COLOR_AREA (image),
                                                 context->gimp->config->color_management);
               gtk_icon_size_lookup (GTK_ICON_SIZE_MENU, &w, &h);
               gtk_widget_set_size_request (image, w, h);
-
-              g_object_unref (color);
             }
           else
             {
               image = gtk_image_new_from_icon_name (GIMP_ICON_CLOSE,
                                                     GTK_ICON_SIZE_MENU);
             }
+          g_object_unref (rgb);
 
           gtk_container_add (GTK_CONTAINER (radio), image);
           gtk_widget_show (image);
@@ -475,6 +475,7 @@ check_button_with_icon_new (const gchar *label,
   GtkWidget *hbox;
   GtkWidget *button;
   GtkWidget *image;
+  GtkWidget *label_widget;
 
   hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
   gtk_box_pack_start (vbox, hbox, FALSE, FALSE, 0);
@@ -486,7 +487,32 @@ check_button_with_icon_new (const gchar *label,
 
   button = gtk_check_button_new_with_mnemonic (label);
   gtk_box_pack_start (GTK_BOX (hbox), button, TRUE, TRUE, 0);
-  gtk_widget_show (button);
+  gtk_widget_set_visible (button, TRUE);
+
+  /* Resize the label to its bold size to avoid a GUI twitch */
+  label_widget = gtk_bin_get_child (GTK_BIN (button));
+  gtk_widget_set_size_request (label_widget,
+                               check_button_get_bold_label_width (label),
+                               -1);
 
   return button;
+}
+
+static gint
+check_button_get_bold_label_width (const gchar *text)
+{
+  GtkWidget      *temp_label = gtk_label_new (NULL);
+  GtkRequisition  natural_size;
+
+  gtk_label_set_text (GTK_LABEL (temp_label), text);
+  gtk_widget_set_visible (temp_label, TRUE);
+
+  gimp_label_set_attributes (GTK_LABEL (temp_label),
+                             PANGO_ATTR_WEIGHT, PANGO_WEIGHT_BOLD,
+                             -1);
+
+  gtk_widget_get_preferred_size (temp_label, NULL, &natural_size);
+  gtk_widget_destroy (temp_label);
+
+  return natural_size.width;
 }

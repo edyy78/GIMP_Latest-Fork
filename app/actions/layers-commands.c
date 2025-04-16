@@ -58,12 +58,12 @@
 #include "core/gimpprogress.h"
 
 #include "text/gimptext.h"
-#include "text/gimptext-vectors.h"
+#include "text/gimptext-path.h"
 #include "text/gimptextlayer.h"
 
+#include "vectors/gimppath.h"
+#include "vectors/gimppath-warp.h"
 #include "vectors/gimpstroke.h"
-#include "vectors/gimpvectors.h"
-#include "vectors/gimpvectors-warp.h"
 
 #include "widgets/gimpaction.h"
 #include "widgets/gimpdock.h"
@@ -148,23 +148,23 @@ static void   layers_scale_callback           (GtkWidget             *dialog,
                                                GimpViewable          *viewable,
                                                gint                   width,
                                                gint                   height,
-                                               GimpUnit               unit,
+                                               GimpUnit              *unit,
                                                GimpInterpolationType  interpolation,
                                                gdouble                xresolution,
                                                gdouble                yresolution,
-                                               GimpUnit               resolution_unit,
+                                               GimpUnit              *resolution_unit,
                                                gpointer               user_data);
 static void   layers_resize_callback          (GtkWidget             *dialog,
                                                GimpViewable          *viewable,
                                                GimpContext           *context,
                                                gint                   width,
                                                gint                   height,
-                                               GimpUnit               unit,
+                                               GimpUnit              *unit,
                                                gint                   offset_x,
                                                gint                   offset_y,
                                                gdouble                unused0,
                                                gdouble                unused1,
-                                               GimpUnit               unused2,
+                                               GimpUnit              *unused2,
                                                GimpFillType           fill_type,
                                                GimpItemSet            unused3,
                                                gboolean               unused4,
@@ -177,8 +177,8 @@ static gint   layers_mode_index               (GimpLayerMode          layer_mode
 
 /*  private variables  */
 
-static GimpUnit               layer_resize_unit   = GIMP_UNIT_PIXEL;
-static GimpUnit               layer_scale_unit    = GIMP_UNIT_PIXEL;
+static GimpUnit              *layer_resize_unit   = NULL;
+static GimpUnit              *layer_scale_unit    = NULL;
 static GimpInterpolationType  layer_scale_interp  = -1;
 
 
@@ -657,7 +657,15 @@ layers_raise_cmd_callback (GimpAction *action,
 
       index = gimp_item_get_index (iter->data);
       if (index > 0)
-        raised_layers = g_list_prepend (raised_layers, iter->data);
+        {
+          raised_layers = g_list_prepend (raised_layers, iter->data);
+        }
+      else
+        {
+          gimp_image_flush (image);
+          g_list_free (raised_layers);
+          return;
+        }
     }
 
   gimp_image_undo_group_start (image,
@@ -665,6 +673,8 @@ layers_raise_cmd_callback (GimpAction *action,
                                ngettext ("Raise Layer",
                                          "Raise Layers",
                                          g_list_length (raised_layers)));
+
+  raised_layers = g_list_reverse (raised_layers);
   for (iter = raised_layers; iter; iter = iter->next)
     gimp_image_raise_item (image, iter->data, NULL);
 
@@ -728,7 +738,15 @@ layers_lower_cmd_callback (GimpAction *action,
       layer_list = gimp_item_get_container_iter (GIMP_ITEM (iter->data));
       index = gimp_item_get_index (iter->data);
       if (index < g_list_length (layer_list) - 1)
-        lowered_layers = g_list_prepend (lowered_layers, iter->data);
+        {
+          lowered_layers = g_list_prepend (lowered_layers, iter->data);
+        }
+      else
+        {
+          gimp_image_flush (image);
+          g_list_free (lowered_layers);
+          return;
+        }
     }
 
   gimp_image_undo_group_start (image,
@@ -800,7 +818,8 @@ layers_duplicate_cmd_callback (GimpAction *action,
                                _("Duplicate layers"));
   for (iter = layers; iter; iter = iter->next)
     {
-      GimpLayer *new_layer;
+      GimpLayer     *new_layer;
+      GimpContainer *filters;
 
       new_layer = GIMP_LAYER (gimp_item_duplicate (GIMP_ITEM (iter->data),
                                                    G_TYPE_FROM_INSTANCE (iter->data)));
@@ -813,10 +832,12 @@ layers_duplicate_cmd_callback (GimpAction *action,
                             gimp_layer_get_parent (iter->data),
                             gimp_item_get_index (iter->data),
                             TRUE);
+      gimp_drawable_enable_resize_undo (GIMP_DRAWABLE (new_layer));
       new_layers = g_list_prepend (new_layers, new_layer);
 
       /* Import any attached layer effects */
-      if (gimp_drawable_has_filters (GIMP_DRAWABLE (iter->data)))
+      filters = gimp_drawable_get_filters (GIMP_DRAWABLE (iter->data));
+      if (gimp_container_get_n_children (filters) > 0)
         {
           GList         *filter_list;
           GimpContainer *filters;
@@ -835,11 +856,14 @@ layers_duplicate_cmd_callback (GimpAction *action,
                     gimp_drawable_filter_duplicate (GIMP_DRAWABLE (new_layer),
                                                     old_filter);
 
-                  gimp_drawable_filter_apply (filter, NULL);
-                  gimp_drawable_filter_commit (filter, TRUE, NULL, FALSE);
+                  if (filter != NULL)
+                    {
+                      gimp_drawable_filter_apply (filter, NULL);
+                      gimp_drawable_filter_commit (filter, TRUE, NULL, FALSE);
 
-                  gimp_drawable_filter_layer_mask_freeze (filter);
-                  g_object_unref (filter);
+                      gimp_drawable_filter_layer_mask_freeze (filter);
+                      g_object_unref (filter);
+                    }
                 }
             }
         }
@@ -920,11 +944,47 @@ layers_merge_group_cmd_callback (GimpAction *action,
 
           for (iter2 = layers; iter2; iter2 = iter2->next)
             {
+              if (iter->data == iter2->data)
+                continue;
+
               /* Do not merge a layer when we already merge one of its
                * ancestors.
                */
               if (gimp_viewable_is_ancestor (iter2->data, iter->data))
                 break;
+
+              /* Do not merge a layer which has a little sister (same
+               * parent and smaller index) or a little cousin (one of
+               * its ancestors is a little sister) of a pass-through
+               * group layer.
+               * These will be rendered and merged through the
+               * pass-through by definition.
+               */
+              if (gimp_viewable_get_children (GIMP_VIEWABLE (iter2->data)) &&
+                  gimp_layer_get_mode (iter2->data) == GIMP_LAYER_MODE_PASS_THROUGH)
+                {
+                  GimpLayer *pass_through_parent = gimp_layer_get_parent (iter2->data);
+                  GimpLayer *cousin              = iter->data;
+                  gboolean   ignore = FALSE;
+
+                  do
+                    {
+                      GimpLayer *cousin_parent = gimp_layer_get_parent (cousin);
+
+                      if (pass_through_parent == cousin_parent &&
+                          gimp_item_get_index (GIMP_ITEM (iter2->data)) < gimp_item_get_index (GIMP_ITEM (cousin)))
+                        {
+                          ignore = TRUE;
+                          break;
+                        }
+
+                      cousin = cousin_parent;
+                    }
+                  while (cousin != NULL);
+
+                  if (ignore)
+                    break;
+                }
             }
 
           if (iter2 == NULL)
@@ -976,7 +1036,7 @@ layers_delete_cmd_callback (GimpAction *action,
   removed_layers = g_list_copy (layers);
 
   /* Removing children layers (they will be removed anyway by removing
-   * the parent.
+   * the parent).
    */
   for (iter = removed_layers; iter; iter = iter->next)
     {
@@ -1041,7 +1101,7 @@ layers_text_to_vectors_cmd_callback (GimpAction *action,
   return_if_no_layers (image, layers, data);
 
   /* TODO: have the proper undo group. */
-  gimp_image_undo_group_start (image, GIMP_UNDO_GROUP_VECTORS_IMPORT,
+  gimp_image_undo_group_start (image, GIMP_UNDO_GROUP_PATHS_IMPORT,
                                _("Add Paths"));
   for (iter = layers; iter; iter = iter->next)
     {
@@ -1049,16 +1109,16 @@ layers_text_to_vectors_cmd_callback (GimpAction *action,
 
       if (GIMP_IS_TEXT_LAYER (layer))
         {
-          GimpVectors *vectors;
-          gint         x, y;
+          GimpPath *path;
+          gint      x, y;
 
-          vectors = gimp_text_vectors_new (image, GIMP_TEXT_LAYER (layer)->text);
+          path = gimp_text_path_new (image, GIMP_TEXT_LAYER (layer)->text);
 
           gimp_item_get_offset (GIMP_ITEM (layer), &x, &y);
-          gimp_item_translate (GIMP_ITEM (vectors), x, y, FALSE);
+          gimp_item_translate (GIMP_ITEM (path), x, y, FALSE);
 
-          gimp_image_add_vectors (image, vectors,
-                                  GIMP_IMAGE_ACTIVE_PARENT, -1, TRUE);
+          gimp_image_add_path (image, path,
+                               GIMP_IMAGE_ACTIVE_PARENT, -1, TRUE);
           gimp_image_flush (image);
         }
     }
@@ -1074,26 +1134,26 @@ layers_text_along_vectors_cmd_callback (GimpAction *action,
   GList       *layers;
   GList       *paths;
   GimpLayer   *layer;
-  GimpVectors *vectors;
+  GimpPath    *path;
   return_if_no_layers (image, layers, data);
-  return_if_no_vectors_list (image, paths, data);
+  return_if_no_paths (image, paths, data);
 
   if (g_list_length (layers) != 1 || g_list_length (paths) != 1)
     return;
 
-  layer   = layers->data;
-  vectors = paths->data;
+  layer = layers->data;
+  path  = paths->data;
   if (GIMP_IS_TEXT_LAYER (layer))
     {
-      gdouble      box_width;
-      gdouble      box_height;
-      GimpVectors *new_vectors;
-      gdouble      offset;
+      gdouble   box_width;
+      gdouble   box_height;
+      GimpPath *new_path;
+      gdouble   offset;
 
       box_width  = gimp_item_get_width  (GIMP_ITEM (layer));
       box_height = gimp_item_get_height (GIMP_ITEM (layer));
 
-      new_vectors = gimp_text_vectors_new (image, GIMP_TEXT_LAYER (layer)->text);
+      new_path = gimp_text_path_new (image, GIMP_TEXT_LAYER (layer)->text);
 
       offset = 0;
       switch (GIMP_TEXT_LAYER (layer)->text->base_dir)
@@ -1109,7 +1169,7 @@ layers_text_along_vectors_cmd_callback (GimpAction *action,
           {
             GimpStroke *stroke = NULL;
 
-            while ((stroke = gimp_vectors_stroke_get_next (new_vectors, stroke)))
+            while ((stroke = gimp_path_stroke_get_next (new_path, stroke)))
               {
                 gimp_stroke_rotate (stroke, 0, 0, 270);
                 gimp_stroke_translate (stroke, 0, box_width);
@@ -1119,13 +1179,12 @@ layers_text_along_vectors_cmd_callback (GimpAction *action,
           break;
         }
 
+      gimp_path_warp_path (path, new_path, offset);
 
-      gimp_vectors_warp_vectors (vectors, new_vectors, offset);
+      gimp_item_set_visible (GIMP_ITEM (new_path), TRUE, FALSE);
 
-      gimp_item_set_visible (GIMP_ITEM (new_vectors), TRUE, FALSE);
-
-      gimp_image_add_vectors (image, new_vectors,
-                              GIMP_IMAGE_ACTIVE_PARENT, -1, TRUE);
+      gimp_image_add_path (image, new_path,
+                           GIMP_IMAGE_ACTIVE_PARENT, -1, TRUE);
       gimp_image_flush (image);
     }
 }
@@ -1159,7 +1218,10 @@ layers_resize_cmd_callback (GimpAction *action,
       if (GIMP_IS_IMAGE_WINDOW (data))
         display = action_data_get_display (data);
 
-      if (layer_resize_unit != GIMP_UNIT_PERCENT && display)
+      if (layer_resize_unit == NULL)
+        layer_resize_unit = gimp_unit_pixel ();
+
+      if (layer_resize_unit != gimp_unit_percent () && display)
         layer_resize_unit = gimp_display_get_shell (display)->unit;
 
       dialog = resize_dialog_new (GIMP_VIEWABLE (layer),
@@ -1234,7 +1296,10 @@ layers_scale_cmd_callback (GimpAction *action,
       if (GIMP_IS_IMAGE_WINDOW (data))
         display = action_data_get_display (data);
 
-      if (layer_scale_unit != GIMP_UNIT_PERCENT && display)
+      if (layer_scale_unit == NULL)
+        layer_scale_unit = gimp_unit_pixel ();;
+
+      if (layer_scale_unit != gimp_unit_percent () && display)
         layer_scale_unit = gimp_display_get_shell (display)->unit;
 
       if (layer_scale_interp == -1)
@@ -2472,11 +2537,11 @@ layers_scale_callback (GtkWidget             *dialog,
                        GimpViewable          *viewable,
                        gint                   width,
                        gint                   height,
-                       GimpUnit               unit,
+                       GimpUnit              *unit,
                        GimpInterpolationType  interpolation,
                        gdouble                xresolution,    /* unused */
                        gdouble                yresolution,    /* unused */
-                       GimpUnit               resolution_unit,/* unused */
+                       GimpUnit              *resolution_unit,/* unused */
                        gpointer               user_data)
 {
   GimpDisplay *display = GIMP_DISPLAY (user_data);
@@ -2533,12 +2598,12 @@ layers_resize_callback (GtkWidget    *dialog,
                         GimpContext  *context,
                         gint          width,
                         gint          height,
-                        GimpUnit      unit,
+                        GimpUnit     *unit,
                         gint          offset_x,
                         gint          offset_y,
                         gdouble       unused0,
                         gdouble       unused1,
-                        GimpUnit      unused2,
+                        GimpUnit     *unused2,
                         GimpFillType  fill_type,
                         GimpItemSet   unused3,
                         gboolean      unused4,

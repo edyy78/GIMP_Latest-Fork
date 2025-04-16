@@ -23,7 +23,6 @@
 #include "libgimpbase/gimpwire.h" /* FIXME kill this include */
 
 #include "gimpplugin-private.h"
-#include "gimpprocedure-private.h"
 
 
 /* GimpResource: base class for resources.
@@ -278,6 +277,9 @@ gimp_resource_deserialize_create (GType     type,
  * gimp_resource_get_id:
  * @resource: The resource.
  *
+ * Note: in most use cases, you should not need a resource's ID which is
+ * mostly internal data and not reusable across sessions.
+ *
  * Returns: the resource ID.
  *
  * Since: 3.0
@@ -305,6 +307,11 @@ gimp_resource_get_id (GimpResource *resource)
  * abstract class, the real object type will actually be the proper
  * subclass.
  *
+ * Note: in most use cases, you should not need to retrieve a
+ * #GimpResource by its ID, which is mostly internal data and not
+ * reusable across sessions. Use the appropriate functions for your use
+ * case instead.
+ *
  * Returns: (nullable) (transfer none): a #GimpResource for @resource_id or
  *          %NULL if @resource_id does not represent a valid resource.
  *          The object belongs to libgimp and you must not modify
@@ -317,10 +324,9 @@ gimp_resource_get_by_id (gint32 resource_id)
 {
   if (resource_id > 0)
     {
-      GimpPlugIn    *plug_in   = gimp_get_plug_in ();
-      GimpProcedure *procedure = _gimp_plug_in_get_procedure (plug_in);
+      GimpPlugIn *plug_in = gimp_get_plug_in ();
 
-      return _gimp_procedure_get_resource (procedure, resource_id);
+      return _gimp_plug_in_get_resource (plug_in, resource_id);
     }
 
   return NULL;
@@ -334,7 +340,7 @@ gimp_resource_get_by_id (gint32 resource_id)
  * Returns the resource with the given @resource_type and
  * @resource_name.
  *
- * Returns: (transfer full): The resource.
+ * Returns: (nullable) (transfer none): The resource.
  *
  * Since: 3.0
  **/

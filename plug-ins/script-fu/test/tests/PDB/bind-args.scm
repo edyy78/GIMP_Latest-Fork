@@ -31,15 +31,15 @@
 ; int
 ; float
 
-; GimpRGB is tested e.g. with Palette
-; GimpRGBArray is tested e.g.
+; Colors (GeglColor) are tested e.g. with Palette
+; GimpColorArray is tested e.g.
 ; from palette-get-colormap
 ; to is not tested: not an arg to any PDB proc
 
 ; GStrv string array
 ; from brushes-get-list
-; to file-gih-save or extension-gimp-help
-; TODO test GStrv to file-gih-save
+; to file-gih-export or extension-gimp-help
+; TODO test GStrv to file-gih-export
 
 ; GBytes
 ; from image-get-colormap
@@ -75,10 +75,11 @@
 ; A GimpUnit is both an enum and an object???
 ; ScriptFu converts to int.  More or less an ID.
 
+; obsolete: GimpUnit is now an object
 ; to
 ; unit index 0 is px
-(assert '(string=? (car (gimp-unit-get-abbreviation 0))
-                   "px"))
+;(assert '(string=? (car (gimp-unit-get-abbreviation 0))
+;                   "px"))
 
 ; from
 ; default line width unit is px

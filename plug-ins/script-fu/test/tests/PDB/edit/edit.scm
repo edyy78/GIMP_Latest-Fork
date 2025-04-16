@@ -9,14 +9,16 @@
 ; are not in the PDB
 
 
+(script-fu-use-v3)
+
 
 ; setup
 ; Load test image that already has drawable
-(define testImage (testing:load-test-image "wilber.png"))
+(define testImage (testing:load-test-image-basic-v3))
 
 ; get all the root layers
 ; testImage has exactly one root layer.
-(define testLayers (cadr (gimp-image-get-layers testImage)))
+(define testLayers (gimp-image-get-layers testImage))
 ;testLayers is-a vector
 
 (define testLayer (vector-ref testLayers 0))
@@ -27,7 +29,20 @@
 ; So these tests might not pass when you run this test file
 ; in the wrong order.
 
-; paste
+
+
+
+(test! "named-copy")
+
+(define testBuffer (gimp-edit-named-copy
+                              (make-vector 1 testLayer)
+                              "testBufferName"))
+; There is one named buffer
+(assert `(= (length (gimp-buffers-get-name-list "")) 1))
+
+
+
+(test! "paste")
 
 ; ordinary paste is to a drawable
 
@@ -41,77 +56,91 @@
 
 ; paste-as-new-image returns NULL image when clipboard empty
 ; paste-as-new is deprecated
-(assert `(= (car (gimp-edit-paste-as-new-image))
+(assert `(= (gimp-edit-paste-as-new-image)
             -1))  ; the NULL ID
+; named-paste-as-new-image returns a new image
+(assert `(gimp-image-id-is-valid (gimp-edit-named-paste-as-new-image "testBufferName")))
 
-
-; copy
+(test! "copy")
 
 ; copy when:
 ;  - no selection
 ;  - image has one drawable
 ;  - one drawable is passed
 ; returns true and clip has one drawable
-(assert-PDB-true `(gimp-edit-copy 1 ,testLayers))
+(assert `(gimp-edit-copy ,testLayers))
 
 ; paste when clipboard is not empty returns a vector of length one
-(assert `(= (car (gimp-edit-paste
+(assert `(= (vector-length (gimp-edit-paste
                    ,testLayer
                    TRUE)) ; paste-into
             1))
 ; get reference to pasted layer
-(define testPastedLayer (vector-ref (cadr (gimp-image-get-layers testImage))
+(define testPastedLayer (vector-ref (gimp-image-get-layers testImage)
                                        0))
 
 ; !!! this is not what happens in the GUI, the pasted layer is NOT floating
 ; The pasted layer is floating
-(assert-PDB-true `(gimp-layer-is-floating-sel ,testPastedLayer))
+(assert `(gimp-layer-is-floating-sel ,testPastedLayer))
 
 
 
-
+(test! "copy-visible")
 
 ; copy-visible takes only an image
 ; it puts one drawable on clip
-(assert-PDB-true `(gimp-edit-copy-visible ,testImage))
+(assert `(gimp-edit-copy-visible ,testImage))
 
 
 
 
+(test! "named-paste")
+
+; There is one named buffer
+(assert `(= (length (gimp-buffers-get-name-list "")) 1))
+
+; named-paste returns just the floating sel
+(assert `(gimp-edit-named-paste
+                   ,testLayer
+                   "testBufferName"
+                   #f)) ; paste-into
+
+
+(test! "paste  into")
 ; paste when clipboard is not empty returns a vector of length one
-(assert `(= (car (gimp-edit-paste ,testLayer TRUE)) ; paste-into
+(assert `(= (vector-length (gimp-edit-paste ,testLayer TRUE)) ; paste-into
             1))
 
 ; The first pasted floating layer was anchored (merged into) first layer
-; The ID of the floating sel is now invalid
-(assert-PDB-false `(gimp-item-id-is-valid ,testPastedLayer))
-; Can't do this, it throws CRITICAL
-;(assert-error `(gimp-layer-is-floating-sel ,testPastedLayer)
-;              "Procedure")
+; The ID of the first floating sel is now invalid !
+(assert `(not (gimp-item-id-is-valid ,testPastedLayer)))
+; The first floating sel MUST NOT BE USED AGAIN !
+(assert-error `(gimp-layer-is-floating-sel ,testPastedLayer)
+              "Invalid value for argument 0")
+
 
 ; There are now two layers
-(assert `(= (car (gimp-image-get-layers ,testImage))
-            2))
-(define testPastedLayer2 (vector-ref (cadr (gimp-image-get-layers testImage))
+(assert `(= (vector-length (gimp-image-get-layers ,testImage)) 2))
+
+(define testPastedLayer2 (vector-ref (gimp-image-get-layers testImage)
                                        0))
 ; the new layer is now floating.
-(assert-PDB-true `(gimp-layer-is-floating-sel ,testPastedLayer2))
+(assert `(gimp-layer-is-floating-sel ,testPastedLayer2))
 
 
 
 
+(test! "paste into empty image")
 
 ; paste specifying no destination layer is an error.
-; You cannot paste into an empty image because you must pass a destination layer.
+; You cannot paste into an empty image having no layers
+; because you must pass a destination layer.
 ; !!! This is different from the GUI
 (assert-error `(gimp-edit-paste -1 TRUE)
               "Invalid value for argument 0")
 
 
 
-; TODO test paste-into FALSE
-
-; TODO test cut
 
 ; TODO test cross image paste, of different modes
 
@@ -122,11 +151,12 @@
 ; do not intersect bounds of selection.
 ; TODO
 
+; cleanup
+; delete buffers, other tests may expect no buffers
+(gimp-buffer-delete "testBufferName")
+
+; for debugging individual test file
+(testing:show testImage)
 
 
-
-
-
-
-; for debugging individual test file:
-(gimp-display-new testImage)
+(script-fu-use-v2)

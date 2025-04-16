@@ -40,7 +40,7 @@
 
 #include "paint/gimppaintoptions.h" /* GIMP_PAINT_OPTIONS_CONTEXT_MASK */
 
-#include "vectors/gimpvectors.h"
+#include "vectors/gimppath.h"
 
 #include "widgets/gimpdialogfactory.h"
 #include "widgets/gimpdockcontainer.h"
@@ -121,7 +121,7 @@ static void     gimp_vector_tool_path_activate   (GimpToolWidget        *path,
 
 static void     gimp_vector_tool_vectors_changed (GimpImage             *image,
                                                   GimpVectorTool        *vector_tool);
-static void     gimp_vector_tool_vectors_removed (GimpVectors           *vectors,
+static void     gimp_vector_tool_vectors_removed (GimpPath              *vectors,
                                                   GimpVectorTool        *vector_tool);
 
 static void     gimp_vector_tool_to_selection    (GimpVectorTool        *vector_tool);
@@ -366,12 +366,12 @@ gimp_vector_tool_cursor_update (GimpTool         *tool,
     {
       GimpToolCursorType tool_cursor = GIMP_TOOL_CURSOR_PATHS;
 
-      if (gimp_image_pick_vectors (gimp_display_get_image (display),
-                                   coords->x, coords->y,
-                                   FUNSCALEX (shell,
-                                              GIMP_TOOL_HANDLE_SIZE_CIRCLE / 2),
-                                   FUNSCALEY (shell,
-                                              GIMP_TOOL_HANDLE_SIZE_CIRCLE / 2)))
+      if (gimp_image_pick_path (gimp_display_get_image (display),
+                                coords->x, coords->y,
+                                FUNSCALEX (shell,
+                                           GIMP_TOOL_HANDLE_SIZE_CIRCLE / 2),
+                                FUNSCALEY (shell,
+                                           GIMP_TOOL_HANDLE_SIZE_CIRCLE / 2)))
         {
           tool_cursor = GIMP_TOOL_CURSOR_HAND;
         }
@@ -450,7 +450,7 @@ gimp_vector_tool_path_changed (GimpToolWidget *path,
 {
   GimpDisplayShell *shell = gimp_tool_widget_get_shell (path);
   GimpImage        *image = gimp_display_get_image (shell->display);
-  GimpVectors      *vectors;
+  GimpPath         *vectors;
 
   g_object_get (path,
                 "vectors", &vectors,
@@ -460,8 +460,8 @@ gimp_vector_tool_path_changed (GimpToolWidget *path,
     {
       if (vectors && ! gimp_item_is_attached (GIMP_ITEM (vectors)))
         {
-          gimp_image_add_vectors (image, vectors,
-                                  GIMP_IMAGE_ACTIVE_PARENT, -1, TRUE);
+          gimp_image_add_path (image, vectors,
+                               GIMP_IMAGE_ACTIVE_PARENT, -1, TRUE);
           gimp_image_flush (image);
 
           gimp_vector_tool_set_vectors (vector_tool, vectors);
@@ -474,7 +474,7 @@ gimp_vector_tool_path_changed (GimpToolWidget *path,
             {
               GList *list = g_list_prepend (NULL, vectors);
 
-              gimp_image_set_selected_vectors (image, list);
+              gimp_image_set_selected_paths (image, list);
               g_list_free (list);
             }
         }
@@ -492,7 +492,7 @@ gimp_vector_tool_path_begin_change (GimpToolWidget *path,
   GimpDisplayShell *shell = gimp_tool_widget_get_shell (path);
   GimpImage        *image = gimp_display_get_image (shell->display);
 
-  gimp_image_undo_push_vectors_mod (image, desc, vector_tool->vectors);
+  gimp_image_undo_push_path_mod (image, desc, vector_tool->vectors);
 }
 
 static void
@@ -532,17 +532,17 @@ static void
 gimp_vector_tool_vectors_changed (GimpImage      *image,
                                   GimpVectorTool *vector_tool)
 {
-  GimpVectors *vectors = NULL;
+  GimpPath *path = NULL;
 
-  /* The vectors tool can only work on one path at a time. */
-  if (g_list_length (gimp_image_get_selected_vectors (image)) == 1)
-    vectors = gimp_image_get_selected_vectors (image)->data;
+  /* The path tool can only work on one path at a time. */
+  if (g_list_length (gimp_image_get_selected_paths (image)) == 1)
+    path = gimp_image_get_selected_paths (image)->data;
 
-  gimp_vector_tool_set_vectors (vector_tool, vectors);
+  gimp_vector_tool_set_vectors (vector_tool, path);
 }
 
 static void
-gimp_vector_tool_vectors_removed (GimpVectors    *vectors,
+gimp_vector_tool_vectors_removed (GimpPath       *vectors,
                                   GimpVectorTool *vector_tool)
 {
   gimp_vector_tool_set_vectors (vector_tool, NULL);
@@ -550,14 +550,14 @@ gimp_vector_tool_vectors_removed (GimpVectors    *vectors,
 
 void
 gimp_vector_tool_set_vectors (GimpVectorTool *vector_tool,
-                              GimpVectors    *vectors)
+                              GimpPath       *vectors)
 {
   GimpTool          *tool;
   GimpItem          *item = NULL;
   GimpVectorOptions *options;
 
   g_return_if_fail (GIMP_IS_VECTOR_TOOL (vector_tool));
-  g_return_if_fail (vectors == NULL || GIMP_IS_VECTORS (vectors));
+  g_return_if_fail (vectors == NULL || GIMP_IS_PATH (vectors));
 
   tool    = GIMP_TOOL (vector_tool);
   options = GIMP_VECTOR_TOOL_GET_OPTIONS (vector_tool);
@@ -623,7 +623,7 @@ gimp_vector_tool_set_vectors (GimpVectorTool *vector_tool,
 
   vector_tool->vectors = g_object_ref (vectors);
 
-  g_signal_connect_object (gimp_item_get_image (item), "selected-vectors-changed",
+  g_signal_connect_object (gimp_item_get_image (item), "selected-paths-changed",
                            G_CALLBACK (gimp_vector_tool_vectors_changed),
                            vector_tool, 0);
   g_signal_connect_object (vectors, "removed",
@@ -749,6 +749,15 @@ gimp_vector_tool_fill_vectors (GimpVectorTool *vector_tool,
       return;
     }
 
+  if (g_list_length (drawables) == 1 &&
+      gimp_item_is_content_locked (GIMP_ITEM (drawables->data), NULL))
+    {
+      gimp_tool_message (GIMP_TOOL (vector_tool),
+                         GIMP_TOOL (vector_tool)->display,
+                         _("A selected layer's pixels are locked."));
+      return;
+    }
+
   vectors_list = g_list_prepend (NULL, vector_tool->vectors);
   dialog = fill_dialog_new (vectors_list, drawables,
                             GIMP_CONTEXT (GIMP_TOOL_GET_OPTIONS (vector_tool)),
@@ -826,6 +835,15 @@ gimp_vector_tool_stroke_vectors (GimpVectorTool *vector_tool,
       gimp_tool_message (GIMP_TOOL (vector_tool),
                          GIMP_TOOL (vector_tool)->display,
                          _("There are no selected layers or channels to stroke to."));
+      return;
+    }
+
+  if (g_list_length (drawables) == 1 &&
+      gimp_item_is_content_locked (GIMP_ITEM (drawables->data), NULL))
+    {
+      gimp_tool_message (GIMP_TOOL (vector_tool),
+                         GIMP_TOOL (vector_tool)->display,
+                         _("A selected layer's pixels are locked."));
       return;
     }
 

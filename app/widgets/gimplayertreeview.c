@@ -208,6 +208,13 @@ gimp_layer_tree_view_class_init (GimpLayerTreeViewClass *klass)
   tree_view_class->drop_component  = gimp_layer_tree_view_drop_component;
   tree_view_class->drop_pixbuf     = gimp_layer_tree_view_drop_pixbuf;
 
+  item_view_class->move_cursor_up_action        = "layers-select-previous";
+  item_view_class->move_cursor_down_action      = "layers-select-next";
+  item_view_class->move_cursor_up_flat_action   = "layers-select-flattened-previous";
+  item_view_class->move_cursor_down_flat_action = "layers-select-flattened-next";
+  item_view_class->move_cursor_start_action     = "layers-select-top";
+  item_view_class->move_cursor_end_action       = "layers-select-bottom";
+
   item_view_class->item_type       = GIMP_TYPE_LAYER;
   item_view_class->signal_name     = "selected-layers-changed";
 
@@ -219,18 +226,19 @@ gimp_layer_tree_view_class_init (GimpLayerTreeViewClass *klass)
   item_view_class->remove_item     = (GimpRemoveItemFunc) gimp_image_remove_layer;
   item_view_class->new_item        = gimp_layer_tree_view_item_new;
 
-  item_view_class->action_group          = "layers";
-  item_view_class->activate_action       = "layers-edit";
-  item_view_class->new_action            = "layers-new";
-  item_view_class->new_default_action    = "layers-new-last-values";
-  item_view_class->raise_action          = "layers-raise";
-  item_view_class->raise_top_action      = "layers-raise-to-top";
-  item_view_class->lower_action          = "layers-lower";
-  item_view_class->lower_bottom_action   = "layers-lower-to-bottom";
-  item_view_class->duplicate_action      = "layers-duplicate";
-  item_view_class->delete_action         = "layers-delete";
-  item_view_class->lock_content_help_id  = GIMP_HELP_LAYER_LOCK_PIXELS;
-  item_view_class->lock_position_help_id = GIMP_HELP_LAYER_LOCK_POSITION;
+  item_view_class->action_group            = "layers";
+  item_view_class->activate_action         = "layers-edit";
+  item_view_class->new_action              = "layers-new";
+  item_view_class->new_default_action      = "layers-new-last-values";
+  item_view_class->raise_action            = "layers-raise";
+  item_view_class->raise_top_action        = "layers-raise-to-top";
+  item_view_class->lower_action            = "layers-lower";
+  item_view_class->lower_bottom_action     = "layers-lower-to-bottom";
+  item_view_class->duplicate_action        = "layers-duplicate";
+  item_view_class->delete_action           = "layers-delete";
+  item_view_class->lock_content_help_id    = GIMP_HELP_LAYER_LOCK_PIXELS;
+  item_view_class->lock_position_help_id   = GIMP_HELP_LAYER_LOCK_POSITION;
+  item_view_class->lock_visibility_help_id = GIMP_HELP_LAYER_LOCK_VISIBILITY;
 }
 
 static void
@@ -277,9 +285,8 @@ gimp_layer_tree_view_init (GimpLayerTreeView *view)
   g_signal_connect (view->priv->layer_mode_box, "notify::layer-mode",
                     G_CALLBACK (gimp_layer_tree_view_layer_mode_box_callback),
                     view);
-
-  gimp_help_set_help_data (view->priv->layer_mode_box, NULL,
-                           GIMP_HELP_LAYER_DIALOG_PAINT_MODE_MENU);
+  gimp_help_connect (view->priv->layer_mode_box, NULL, gimp_standard_help_func,
+                     GIMP_HELP_LAYER_DIALOG_PAINT_MODE_MENU, NULL, NULL);
 
   /*  Opacity scale  */
 
@@ -287,8 +294,8 @@ gimp_layer_tree_view_init (GimpLayerTreeView *view)
                                                        1.0, 10.0, 0.0);
   scale = gimp_spin_scale_new (view->priv->opacity_adjustment, _("Opacity"), 1);
   gimp_spin_scale_set_constrain_drag (GIMP_SPIN_SCALE (scale), TRUE);
-  gimp_help_set_help_data (scale, NULL,
-                           GIMP_HELP_LAYER_DIALOG_OPACITY_SCALE);
+  gimp_help_connect (scale, NULL, gimp_standard_help_func,
+                     GIMP_HELP_LAYER_DIALOG_OPACITY_SCALE, NULL, NULL);
   gimp_item_tree_view_add_options (GIMP_ITEM_TREE_VIEW (view),
                                    NULL, scale);
 

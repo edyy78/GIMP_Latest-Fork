@@ -175,6 +175,7 @@ gimp_data_class_init (GimpDataClass *klass)
   g_object_class_install_property (object_class, PROP_IMAGE,
                                    g_param_spec_object ("image", NULL, NULL,
                                                         GIMP_TYPE_IMAGE,
+                                                        G_PARAM_EXPLICIT_NOTIFY |
                                                         GIMP_PARAM_READWRITE));
 
   g_object_class_install_property (object_class, PROP_WRITABLE,
@@ -243,6 +244,7 @@ gimp_data_finalize (GObject *object)
   gimp_id_table_remove (data_id_table, private->ID);
 
   g_clear_object (&private->file);
+  g_clear_weak_pointer (&private->image);
 
   if (private->tags)
     {
@@ -987,10 +989,12 @@ gimp_data_set_image (GimpData  *data,
 
   g_return_if_fail (private->file == NULL);
 
-  g_set_object (&private->image, image);
+  g_set_weak_pointer (&private->image, image);
 
   private->writable  = writable  ? TRUE : FALSE;
   private->deletable = deletable ? TRUE : FALSE;
+
+  g_object_notify (G_OBJECT (data), "image");
 }
 
 GimpImage *
@@ -1404,7 +1408,11 @@ gimp_data_identify (GimpData    *data,
 
   identified = (is_internal == gimp_data_is_internal (data)      &&
                 g_strcmp0 (collection, current_collection) == 0  &&
-                g_strcmp0 (name, gimp_object_get_name (GIMP_OBJECT (data))) == 0);
+                /* Internal data have unique collection names. Moreover
+                 * their names can be localized so it should not be
+                 * relied upon for comparison.
+                 */
+                (is_internal ? TRUE : g_strcmp0 (name, gimp_object_get_name (GIMP_OBJECT (data))) == 0));
 
   g_free (current_collection);
 

@@ -86,7 +86,6 @@ static GimpProcedure  * grid_create_procedure (GimpPlugIn           *plug_in,
 static GimpValueArray * grid_run              (GimpProcedure        *procedure,
                                                GimpRunMode           run_mode,
                                                GimpImage            *image,
-                                               gint                  n_drawables,
                                                GimpDrawable        **drawables,
                                                GimpProcedureConfig  *config,
                                                gpointer              run_data);
@@ -178,81 +177,81 @@ grid_create_procedure (GimpPlugIn  *plug_in,
                                       "Tom Rathborne, TC",
                                       "1997 - 2000");
 
-      GIMP_PROC_ARG_INT (procedure, "hwidth",
-                         "H width",
-                         "Horizontal width",
-                         0, GIMP_MAX_IMAGE_SIZE, 1,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "hwidth",
+                                       "H width",
+                                       "Horizontal width",
+                                       0, GIMP_MAX_IMAGE_SIZE, 1,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "hspace",
-                         "H space",
-                         "Horizontal spacing",
-                         1, GIMP_MAX_IMAGE_SIZE, 16,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "hspace",
+                                       "H space",
+                                       "Horizontal spacing",
+                                       1, GIMP_MAX_IMAGE_SIZE, 16,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "hoffset",
-                         "H offset",
-                         "Horizontal offset",
-                         0, GIMP_MAX_IMAGE_SIZE, 8,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "hoffset",
+                                       "H offset",
+                                       "Horizontal offset",
+                                       0, GIMP_MAX_IMAGE_SIZE, 8,
+                                       G_PARAM_READWRITE);
 
       /* TODO: for "hcolor", "icolor" and "vcolor", the original code would use
        * the foreground color as default. Future work would be to get the
        * foreground/background color from context.
        */
-      GIMP_PROC_ARG_COLOR (procedure, "hcolor",
-                           "H color",
-                           "Horizontal color",
-                           TRUE, default_hcolor,
-                           G_PARAM_READWRITE);
+      gimp_procedure_add_color_argument (procedure, "hcolor",
+                                         "H color",
+                                         "Horizontal color",
+                                         TRUE, default_hcolor,
+                                         G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "vwidth",
-                         "V width",
-                         "Vertical width",
-                         0, GIMP_MAX_IMAGE_SIZE, 1,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "vwidth",
+                                       "V width",
+                                       "Vertical width",
+                                       0, GIMP_MAX_IMAGE_SIZE, 1,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "vspace",
-                         "V space",
-                         "Vertical spacing",
-                         1, GIMP_MAX_IMAGE_SIZE, 16,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "vspace",
+                                       "V space",
+                                       "Vertical spacing",
+                                       1, GIMP_MAX_IMAGE_SIZE, 16,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "voffset",
-                         "V offset",
-                         "Vertical offset",
-                         0, GIMP_MAX_IMAGE_SIZE, 8,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "voffset",
+                                       "V offset",
+                                       "Vertical offset",
+                                       0, GIMP_MAX_IMAGE_SIZE, 8,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_COLOR (procedure, "vcolor",
-                           "V color",
-                           "Vertical color",
-                           TRUE, default_vcolor,
-                           G_PARAM_READWRITE);
+      gimp_procedure_add_color_argument (procedure, "vcolor",
+                                         "V color",
+                                         "Vertical color",
+                                         TRUE, default_vcolor,
+                                         G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "iwidth",
-                         "I width",
-                         "Intersection width",
-                         0, GIMP_MAX_IMAGE_SIZE, 0,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "iwidth",
+                                       "I width",
+                                       "Intersection width",
+                                       0, GIMP_MAX_IMAGE_SIZE, 0,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "ispace",
-                         "I space",
-                         "Intersection spacing",
-                         1, GIMP_MAX_IMAGE_SIZE, 2,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "ispace",
+                                       "I space",
+                                       "Intersection spacing",
+                                       1, GIMP_MAX_IMAGE_SIZE, 2,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "ioffset",
-                         "I offset",
-                         "Intersection offset",
-                         0, GIMP_MAX_IMAGE_SIZE, 6,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "ioffset",
+                                       "I offset",
+                                       "Intersection offset",
+                                       0, GIMP_MAX_IMAGE_SIZE, 6,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_COLOR (procedure, "icolor",
-                           "I color",
-                           "Intersection color",
-                           TRUE, default_icolor,
-                           G_PARAM_READWRITE);
+      gimp_procedure_add_color_argument (procedure, "icolor",
+                                         "I color",
+                                         "Intersection color",
+                                         TRUE, default_icolor,
+                                         G_PARAM_READWRITE);
 
       g_object_unref (default_hcolor);
       g_object_unref (default_vcolor);
@@ -266,7 +265,6 @@ static GimpValueArray *
 grid_run (GimpProcedure        *procedure,
           GimpRunMode           run_mode,
           GimpImage            *image,
-          gint                  n_drawables,
           GimpDrawable        **drawables,
           GimpProcedureConfig  *config,
           gpointer              run_data)
@@ -275,7 +273,7 @@ grid_run (GimpProcedure        *procedure,
 
   gegl_init (NULL, NULL);
 
-  if (n_drawables != 1)
+  if (gimp_core_object_array_get_length ((GObject **) drawables) != 1)
     {
       GError *error = NULL;
 
@@ -349,6 +347,9 @@ pix_composite (guchar   *p1,
                gboolean  alpha)
 {
   gint b;
+  gint alpha_index;
+
+  alpha_index = alpha ? (bytes - 1) : bytes;
 
   if (blend)
     {
@@ -357,7 +358,8 @@ pix_composite (guchar   *p1,
 
       for (b = 0; b < bytes; b++)
         {
-          *p1 = *p1 * (1.0 - p2[3]/255.0) + p2[b] * p2[3]/255.0;
+          *p1 = *p1 * (1.0 - p2[alpha_index] / 255.0) +
+                p2[b] * p2[alpha_index] / 255.0;
           p1++;
         }
     }
@@ -369,7 +371,7 @@ pix_composite (guchar   *p1,
 
   if (alpha && *p1 < 255)
     {
-      b = *p1 + 255.0 * ((gdouble) p2[3] / (255.0 - *p1));
+      b = *p1 + 255.0 * ((gdouble) p2[alpha_index] / (255.0 - *p1));
 
       *p1 = b > 255 ? 255 : b;
     }
@@ -445,9 +447,9 @@ render_grid (GimpImage           *image,
       else
         format = babl_format ("R'G'B' u8");
 
-      gegl_color_get_pixel (hcolor_gegl, format, hcolor);
-      gegl_color_get_pixel (vcolor_gegl, format, vcolor);
-      gegl_color_get_pixel (icolor_gegl, format, icolor);
+      gegl_color_get_pixel (hcolor_gegl, babl_format ("R'G'B'A u8"), hcolor);
+      gegl_color_get_pixel (vcolor_gegl, babl_format ("R'G'B'A u8"), vcolor);
+      gegl_color_get_pixel (icolor_gegl, babl_format ("R'G'B'A u8"), icolor);
       break;
 
     case GIMP_GRAY:
@@ -458,13 +460,13 @@ render_grid (GimpImage           *image,
       else
         format = babl_format ("Y' u8");
 
-      gegl_color_get_pixel (hcolor_gegl, format, hcolor);
-      gegl_color_get_pixel (vcolor_gegl, format, vcolor);
-      gegl_color_get_pixel (icolor_gegl, format, icolor);
+      gegl_color_get_pixel (hcolor_gegl, babl_format ("Y'A u8"), hcolor);
+      gegl_color_get_pixel (vcolor_gegl, babl_format ("Y'A u8"), vcolor);
+      gegl_color_get_pixel (icolor_gegl, babl_format ("Y'A u8"), icolor);
       break;
 
     case GIMP_INDEXED:
-      cmap = gimp_image_get_colormap (image, NULL, &ncolors);
+      cmap = gimp_palette_get_colormap (gimp_image_get_palette (image), babl_format ("R'G'B' u8"), &ncolors, NULL);
 
       hcolor[0] = best_cmap_match (cmap, ncolors, hcolor_gegl);
       vcolor[0] = best_cmap_match (cmap, ncolors, vcolor_gegl);
@@ -770,7 +772,7 @@ dialog (GimpImage           *image,
   GtkWidget       *space;
   GtkWidget       *offset;
   GtkWidget       *chain_button;
-  GimpUnit         unit;
+  GimpUnit        *unit;
   gint             d_width;
   gint             d_height;
   gdouble          xres;
@@ -867,7 +869,7 @@ dialog (GimpImage           *image,
   gtk_widget_show (width);
 
   /*  set the unit back to pixels, since most times we will want pixels */
-  gimp_size_entry_set_unit (GIMP_SIZE_ENTRY (width), GIMP_UNIT_PIXEL);
+  gimp_size_entry_set_unit (GIMP_SIZE_ENTRY (width), gimp_unit_pixel ());
 
   /*  set the resolution to the image resolution  */
   gimp_size_entry_set_resolution (GIMP_SIZE_ENTRY (width), 0, xres, TRUE);
@@ -938,7 +940,7 @@ dialog (GimpImage           *image,
   gtk_box_pack_start (GTK_BOX (vbox), space, FALSE, FALSE, 0);
   gtk_widget_show (space);
 
-  gimp_size_entry_set_unit (GIMP_SIZE_ENTRY (space), GIMP_UNIT_PIXEL);
+  gimp_size_entry_set_unit (GIMP_SIZE_ENTRY (space), gimp_unit_pixel ());
 
   /*  set the resolution to the image resolution  */
   gimp_size_entry_set_resolution (GIMP_SIZE_ENTRY (space), 0, xres, TRUE);
@@ -1003,7 +1005,7 @@ dialog (GimpImage           *image,
   gtk_box_pack_start (GTK_BOX (vbox), offset, FALSE, FALSE, 0);
   gtk_widget_show (offset);
 
-  gimp_size_entry_set_unit (GIMP_SIZE_ENTRY (offset), GIMP_UNIT_PIXEL);
+  gimp_size_entry_set_unit (GIMP_SIZE_ENTRY (offset), gimp_unit_pixel ());
 
   /*  set the resolution to the image resolution  */
   gimp_size_entry_set_resolution (GIMP_SIZE_ENTRY (offset), 0, xres, TRUE);

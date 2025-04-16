@@ -41,6 +41,7 @@ struct _GimpChannelClass
   GimpDrawableClass parent_class;
 
   /* Padding for future expansion */
+  void (*_gimp_reserved0) (void);
   void (*_gimp_reserved1) (void);
   void (*_gimp_reserved2) (void);
   void (*_gimp_reserved3) (void);
@@ -49,17 +50,11 @@ struct _GimpChannelClass
   void (*_gimp_reserved6) (void);
   void (*_gimp_reserved7) (void);
   void (*_gimp_reserved8) (void);
+  void (*_gimp_reserved9) (void);
 };
 
 
 GimpChannel * gimp_channel_get_by_id (gint32       channel_id);
-
-GimpChannel * gimp_channel_new       (GimpImage   *image,
-                                      const gchar *name,
-                                      guint        width,
-                                      guint        height,
-                                      gdouble      opacity,
-                                      GeglColor   *color);
 
 
 G_END_DECLS

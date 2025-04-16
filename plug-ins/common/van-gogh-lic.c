@@ -88,13 +88,13 @@ static GimpProcedure  * lic_create_procedure (GimpPlugIn           *plug_in,
 static GimpValueArray * lic_run              (GimpProcedure        *procedure,
                                               GimpRunMode           run_mode,
                                               GimpImage            *image,
-                                              gint                  n_drawables,
                                               GimpDrawable        **drawables,
                                               GimpProcedureConfig  *config,
                                               gpointer              run_data);
 
 static gboolean         create_main_dialog   (GimpProcedure        *procedure,
-                                              GimpProcedureConfig  *config);
+                                              GimpProcedureConfig  *config,
+                                              GimpDrawable         *drawable);
 static void             compute_image        (GimpProcedureConfig  *config,
                                               GimpDrawable         *drawable);
 
@@ -154,69 +154,69 @@ lic_create_procedure (GimpPlugIn  *plug_in,
                                       "Tom Bech & Federico Mena Quintero",
                                       "Version 0.14, September 24 1997");
 
-      GIMP_PROC_ARG_CHOICE (procedure, "effect-channel",
-                            _("E_ffect Channel"),
-                            _("Effect Channel"),
-                            gimp_choice_new_with_values ("hue",        LIC_HUE,        _("Hue"),        NULL,
-                                                         "saturation", LIC_SATURATION, _("Saturation"), NULL,
-                                                         "brightness", LIC_BRIGHTNESS, _("Brightness"), NULL,
-                                                         NULL),
-                            "brightness",
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_choice_argument (procedure, "effect-channel",
+                                          _("E_ffect Channel"),
+                                          _("Effect Channel"),
+                                          gimp_choice_new_with_values ("hue",        LIC_HUE,        _("Hue"),        NULL,
+                                                                       "saturation", LIC_SATURATION, _("Saturation"), NULL,
+                                                                       "brightness", LIC_BRIGHTNESS, _("Brightness"), NULL,
+                                                                       NULL),
+                                          "brightness",
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_CHOICE (procedure, "effect-operator",
-                            _("Effect O_perator"),
-                            _("Effect Operator"),
-                            gimp_choice_new_with_values ("derivative", 0, _("Derivative"), NULL,
-                                                         "gradient",   1, _("Gradient"),   NULL,
-                                                         NULL),
-                            "gradient",
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_choice_argument (procedure, "effect-operator",
+                                          _("Effect O_perator"),
+                                          _("Effect Operator"),
+                                          gimp_choice_new_with_values ("derivative", 0, _("Derivative"), NULL,
+                                                                       "gradient",   1, _("Gradient"),   NULL,
+                                                                       NULL),
+                                          "gradient",
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_CHOICE (procedure, "effect-convolve",
-                            _("Con_volve"),
-                            _("Convolve"),
-                            gimp_choice_new_with_values ("with-white-noise",  0, _("With white noise"),  NULL,
-                                                         "with-source-image", 1, _("With source image"), NULL,
-                                                         NULL),
-                            "with-source-image",
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_choice_argument (procedure, "effect-convolve",
+                                          _("Con_volve"),
+                                          _("Convolve"),
+                                          gimp_choice_new_with_values ("with-white-noise",  0, _("With white noise"),  NULL,
+                                                                       "with-source-image", 1, _("With source image"), NULL,
+                                                                       NULL),
+                                          "with-source-image",
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_DRAWABLE (procedure, "effect-image",
-                              _("Effect i_mage"),
-                              _("Effect image"),
-                              TRUE,
-                              G_PARAM_READWRITE);
+      gimp_procedure_add_drawable_argument (procedure, "effect-image",
+                                            _("Effect i_mage"),
+                                            _("Effect image"),
+                                            TRUE,
+                                            G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "filter-length",
-                            _("Fil_ter length"),
-                            _("Filter length"),
-                            0.1, 64.0, 5.0,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "filter-length",
+                                          _("Fil_ter length"),
+                                          _("Filter length"),
+                                          0.1, 64.0, 5.0,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "noise-magnitude",
-                            _("_Noise Magnitude"),
-                            _("Noise Magnitude"),
-                            1.0, 5.0, 2.0,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "noise-magnitude",
+                                          _("_Noise Magnitude"),
+                                          _("Noise Magnitude"),
+                                          1.0, 5.0, 2.0,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "integration-steps",
-                            _("Inte_gration steps"),
-                            _("Integration steps"),
-                            1.0, 40.0, 25.0,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "integration-steps",
+                                          _("Inte_gration steps"),
+                                          _("Integration steps"),
+                                          1.0, 40.0, 25.0,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "min-value",
-                            _("Minimum v_alue"),
-                            _("Minimum value"),
-                            -100.0, 0, -25.0,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "min-value",
+                                          _("Minimum v_alue"),
+                                          _("Minimum value"),
+                                          -100.0, 0, -25.0,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "max-value",
-                            _("Ma_ximum value"),
-                            _("Maximum value"),
-                            0.0, 100, 25.0,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "max-value",
+                                          _("Ma_ximum value"),
+                                          _("Maximum value"),
+                                          0.0, 100, 25.0,
+                                          G_PARAM_READWRITE);
     }
 
   return procedure;
@@ -226,7 +226,6 @@ static GimpValueArray *
 lic_run (GimpProcedure        *procedure,
          GimpRunMode           run_mode,
          GimpImage            *image,
-         gint                  n_drawables,
          GimpDrawable        **drawables,
          GimpProcedureConfig  *config,
          gpointer              run_data)
@@ -235,7 +234,7 @@ lic_run (GimpProcedure        *procedure,
 
   gegl_init (NULL, NULL);
 
-  if (n_drawables != 1)
+  if (gimp_core_object_array_get_length ((GObject **) drawables) != 1)
     {
       GError *error = NULL;
 
@@ -260,7 +259,7 @@ lic_run (GimpProcedure        *procedure,
       switch (run_mode)
         {
         case GIMP_RUN_INTERACTIVE:
-          if (! create_main_dialog (procedure, config))
+          if (! create_main_dialog (procedure, config, drawable))
             {
               return gimp_procedure_new_return_values (procedure,
                                                        GIMP_PDB_CANCEL,
@@ -312,10 +311,10 @@ static void
 peek (GeglBuffer *buffer,
       gint        x,
       gint        y,
-      GimpRGB    *color)
+      gdouble    *color)
 {
   gegl_buffer_sample (buffer, x, y, NULL,
-                      color, babl_format ("R'G'B'A double"),
+                      color, babl_format ("RGBA double"),
                       GEGL_SAMPLER_NEAREST, GEGL_ABYSS_NONE);
 }
 
@@ -323,10 +322,10 @@ static void
 poke (GeglBuffer *buffer,
       gint        x,
       gint        y,
-      GimpRGB    *color)
+      gdouble    *color)
 {
   gegl_buffer_set (buffer, GEGL_RECTANGLE (x, y, 1, 1), 0,
-                   babl_format ("R'G'B'A double"), color,
+                   babl_format ("RGBA double"), color,
                    GEGL_AUTO_ROWSTRIDE);
 }
 
@@ -533,13 +532,14 @@ lic_noise (gint    x,
 
 static void
 getpixel (GeglBuffer *buffer,
-          GimpRGB    *p,
+          gdouble    *p,
           gdouble     u,
           gdouble     v)
 {
   register gint x1, y1, x2, y2;
   gint width, height;
-  static GimpRGB pp[4];
+  gdouble     pp[4];
+  gdouble     pixels[16];
 
   width  = border_w;
   height = border_h;
@@ -560,15 +560,20 @@ getpixel (GeglBuffer *buffer,
   x2 = (x1 + 1) % width;
   y2 = (y1 + 1) % height;
 
-  peek (buffer, x1, y1, &pp[0]);
-  peek (buffer, x2, y1, &pp[1]);
-  peek (buffer, x1, y2, &pp[2]);
-  peek (buffer, x2, y2, &pp[3]);
+  peek (buffer, x1, y1, pp);
+  for (gint i = 0; i < 4; i++)
+    pixels[i] = pp[i];
+  peek (buffer, x2, y1, pp);
+  for (gint i = 0; i < 4; i++)
+    pixels[i + 4] = pp[i];
+  peek (buffer, x1, y2, pp);
+  for (gint i = 0; i < 4; i++)
+    pixels[i + 8] = pp[i];
+  peek (buffer, x2, y2, pp);
+  for (gint i = 0; i < 4; i++)
+    pixels[i + 12] = pp[i];
 
-  if (source_drw_has_alpha)
-    *p = gimp_bilinear_rgba (u, v, pp);
-  else
-    *p = gimp_bilinear_rgb (u, v, pp);
+  gimp_bilinear_rgb (u, v, pixels, source_drw_has_alpha, p);
 }
 
 static void
@@ -577,13 +582,13 @@ lic_image (GeglBuffer *buffer,
            gint        y,
            gdouble     vx,
            gdouble     vy,
-           GimpRGB    *color)
+           gdouble    *color)
 {
   gdouble u, step = 2.0 * l / isteps;
   gdouble xx = (gdouble) x, yy = (gdouble) y;
   gdouble c, s;
-  GimpRGB col = { 0, 0, 0, 0 };
-  GimpRGB col1, col2, col3;
+  gdouble col[4] = { 0, 0, 0, 0 };
+  gdouble col1[4], col2[4], col3[4];
 
   /* Get vector at x,y */
   /* ================= */
@@ -594,44 +599,71 @@ lic_image (GeglBuffer *buffer,
   /* Calculate integral numerically */
   /* ============================== */
 
-  getpixel (buffer, &col1, xx + l * c, yy + l * s);
+  getpixel (buffer, col1, xx + l * c, yy + l * s);
 
   if (source_drw_has_alpha)
-    gimp_rgba_multiply (&col1, filter (-l));
+    {
+      for (gint i = 0; i < 4; i++)
+        col1[i] *= filter (-l);
+    }
   else
-    gimp_rgb_multiply (&col1, filter (-l));
+    {
+      for (gint i = 0; i < 3; i++)
+        col1[i] *= filter (-l);
+    }
 
   for (u = -l + step; u <= l; u += step)
     {
-      getpixel (buffer, &col2, xx - u * c, yy - u * s);
+      getpixel (buffer, col2, xx - u * c, yy - u * s);
 
       if (source_drw_has_alpha)
         {
-          gimp_rgba_multiply (&col2, filter (u));
+          for (gint i = 0; i < 4; i++)
+            {
+              col2[i] *= filter (u);
+              col3[i] = col1[i];
+            }
 
-          col3 = col1;
-          gimp_rgba_add (&col3, &col2);
-          gimp_rgba_multiply (&col3, 0.5 * step);
-          gimp_rgba_add (&col, &col3);
+          for (gint i = 0; i < 4; i++)
+            {
+              col3[i] += col2[i];
+              col3[i] *= (0.5 * step);
+              col[i] += col3[i];
+            }
         }
       else
         {
-          gimp_rgb_multiply (&col2, filter (u));
+          for (gint i = 0; i < 3; i++)
+            {
+              col2[i] *= filter (u);
+              col3[i] = col1[i];
+            }
 
-          col3 = col1;
-          gimp_rgb_add (&col3, &col2);
-          gimp_rgb_multiply (&col3, 0.5 * step);
-          gimp_rgb_add (&col, &col3);
+          for (gint i = 0; i < 3; i++)
+            {
+              col3[i] += col2[i];
+              col3[i] *= (0.5 * step);
+              col[i] += col3[i];
+            }
         }
-      col1 = col2;
-    }
-  if (source_drw_has_alpha)
-    gimp_rgba_multiply (&col, 1.0 / l);
-  else
-    gimp_rgb_multiply (&col, 1.0 / l);
-  gimp_rgb_clamp (&col);
 
-  *color = col;
+      for (gint i = 0; i < 4; i++)
+        col1[i] = col2[i];
+    }
+
+  if (source_drw_has_alpha)
+    {
+      for (gint i = 0; i < 4; i++)
+        col[i] *= (1.0 / l);
+    }
+  else
+    {
+      for (gint i = 0; i < 3; i++)
+        col[i] *= (1.0 / l);
+    }
+
+  for (gint i = 0; i < 4; i++)
+    color[i] = CLAMP (col[i], 0.0, 1.0);
 }
 
 static guchar *
@@ -639,45 +671,44 @@ rgb_to_hsl (GimpDrawable     *drawable,
             LICEffectChannel  effect_channel)
 {
   GeglBuffer *buffer;
-  guchar     *themap, data[4];
+  guchar     *themap;
+  gfloat      data[3];
   gint        x, y;
-  GimpRGB     color;
-  GimpHSL     color_hsl;
+  gint        height_max;
+  gint        width_max;
   gdouble     val = 0.0;
-  glong       maxc, index = 0;
+  gint64      maxc, index = 0;
   GRand      *gr;
 
   gr = g_rand_new ();
 
-  maxc = gimp_drawable_get_width (drawable) * gimp_drawable_get_height (drawable);
+  width_max  = gimp_drawable_get_width (drawable);
+  height_max = gimp_drawable_get_height (drawable);
+
+  maxc = width_max * height_max;
 
   buffer = gimp_drawable_get_buffer (drawable);
 
   themap = g_new (guchar, maxc);
 
-  for (y = 0; y < border_h; y++)
+  for (y = 0; y < height_max; y++)
     {
-      for (x = 0; x < border_w; x++)
+      for (x = 0; x < width_max; x++)
         {
-          data[3] = 255;
-
           gegl_buffer_sample (buffer, x, y, NULL,
-                              data, babl_format ("R'G'B'A u8"),
+                              data, babl_format ("HSL float"),
                               GEGL_SAMPLER_NEAREST, GEGL_ABYSS_NONE);
-
-          gimp_rgba_set_uchar (&color, data[0], data[1], data[2], data[3]);
-          gimp_rgb_to_hsl (&color, &color_hsl);
 
           switch (effect_channel)
             {
             case LIC_HUE:
-              val = color_hsl.h * 255;
+              val = data[0] * 255;
               break;
             case LIC_SATURATION:
-              val = color_hsl.s * 255;
+              val = data[1] * 255;
               break;
             case LIC_BRIGHTNESS:
-              val = color_hsl.l * 255;
+              val = data[2] * 255;
               break;
             }
 
@@ -705,7 +736,7 @@ compute_lic (GimpProcedureConfig *config,
   GeglBuffer *src_buffer;
   GeglBuffer *dest_buffer;
   gint        xcount, ycount;
-  GimpRGB     color;
+  gdouble     color[4] = { 0.0, 0.0, 0.0, 1.0 };
   gdouble     vx, vy, tmp;
   gint        effect_convolve;
 
@@ -746,21 +777,27 @@ compute_lic (GimpProcedureConfig *config,
 
           if (effect_convolve == 0)
             {
-              peek (src_buffer, xcount, ycount, &color);
+              peek (src_buffer, xcount, ycount, color);
 
               tmp = lic_noise (xcount, ycount, vx, vy);
 
               if (source_drw_has_alpha)
-                gimp_rgba_multiply (&color, tmp);
+                {
+                  for (gint i = 0; i < 4; i++)
+                    color[i] *= tmp;
+                }
               else
-                gimp_rgb_multiply (&color, tmp);
+                {
+                  for (gint i = 0; i < 3; i++)
+                    color[i] *= tmp;
+                }
             }
           else
             {
-              lic_image (src_buffer, xcount, ycount, vx, vy, &color);
+              lic_image (src_buffer, xcount, ycount, vx, vy, color);
             }
 
-          poke (dest_buffer, xcount, ycount, &color);
+          poke (dest_buffer, xcount, ycount, color);
         }
 
       gimp_progress_update ((gfloat) ycount / (gfloat) border_h);
@@ -864,9 +901,11 @@ compute_image (GimpProcedureConfig *config,
 
 static gboolean
 create_main_dialog (GimpProcedure       *procedure,
-                    GimpProcedureConfig *config)
+                    GimpProcedureConfig *config,
+                    GimpDrawable        *drawable)
 {
   GtkWidget *dialog;
+  GtkWidget *chooser;
   gboolean   run;
 
   gimp_ui_init (PLUG_IN_BINARY);
@@ -888,7 +927,14 @@ create_main_dialog (GimpProcedure       *procedure,
 
   gimp_procedure_dialog_fill (GIMP_PROCEDURE_DIALOG (dialog), NULL);
 
-  gtk_widget_show (dialog);
+  gtk_widget_set_visible (dialog, TRUE);
+
+  /* TODO: Currently we can't serialize GimpDrawable parameters, so this sets
+   * the parameter to the current image as a default value */
+  chooser = gimp_procedure_dialog_get_widget (GIMP_PROCEDURE_DIALOG (dialog),
+                                              "effect-image", G_TYPE_NONE);
+  gimp_drawable_chooser_set_drawable (GIMP_DRAWABLE_CHOOSER (chooser),
+                                      drawable);
 
   run = gimp_procedure_dialog_run (GIMP_PROCEDURE_DIALOG (dialog));
 

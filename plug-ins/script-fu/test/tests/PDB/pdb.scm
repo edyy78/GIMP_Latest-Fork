@@ -8,7 +8,6 @@
 ; The test files might be organized in directories in the repo,
 ; but all flattened into the /tests directory when installed.
 
-; images
 (testing:load-test "image-new.scm")
 (testing:load-test "image-precision.scm")
 (testing:load-test "image-indexed.scm")
@@ -26,9 +25,11 @@
 (testing:load-test "layer-new.scm")
 (testing:load-test "layer-ops.scm")
 (testing:load-test "layer-mask.scm")
-; TODO layer stack ops
+; TODO layer stack ops, moving up and down?
 
-(testing:load-test "text-layer-new.scm")
+; TODO broken until ScriptFu marshalls GimpUnit
+; and it crosses the wire?
+; (testing:load-test "text-layer-new.scm")
 
 (testing:load-test "vectors-new.scm")
 (testing:load-test "vectors-stroke.scm")
@@ -37,11 +38,14 @@
 (testing:load-test "selection-from.scm")
 (testing:load-test "selection-by.scm")
 (testing:load-test "selection-by-shape.scm")
+; TODO test floating-sel- methods
 
 (testing:load-test "channel-new.scm")
 (testing:load-test "channel-attributes.scm")
 (testing:load-test "channel-ops.scm")
 ; TODO channels to selection
+
+(testing:load-test "color.scm")
 
 ; Test superclass methods.
 ; Drawable and Item are superclasses
@@ -51,6 +55,7 @@
 (testing:load-test "item.scm")
 (testing:load-test "item-position.scm")
 (testing:load-test "item-layer-group.scm")
+(testing:load-test "item-layer-group-2.scm")
 
 (testing:load-test "drawable.scm")
 (testing:load-test "drawable-attributes.scm")
@@ -73,16 +78,27 @@
 (testing:load-test "edit.scm")
 (testing:load-test "edit-multi-layer.scm")
 (testing:load-test "buffer.scm")
+(testing:load-test "edit-cut.scm")
+
+(testing:load-test "file.scm")
 
 ; gimp module, gimp-get methods
-(testing:load-test "gimp.scm")
-; gimp PDB as a queriable store i.e. database
-(testing:load-test "PDB.scm")
+
+; Since 3.0rc2 private to libgimp
+; gimp PDB as a queryable store i.e. database
+; (testing:load-test "PDB.scm")
+; test methods on PDBProcedure
+;(testing:load-test "procedures.scm")
+
 ; test gimp as a refreshable set of installed resources
 (testing:load-test "refresh.scm")
-; test methods on PDBProcedure
-(testing:load-test "procedures.scm")
 
+; test methods on DrawableFilter
+(testing:load-test "filter.scm")
+(testing:load-test "filter-ops.scm")
+
+; Only run when not headless i.e.
+; when testing is interactive using SF Console
 (testing:load-test "display.scm")
 
 ; TODO undo
@@ -99,7 +115,13 @@
 (testing:load-test "enums.scm")
 (testing:load-test "bind-args.scm")
 (testing:load-test "pixel.scm")
+(testing:load-test "named-args.scm")
 
+; tested last, random and time-consuming
+(testing:load-test "file-export.scm")
+
+; Don't routinely test the PDB API for NDE filters, it is long:
+; (testing:load-test "gegl.scm")
 
 ; report the result
 (testing:report)

@@ -118,6 +118,7 @@ opened_xcf_file_files (gconstpointer data)
                            gimp_get_user_context (gimp),
                            NULL /*progress*/,
                            file,
+                           0, 0, /* vector width, height */
                            FALSE /*as_new*/,
                            NULL /*file_proc*/,
                            GIMP_RUN_NONINTERACTIVE,
@@ -147,8 +148,8 @@ imported_file_files (gconstpointer data)
   gchar             *filename;
   GimpPDBStatusType  status;
 
-  filename = g_build_filename (g_getenv ("GIMP_TESTING_ABS_TOP_SRCDIR"),
-                               "desktop/64x64/gimp.png",
+  filename = g_build_filename (g_getenv ("GIMP_TESTING_ABS_TOP_BUILDDIR"),
+                               "gimp-data/images/logo/gimp64x64.png",
                                NULL);
   g_assert_true (g_file_test (filename, G_FILE_TEST_EXISTS));
   file = g_file_new_for_path (filename);
@@ -158,6 +159,7 @@ imported_file_files (gconstpointer data)
                            gimp_get_user_context (gimp),
                            NULL /*progress*/,
                            file,
+                           0, 0, /* vector width, height */
                            FALSE /*as_new*/,
                            NULL /*file_proc*/,
                            GIMP_RUN_NONINTERACTIVE,
@@ -191,8 +193,8 @@ saved_imported_file_files (gconstpointer data)
   GimpPDBStatusType    status;
   GimpPlugInProcedure *proc;
 
-  import_filename = g_build_filename (g_getenv ("GIMP_TESTING_ABS_TOP_SRCDIR"),
-                                      "desktop/64x64/gimp.png",
+  import_filename = g_build_filename (g_getenv ("GIMP_TESTING_ABS_TOP_BUILDDIR"),
+                                      "gimp-data/images/logo/gimp64x64.png",
                                       NULL);
   import_file = g_file_new_for_path (import_filename);
   g_free (import_filename);
@@ -206,6 +208,7 @@ saved_imported_file_files (gconstpointer data)
                            gimp_get_user_context (gimp),
                            NULL /*progress*/,
                            import_file,
+                           0, 0, /* vector width, height */
                            FALSE /*as_new*/,
                            NULL /*file_proc*/,
                            GIMP_RUN_NONINTERACTIVE,
@@ -303,8 +306,8 @@ clear_import_file_after_export (gconstpointer data)
   GimpPlugInProcedure *proc;
   GimpPDBStatusType    status;
 
-  filename = g_build_filename (g_getenv ("GIMP_TESTING_ABS_TOP_SRCDIR"),
-                               "desktop/64x64/gimp.png",
+  filename = g_build_filename (g_getenv ("GIMP_TESTING_ABS_TOP_BUILDDIR"),
+                               "gimp-data/images/logo/gimp64x64.png",
                                NULL);
   file = g_file_new_for_path (filename);
   g_free (filename);
@@ -313,6 +316,7 @@ clear_import_file_after_export (gconstpointer data)
                            gimp_get_user_context (gimp),
                            NULL /*progress*/,
                            file,
+                           0, 0, /* vector width, height */
                            FALSE /*as_new*/,
                            NULL /*file_proc*/,
                            GIMP_RUN_NONINTERACTIVE,

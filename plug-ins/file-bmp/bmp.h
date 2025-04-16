@@ -21,18 +21,30 @@
 
 
 #define LOAD_PROC      "file-bmp-load"
-#define SAVE_PROC      "file-bmp-save"
+#define EXPORT_PROC    "file-bmp-export"
 #define PLUG_IN_BINARY "file-bmp"
 #define PLUG_IN_ROLE   "gimp-file-bmp"
 
-#define MAXCOLORS   256
-
-#define BitSet(byte, bit)        (((byte) & (bit)) == (bit))
+#define MAXCOLORS 256
 
 #define ReadOK(file,buffer,len)  (fread(buffer, len, 1, file) != 0)
-#define Write(file,buffer,len)   fwrite(buffer, len, 1, file)
-#define WriteOK(file,buffer,len) (Write(buffer, len, file) != 0)
 
+#if !defined(WIN32) || defined(__MINGW32__)
+#define BI_RGB            0
+#define BI_RLE8           1
+#define BI_RLE4           2
+#define BI_BITFIELDS      3
+#define BI_JPEG           4
+#define BI_PNG            5
+#define BI_ALPHABITFIELDS 6
+#endif
+/* The following two are OS/2 BMP compression methods.
+ * Their values (3 and 4) clash with MS values for
+ * BI_BITFIELDS and BI_JPEG. We make up our own distinct
+ * values and assign them as soon as we identify these
+ * methods. */
+#define BI_OS2_HUFFMAN (100 + BI_BITFIELDS)
+#define BI_OS2_RLE24   (100 + BI_JPEG)
 
 typedef struct
 {
@@ -41,11 +53,11 @@ typedef struct
   guint16  zzHotX;      /* 06 */
   guint16  zzHotY;      /* 08 */
   guint32  bfOffs;      /* 0A */
-  guint32  biSize;      /* 0E */
 } BitmapFileHead;
 
 typedef struct
 {
+  guint32  biSize;      /* 0E */
   gint32   biWidth;     /* 12 */
   gint32   biHeight;    /* 16 */
   guint16  biPlanes;    /* 1A */
@@ -57,6 +69,15 @@ typedef struct
   guint32  biClrUsed;   /* 2E */
   guint32  biClrImp;    /* 32 */
   guint32  masks[4];    /* 36 */
+  guint32  bV4CSType;
+  gdouble  bV4Endpoints[9];
+  gdouble  bV4GammaRed;
+  gdouble  bV4GammaGreen;
+  gdouble  bV4GammaBlue;
+  guint32  bV5Intent;
+  guint32  bV5ProfileData;
+  guint32  bV5ProfileSize;
+  guint32  bV5Reserved;
 } BitmapHead;
 
 typedef struct
@@ -64,6 +85,7 @@ typedef struct
   guint32 mask;
   guint32 shiftin;
   gfloat  max_value;
+  gint    nbits;
 } BitmapChannel;
 
 

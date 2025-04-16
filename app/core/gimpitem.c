@@ -32,6 +32,8 @@
 #include "gimp-parasites.h"
 #include "gimpchannel.h"
 #include "gimpcontainer.h"
+#include "gimpdrawable-filters.h"
+#include "gimpdrawablefilter.h"
 #include "gimpidtable.h"
 #include "gimpimage.h"
 #include "gimpimage-undo.h"
@@ -1784,6 +1786,36 @@ gimp_item_transform (GimpItem               *item,
 
   gimp_item_end_transform (item, push_undo);
 
+  /* Update crop of any filters */
+  if (GIMP_IS_DRAWABLE (item))
+    {
+      GeglRectangle  rect;
+      GimpContainer *filters;
+      GList         *filter_list;
+
+      rect = gimp_drawable_get_bounding_box (GIMP_DRAWABLE (item));
+      gimp_item_mask_intersect (item, &rect.x, &rect.y,
+                                &rect.width, &rect.height);
+
+      filters = gimp_drawable_get_filters (GIMP_DRAWABLE (item));
+
+      for (filter_list = GIMP_LIST (filters)->queue->tail; filter_list;
+           filter_list = g_list_previous (filter_list))
+        {
+          if (GIMP_IS_DRAWABLE_FILTER (filter_list->data))
+            {
+              GimpDrawableFilter *filter = filter_list->data;
+              GimpChannel        *mask;
+
+              mask = GIMP_CHANNEL (gimp_drawable_filter_get_mask (filter));
+
+              /* Don't resize partial layer effects */
+              if (! mask || gimp_channel_is_empty (mask))
+                gimp_drawable_filter_refresh_crop (filter, &rect);
+            }
+        }
+    }
+
   if (push_undo)
     gimp_image_undo_group_end (image);
 }
@@ -1807,6 +1839,7 @@ gimp_item_fill (GimpItem        *item,
 {
   GimpItemClass *item_class;
   GList         *iter;
+  gboolean       locked = FALSE;
   gboolean       retval = FALSE;
 
   g_return_val_if_fail (GIMP_IS_ITEM (item), FALSE);
@@ -1833,11 +1866,21 @@ gimp_item_fill (GimpItem        *item,
 
       for (iter = drawables; iter; iter = iter->next)
         {
+          if (gimp_item_is_content_locked (GIMP_ITEM (iter->data), NULL))
+            {
+              locked = TRUE;
+              continue;
+            }
+
           retval = item_class->fill (item, iter->data, fill_options,
                                      push_undo, progress, error);
           if (! retval)
             break;
         }
+
+      if (locked)
+        gimp_message_literal (image->gimp, NULL, GIMP_MESSAGE_WARNING,
+                              _("A selected layer's pixels are locked."));
 
       if (push_undo)
         gimp_image_undo_group_end (image);
@@ -1858,6 +1901,7 @@ gimp_item_stroke (GimpItem          *item,
 {
   GimpItemClass *item_class;
   GList         *iter;
+  gboolean       locked = FALSE;
   gboolean       retval = FALSE;
 
   g_return_val_if_fail (GIMP_IS_ITEM (item), FALSE);
@@ -1889,11 +1933,21 @@ gimp_item_stroke (GimpItem          *item,
 
       for (iter = drawables; iter; iter = iter->next)
         {
+          if (gimp_item_is_content_locked (GIMP_ITEM (iter->data), NULL))
+            {
+              locked = TRUE;
+              continue;
+            }
+
           retval = item_class->stroke (item, iter->data, stroke_options, push_undo,
                                        progress, error);
           if (! retval)
             break;
         }
+
+      if (locked)
+        gimp_message_literal (image->gimp, NULL, GIMP_MESSAGE_WARNING,
+                              _("A selected layer's pixels are locked."));
 
       if (push_undo)
         gimp_image_undo_group_end (image);
@@ -2069,8 +2123,8 @@ gimp_item_replace_item (GimpItem *item,
                         GimpItem *replace)
 {
   GimpItemPrivate *private;
-  gint             offset_x;
-  gint             offset_y;
+  gint             offset_x = 0;
+  gint             offset_y = 0;
 
   g_return_if_fail (GIMP_IS_ITEM (item));
   g_return_if_fail (! gimp_item_is_attached (item));
@@ -2694,7 +2748,6 @@ gimp_item_mask_intersect (GimpItem *item,
   gboolean     retval;
 
   g_return_val_if_fail (GIMP_IS_ITEM (item), FALSE);
-  g_return_val_if_fail (gimp_item_is_attached (item), FALSE);
 
   image     = gimp_item_get_image (item);
   selection = gimp_image_get_mask (image);

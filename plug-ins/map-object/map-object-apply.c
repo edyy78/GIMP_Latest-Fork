@@ -183,7 +183,7 @@ init_compute (void)
 static void
 render (gdouble   x,
         gdouble   y,
-        GimpRGB  *col,
+        gdouble  *col,
         gpointer  data)
 {
   GimpVector3 pos;
@@ -192,7 +192,7 @@ render (gdouble   x,
   pos.y = y / (gdouble) height;
   pos.z = 0.0;
 
-  *col = get_ray_color (&pos);
+  get_ray_color (&pos, col);
 }
 
 static void
@@ -213,7 +213,7 @@ void
 compute_image (void)
 {
   gint         xcount, ycount;
-  GimpRGB      color;
+  gdouble      color[4];
   glong        progress_counter = 0;
   GimpVector3  p;
   GimpImage   *new_image    = NULL;
@@ -223,13 +223,9 @@ compute_image (void)
   init_compute ();
 
   if (mapvals.create_new_image)
-    {
-      new_image = gimp_image_new (width, height, GIMP_RGB);
-    }
+    new_image = gimp_image_new (width, height, GIMP_RGB);
   else
-    {
-      new_image = image;
-    }
+    new_image = image;
 
   gimp_image_undo_group_start (new_image);
 
@@ -283,8 +279,8 @@ compute_image (void)
           for (xcount = 0; xcount < width; xcount++)
             {
               p = int_to_pos (xcount, ycount);
-              color = (* get_ray_color) (&p);
-              poke (xcount, ycount, &color, NULL);
+              (* get_ray_color) (&p, color);
+              poke (xcount, ycount, color, NULL);
 
               progress_counter++;
             }
@@ -412,13 +408,13 @@ copy_from_config (GimpProcedureConfig *config)
   if (cyl_top)
     mapvals.cylindermap_id[0] = gimp_item_get_id (GIMP_ITEM (cyl_top));
   if (cyl_bottom)
-    mapvals.cylindermap_id[0] = gimp_item_get_id (GIMP_ITEM (cyl_bottom));
+    mapvals.cylindermap_id[1] = gimp_item_get_id (GIMP_ITEM (cyl_bottom));
 
   if (color == NULL)
     color = gegl_color_new ("white");
 
   /* TODO: Use GeglColor directly in this plug-in */
   gegl_color_get_pixel (color, babl_format ("R'G'B'A double"),
-                        &mapvals.lightsource.color);
+                        mapvals.lightsource.color);
   g_object_unref (color);
 }

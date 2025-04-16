@@ -85,7 +85,7 @@ static const GimpActionEntry image_actions[] =
     NC_("image-action", "_Soft-proof Profile..."), NULL, { NULL },
     NC_("image-action", "Set the soft-proofing profile"),
     image_softproof_profile_cmd_callback,
-    GIMP_HELP_VIEW_COLOR_MANAGEMENT },
+    GIMP_HELP_IMAGE_SOFT_PROOF_PROFILE_ASSIGN },
 
   { "image-color-profile-save", NULL,
     NC_("image-action", "_Save Color Profile to File..."), NULL, { NULL },
@@ -176,7 +176,7 @@ static const GimpToggleActionEntry image_toggle_actions[] =
     NC_("image-action", "Use black point compensation for soft-proofing"),
     image_softproof_bpc_cmd_callback,
     TRUE,
-    GIMP_HELP_VIEW_COLOR_MANAGEMENT }
+    GIMP_HELP_IMAGE_SOFT_PROOF_BLACK_POINT }
 };
 
 static const GimpRadioActionEntry image_convert_base_type_actions[] =
@@ -299,25 +299,25 @@ static const GimpRadioActionEntry image_softproof_intent_actions[] =
     NC_("image-action", "_Perceptual"), NULL, { NULL },
     NC_("image-action", "Soft-proofing rendering intent is perceptual"),
     GIMP_COLOR_RENDERING_INTENT_PERCEPTUAL,
-    GIMP_HELP_VIEW_COLOR_MANAGEMENT },
+    GIMP_HELP_IMAGE_SOFT_PROOF_RENDERING_INTENT },
 
   { "image-softproof-intent-relative-colorimetric", NULL,
     NC_("image-action", "_Relative Colorimetric"), NULL, { NULL },
     NC_("image-action", "Soft-proofing rendering intent is relative colorimetric"),
     GIMP_COLOR_RENDERING_INTENT_RELATIVE_COLORIMETRIC,
-    GIMP_HELP_VIEW_COLOR_MANAGEMENT },
+    GIMP_HELP_IMAGE_SOFT_PROOF_RENDERING_INTENT },
 
   { "image-softproof-intent-saturation", NULL,
     NC_("image-action", "_Saturation"), NULL, { NULL },
     NC_("image-action", "Soft-proofing rendering intent is saturation"),
     GIMP_COLOR_RENDERING_INTENT_SATURATION,
-    GIMP_HELP_VIEW_COLOR_MANAGEMENT },
+    GIMP_HELP_IMAGE_SOFT_PROOF_RENDERING_INTENT },
 
   { "image-softproof-intent-absolute-colorimetric", NULL,
     NC_("image-action", "_Absolute Colorimetric"), NULL, { NULL },
     NC_("image-action", "Soft-proofing rendering intent is absolute colorimetric"),
     GIMP_COLOR_RENDERING_INTENT_ABSOLUTE_COLORIMETRIC,
-    GIMP_HELP_VIEW_COLOR_MANAGEMENT }
+    GIMP_HELP_IMAGE_SOFT_PROOF_RENDERING_INTENT }
 };
 
 
@@ -381,19 +381,34 @@ void
 image_actions_update (GimpActionGroup *group,
                       gpointer         data)
 {
-  GimpImage        *image          = action_data_get_image (data);
-  gboolean          is_indexed     = FALSE;
-  gboolean          is_u8_gamma    = FALSE;
-  gboolean          is_double      = FALSE;
-  gboolean          aux            = FALSE;
-  gboolean          lp             = FALSE;
-  gboolean          sel            = FALSE;
-  gboolean          groups         = FALSE;
-  gboolean          profile_srgb   = FALSE;
-  gboolean          profile_hidden = FALSE;
-  gboolean          profile        = FALSE;
-  gboolean          s_bpc          = FALSE;
+  Gimp              *gimp           = action_data_get_gimp (data);
+  GimpImage         *image          = action_data_get_image (data);
+  GimpComponentType  component_type = GIMP_COMPONENT_TYPE_U8;
+  GimpTRCType        trc            = GIMP_TRC_LINEAR;
+  gboolean           is_indexed     = FALSE;
+  gboolean           is_u8_gamma    = FALSE;
+  gboolean           is_double      = FALSE;
+  gboolean           aux            = FALSE;
+  gboolean           lp             = FALSE;
+  gboolean           sel            = FALSE;
+  gboolean           groups         = FALSE;
+  gboolean           profile_srgb   = FALSE;
+  gboolean           profile_hidden = FALSE;
+  gboolean           profile        = FALSE;
+  gboolean           s_bpc          = FALSE;
 
+  if (gimp)
+    {
+      GimpContext *context = gimp_get_user_context (gimp);
+
+      /* The discrepancy may happens when a new image just got opened
+       * and context was not fully updated yet. We just skip the actions
+       * update. There will soon be more events triggering it with
+       * consistent context.
+       */
+      if (! context || image != gimp_context_get_image (context))
+        return;
+    }
 #define SET_LABEL(action,label) \
         gimp_action_group_set_action_label (group, action, (label))
 #define SET_SENSITIVE(action,condition) \
@@ -409,8 +424,6 @@ image_actions_update (GimpActionGroup *group,
       const gchar       *action = NULL;
       GimpImageBaseType  base_type;
       GimpPrecision      precision;
-      GimpComponentType  component_type;
-      GimpTRCType        trc;
 
       base_type      = gimp_image_get_base_type (image);
       precision      = gimp_image_get_precision (image);
@@ -530,17 +543,17 @@ image_actions_update (GimpActionGroup *group,
   SET_SENSITIVE ("image-softproof-black-point-compensation",     image);
   SET_ACTIVE    ("image-softproof-black-point-compensation",     s_bpc);
 
-  SET_SENSITIVE ("image-convert-u8",     image);
-  SET_SENSITIVE ("image-convert-u16",    image && !is_indexed);
-  SET_SENSITIVE ("image-convert-u32",    image && !is_indexed);
-  SET_SENSITIVE ("image-convert-half",   image && !is_indexed);
-  SET_SENSITIVE ("image-convert-float",  image && !is_indexed);
-  SET_SENSITIVE ("image-convert-double", image && !is_indexed);
+  SET_SENSITIVE ("image-convert-u8",     image && component_type != GIMP_COMPONENT_TYPE_U8);
+  SET_SENSITIVE ("image-convert-u16",    image && !is_indexed && component_type != GIMP_COMPONENT_TYPE_U16);
+  SET_SENSITIVE ("image-convert-u32",    image && !is_indexed && component_type != GIMP_COMPONENT_TYPE_U32);
+  SET_SENSITIVE ("image-convert-half",   image && !is_indexed && component_type != GIMP_COMPONENT_TYPE_HALF);
+  SET_SENSITIVE ("image-convert-float",  image && !is_indexed && component_type != GIMP_COMPONENT_TYPE_FLOAT);
+  SET_SENSITIVE ("image-convert-double", image && !is_indexed && component_type != GIMP_COMPONENT_TYPE_DOUBLE);
   SET_VISIBLE   ("image-convert-double", is_double);
 
-  SET_SENSITIVE ("image-convert-linear",     image && !is_indexed);
-  SET_SENSITIVE ("image-convert-non-linear", image);
-  SET_SENSITIVE ("image-convert-perceptual", image && !is_indexed);
+  SET_SENSITIVE ("image-convert-linear",     image && !is_indexed && trc != GIMP_TRC_LINEAR);
+  SET_SENSITIVE ("image-convert-non-linear", image && trc != GIMP_TRC_NON_LINEAR);
+  SET_SENSITIVE ("image-convert-perceptual", image && !is_indexed && trc != GIMP_TRC_PERCEPTUAL);
 
   SET_SENSITIVE ("image-color-profile-use-srgb", image && (profile || profile_hidden));
   SET_ACTIVE    ("image-color-profile-use-srgb", image && profile_srgb);

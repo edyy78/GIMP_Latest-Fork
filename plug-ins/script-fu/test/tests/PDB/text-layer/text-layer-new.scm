@@ -87,11 +87,11 @@
 
 ;              misc ops
 
-; vectors from text succeeds
-(assert `(gimp-vectors-new-from-text-layer
+; path from text succeeds
+(assert `(gimp-path-new-from-text-layer
               ,testImage
               ,testTextLayer))
-; not capturing returned ID of vectors
+; not capturing returned ID of path
 
 
 
@@ -131,7 +131,6 @@
 
 
 ; error to insert layer created by gimp-text-font
-; TODO make the error message matching by prefix only
 (assert-error `(gimp-image-insert-layer
                   ,testImage
                   ,testTextLayer2

@@ -8,6 +8,7 @@ app/about.h
 app/app.c
 app/gimp-update.c
 app/gimp-version.c
+app/language.c
 app/main.c
 app/sanity.c
 
@@ -59,6 +60,8 @@ app/actions/mypaint-brushes-actions.c
 app/actions/palette-editor-actions.c
 app/actions/palettes-actions.c
 app/actions/palettes-commands.c
+app/actions/paths-actions.c
+app/actions/paths-commands.c
 app/actions/patterns-actions.c
 app/actions/plug-in-actions.c
 app/actions/plug-in-commands.c
@@ -81,8 +84,6 @@ app/actions/tool-presets-actions.c
 app/actions/tool-presets-commands.c
 app/actions/tools-actions.c
 app/actions/vector-toolpath-actions.c
-app/actions/vectors-actions.c
-app/actions/vectors-commands.c
 app/actions/view-actions.c
 app/actions/view-commands.c
 app/actions/window-actions.c
@@ -147,6 +148,7 @@ app/core/gimpdrawable-levels.c
 app/core/gimpdrawable-offset.c
 app/core/gimpdrawable-stroke.c
 app/core/gimpdrawable-transform.c
+app/core/gimpdrawablefiltermask.c
 app/core/gimpdynamicsoutput.c
 app/core/gimpfilloptions.c
 app/core/gimpgradient-load.c
@@ -245,9 +247,9 @@ app/dialogs/template-options-dialog.c
 app/dialogs/tips-dialog.c
 app/dialogs/tips-parser.c
 app/dialogs/user-install-dialog.c
-app/dialogs/vectors-export-dialog.c
-app/dialogs/vectors-import-dialog.c
-app/dialogs/vectors-options-dialog.c
+app/dialogs/path-export-dialog.c
+app/dialogs/path-import-dialog.c
+app/dialogs/path-options-dialog.c
 app/dialogs/welcome-dialog.c
 
 app/display/display-enums.c
@@ -358,6 +360,7 @@ app/pdb/channel-cmds.c
 app/pdb/drawable-cmds.c
 app/pdb/drawable-color-cmds.c
 app/pdb/drawable-edit-cmds.c
+app/pdb/drawable-filter-cmds.c
 app/pdb/edit-cmds.c
 app/pdb/floating-sel-cmds.c
 app/pdb/gimppdb-query.c
@@ -365,6 +368,7 @@ app/pdb/gimppdb-utils.c
 app/pdb/gimppdb.c
 app/pdb/gimppdbcontext.c
 app/pdb/gimpprocedure.c
+app/pdb/image-autocrop-cmds.c
 app/pdb/image-cmds.c
 app/pdb/image-convert-cmds.c
 app/pdb/image-guides-cmds.c
@@ -374,12 +378,11 @@ app/pdb/image-transform-cmds.c
 app/pdb/image-undo-cmds.c
 app/pdb/item-transform-cmds.c
 app/pdb/layer-cmds.c
+app/pdb/path-cmds.c
 app/pdb/pdb-cmds.c
-app/pdb/plug-in-compat-cmds.c
 app/pdb/resource-cmds.c
 app/pdb/selection-cmds.c
 app/pdb/text-layer-cmds.c
-app/pdb/vectors-cmds.c
 
 app/plug-in/gimpenvirontable.c
 app/plug-in/gimpinterpreterdb.c
@@ -529,9 +532,9 @@ app/tools/gimpwarpoptions.c
 app/tools/gimpwarptool.c
 app/tools/tools-enums.c
 
-app/vectors/gimpvectors.c
-app/vectors/gimpvectors-export.c
-app/vectors/gimpvectors-import.c
+app/vectors/gimppath.c
+app/vectors/gimppath-export.c
+app/vectors/gimppath-import.c
 
 app/widgets/gimpactioneditor.c
 app/widgets/gimpactiongroup.c
@@ -595,7 +598,6 @@ app/widgets/gimpimagecommenteditor.c
 app/widgets/gimpimageprofileview.c
 app/widgets/gimpimagepropview.c
 app/widgets/gimpitemtreeview.c
-app/widgets/gimplanguagestore-parser.c
 app/widgets/gimplayermodebox.c
 app/widgets/gimplayertreeview.c
 app/widgets/gimpmenudock.c
@@ -641,7 +643,7 @@ app/widgets/gimptoolpreseteditor.c
 app/widgets/gimptranslationstore.c
 app/widgets/gimpuimanager.c
 app/widgets/gimpundoeditor.c
-app/widgets/gimpvectorstreeview.c
+app/widgets/gimppathtreeview.c
 app/widgets/gimpviewablebox.c
 app/widgets/gimpwidgets-constructors.c
 app/widgets/gimpwidgets-utils.c
@@ -660,24 +662,32 @@ data/tags/gimp-tags-default.xml.in
 
 menus/brush-editor-menu.ui
 menus/brushes-menu.ui
+menus/buffers-menu.ui
 menus/channels-menu.ui
+menus/colormap-menu.ui
 menus/cursor-info-menu.ui
 menus/dashboard-menu.ui
 menus/dockable-menu.ui.in.in
+menus/documents-menu.ui
 menus/dynamics-editor-menu.ui
 menus/dynamics-menu.ui
 menus/error-console-menu.ui
+menus/fonts-menu.ui
 menus/gradient-editor-menu.ui
 menus/gradients-menu.ui
 menus/image-menu.ui.in.in
+menus/images-menu.ui
 menus/layers-menu.ui
+menus/mypaint-brushes-menu.ui
 menus/palette-editor-menu.ui
 menus/palettes-menu.ui
+menus/paths-menu.ui
+menus/patterns-menu.ui
 menus/sample-points-menu.ui
 menus/selection-menu.ui
+menus/templates-menu.ui
 menus/text-tool-menu.ui
 menus/tool-options-menu.ui
 menus/tool-preset-editor-menu.ui
 menus/tool-presets-menu.ui
 menus/undo-menu.ui
-menus/vectors-menu.ui

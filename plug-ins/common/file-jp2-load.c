@@ -245,12 +245,18 @@ jp2_create_procedure (GimpPlugIn  *plug_in,
       gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
                                           "j2k,j2c,jpc");
 
-      GIMP_PROC_ARG_INT (procedure, "colorspace",
-                         _("Color s_pace"),
-                         _("Color space { UNKNOWN (0), GRAYSCALE (1), RGB (2), "
-                           "CMYK (3), YCbCr (4), xvYCC (5) }"),
-                         0, 5, 0,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_choice_argument (procedure, "colorspace",
+                                          _("Color s_pace"),
+                                          _("Color space"),
+                                          gimp_choice_new_with_values ("srgb",      OPJ_CLRSPC_SRGB,     _("sRGB"),     NULL,
+                                                                       "grayscale", OPJ_CLRSPC_GRAY,     _("Grayscale"), NULL,
+                                                                       "ycbcr",     OPJ_CLRSPC_SYCC,     _("YCbCr"),     NULL,
+                                                                       "xvycc",     OPJ_CLRSPC_EYCC,     _("xvYCC"),     NULL,
+                                                                       "cmyk",      OPJ_CLRSPC_CMYK,     _("CMYK"),      NULL,
+                                                                       "unknown",   OPJ_CLRSPC_UNKNOWN,  _("Unknown"),   NULL,
+                                                                       NULL),
+                                          "unknown",
+                                          G_PARAM_READWRITE);
     }
 
   return procedure;
@@ -284,38 +290,9 @@ jp2_load (GimpProcedure         *procedure,
 
     default:
       if (! strcmp (gimp_procedure_get_name (procedure), LOAD_J2K_PROC))
-        {
-          gint color_space_argument = 0;
-
-          g_object_get (config,
-                        "colorspace", &color_space_argument,
-                        NULL);
-
-          /* Order is not the same as OpenJPEG enum on purpose,
-           * since it's better to not rely on a given order or
-           * on enum values.
-           */
-          switch (color_space_argument)
-            {
-            case 1:
-              color_space = OPJ_CLRSPC_GRAY;
-              break;
-            case 2:
-              color_space = OPJ_CLRSPC_SRGB;
-              break;
-            case 3:
-              color_space = OPJ_CLRSPC_CMYK;
-              break;
-            case 4:
-              color_space = OPJ_CLRSPC_SYCC;
-              break;
-            case 5:
-              color_space = OPJ_CLRSPC_EYCC;
-              break;
-            default:
-              break;
-            }
-        }
+        color_space =
+          gimp_procedure_config_get_choice_id (GIMP_PROCEDURE_CONFIG (config),
+                                               "colorspace");
       interactive = FALSE;
       break;
     }
@@ -820,8 +797,6 @@ color_cmyk_to_rgb (opj_image_t *image)
       image->comps[2].data[i] = (int) (255.0f * Y * K); /* B */
     }
 
-  free (image->comps[3].data);
-  image->comps[3].data = NULL;
   image->comps[0].prec = 8;
   image->comps[1].prec = 8;
   image->comps[2].prec = 8;
@@ -833,6 +808,10 @@ color_cmyk_to_rgb (opj_image_t *image)
       memcpy(&(image->comps[i]), &(image->comps[i + 1]),
              sizeof (image->comps[i]));
     }
+
+  /* Restore the count so the OpenJPEG destroy function works
+   * properly */
+  image->numcomps += 1;
 
   return TRUE;
 }
@@ -961,8 +940,9 @@ open_dialog (GimpProcedure    *procedure,
 {
   const gchar     *title;
   GtkWidget       *dialog;
-  GtkListStore    *store = NULL;
   gboolean         run;
+  GParamSpec      *cspec;
+  GimpChoice      *choice;
   OPJ_COLOR_SPACE  color_space = OPJ_CLRSPC_SRGB;
 
   if (format == OPJ_CODEC_J2K)
@@ -978,27 +958,19 @@ open_dialog (GimpProcedure    *procedure,
                                       GIMP_PROCEDURE_CONFIG (config),
                                       _(title));
 
-  gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
-                                            GTK_RESPONSE_OK,
-                                            GTK_RESPONSE_CANCEL,
-                                            -1);
+  cspec  = g_object_class_find_property (G_OBJECT_GET_CLASS (config), "colorspace");
+  choice = gimp_param_spec_choice_get_choice (cspec);
 
   if (num_components == 3)
     {
       /* Can be RGB, YUV and YCC. */
-      store = gimp_int_store_new (_("sRGB"),  OPJ_CLRSPC_SRGB,
-                                  _("YCbCr"), OPJ_CLRSPC_SYCC,
-                                  _("xvYCC"), OPJ_CLRSPC_EYCC,
-                                  NULL);
+      gimp_choice_set_sensitive (choice, "grayscale", FALSE);
+      gimp_choice_set_sensitive (choice, "cmyk", FALSE);
     }
   else if (num_components == 4)
     {
       /* Can be RGB, YUV and YCC with alpha or CMYK. */
-      store = gimp_int_store_new (_("sRGB"),  OPJ_CLRSPC_SRGB,
-                                  _("YCbCr"), OPJ_CLRSPC_SYCC,
-                                  _("xvYCC"), OPJ_CLRSPC_EYCC,
-                                  _("CMYK"),  OPJ_CLRSPC_CMYK,
-                                  NULL);
+      gimp_choice_set_sensitive (choice, "grayscale", FALSE);
     }
   else
     {
@@ -1006,22 +978,20 @@ open_dialog (GimpProcedure    *procedure,
                    _("Unsupported JPEG 2000%s '%s' with %d components."),
                    (format == OPJ_CODEC_J2K) ? " codestream" : "",
                    gimp_file_get_utf8_name (file), num_components);
-      color_space = OPJ_CLRSPC_UNKNOWN;
+
+      g_object_set (config, "colorspace", "unknown", NULL);
     }
 
-  if (store)
+  if (num_components == 3 || num_components == 4)
     {
-      gimp_procedure_dialog_get_int_combo (GIMP_PROCEDURE_DIALOG (dialog),
-                                           "colorspace", GIMP_INT_STORE (store));
       /* By default, RGB is active. */
-      g_object_set (config,
-                    "colorspace", color_space,
-                    NULL);
+      gimp_choice_set_sensitive (choice, "unknown", FALSE);
+      g_object_set (config, "colorspace", "srgb", NULL);
 
       gimp_procedure_dialog_fill (GIMP_PROCEDURE_DIALOG (dialog),
                                   NULL);
 
-      gtk_widget_show (dialog);
+      gtk_widget_set_visible (dialog, TRUE);
 
       run = gimp_procedure_dialog_run (GIMP_PROCEDURE_DIALOG (dialog));
 
@@ -1030,9 +1000,9 @@ open_dialog (GimpProcedure    *procedure,
          * No error occurred. */
         color_space = OPJ_CLRSPC_UNKNOWN;
       else
-        g_object_get (config,
-                      "colorspace", &color_space,
-                      NULL);
+        color_space =
+          gimp_procedure_config_get_choice_id (GIMP_PROCEDURE_CONFIG (config),
+                                               "colorspace");
     }
 
   gtk_widget_destroy (dialog);
@@ -1244,6 +1214,8 @@ load_image (GimpProcedure     *procedure,
                        gimp_file_get_utf8_name (file));
           goto out;
         }
+
+      num_components--;
     }
   else if (image->color_space == OPJ_CLRSPC_EYCC)
     {

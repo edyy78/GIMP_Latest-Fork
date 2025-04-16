@@ -86,7 +86,6 @@ static GimpProcedure  * optimize_create_procedure (GimpPlugIn           *plug_in
 static GimpValueArray * optimize_run              (GimpProcedure        *procedure,
                                                    GimpRunMode           run_mode,
                                                    GimpImage            *image,
-                                                   gint                  n_drawables,
                                                    GimpDrawable        **drawables,
                                                    GimpProcedureConfig  *config,
                                                    gpointer              run_data);
@@ -123,8 +122,6 @@ static  guint             width, height;
 static  gint32            total_frames;
 static  GimpLayer       **layers;
 static  guchar            pixelstep;
-static  guchar           *palette;
-static  gint              ncolors;
 static  operatingMode     opmode;
 
 
@@ -187,7 +184,7 @@ optimize_create_procedure (GimpPlugIn  *plug_in,
                                         "final file size.  If a frame of the"
                                         "animation can use the 'combine' "
                                         "mode, this procedure attempts to "
-                                        "maximize the number of ajdacent "
+                                        "maximize the number of adjacent "
                                         "pixels having the same color, which"
                                         "improves the compression for some "
                                         "image formats such as GIF or MNG.",
@@ -295,11 +292,11 @@ optimize_create_procedure (GimpPlugIn  *plug_in,
                                       "Adam D. Moss <adam@gimp.org>",
                                       "1997-2003");
 
-      GIMP_PROC_VAL_IMAGE (procedure, "result",
-                           "Result",
-                           "Resultimg image",
-                           FALSE,
-                           G_PARAM_READWRITE);
+      gimp_procedure_add_image_return_value (procedure, "result",
+                                             "Result",
+                                             "Resulting image",
+                                             FALSE,
+                                             G_PARAM_READWRITE);
     }
 
   return procedure;
@@ -309,7 +306,6 @@ static GimpValueArray *
 optimize_run (GimpProcedure        *procedure,
               GimpRunMode           run_mode,
               GimpImage            *image,
-              gint                  n_drawables,
               GimpDrawable        **drawables,
               GimpProcedureConfig  *config,
               gpointer              run_data)
@@ -536,7 +532,8 @@ do_optimizations (GimpRunMode  run_mode,
 
   width     = gimp_image_get_width (image);
   height    = gimp_image_get_height (image);
-  layers    = gimp_image_get_layers (image, &total_frames);
+  layers    = gimp_image_get_layers (image);
+  total_frames = gimp_core_object_array_get_length ((GObject **) layers);
   imagetype = gimp_image_get_base_type (image);
   pixelstep = (imagetype == GIMP_RGB) ? 4 : 2;
 
@@ -560,10 +557,7 @@ do_optimizations (GimpRunMode  run_mode,
   gimp_image_undo_disable (new_image);
 
   if (imagetype == GIMP_INDEXED)
-    {
-      palette = gimp_image_get_colormap (image, NULL, &ncolors);
-      gimp_image_set_colormap (new_image, palette, ncolors);
-    }
+    gimp_image_set_palette (new_image, gimp_image_get_palette (image));
 
 #if 1
   if (opmode == OPBACKGROUND ||

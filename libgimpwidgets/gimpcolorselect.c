@@ -117,13 +117,6 @@ struct _GimpLCH
 };
 
 
-#define GIMP_COLOR_SELECT_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_COLOR_SELECT, GimpColorSelectClass))
-#define GIMP_IS_COLOR_SELECT_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_COLOR_SELECT))
-#define GIMP_COLOR_SELECT_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_COLOR_SELECT, GimpColorSelectClass))
-
-
-typedef struct _GimpColorSelectClass GimpColorSelectClass;
-
 struct _GimpColorSelect
 {
   GimpColorSelector    parent_instance;
@@ -176,7 +169,7 @@ struct _ColorSelectFill
   gint     height;
   gfloat   rgb[3];
   gfloat   hsv[3];
-  gdouble  lch[4];
+  gfloat   lch[4];
   guchar   oog_color[3];
 
   ColorSelectRenderFunc render_line;
@@ -219,7 +212,7 @@ static void       gimp_color_select_update_pos             (GimpColorSelect     
 static void       gimp_color_select_drop_color             (GtkWidget          *widget,
                                                             gint                x,
                                                             gint                y,
-                                                            const GimpRGB      *color,
+                                                            GeglColor          *color,
                                                             gpointer            data);
 #endif
 
@@ -281,6 +274,8 @@ static void       gimp_color_select_notify_config          (GimpColorConfig  *co
 
 static gfloat     gimp_color_select_get_z_value            (GimpColorSelect *select,
                                                             GeglColor       *color);
+
+static void       gimp_color_select_set_label              (GimpColorSelect *select);
 
 
 G_DEFINE_TYPE (GimpColorSelect, gimp_color_select, GIMP_TYPE_COLOR_SELECTOR)
@@ -347,9 +342,9 @@ gimp_color_select_class_init (GimpColorSelectClass *klass)
 
   gtk_widget_class_set_css_name (GTK_WIDGET_CLASS (klass), "GimpColorSelect");
 
-  fish_lch_to_rgb    = babl_fish (babl_format ("CIE LCH(ab) double"),
+  fish_lch_to_rgb    = babl_fish (babl_format ("CIE LCH(ab) float"),
                                   babl_format ("R'G'B' double"));
-  fish_lch_to_rgb_u8 = babl_fish (babl_format ("CIE LCH(ab) double"),
+  fish_lch_to_rgb_u8 = babl_fish (babl_format ("CIE LCH(ab) float"),
                                   babl_format ("R'G'B' u8"));
   rgbf_format        = babl_format ("R'G'B' float");
   rgbu_format        = babl_format ("R'G'B' u8");
@@ -363,6 +358,7 @@ gimp_color_select_init (GimpColorSelect *select)
   GtkWidget              *hbox;
   GtkWidget              *frame;
   GtkWidget              *vbox;
+  GtkWidget              *grid;
   GEnumClass             *model_class;
   GEnumClass             *channel_class;
   const GimpEnumDesc     *enum_desc;
@@ -511,23 +507,36 @@ gimp_color_select_init (GimpColorSelect *select)
       }
     }
 
+  grid = gtk_grid_new ();
+  gtk_grid_set_row_spacing (GTK_GRID (grid), 1);
+  gtk_grid_set_column_spacing (GTK_GRID (grid), 1);
+  gtk_box_pack_start (GTK_BOX (select), grid, FALSE, FALSE, 0);
+  gtk_widget_set_visible (grid, TRUE);
+
   select->label = gtk_label_new (NULL);
   gtk_widget_set_halign (select->label, GTK_ALIGN_START);
   gtk_widget_set_vexpand (select->label, FALSE);
+  gtk_label_set_ellipsize (GTK_LABEL (select->label), PANGO_ELLIPSIZE_END);
   gtk_label_set_justify (GTK_LABEL (select->label), GTK_JUSTIFY_LEFT);
-  gtk_label_set_text (GTK_LABEL (select->label), _("Profile: sRGB"));
-  gtk_box_pack_start (GTK_BOX (select), select->label, FALSE, FALSE, 0);
+  gtk_grid_attach (GTK_GRID (grid), select->label, 0, 0, 1, 1);
   gtk_widget_show (select->label);
+  gimp_color_select_set_label (select);
 
   select->simulation_label = gtk_label_new (NULL);
   gtk_widget_set_halign (select->simulation_label, GTK_ALIGN_START);
   gtk_widget_set_vexpand (select->simulation_label, FALSE);
+  gtk_label_set_ellipsize (GTK_LABEL (select->simulation_label), PANGO_ELLIPSIZE_END);
   gtk_label_set_justify (GTK_LABEL (select->simulation_label), GTK_JUSTIFY_LEFT);
   gtk_label_set_markup (GTK_LABEL (select->simulation_label), _("Soft-Proof Profile: <i>unknown</i>"));
-  gtk_box_pack_start (GTK_BOX (select), select->simulation_label, FALSE, FALSE, 0);
+  gtk_grid_attach (GTK_GRID (grid), select->simulation_label, 0, 1, 1, 1);
 
   g_type_class_unref (model_class);
   g_type_class_unref (channel_class);
+
+  /* See z_color_fill and xy_color_fill values at top of the init()
+   * function. Make sure the GimpColorSelector code is not out-of-sync.
+   */
+  gimp_color_selector_set_channel (selector, GIMP_COLOR_SELECTOR_HUE);
 }
 
 static void
@@ -656,6 +665,8 @@ gimp_color_select_set_channel (GimpColorSelector        *selector,
 
   gimp_color_select_update (select,
                             UPDATE_POS | UPDATE_Z_COLOR | UPDATE_XY_COLOR);
+
+  gimp_color_select_set_label (select);
 }
 
 static void
@@ -665,7 +676,8 @@ gimp_color_select_set_model_visible (GimpColorSelector      *selector,
 {
   GimpColorSelect *select = GIMP_COLOR_SELECT (selector);
 
-  gtk_widget_set_visible (select->toggle_box[model], visible);
+  if (! visible || gimp_color_selector_get_toggles_visible (selector))
+    gtk_widget_set_visible (select->toggle_box[model], visible);
 }
 
 static void
@@ -681,44 +693,12 @@ gimp_color_select_set_format (GimpColorSelector *selector,
       rgbf_format        = babl_format_with_space ("R'G'B' float", format);
       rgbu_format        = babl_format_with_space ("R'G'B' u8", format);
       hsvf_format        = babl_format_with_space ("HSV float", format);
-      fish_lch_to_rgb    = babl_fish (babl_format ("CIE LCH(ab) double"),
+      fish_lch_to_rgb    = babl_fish (babl_format ("CIE LCH(ab) float"),
                                       babl_format_with_space ("R'G'B' double", format));
-      fish_lch_to_rgb_u8 = babl_fish (babl_format ("CIE LCH(ab) double"),
+      fish_lch_to_rgb_u8 = babl_fish (babl_format ("CIE LCH(ab) float"),
                                       babl_format_with_space ("R'G'B' u8", format));
 
-      if (format == NULL || babl_format_get_space (format) == babl_space ("sRGB"))
-        {
-          gtk_label_set_text (GTK_LABEL (select->label), _("Profile: sRGB"));
-          gimp_help_set_help_data (select->label, NULL, NULL);
-        }
-      else
-        {
-          GimpColorProfile *profile = NULL;
-          const gchar      *icc;
-          gint              icc_len;
-
-          icc = babl_space_get_icc (babl_format_get_space (format), &icc_len);
-          profile = gimp_color_profile_new_from_icc_profile ((const guint8 *) icc, icc_len, NULL);
-
-          if (profile != NULL)
-            {
-              gchar *text;
-
-              text = g_strdup_printf (_("Profile: %s"), gimp_color_profile_get_label (profile));
-              gtk_label_set_text (GTK_LABEL (select->label), text);
-              gimp_help_set_help_data (select->label,
-                                       gimp_color_profile_get_summary (profile),
-                                       NULL);
-              g_free (text);
-            }
-          else
-            {
-              gtk_label_set_markup (GTK_LABEL (select->label), _("Profile: <i>unknown</i>"));
-              gimp_help_set_help_data (select->label, NULL, NULL);
-            }
-
-          g_clear_object (&profile);
-        }
+      gimp_color_select_set_label (select);
 
       select->xy_needs_render = TRUE;
       select->z_needs_render  = TRUE;
@@ -806,7 +786,7 @@ gimp_color_select_simulation (GimpColorSelector *selector,
   if (format)
     {
       softproof_format      = format;
-      fish_lch_to_softproof = babl_fish (babl_format ("CIE LCH(ab) double"), format);
+      fish_lch_to_softproof = babl_fish (babl_format ("CIE LCH(ab) float"), format);
 
       if (babl_format_get_space (format) == babl_space ("sRGB"))
         {
@@ -894,11 +874,12 @@ gimp_color_select_update_values (GimpColorSelect *select)
   GimpColorSelector *selector = GIMP_COLOR_SELECTOR (select);
   GeglColor         *color    = gimp_color_selector_get_color (selector);
   gdouble            values[3];
+  gfloat             values_float[3];
   const Babl        *rgb_format;
   const Babl        *hsv_format;
 
   rgb_format = babl_format_with_space ("R'G'B' double", select->format);
-  hsv_format = babl_format_with_space ("HSV double", select->format);
+  hsv_format = babl_format_with_space ("HSV float", select->format);
 
   switch (select->z_color_fill)
     {
@@ -919,38 +900,41 @@ gimp_color_select_update_values (GimpColorSelect *select)
       break;
 
     case COLOR_SELECT_HUE:
-      values[0] = select->pos[2];
-      values[1] = select->pos[0];
-      values[2] = select->pos[1];
-      gegl_color_set_pixel (color, hsv_format, values);
+      values_float[0] = select->pos[2];
+      values_float[1] = select->pos[0];
+      values_float[2] = select->pos[1];
+      gegl_color_set_pixel (color, hsv_format, values_float);
       break;
     case COLOR_SELECT_SATURATION:
-      values[0] = select->pos[0];
-      values[1] = select->pos[2];
-      values[2] = select->pos[1];
-      gegl_color_set_pixel (color, hsv_format, values);
+      values_float[0] = select->pos[0];
+      values_float[1] = select->pos[2];
+      values_float[2] = select->pos[1];
+      gegl_color_set_pixel (color, hsv_format, values_float);
       break;
     case COLOR_SELECT_VALUE:
-      gegl_color_set_pixel (color, hsv_format, select->pos);
+      values_float[0] = select->pos[0];
+      values_float[1] = select->pos[1];
+      values_float[2] = select->pos[2];
+      gegl_color_set_pixel (color, hsv_format, values_float);
       break;
 
     case COLOR_SELECT_LCH_LIGHTNESS:
-      values[0] = select->pos[2] * 100.0;
-      values[1] = select->pos[1] * 200.0;
-      values[2] = select->pos[0] * 360.0;
-      gegl_color_set_pixel (color, babl_format ("CIE LCH(ab) double"), values);
+      values_float[0] = select->pos[2] * 100.0;
+      values_float[1] = select->pos[1] * 200.0;
+      values_float[2] = select->pos[0] * 360.0;
+      gegl_color_set_pixel (color, babl_format ("CIE LCH(ab) float"), values_float);
       break;
     case COLOR_SELECT_LCH_CHROMA:
-      values[0] = select->pos[1] * 100.0;
-      values[1] = select->pos[2] * 200.0;
-      values[2] = select->pos[0] * 360.0;
-      gegl_color_set_pixel (color, babl_format ("CIE LCH(ab) double"), values);
+      values_float[0] = select->pos[1] * 100.0;
+      values_float[1] = select->pos[2] * 200.0;
+      values_float[2] = select->pos[0] * 360.0;
+      gegl_color_set_pixel (color, babl_format ("CIE LCH(ab) float"), values_float);
       break;
     case COLOR_SELECT_LCH_HUE:
-      values[0] = select->pos[1] * 100.0;
-      values[1] = select->pos[0] * 200.0;
-      values[2] = select->pos[2] * 360.0;
-      gegl_color_set_pixel (color, babl_format ("CIE LCH(ab) double"), values);
+      values_float[0] = select->pos[1] * 100.0;
+      values_float[1] = select->pos[0] * 200.0;
+      values_float[2] = select->pos[2] * 360.0;
+      gegl_color_set_pixel (color, babl_format ("CIE LCH(ab) float"), values_float);
       break;
 
     default:
@@ -968,12 +952,12 @@ gimp_color_select_update_pos (GimpColorSelect *select)
   GimpColorSelector *selector = GIMP_COLOR_SELECTOR (select);
   GeglColor         *color    = gimp_color_selector_get_color (selector);
   gdouble            rgb[3];
-  gdouble            lch[3];
-  gdouble            hsv[3];
+  gfloat             lch[3];
+  gfloat             hsv[3];
 
   gegl_color_get_pixel (color, babl_format_with_space ("R'G'B' double", select->format), rgb);
-  gegl_color_get_pixel (color, babl_format_with_space ("HSV double", select->format), hsv);
-  gegl_color_get_pixel (color, babl_format ("CIE LCH(ab) double"), lch);
+  gegl_color_get_pixel (color, babl_format_with_space ("HSV float", select->format), hsv);
+  gegl_color_get_pixel (color, babl_format ("CIE LCH(ab) float"), lch);
   g_object_unref (color);
 
   switch (select->z_color_fill)
@@ -1036,7 +1020,7 @@ static void
 gimp_color_select_drop_color (GtkWidget     *widget,
                               gint           x,
                               gint           y,
-                              const GimpRGB *color,
+                              GeglColor     *color,
                               gpointer       data)
 {
   GimpColorSelect *select = GIMP_COLOR_SELECT (data);
@@ -1429,7 +1413,7 @@ gimp_color_select_render (GtkWidget           *preview,
 
   gegl_color_get_pixel (color, rgbf_format, csf.rgb);
   gegl_color_get_pixel (color, hsvf_format, csf.hsv);
-  gegl_color_get_pixel (color, babl_format ("CIE LCH(ab) alpha double"), csf.lch);
+  gegl_color_get_pixel (color, babl_format ("CIE LCH(ab) alpha float"), csf.lch);
 
   csf.oog_color[0] = oog_color[0];
   csf.oog_color[1] = oog_color[1];
@@ -1598,7 +1582,7 @@ static void
 color_select_render_lch_lightness (ColorSelectFill *csf)
 {
   guchar  *p   = csf->buffer;
-  gdouble  lch[4] = { 0.0, 0.0, 0.0, 1.0 };
+  gfloat   lch[4] = { 0.0, 0.0, 0.0, 1.0 };
   guchar   rgb[3];
   gint     i;
 
@@ -1617,7 +1601,7 @@ static void
 color_select_render_lch_chroma (ColorSelectFill *csf)
 {
   guchar  *p   = csf->buffer;
-  gdouble  lch[4] = { 80.0, 0.0, 0.0, 1.0 };
+  gfloat   lch[4] = { 80.0, 0.0, 0.0, 1.0 };
   guchar   rgb[3];
   gint     i;
 
@@ -1636,7 +1620,7 @@ static void
 color_select_render_lch_hue (ColorSelectFill *csf)
 {
   guchar  *p      = csf->buffer;
-  gdouble  lch[4] = { 80.0, 200.0, 0.0, 1.0 };
+  gfloat   lch[4] = { 80.0, 200.0, 0.0, 1.0 };
   guchar   rgb[3];
   gint     i;
 
@@ -1891,7 +1875,7 @@ color_select_render_lch_chroma_lightness (ColorSelectFill *csf)
 {
   GeglColor *c = NULL;
   guchar    *p = csf->buffer;
-  gdouble    lch[3];
+  gfloat     lch[3];
 
   c = gegl_color_new (NULL);
 
@@ -1902,7 +1886,7 @@ color_select_render_lch_chroma_lightness (ColorSelectFill *csf)
     {
       lch[1] = i * 200.0 / csf->width;
 
-      gegl_color_set_pixel (c, babl_format ("CIE LCH(ab) double"), lch);
+      gegl_color_set_pixel (c, babl_format ("CIE LCH(ab) float"), lch);
 
       if (gimp_color_is_out_of_gamut (c, babl_format_get_space (rgbf_format)) ||
           (softproof_format &&
@@ -1928,7 +1912,7 @@ color_select_render_lch_hue_lightness (ColorSelectFill *csf)
 {
   GeglColor *c = NULL;
   guchar    *p = csf->buffer;
-  gdouble    lch[3];
+  gfloat     lch[3];
 
   c = gegl_color_new (NULL);
 
@@ -1939,7 +1923,7 @@ color_select_render_lch_hue_lightness (ColorSelectFill *csf)
     {
       lch[2] = i * 360.0 / csf->width;
 
-      gegl_color_set_pixel (c, babl_format ("CIE LCH(ab) double"), lch);
+      gegl_color_set_pixel (c, babl_format ("CIE LCH(ab) float"), lch);
 
       if (gimp_color_is_out_of_gamut (c, babl_format_get_space (rgbf_format)) ||
           (softproof_format &&
@@ -1965,7 +1949,7 @@ color_select_render_lch_hue_chroma (ColorSelectFill *csf)
 {
   GeglColor *c = NULL;
   guchar    *p = csf->buffer;
-  gdouble    lch[3];
+  gfloat     lch[3];
   gint       i;
 
   c = gegl_color_new (NULL);
@@ -1977,7 +1961,7 @@ color_select_render_lch_hue_chroma (ColorSelectFill *csf)
     {
       lch[2] = i * 360.0 / csf->width;
 
-      gegl_color_set_pixel (c, babl_format ("CIE LCH(ab) double"), lch);
+      gegl_color_set_pixel (c, babl_format ("CIE LCH(ab) float"), lch);
 
       if (gimp_color_is_out_of_gamut (c, babl_format_get_space (rgbf_format)) ||
           (softproof_format &&
@@ -2054,4 +2038,105 @@ gimp_color_select_get_z_value (GimpColorSelect *select,
     }
 
   return channels[z_channel];
+}
+
+static void
+gimp_color_select_set_label (GimpColorSelect *select)
+{
+  GEnumClass               *enum_class;
+  const GimpEnumDesc       *enum_desc;
+  const gchar              *model_help;
+  gchar                    *model_label;
+  GimpColorSelectorChannel  channel;
+  GimpColorSelectorModel    model      = GIMP_COLOR_SELECTOR_MODEL_RGB;
+  gboolean                  with_space = TRUE;
+
+  channel = gimp_color_selector_get_channel (GIMP_COLOR_SELECTOR (select));
+  switch (channel)
+    {
+    case GIMP_COLOR_SELECTOR_HUE:
+    case GIMP_COLOR_SELECTOR_SATURATION:
+    case GIMP_COLOR_SELECTOR_VALUE:
+      model = GIMP_COLOR_SELECTOR_MODEL_HSV;
+      break;
+    case GIMP_COLOR_SELECTOR_RED:
+    case GIMP_COLOR_SELECTOR_GREEN:
+    case GIMP_COLOR_SELECTOR_BLUE:
+      model = GIMP_COLOR_SELECTOR_MODEL_RGB;
+      break;
+    case GIMP_COLOR_SELECTOR_LCH_LIGHTNESS:
+    case GIMP_COLOR_SELECTOR_LCH_CHROMA:
+    case GIMP_COLOR_SELECTOR_LCH_HUE:
+      model = GIMP_COLOR_SELECTOR_MODEL_LCH;
+      with_space = FALSE;
+      break;
+    case GIMP_COLOR_SELECTOR_ALPHA:
+      /* Let's ignore label change when alpha is selected (it can be
+       * used with any model).
+       */
+      return;
+    }
+
+  enum_class  = g_type_class_ref (GIMP_TYPE_COLOR_SELECTOR_MODEL);
+  enum_desc   = gimp_enum_get_desc (enum_class, model);
+  model_help  = gettext (enum_desc->value_help);
+  model_label = g_strdup_printf (_("Model: %s"), gettext (enum_desc->value_desc));
+
+  if (with_space)
+    {
+      if (select->format == NULL || babl_format_get_space (select->format) == babl_space ("sRGB"))
+        {
+          gchar *label;
+
+          /* TODO: in future, this could be a better thought localized
+           * string, but for now, I had to preserve string freeze.
+           */
+          label = g_strdup_printf ("%s - %s", model_label, _("Profile: sRGB"));
+          gtk_label_set_text (GTK_LABEL (select->label), label);
+          gimp_help_set_help_data (select->label, model_help, NULL);
+          g_free (label);
+        }
+      else
+        {
+          GimpColorProfile *profile = NULL;
+          const gchar      *icc;
+          gint              icc_len;
+
+          icc = babl_space_get_icc (babl_format_get_space (select->format), &icc_len);
+          profile = gimp_color_profile_new_from_icc_profile ((const guint8 *) icc, icc_len, NULL);
+
+          if (profile != NULL)
+            {
+              gchar *label;
+              gchar *text;
+
+              text  = g_strdup_printf (_("Profile: %s"), gimp_color_profile_get_label (profile));
+              label = g_strdup_printf ("%s - %s", model_label, text);
+              gtk_label_set_text (GTK_LABEL (select->label), label);
+              gimp_help_set_help_data (select->label,
+                                       gimp_color_profile_get_summary (profile),
+                                       NULL);
+              g_free (text);
+              g_free (label);
+            }
+          else
+            {
+              gchar *label;
+
+              label = g_strdup_printf ("%s - %s", model_label, _("Profile: <i>unknown</i>"));
+              gtk_label_set_markup (GTK_LABEL (select->label), label);
+              gimp_help_set_help_data (select->label, model_help, NULL);
+              g_free (label);
+            }
+
+          g_clear_object (&profile);
+        }
+    }
+  else
+    {
+      gtk_label_set_text (GTK_LABEL (select->label), model_label);
+      gimp_help_set_help_data (select->label, model_help, NULL);
+    }
+
+  g_free (model_label);
 }

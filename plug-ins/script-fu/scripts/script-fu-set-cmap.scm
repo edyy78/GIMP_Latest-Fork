@@ -34,9 +34,9 @@
 
     (while (< i num-colors)
       (set! color (car (gimp-palette-entry-get-color palette i)))
-      (aset cmap (* i 3) (car color))
-      (aset cmap (+ (* i 3) 1) (cadr color))
-      (aset cmap (+ (* i 3) 2) (caddr color))
+      (vector-set! cmap (* i 3) (car color))
+      (vector-set! cmap (+ (* i 3) 1) (cadr color))
+      (vector-set! cmap (+ (* i 3) 2) (caddr color))
       (set! i (+ i 1))
     )
 
@@ -44,21 +44,19 @@
   )
 )
 
-(define (script-fu-set-cmap img drawable palette)
-  (gimp-image-set-colormap img
-                           (script-fu-make-cmap-array palette))
+(define (script-fu-set-cmap img drawables palette)
+  (gimp-image-set-palette img palette)
   (gimp-displays-flush)
 )
 
-(script-fu-register "script-fu-set-cmap"
+(script-fu-register-filter "script-fu-set-cmap"
     _"Se_t Colormap..."
     _"Change the colormap of an image to the colors in a specified palette."
     "Kevin Cozens <kcozens@interlog.com>"
     "Kevin Cozens"
     "September 29, 2004"
     "INDEXED*"
-    SF-IMAGE     "Image"    0
-    SF-DRAWABLE  "Drawable" 0
+    SF-ONE-OR-MORE-DRAWABLE
     SF-PALETTE  _"Palette"  "Default"
 )
 

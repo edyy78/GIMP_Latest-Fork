@@ -144,7 +144,7 @@ register_palette_select_procs (GimpPDB *pdb)
   /*
    * gimp-palettes-popup
    */
-  procedure = gimp_procedure_new (palettes_popup_invoker);
+  procedure = gimp_procedure_new (palettes_popup_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-palettes-popup");
   gimp_procedure_set_static_help (procedure,
@@ -173,6 +173,8 @@ register_palette_select_procs (GimpPDB *pdb)
                                gimp_param_spec_palette ("initial-palette",
                                                         "initial palette",
                                                         "The palette to set as the initial choice.",
+                                                        TRUE,
+                                                        NULL,
                                                         FALSE,
                                                         GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
@@ -187,7 +189,7 @@ register_palette_select_procs (GimpPDB *pdb)
   /*
    * gimp-palettes-close-popup
    */
-  procedure = gimp_procedure_new (palettes_close_popup_invoker);
+  procedure = gimp_procedure_new (palettes_close_popup_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-palettes-close-popup");
   gimp_procedure_set_static_help (procedure,
@@ -211,7 +213,7 @@ register_palette_select_procs (GimpPDB *pdb)
   /*
    * gimp-palettes-set-popup
    */
-  procedure = gimp_procedure_new (palettes_set_popup_invoker);
+  procedure = gimp_procedure_new (palettes_set_popup_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-palettes-set-popup");
   gimp_procedure_set_static_help (procedure,
@@ -233,6 +235,8 @@ register_palette_select_procs (GimpPDB *pdb)
                                gimp_param_spec_palette ("palette",
                                                         "palette",
                                                         "The palette to set as selected",
+                                                        FALSE,
+                                                        NULL,
                                                         FALSE,
                                                         GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);

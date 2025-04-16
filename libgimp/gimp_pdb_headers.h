@@ -39,6 +39,7 @@
 #include <libgimp/gimpdrawable_pdb.h>
 #include <libgimp/gimpdrawablecolor_pdb.h>
 #include <libgimp/gimpdrawableedit_pdb.h>
+#include <libgimp/gimpdrawablefilter_pdb.h>
 #include <libgimp/gimpdrawableselect_pdb.h>
 #include <libgimp/gimpdynamics_pdb.h>
 #include <libgimp/gimpedit_pdb.h>
@@ -51,8 +52,10 @@
 #include <libgimp/gimpgradient_pdb.h>
 #include <libgimp/gimpgradients_pdb.h>
 #include <libgimp/gimpgradientselect_pdb.h>
+#include <libgimp/gimpgrouplayer_pdb.h>
 #include <libgimp/gimphelp_pdb.h>
 #include <libgimp/gimpimage_pdb.h>
+#include <libgimp/gimpimageautocrop_pdb.h>
 #include <libgimp/gimpimagecolorprofile_pdb.h>
 #include <libgimp/gimpimageconvert_pdb.h>
 #include <libgimp/gimpimagegrid_pdb.h>
@@ -69,6 +72,7 @@
 #include <libgimp/gimppalette_pdb.h>
 #include <libgimp/gimppalettes_pdb.h>
 #include <libgimp/gimppaletteselect_pdb.h>
+#include <libgimp/gimppath_pdb.h>
 #include <libgimp/gimppattern_pdb.h>
 #include <libgimp/gimppatterns_pdb.h>
 #include <libgimp/gimppatternselect_pdb.h>
@@ -77,6 +81,6 @@
 #include <libgimp/gimpselection_pdb.h>
 #include <libgimp/gimptextlayer_pdb.h>
 #include <libgimp/gimptexttool_pdb.h>
-#include <libgimp/gimpvectors_pdb.h>
+#include <libgimp/gimpunit_pdb.h>
 
 #endif /* __GIMP_PDB_HEADERS_H__ */

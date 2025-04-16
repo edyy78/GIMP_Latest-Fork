@@ -40,10 +40,14 @@
  * gimp_item_id_is_valid:
  * @item_id: The item ID to check.
  *
- * Returns TRUE if the item ID is valid.
+ * Returns %TRUE if the item ID is valid.
  *
  * This procedure checks if the given item ID is valid and refers to an
  * existing item.
+ *
+ * *Note*: in most use cases, you should not use this function. If you
+ * got a [class@Gimp.Item] from the API, you should trust it is valid.
+ * This function is mostly for internal usage.
  *
  * Returns: Whether the item ID is valid.
  *
@@ -79,7 +83,10 @@ gimp_item_id_is_valid (gint item_id)
  *
  * Returns whether the item ID is a drawable.
  *
- * This procedure returns TRUE if the specified item ID is a drawable.
+ * This procedure returns %TRUE if the specified item ID is a drawable.
+ *
+ * *Note*: in most use cases, you should not use this function. See
+ * [func@Gimp.Item.id_is_layer] for a discussion on alternatives.
  *
  * Returns: TRUE if the item ID is a drawable, FALSE otherwise.
  *
@@ -115,7 +122,26 @@ gimp_item_id_is_drawable (gint item_id)
  *
  * Returns whether the item ID is a layer.
  *
- * This procedure returns TRUE if the specified item ID is a layer.
+ * This procedure returns %TRUE if the specified item ID is a layer.
+ *
+ * *Note*: in most use cases, you should not use this function. If the
+ * goal is to verify the accurate type for a [class@Gimp.Item], you
+ * should either use [method@Gimp.Item.is_layer] or the specific
+ * type-checking methods for the used language.
+ *
+ * For instance, in C:
+ *
+ * ```C
+ * if (GIMP_IS_LAYER (item))
+ *   do_something ();
+ * ```
+ *
+ * Or in the Python binding, you could run:
+ *
+ * ```py3
+ * if isinstance(item, Gimp.Layer):
+ *   do_something()
+ * ```
  *
  * Returns: TRUE if the item is a layer, FALSE otherwise.
  *
@@ -151,8 +177,11 @@ gimp_item_id_is_layer (gint item_id)
  *
  * Returns whether the item ID is a text layer.
  *
- * This procedure returns TRUE if the specified item ID is a text
+ * This procedure returns %TRUE if the specified item ID is a text
  * layer.
+ *
+ * *Note*: in most use cases, you should not use this function. See
+ * [func@Gimp.Item.id_is_layer] for a discussion on alternatives.
  *
  * Returns: TRUE if the item is a text layer, FALSE otherwise.
  *
@@ -183,12 +212,55 @@ gimp_item_id_is_text_layer (gint item_id)
 }
 
 /**
+ * gimp_item_id_is_group_layer:
+ * @item_id: The item ID.
+ *
+ * Returns whether the item ID is a group layer.
+ *
+ * This procedure returns %TRUE if the specified item ID is a group
+ * layer.
+ *
+ * *Note*: in most use cases, you should not use this function. See
+ * [func@Gimp.Item.id_is_layer] for a discussion on alternatives.
+ *
+ * Returns: TRUE if the item is a group layer, FALSE otherwise.
+ *
+ * Since: 3.0
+ **/
+gboolean
+gimp_item_id_is_group_layer (gint item_id)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean group_layer = FALSE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_INT, item_id,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-id-is-group-layer",
+                                               args);
+  gimp_value_array_unref (args);
+
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    group_layer = GIMP_VALUES_GET_BOOLEAN (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
+
+  return group_layer;
+}
+
+/**
  * gimp_item_id_is_channel:
  * @item_id: The item ID.
  *
  * Returns whether the item ID is a channel.
  *
- * This procedure returns TRUE if the specified item ID is a channel.
+ * This procedure returns %TRUE if the specified item ID is a channel.
+ *
+ * *Note*: in most use cases, you should not use this function. See
+ * [func@Gimp.Item.id_is_layer] for a discussion on alternatives.
  *
  * Returns: TRUE if the item ID is a channel, FALSE otherwise.
  *
@@ -224,8 +296,11 @@ gimp_item_id_is_channel (gint item_id)
  *
  * Returns whether the item ID is a layer mask.
  *
- * This procedure returns TRUE if the specified item ID is a layer
+ * This procedure returns %TRUE if the specified item ID is a layer
  * mask.
+ *
+ * *Note*: in most use cases, you should not use this function. See
+ * [func@Gimp.Item.id_is_layer] for a discussion on alternatives.
  *
  * Returns: TRUE if the item ID is a layer mask, FALSE otherwise.
  *
@@ -256,12 +331,55 @@ gimp_item_id_is_layer_mask (gint item_id)
 }
 
 /**
+ * gimp_item_id_is_path:
+ * @item_id: The item ID.
+ *
+ * Returns whether the item ID is a path.
+ *
+ * This procedure returns %TRUE if the specified item ID is a path.
+ *
+ * *Note*: in most use cases, you should not use this function. See
+ * [func@Gimp.Item.id_is_layer] for a discussion on alternatives.
+ *
+ * Returns: TRUE if the item ID is a path, FALSE otherwise.
+ *
+ * Since: 3.0
+ **/
+gboolean
+gimp_item_id_is_path (gint item_id)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean path = FALSE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_INT, item_id,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-id-is-path",
+                                               args);
+  gimp_value_array_unref (args);
+
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    path = GIMP_VALUES_GET_BOOLEAN (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
+
+  return path;
+}
+
+/**
  * gimp_item_id_is_selection:
  * @item_id: The item ID.
  *
  * Returns whether the item ID is a selection.
  *
- * This procedure returns TRUE if the specified item ID is a selection.
+ * This procedure returns %TRUE if the specified item ID is a
+ * selection.
+ *
+ * *Note*: in most use cases, you should not use this function. See
+ * [func@Gimp.Item.id_is_layer] for a discussion on alternatives.
  *
  * Returns: TRUE if the item ID is a selection, FALSE otherwise.
  *
@@ -289,42 +407,6 @@ gimp_item_id_is_selection (gint item_id)
   gimp_value_array_unref (return_vals);
 
   return selection;
-}
-
-/**
- * gimp_item_id_is_vectors:
- * @item_id: The item ID.
- *
- * Returns whether the item ID is a vectors.
- *
- * This procedure returns TRUE if the specified item ID is a vectors.
- *
- * Returns: TRUE if the item ID is a vectors, FALSE otherwise.
- *
- * Since: 3.0
- **/
-gboolean
-gimp_item_id_is_vectors (gint item_id)
-{
-  GimpValueArray *args;
-  GimpValueArray *return_vals;
-  gboolean vectors = FALSE;
-
-  args = gimp_value_array_new_from_types (NULL,
-                                          G_TYPE_INT, item_id,
-                                          G_TYPE_NONE);
-
-  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
-                                               "gimp-item-id-is-vectors",
-                                               args);
-  gimp_value_array_unref (args);
-
-  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
-    vectors = GIMP_VALUES_GET_BOOLEAN (return_vals, 1);
-
-  gimp_value_array_unref (return_vals);
-
-  return vectors;
 }
 
 /**
@@ -408,7 +490,7 @@ gimp_item_delete (GimpItem *item)
  *
  * Returns whether the item is a group item.
  *
- * This procedure returns TRUE if the specified item is a group item
+ * This procedure returns %TRUE if the specified item is a group item
  * which can have children.
  *
  * Returns: TRUE if the item is a group, FALSE otherwise.
@@ -476,24 +558,22 @@ gimp_item_get_parent (GimpItem *item)
 }
 
 /**
- * gimp_item_get_children: (skip)
+ * gimp_item_get_children:
  * @item: The item.
- * @num_children: (out): The item's number of children.
  *
  * Returns the item's list of children.
  *
  * This procedure returns the list of items which are children of the
  * specified item. The order is topmost to bottommost.
  *
- * Returns: (array length=num_children) (element-type GimpItem) (transfer container):
+ * Returns: (element-type GimpItem) (array zero-terminated=1) (transfer container):
  *          The item's list of children.
  *          The returned value must be freed with g_free().
  *
  * Since: 2.8
  **/
 GimpItem **
-gimp_item_get_children (GimpItem *item,
-                        gint     *num_children)
+gimp_item_get_children (GimpItem *item)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
@@ -508,13 +588,8 @@ gimp_item_get_children (GimpItem *item,
                                                args);
   gimp_value_array_unref (args);
 
-  *num_children = 0;
-
   if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
-    {
-      *num_children = GIMP_VALUES_GET_INT (return_vals, 1);
-      { GimpObjectArray *a = g_value_get_boxed (gimp_value_array_index (return_vals, 2)); if (a) children = g_memdup2 (a->data, a->length * sizeof (gpointer)); };
-    }
+    children = g_value_dup_boxed (gimp_value_array_index (return_vals, 1));
 
   gimp_value_array_unref (return_vals);
 
@@ -527,7 +602,7 @@ gimp_item_get_children (GimpItem *item,
  *
  * Returns whether the item is expanded.
  *
- * This procedure returns TRUE if the specified item is expanded.
+ * This procedure returns %TRUE if the specified item is expanded.
  *
  * Returns: TRUE if the item is expanded, FALSE otherwise.
  *

@@ -32,7 +32,7 @@
 #include "core/gimplayer.h"
 #include "core/gimpchannel.h"
 
-#include "vectors/gimpvectors.h"
+#include "vectors/gimppath.h"
 
 #include "widgets/gimppivotselector.h"
 #include "widgets/gimppropwidgets.h"
@@ -69,8 +69,10 @@ enum
 
 struct _GimpAlignOptionsPrivate
 {
+  GimpImage *image;
+
   gboolean   align_layers;
-  gboolean   align_vectors;
+  gboolean   align_paths;
   gboolean   align_contents;
   gdouble    pivot_x;
   gdouble    pivot_y;
@@ -225,7 +227,7 @@ gimp_align_options_set_property (GObject      *object,
       gimp_align_options_update_area (options);
       break;
     case PROP_ALIGN_VECTORS:
-      options->priv->align_vectors = g_value_get_boolean (value);
+      options->priv->align_paths = g_value_get_boolean (value);
       gimp_align_options_update_area (options);
       break;
 
@@ -264,7 +266,7 @@ gimp_align_options_get_property (GObject    *object,
       g_value_set_boolean (value, options->priv->align_layers);
       break;
     case PROP_ALIGN_VECTORS:
-      g_value_set_boolean (value, options->priv->align_vectors);
+      g_value_set_boolean (value, options->priv->align_paths);
       break;
 
     case PROP_ALIGN_CONTENTS:
@@ -571,11 +573,11 @@ gimp_align_options_get_objects (GimpAlignOptions *options)
           layers = g_list_copy (layers);
           objects = g_list_concat (objects, layers);
         }
-      if (options->priv->align_vectors)
+      if (options->priv->align_paths)
         {
           GList *vectors;
 
-          vectors = gimp_image_get_selected_vectors (image);
+          vectors = gimp_image_get_selected_paths (image);
           vectors = g_list_copy (vectors);
           objects = g_list_concat (objects, vectors);
         }
@@ -698,25 +700,22 @@ gimp_align_options_image_changed (GimpContext      *context,
                                   GimpImage        *image,
                                   GimpAlignOptions *options)
 {
-  GimpImage *prev_image;
-
-  prev_image = g_object_get_data (G_OBJECT (options), "gimp-align-options-image");
-
-  if (image != prev_image)
+  if (image != options->priv->image)
     {
       /* We cannot keep track of selected guides across image changes. */
       g_clear_pointer (&options->priv->selected_guides, g_list_free);
       gimp_align_options_pick_reference (options, NULL);
 
-      if (prev_image)
+      if (options->priv->image)
         {
-          g_signal_handlers_disconnect_by_func (prev_image,
+          g_signal_handlers_disconnect_by_func (options->priv->image,
                                                 G_CALLBACK (gimp_align_options_update_area),
                                                 options);
-          g_signal_handlers_disconnect_by_func (prev_image,
+          g_signal_handlers_disconnect_by_func (options->priv->image,
                                                 G_CALLBACK (gimp_align_options_guide_removed),
                                                 options);
         }
+      g_set_weak_pointer (&options->priv->image, image);
       if (image)
         {
           g_signal_connect_object (image, "selected-channels-changed",
@@ -730,7 +729,6 @@ gimp_align_options_image_changed (GimpContext      *context,
                                    options, 0);
         }
 
-      g_object_set_data (G_OBJECT (options), "gimp-align-options-image", image);
       gimp_align_options_update_area (options);
     }
 }
@@ -740,7 +738,7 @@ gimp_align_options_update_area (GimpAlignOptions *options)
 {
   GimpImage *image;
   GList     *layers           = NULL;
-  GList     *vectors          = NULL;
+  GList     *paths            = NULL;
   gboolean   enable_ver_align = FALSE;
   gboolean   enable_hor_align = FALSE;
   gboolean   enable_ver_distr = FALSE;
@@ -757,12 +755,12 @@ gimp_align_options_update_area (GimpAlignOptions *options)
   if (image)
     {
       layers = gimp_image_get_selected_layers (image);
-      vectors = gimp_image_get_selected_vectors (image);
+      paths  = gimp_image_get_selected_paths (image);
 
       if (options->priv->align_layers)
         n_items += g_list_length (layers);
-      if (options->priv->align_vectors)
-        n_items += g_list_length (vectors);
+      if (options->priv->align_paths)
+        n_items += g_list_length (paths);
 
       n_items += g_list_length (options->priv->selected_guides);
     }
@@ -826,7 +824,7 @@ gimp_align_options_update_area (GimpAlignOptions *options)
           else if (GIMP_IS_CHANNEL (options->priv->reference))
             tmp_txt = g_strdup_printf (_("Reference channel: %s"),
                                        gimp_object_get_name (options->priv->reference));
-          else if (GIMP_IS_VECTORS (options->priv->reference))
+          else if (GIMP_IS_PATH (options->priv->reference))
             tmp_txt = g_strdup_printf (_("Reference path: %s"),
                                        gimp_object_get_name (options->priv->reference));
           else if (GIMP_IS_GUIDE (options->priv->reference))

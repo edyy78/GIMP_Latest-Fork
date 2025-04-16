@@ -41,6 +41,7 @@
 #include "gimpdockwindow.h"
 #include "gimphelp-ids.h"
 #include "gimppanedbox.h"
+#include "gimpviewrenderer.h"
 #include "gimptoolbox.h"
 #include "gimptoolbox-color-area.h"
 #include "gimptoolbox-dnd.h"
@@ -48,6 +49,7 @@
 #include "gimptoolbox-indicator-area.h"
 #include "gimptoolpalette.h"
 #include "gimpuimanager.h"
+#include "gimpview.h"
 #include "gimpwidgets-utils.h"
 
 #include "about.h"
@@ -95,6 +97,7 @@ static void        gimp_toolbox_get_property            (GObject        *object,
                                                          GValue         *value,
                                                          GParamSpec     *pspec);
 
+static void        gimp_toolbox_style_updated           (GtkWidget      *widget);
 static gboolean    gimp_toolbox_button_press_event      (GtkWidget      *widget,
                                                          GdkEventButton *event);
 static void        gimp_toolbox_drag_leave              (GtkWidget      *widget,
@@ -162,6 +165,7 @@ gimp_toolbox_class_init (GimpToolboxClass *klass)
   object_class->get_property          = gimp_toolbox_get_property;
 
   widget_class->button_press_event    = gimp_toolbox_button_press_event;
+  widget_class->style_updated         = gimp_toolbox_style_updated;
 
   dock_class->get_description         = gimp_toolbox_get_description;
   dock_class->set_host_geometry_hints = gimp_toolbox_set_host_geometry_hints;
@@ -181,7 +185,7 @@ gimp_toolbox_init (GimpToolbox *toolbox)
 {
   toolbox->p = gimp_toolbox_get_instance_private (toolbox);
 
-  gimp_help_connect (GTK_WIDGET (toolbox), gimp_standard_help_func,
+  gimp_help_connect (GTK_WIDGET (toolbox), NULL, gimp_standard_help_func,
                      GIMP_HELP_TOOLBOX, NULL, NULL);
 }
 
@@ -202,7 +206,7 @@ gimp_toolbox_constructed (GObject *object)
   toolbox->p->vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
   gtk_box_pack_start (GTK_BOX (main_vbox), toolbox->p->vbox, FALSE, FALSE, 0);
   gtk_box_reorder_child (GTK_BOX (main_vbox), toolbox->p->vbox, 0);
-  gtk_widget_show (toolbox->p->vbox);
+  gtk_widget_set_visible (toolbox->p->vbox, TRUE);
 
   /* Use g_signal_connect() also for the toolbox itself so we can pass
    * data and reuse the same function for the vbox
@@ -226,12 +230,25 @@ gimp_toolbox_constructed (GObject *object)
                     G_CALLBACK (gimp_toolbox_drag_drop),
                     toolbox);
 
+  g_signal_connect_object (config,
+                           "notify::theme",
+                           G_CALLBACK (gimp_toolbox_style_updated),
+                           toolbox, G_CONNECT_AFTER | G_CONNECT_SWAPPED);
+  g_signal_connect_object (config,
+                           "notify::override-theme-icon-size",
+                           G_CALLBACK (gimp_toolbox_style_updated),
+                           toolbox, G_CONNECT_AFTER | G_CONNECT_SWAPPED);
+  g_signal_connect_object (config,
+                           "notify::custom-icon-size",
+                           G_CALLBACK (gimp_toolbox_style_updated),
+                           toolbox, G_CONNECT_AFTER | G_CONNECT_SWAPPED);
+
   event_box = gtk_event_box_new ();
   gtk_box_pack_start (GTK_BOX (toolbox->p->vbox), event_box, FALSE, FALSE, 0);
   g_signal_connect_swapped (event_box, "button-press-event",
                             G_CALLBACK (gimp_toolbox_button_press_event),
                             toolbox);
-  gtk_widget_show (event_box);
+  gtk_widget_set_visible (event_box, TRUE);
 
   toolbox->p->header = gtk_frame_new (NULL);
   gtk_frame_set_shadow_type (GTK_FRAME (toolbox->p->header), GTK_SHADOW_NONE);
@@ -256,14 +273,16 @@ gimp_toolbox_constructed (GObject *object)
                                  toolbox);
   gtk_box_pack_start (GTK_BOX (toolbox->p->vbox), toolbox->p->tool_palette,
                       FALSE, FALSE, 0);
-  gtk_widget_show (toolbox->p->tool_palette);
+  gtk_widget_set_visible (toolbox->p->tool_palette, TRUE);
 
   toolbox->p->area_box = gtk_flow_box_new ();
   gtk_flow_box_set_selection_mode (GTK_FLOW_BOX (toolbox->p->area_box),
                                    GTK_SELECTION_NONE);
+  gtk_flow_box_set_max_children_per_line (GTK_FLOW_BOX (toolbox->p->area_box),
+                                          3);
   gtk_box_pack_start (GTK_BOX (toolbox->p->vbox), toolbox->p->area_box,
                       FALSE, FALSE, 0);
-  gtk_widget_show (toolbox->p->area_box);
+  gtk_widget_set_visible (toolbox->p->area_box, TRUE);
 
   gtk_widget_add_events (GTK_WIDGET (toolbox), GDK_POINTER_MOTION_MASK);
   gimp_devices_add_widget (toolbox->p->context->gimp, GTK_WIDGET (toolbox));
@@ -349,6 +368,45 @@ gimp_toolbox_get_property (GObject    *object,
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
       break;
     }
+}
+
+static void
+gimp_toolbox_style_updated (GtkWidget *widget)
+{
+  GimpToolbox  *toolbox = GIMP_TOOLBOX (widget);
+  GtkWidget    *area;
+  GtkIconSize   tool_icon_size;
+  gint          pixel_size;
+  gint          width;
+  gint          height;
+
+  gtk_widget_style_get (widget,
+                        "tool-icon-size", &tool_icon_size,
+                        NULL);
+  gtk_icon_size_lookup (tool_icon_size, &pixel_size, NULL);
+
+  width  = pixel_size * (13/6.0f);
+  height = pixel_size * 1.75f;
+
+  /* Image Area */
+  area = gtk_grid_get_child_at (GTK_GRID (toolbox->p->image_area), 0, 0);
+  gimp_view_renderer_set_size_full (GIMP_VIEW (area)->renderer,
+                                    width, height, 0);
+
+  /* Brush Area */
+  area = gtk_grid_get_child_at (GTK_GRID (toolbox->p->foo_area), 0, 0);
+  gimp_view_renderer_set_size_full (GIMP_VIEW (area)->renderer,
+                                    pixel_size, pixel_size, 0);
+
+  /* Pattern Area */
+  area = gtk_grid_get_child_at (GTK_GRID (toolbox->p->foo_area), 1, 0);
+  gimp_view_renderer_set_size_full (GIMP_VIEW (area)->renderer,
+                                    pixel_size, pixel_size, 0);
+
+  /* Gradient Area */
+  area = gtk_grid_get_child_at (GTK_GRID (toolbox->p->foo_area), 0, 1);
+  gimp_view_renderer_set_size_full (GIMP_VIEW (area)->renderer,
+                                    width, (pixel_size / 2), 0);
 }
 
 static gboolean
@@ -645,8 +703,8 @@ toolbox_create_color_area (GimpToolbox *toolbox,
   g_object_set (col_area,
                 "halign",        GTK_ALIGN_CENTER,
                 "valign",        GTK_ALIGN_CENTER,
-                "margin-left",   2,
-                "margin-right",  2,
+                "margin-start",  2,
+                "margin-end",    2,
                 "margin-top",    2,
                 "margin-bottom", 2,
                 NULL);
@@ -679,8 +737,8 @@ toolbox_create_foo_area (GimpToolbox *toolbox,
   g_object_set (foo_area,
                 "halign",        GTK_ALIGN_CENTER,
                 "valign",        GTK_ALIGN_CENTER,
-                "margin-left",   2,
-                "margin-right",  2,
+                "margin-start",  2,
+                "margin-end",    2,
                 "margin-top",    2,
                 "margin-bottom", 2,
                 NULL);
@@ -692,19 +750,37 @@ static GtkWidget *
 toolbox_create_image_area (GimpToolbox *toolbox,
                            GimpContext *context)
 {
-  GtkWidget *image_area;
+  GtkWidget   *image_area;
+  GtkWidget   *grid;
+  GtkIconSize  tool_icon_size;
+  gint         width = 52;
+  gint         height = 42;
 
-  image_area = gimp_toolbox_image_area_create (toolbox, 52, 42);
-  g_object_set (image_area,
+  grid = gtk_grid_new ();
+  gtk_grid_set_row_spacing (GTK_GRID (grid), 2);
+  gtk_grid_set_column_spacing (GTK_GRID (grid), 2);
+
+  gtk_widget_style_get (GTK_WIDGET (toolbox),
+                        "tool-icon-size", &tool_icon_size,
+                        NULL);
+  gtk_icon_size_lookup (tool_icon_size, &width, &height);
+  width  *= (13/6.0f);
+  height *= 1.75f;
+
+  image_area = gimp_toolbox_image_area_create (toolbox, width, height);
+  gtk_grid_attach (GTK_GRID (grid), image_area, 0, 0, 1, 1);
+  gtk_widget_set_visible (grid, TRUE);
+
+  g_object_set (grid,
                 "halign",        GTK_ALIGN_CENTER,
                 "valign",        GTK_ALIGN_CENTER,
-                "margin-left",   2,
-                "margin-right",  2,
+                "margin-start",  2,
+                "margin-end",    2,
                 "margin-top",    2,
                 "margin-bottom", 2,
                 NULL);
 
-  return image_area;
+  return grid;
 }
 
 static void

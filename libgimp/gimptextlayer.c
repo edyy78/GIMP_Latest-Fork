@@ -30,8 +30,6 @@ struct _GimpTextLayer
 };
 
 
-static GimpLayer * gimp_text_layer_copy (GimpLayer *layer);
-
 
 G_DEFINE_TYPE (GimpTextLayer, gimp_text_layer, GIMP_TYPE_LAYER)
 
@@ -41,9 +39,6 @@ G_DEFINE_TYPE (GimpTextLayer, gimp_text_layer, GIMP_TYPE_LAYER)
 static void
 gimp_text_layer_class_init (GimpTextLayerClass *klass)
 {
-  GimpLayerClass *layer_class = GIMP_LAYER_CLASS (klass);
-
-  layer_class->copy = gimp_text_layer_copy;
 }
 
 static void
@@ -78,62 +73,4 @@ gimp_text_layer_get_by_id (gint32 layer_id)
     return (GimpTextLayer *) item;
 
   return NULL;
-}
-
-/**
- * gimp_text_layer_new:
- * @image: The image to which to add the layer.
- * @text:  The text to generate (in UTF-8 encoding).
- * @font:  The name of the font.
- * @size:  The size of text in either pixels or points.
- * @unit:  The units of specified size.
- *
- * Create a new layer.
- *
- * This procedure creates a new text layer displaying the specified @text. By
- * default the width and height of the layer will be determined by the @text
- * contents, the @fontname, @size and @unit.
- *
- * The new layer still needs to be added to the image, as this is not automatic.
- * Add the new layer with the gimp_image_insert_layer() command. Other
- * attributes such as layer mask modes, and offsets should be set with explicit
- * procedure calls.
- *
- * Returns: (transfer none): The newly created text layer.
- *          The object belongs to libgimp and you should not free it.
- *
- * Since: 3.0
- */
-GimpTextLayer *
-gimp_text_layer_new (GimpImage   *image,
-                     const gchar *text,
-                     GimpFont    *font,
-                     gdouble      size,
-                     GimpUnit     unit)
-{
-  return _gimp_text_layer_new (image, text, font, size, unit);
-}
-
-
-/*  private functions  */
-
-static GimpLayer *
-gimp_text_layer_copy (GimpLayer *layer)
-{
-  GimpTextLayer *new_layer;
-  gchar         *text;
-  GimpFont      *font;
-  gdouble        size;
-  GimpUnit       unit;
-
-  g_return_val_if_fail (GIMP_IS_TEXT_LAYER (layer), NULL);
-
-  text      = gimp_text_layer_get_text (GIMP_TEXT_LAYER (layer));
-  font      = gimp_text_layer_get_font (GIMP_TEXT_LAYER (layer));
-  size      = gimp_text_layer_get_font_size (GIMP_TEXT_LAYER (layer), &unit);
-  new_layer = gimp_text_layer_new (gimp_item_get_image (GIMP_ITEM (layer)),
-                                   text, font, size, unit);
-  g_free (text);
-
-  return GIMP_LAYER (new_layer);
 }

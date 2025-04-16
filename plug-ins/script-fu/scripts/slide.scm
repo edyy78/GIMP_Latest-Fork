@@ -44,7 +44,7 @@
 
 
 (define (script-fu-slide img
-                         drawable
+                         drawables
                          text
                          number
                          font
@@ -59,6 +59,7 @@
   )
 
   (let* (
+        (drawable (vector-ref drawables 0))
         (type (car (gimp-drawable-type-with-alpha drawable)))
         (image (cond ((= work-on-copy TRUE)
                       (car (gimp-image-duplicate img)))
@@ -76,22 +77,22 @@
         (hole-space (/ width 8))
         (hole-height (/ width 12))
         (hole-radius (/ hole-width 4))
-        (hole-start (- (/ (rand 1000) 1000) 0.5))
+        (hole-start (- (/ (random 1000) 1000) 0.5))
         (film-layer (car (gimp-layer-new image
+                                         "Film"
                                          width
                                          height
                                          type
-                                         "Film"
                                          100
                                          LAYER-MODE-NORMAL)))
         (bg-layer (car (gimp-layer-new image
+                                       "Background"
                                        width
                                        height
                                        type
-                                       "Background"
                                        100
                                        LAYER-MODE-NORMAL)))
-        (pic-layer (aref (cadr (gimp-image-get-selected-drawables image)) 0))
+        (pic-layer (vector-ref (car (gimp-image-get-selected-drawables image)) 0))
         (numbera (string-append number "A"))
         )
 
@@ -120,7 +121,10 @@
                      (/ (- width crop-width) 2)
                      (/ (- height crop-height) 2))
   (if (< ratio 1)
-      (plug-in-rotate RUN-NONINTERACTIVE image pic-layer 1 FALSE)
+      (begin
+          (gimp-selection-none image)
+          (gimp-item-transform-rotate-simple pic-layer ROTATE-DEGREES90 TRUE 0 0)
+      )
   )
 
 ; add the background layer
@@ -214,7 +218,10 @@
     (gimp-context-set-foreground '(0 0 0))
     (gimp-drawable-edit-fill film-mask FILL-BACKGROUND)
     (gimp-selection-none image)
-    (plug-in-gauss-rle RUN-NONINTERACTIVE image film-mask hole-radius TRUE TRUE)
+    (gimp-drawable-merge-new-filter film-mask "gegl:gaussian-blur" 0 LAYER-MODE-REPLACE 1.0
+                                    "std-dev-x" (* 0.32 hole-radius)
+                                    "std-dev-y" (* 0.32 hole-radius)
+                                    "filter" "auto")
     (gimp-drawable-threshold film-mask HISTOGRAM-VALUE 0.5 1.0)
 
     (gimp-layer-remove-mask film-layer MASK-APPLY)
@@ -226,7 +233,7 @@
 
 ; eventually rotate the whole thing back
   (if (< ratio 1)
-      (plug-in-rotate RUN-NONINTERACTIVE image pic-layer 3 TRUE)
+      (gimp-image-rotate image ROTATE-DEGREES270)
   )
 
 ; clean up after the script
@@ -246,15 +253,14 @@
   )
 )
 
-(script-fu-register "script-fu-slide"
+(script-fu-register-filter "script-fu-slide"
   _"_Slide..."
   _"Add a slide-film like frame, sprocket holes, and labels to an image"
   "Sven Neumann <sven@gimp.org>"
   "Sven Neumann"
   "2004/03/28"
   "RGB GRAY"
-  SF-IMAGE     "Image"         0
-  SF-DRAWABLE  "Drawable"      0
+  SF-ONE-OR-MORE-DRAWABLE
   SF-STRING   _"Text"          "GIMP"
   SF-STRING   _"Number"        "32"
   SF-FONT     _"Font"          "Serif"

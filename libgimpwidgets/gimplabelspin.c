@@ -62,6 +62,8 @@ typedef struct _GimpLabelSpinPrivate
   GtkAdjustment *spin_adjustment;
 
   gint           digits;
+
+  gdouble        value;
 } GimpLabelSpinPrivate;
 
 static void        gimp_label_spin_constructed       (GObject       *object);
@@ -135,7 +137,7 @@ gimp_label_spin_class_init (GimpLabelSpinClass *klass)
   g_object_class_install_property (object_class, PROP_LOWER,
                                    g_param_spec_double ("lower", NULL,
                                                         "Minimum value",
-                                                        -G_MAXDOUBLE, G_MAXDOUBLE, 1.0,
+                                                        -G_MAXDOUBLE, G_MAXDOUBLE, 0.0,
                                                         GIMP_PARAM_READWRITE |
                                                         G_PARAM_CONSTRUCT));
 
@@ -149,7 +151,7 @@ gimp_label_spin_class_init (GimpLabelSpinClass *klass)
   g_object_class_install_property (object_class, PROP_UPPER,
                                    g_param_spec_double ("upper", NULL,
                                                         "Max value",
-                                                        -G_MAXDOUBLE, G_MAXDOUBLE, 0.0,
+                                                        -G_MAXDOUBLE, G_MAXDOUBLE, 1.0,
                                                         GIMP_PARAM_READWRITE |
                                                         G_PARAM_CONSTRUCT));
 
@@ -216,13 +218,11 @@ gimp_label_spin_set_property (GObject      *object,
   switch (property_id)
     {
     case PROP_VALUE:
-      /* Avoid looping forever since we have bound this widget's
-       * "value" property with the spin button "value" property.
-       */
-      if (gtk_adjustment_get_value (priv->spin_adjustment) != g_value_get_double (value))
-        gtk_adjustment_set_value (priv->spin_adjustment, g_value_get_double (value));
-
-      g_signal_emit (object, gimp_label_spin_signals[VALUE_CHANGED], 0);
+      if (priv->value != g_value_get_double (value))
+        {
+          priv->value = g_value_get_double (value);
+          g_signal_emit (object, gimp_label_spin_signals[VALUE_CHANGED], 0);
+        }
       break;
     case PROP_LOWER:
       gtk_adjustment_set_lower (priv->spin_adjustment,
@@ -267,7 +267,7 @@ gimp_label_spin_get_property (GObject    *object,
   switch (property_id)
     {
     case PROP_VALUE:
-      g_value_set_double (value, gtk_adjustment_get_value (priv->spin_adjustment));
+      g_value_set_double (value, priv->value);
       break;
     case PROP_LOWER:
       g_value_set_double (value, gtk_adjustment_get_lower (priv->spin_adjustment));
@@ -339,6 +339,7 @@ gimp_label_spin_update_settings (GimpLabelSpin *spin)
   gdouble               step;
   gdouble               page;
   gint                  digits = priv->digits;
+  gboolean              adjust_step = (digits == 0);
 
   g_return_if_fail (GIMP_IS_LABEL_SPIN (spin));
 
@@ -351,6 +352,14 @@ gimp_label_spin_update_settings (GimpLabelSpin *spin)
 
   gimp_range_estimate_settings (lower, upper, &step, &page,
                                 digits < 0 ? &digits: NULL);
+
+  if (adjust_step && digits == 0 && step < 1.0)
+    {
+      step = 1.0;
+      if (page < step)
+        page = step;
+    }
+
   gimp_label_spin_set_increments (spin, step, page);
   gtk_spin_button_set_digits (GTK_SPIN_BUTTON (priv->spinbutton), (guint) digits);
   gimp_label_spin_update_spin_width (spin, lower, upper, (guint) digits);

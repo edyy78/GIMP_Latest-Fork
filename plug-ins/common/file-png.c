@@ -38,7 +38,7 @@
 
 
 #define LOAD_PROC       "file-png-load"
-#define SAVE_PROC       "file-png-save"
+#define EXPORT_PROC     "file-png-export"
 #define PLUG_IN_BINARY  "file-png"
 #define PLUG_IN_ROLE    "gimp-file-png"
 
@@ -93,12 +93,11 @@ static GimpValueArray * png_load             (GimpProcedure         *procedure,
                                               GimpMetadataLoadFlags *flags,
                                               GimpProcedureConfig   *config,
                                               gpointer               run_data);
-static GimpValueArray * png_save             (GimpProcedure         *procedure,
+static GimpValueArray * png_export           (GimpProcedure         *procedure,
                                               GimpRunMode            run_mode,
                                               GimpImage             *image,
-                                              gint                   n_drawables,
-                                              GimpDrawable         **drawables,
                                               GFile                 *file,
+                                              GimpExportOptions     *options,
                                               GimpMetadata          *metadata,
                                               GimpProcedureConfig   *config,
                                               gpointer               run_data);
@@ -108,7 +107,7 @@ static GimpImage * load_image                (GFile                 *file,
                                               gboolean              *resolution_loaded,
                                               gboolean              *profile_loaded,
                                               GError               **error);
-static gboolean    save_image                (GFile                 *file,
+static gboolean    export_image              (GFile                 *file,
                                               GimpImage             *image,
                                               GimpDrawable          *drawable,
                                               GimpImage             *orig_image,
@@ -123,7 +122,7 @@ static int         respin_cmap               (png_structp            pp,
                                               GimpImage             *image,
                                               GimpDrawable          *drawable);
 
-static gboolean    save_dialog               (GimpImage             *image,
+static gboolean    export_dialog             (GimpImage             *image,
                                               GimpProcedure         *procedure,
                                               GObject               *config,
                                               gboolean               alpha);
@@ -167,7 +166,7 @@ png_query_procedures (GimpPlugIn *plug_in)
   GList *list = NULL;
 
   list = g_list_append (list, g_strdup (LOAD_PROC));
-  list = g_list_append (list, g_strdup (SAVE_PROC));
+  list = g_list_append (list, g_strdup (EXPORT_PROC));
 
   return list;
 }
@@ -206,11 +205,11 @@ png_create_procedure (GimpPlugIn  *plug_in,
       gimp_file_procedure_set_magics (GIMP_FILE_PROCEDURE (procedure),
                                       "0,string,\211PNG\r\n\032\n");
     }
-  else if (! strcmp (name, SAVE_PROC))
+  else if (! strcmp (name, EXPORT_PROC))
     {
-      procedure = gimp_save_procedure_new (plug_in, name,
-                                           GIMP_PDB_PROC_TYPE_PLUGIN,
-                                           TRUE, png_save, NULL, NULL);
+      procedure = gimp_export_procedure_new (plug_in, name,
+                                             GIMP_PDB_PROC_TYPE_PLUGIN,
+                                             TRUE, png_export, NULL, NULL);
 
       gimp_procedure_set_image_types (procedure, "*");
 
@@ -236,79 +235,86 @@ png_create_procedure (GimpPlugIn  *plug_in,
       gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
                                           "png");
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "interlaced",
-                             _("_Interlacing (Adam7)"),
-                             _("Use Adam7 interlacing"),
-                             FALSE,
-                             G_PARAM_READWRITE);
+      gimp_export_procedure_set_capabilities (GIMP_EXPORT_PROCEDURE (procedure),
+                                              GIMP_EXPORT_CAN_HANDLE_RGB     |
+                                              GIMP_EXPORT_CAN_HANDLE_GRAY    |
+                                              GIMP_EXPORT_CAN_HANDLE_INDEXED |
+                                              GIMP_EXPORT_CAN_HANDLE_ALPHA,
+                                              NULL, NULL, NULL);
 
-      GIMP_PROC_ARG_INT (procedure, "compression",
-                         _("Co_mpression level"),
-                         _("Deflate Compression factor (0..9)"),
-                         0, 9, 9,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "interlaced",
+                                           _("_Interlacing (Adam7)"),
+                                           _("Use Adam7 interlacing"),
+                                           FALSE,
+                                           G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "bkgd",
-                             _("Save _background color"),
-                             _("Write bKGD chunk (PNG metadata)"),
-                             TRUE,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "compression",
+                                       _("Co_mpression level"),
+                                       _("Deflate Compression factor (0..9)"),
+                                       0, 9, 9,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "offs",
-                             _("Save layer o_ffset"),
-                             _("Write oFFs chunk (PNG metadata)"),
-                             FALSE,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "bkgd",
+                                           _("Save _background color"),
+                                           _("Write bKGD chunk (PNG metadata)"),
+                                           TRUE,
+                                           G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "phys",
-                             _("Save resol_ution"),
-                             _("Write pHYs chunk (PNG metadata)"),
-                             TRUE,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "offs",
+                                           _("Save layer o_ffset"),
+                                           _("Write oFFs chunk (PNG metadata)"),
+                                           FALSE,
+                                           G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "time",
-                             _("Save creation _time"),
-                             _("Write tIME chunk (PNG metadata)"),
-                             TRUE,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "phys",
+                                           _("Save resol_ution"),
+                                           _("Write pHYs chunk (PNG metadata)"),
+                                           TRUE,
+                                           G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "save-transparent",
-                             _("Save color _values from transparent pixels"),
-                             _("Preserve color of completely transparent pixels"),
-                             FALSE,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "time",
+                                           _("Save creation _time"),
+                                           _("Write tIME chunk (PNG metadata)"),
+                                           TRUE,
+                                           G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "optimize-palette",
-                             _("_Optimize for smallest possible palette size"),
-                             _("When checked, save as 1, 2, 4, or 8-bit depending"
-                               " on number of colors used. When unchecked, always"
-                               " save as 8-bit"),
-                             FALSE,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "save-transparent",
+                                           _("Save color _values from transparent pixels"),
+                                           _("Preserve color of completely transparent pixels"),
+                                           FALSE,
+                                           G_PARAM_READWRITE);
 
-      GIMP_PROC_AUX_ARG_CHOICE (procedure, "format",
-                                _("_Pixel format"),
-                                _("PNG export format"),
-                                gimp_choice_new_with_values ("auto",    PNG_FORMAT_AUTO,    _("Automatic"),    NULL,
-                                                             "rgb8",    PNG_FORMAT_RGB8,    _("8 bpc RGB"),    NULL,
-                                                             "gray8",   PNG_FORMAT_GRAY8,   _("8 bpc GRAY"),   NULL,
-                                                             "rgba8",   PNG_FORMAT_RGBA8,   _("8 bpc RGBA"),   NULL,
-                                                             "graya8",  PNG_FORMAT_GRAYA8,  _("8 bpc GRAYA"),  NULL,
-                                                             "rgb16",   PNG_FORMAT_RGB16,   _("16 bpc RGB"),   NULL,
-                                                             "gray16",  PNG_FORMAT_GRAY16,  _("16 bpc GRAY"),  NULL,
-                                                             "rgba16",  PNG_FORMAT_RGBA16,  _("16 bpc RGBA"),  NULL,
-                                                             "graya16", PNG_FORMAT_GRAYA16, _("16 bpc GRAYA"), NULL,
-                                                             NULL),
-                                "auto", G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "optimize-palette",
+                                           _("_Optimize for smallest possible palette size"),
+                                           _("When checked, save as 1, 2, 4, or 8-bit depending"
+                                             " on number of colors used. When unchecked, always"
+                                             " save as 8-bit"),
+                                           FALSE,
+                                           G_PARAM_READWRITE);
 
-      gimp_save_procedure_set_support_exif      (GIMP_SAVE_PROCEDURE (procedure), TRUE);
-      gimp_save_procedure_set_support_iptc      (GIMP_SAVE_PROCEDURE (procedure), TRUE);
-      gimp_save_procedure_set_support_xmp       (GIMP_SAVE_PROCEDURE (procedure), TRUE);
+      gimp_procedure_add_choice_argument (procedure, "format",
+                                          _("_Pixel format"),
+                                          _("PNG export format"),
+                                          gimp_choice_new_with_values ("auto",    PNG_FORMAT_AUTO,    _("Automatic"),    NULL,
+                                                                       "rgb8",    PNG_FORMAT_RGB8,    _("8 bpc RGB"),    NULL,
+                                                                       "gray8",   PNG_FORMAT_GRAY8,   _("8 bpc GRAY"),   NULL,
+                                                                       "rgba8",   PNG_FORMAT_RGBA8,   _("8 bpc RGBA"),   NULL,
+                                                                       "graya8",  PNG_FORMAT_GRAYA8,  _("8 bpc GRAYA"),  NULL,
+                                                                       "rgb16",   PNG_FORMAT_RGB16,   _("16 bpc RGB"),   NULL,
+                                                                       "gray16",  PNG_FORMAT_GRAY16,  _("16 bpc GRAY"),  NULL,
+                                                                       "rgba16",  PNG_FORMAT_RGBA16,  _("16 bpc RGBA"),  NULL,
+                                                                       "graya16", PNG_FORMAT_GRAYA16, _("16 bpc GRAYA"), NULL,
+                                                                       NULL),
+                                          "auto", G_PARAM_READWRITE);
+
+      gimp_export_procedure_set_support_exif      (GIMP_EXPORT_PROCEDURE (procedure), TRUE);
+      gimp_export_procedure_set_support_iptc      (GIMP_EXPORT_PROCEDURE (procedure), TRUE);
+      gimp_export_procedure_set_support_xmp       (GIMP_EXPORT_PROCEDURE (procedure), TRUE);
 #if defined(PNG_iCCP_SUPPORTED)
-      gimp_save_procedure_set_support_profile   (GIMP_SAVE_PROCEDURE (procedure), TRUE);
+      gimp_export_procedure_set_support_profile   (GIMP_EXPORT_PROCEDURE (procedure), TRUE);
 #endif
-      gimp_save_procedure_set_support_thumbnail (GIMP_SAVE_PROCEDURE (procedure), TRUE);
-      gimp_save_procedure_set_support_comment   (GIMP_SAVE_PROCEDURE (procedure), TRUE);
+      gimp_export_procedure_set_support_thumbnail (GIMP_EXPORT_PROCEDURE (procedure), TRUE);
+      gimp_export_procedure_set_support_comment   (GIMP_EXPORT_PROCEDURE (procedure), TRUE);
     }
 
   return procedure;
@@ -365,61 +371,29 @@ png_load (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
-png_save (GimpProcedure        *procedure,
-          GimpRunMode           run_mode,
-          GimpImage            *image,
-          gint                  n_drawables,
-          GimpDrawable        **drawables,
-          GFile                *file,
-          GimpMetadata         *metadata,
-          GimpProcedureConfig  *config,
-          gpointer              run_data)
+png_export (GimpProcedure        *procedure,
+            GimpRunMode           run_mode,
+            GimpImage            *image,
+            GFile                *file,
+            GimpExportOptions    *options,
+            GimpMetadata         *metadata,
+            GimpProcedureConfig  *config,
+            gpointer              run_data)
 {
   GimpPDBStatusType  status = GIMP_PDB_SUCCESS;
-  GimpExportReturn   export = GIMP_EXPORT_CANCEL;
+  GimpExportReturn   export = GIMP_EXPORT_IGNORE;
+  GList             *drawables;
   GimpImage         *orig_image;
   gboolean           alpha;
-  GError            *error = NULL;
+  GError            *error  = NULL;
 
   gegl_init (NULL, NULL);
 
   orig_image = image;
 
-  switch (run_mode)
-    {
-    case GIMP_RUN_INTERACTIVE:
-    case GIMP_RUN_WITH_LAST_VALS:
-      gimp_ui_init (PLUG_IN_BINARY);
-
-      export = gimp_export_image (&image, &n_drawables, &drawables, "PNG",
-                                  GIMP_EXPORT_CAN_HANDLE_RGB     |
-                                  GIMP_EXPORT_CAN_HANDLE_GRAY    |
-                                  GIMP_EXPORT_CAN_HANDLE_INDEXED |
-                                  GIMP_EXPORT_CAN_HANDLE_ALPHA);
-
-      if (export == GIMP_EXPORT_CANCEL)
-        return gimp_procedure_new_return_values (procedure, GIMP_PDB_CANCEL,
-                                                 NULL);
-      break;
-
-    default:
-      break;
-    }
-
-  if (n_drawables != 1)
-    {
-      /* PNG images have no layer concept. Export image should have a
-       * single drawable selected.
-       */
-      g_set_error (&error, G_FILE_ERROR, 0,
-                   _("PNG format does not support multiple layers."));
-
-      return gimp_procedure_new_return_values (procedure,
-                                               GIMP_PDB_CALLING_ERROR,
-                                               error);
-    }
-
-  alpha = gimp_drawable_has_alpha (drawables[0]);
+  export = gimp_export_options_get_image (options, &image);
+  drawables = gimp_image_list_layers (image);
+  alpha = gimp_drawable_has_alpha (drawables->data);
 
   /* If the image has no transparency, then there is usually no need
    * to save a bKGD chunk. For more information, see:
@@ -432,7 +406,9 @@ png_save (GimpProcedure        *procedure,
 
   if (run_mode == GIMP_RUN_INTERACTIVE)
     {
-      if (! save_dialog (orig_image, procedure, G_OBJECT (config), alpha))
+      gimp_ui_init (PLUG_IN_BINARY);
+
+      if (! export_dialog (orig_image, procedure, G_OBJECT (config), alpha))
         status = GIMP_PDB_CANCEL;
     }
 
@@ -440,9 +416,9 @@ png_save (GimpProcedure        *procedure,
     {
       gint bits_per_sample;
 
-      if (save_image (file, image, drawables[0], orig_image, G_OBJECT (config),
-                      &bits_per_sample, run_mode != GIMP_RUN_NONINTERACTIVE,
-                      &error))
+      if (export_image (file, image, drawables->data, orig_image, G_OBJECT (config),
+                        &bits_per_sample, run_mode != GIMP_RUN_NONINTERACTIVE,
+                        &error))
         {
           if (metadata)
             gimp_metadata_set_bits_per_sample (metadata, bits_per_sample);
@@ -454,11 +430,9 @@ png_save (GimpProcedure        *procedure,
     }
 
   if (export == GIMP_EXPORT_EXPORT)
-    {
-      gimp_image_delete (image);
-      g_free (drawables);
-    }
+    gimp_image_delete (image);
 
+  g_list_free (drawables);
   return gimp_procedure_new_return_values (procedure, status, error);
 }
 
@@ -1016,7 +990,7 @@ load_image (GFile        *file,
               gimp_image_set_resolution ((GimpImage *) image,
                                          (gdouble) xres * 0.0254,
                                          (gdouble) yres * 0.0254);
-              gimp_image_set_unit ((GimpImage *) image, GIMP_UNIT_MM);
+              gimp_image_set_unit ((GimpImage *) image, gimp_unit_mm ());
 
               *resolution_loaded = TRUE;
               break;
@@ -1038,8 +1012,8 @@ load_image (GFile        *file,
       int num_palette;
 
       png_get_PLTE (pp, info, &palette, &num_palette);
-      gimp_image_set_colormap ((GimpImage *) image, (guchar *) palette,
-                               num_palette);
+      gimp_palette_set_colormap (gimp_image_get_palette ((GimpImage *) image), babl_format ("R'G'B' u8"),
+                                 (guchar *) palette, num_palette * 3);
     }
 
   bpp = babl_format_get_bytes_per_pixel (file_format);
@@ -1278,7 +1252,7 @@ offsets_dialog (gint offset_x,
 }
 
 /*
- * 'save_image ()' - Export the specified image to a PNG file.
+ * 'export_image ()' - Export the specified image to a PNG file.
  */
 
 typedef struct
@@ -1295,14 +1269,14 @@ PngGlobals;
 static PngGlobals pngg;
 
 static gboolean
-save_image (GFile        *file,
-            GimpImage    *image,
-            GimpDrawable *drawable,
-            GimpImage    *orig_image,
-            GObject      *config,
-            gint         *bits_per_sample,
-            gboolean      report_progress,
-            GError      **error)
+export_image (GFile        *file,
+              GimpImage    *image,
+              GimpDrawable *drawable,
+              GimpImage    *orig_image,
+              GObject      *config,
+              gint         *bits_per_sample,
+              gboolean      report_progress,
+              GError      **error)
 {
   gint              i, k;             /* Looping vars */
   gint              bpp = 0;          /* Bytes per pixel */
@@ -1330,7 +1304,6 @@ save_image (GFile        *file,
   guchar           *fixed;            /* Fixed-up pixel data */
   guchar           *pixel;            /* Pixel data */
   gdouble           xres, yres;       /* GIMP resolution (dpi) */
-  png_color_16      background;       /* Background color */
   png_time          mod_time;         /* Modification time (ie NOW) */
   time_t            cutime;           /* Time since epoch */
   struct tm        *gmt;              /* GMT broken down */
@@ -1356,22 +1329,22 @@ save_image (GFile        *file,
 
 #if !defined(PNG_iCCP_SUPPORTED)
   g_object_set (config,
-                "save-color-profile", FALSE,
+                "include-color-profile", FALSE,
                 NULL);
 #endif
 
   g_object_get (config,
-                "interlaced",         &save_interlaced,
-                "bkgd",               &save_bkgd,
-                "offs",               &save_offs,
-                "phys",               &save_phys,
-                "time",               &save_time,
-                "save-comment",       &save_comment,
-                "gimp-comment",       &comment,
-                "save-transparent",   &save_transp_pixels,
-                "optimize-palette",   &optimize_palette,
-                "compression",        &compression_level,
-                "save-color-profile", &save_profile,
+                "interlaced",            &save_interlaced,
+                "bkgd",                  &save_bkgd,
+                "offs",                  &save_offs,
+                "phys",                  &save_phys,
+                "time",                  &save_time,
+                "include-comment",       &save_comment,
+                "gimp-comment",          &comment,
+                "save-transparent",      &save_transp_pixels,
+                "optimize-palette",      &optimize_palette,
+                "compression",           &compression_level,
+                "include-color-profile", &save_profile,
                 NULL);
 
   export_format = gimp_procedure_config_get_choice_id (GIMP_PROCEDURE_CONFIG (config), "format");
@@ -1621,9 +1594,9 @@ save_image (GFile        *file,
         color_type = PNG_COLOR_TYPE_PALETTE;
         file_format = gimp_drawable_get_format (drawable);
         pngg.has_plte = TRUE;
-        pngg.palette = (png_colorp) gimp_image_get_colormap (image,
-                                                             NULL,
-                                                             &pngg.num_palette);
+        pngg.palette = (png_colorp) gimp_palette_get_colormap (gimp_image_get_palette (image),
+                                                               babl_format ("R'G'B' u8"),
+                                                               &pngg.num_palette, NULL);
         if (optimize_palette)
           bit_depth = get_bit_depth_for_palette (pngg.num_palette);
         break;
@@ -1743,21 +1716,46 @@ save_image (GFile        *file,
 
   if (save_bkgd)
     {
-      GeglColor *color;
-      GimpRGB    rgb;
-      guchar     c[3];
-
-      color = gimp_context_get_background ();
-      gegl_color_get_pixel (color, babl_format_with_space ("R'G'B' u8", NULL), c);
-      gegl_color_get_pixel (color, babl_format_with_space ("R'G'B'A double", NULL), &rgb);
-      g_object_unref (color);
+      GeglColor    *color;
+      png_color_16  background;       /* Background color */
 
       background.index = 0;
-      background.red   = c[0];
-      background.green = c[1];
-      background.blue  = c[2];
-      background.gray  = gimp_rgb_luminance_uchar (&rgb);
+      color = gimp_context_get_background ();
+      if (bit_depth < 16)
+        {
+          /* Per PNG spec 1.2: "(If the image bit depth is less than 16, the
+           * least significant bits are used and the others are 0.)"
+           * And png_set_bKGD() doesn't handle the conversion for us, if we try
+           * to set a u16 background, it outputs the following warning:
+           * > libpng warning: Ignoring attempt to write 16-bit bKGD chunk when bit_depth is 8
+           */
+          guint8 rgb[3];
+          guint8 gray;
+
+          gegl_color_get_pixel (color, babl_format_with_space ("R'G'B' u8", space), rgb);
+          gegl_color_get_pixel (color, babl_format_with_space ("Y' u8", space), &gray);
+
+          background.red   = rgb[0];
+          background.green = rgb[1];
+          background.blue  = rgb[2];
+          background.gray  = gray;
+        }
+      else
+        {
+          guint16 rgb[3];
+          guint16 gray;
+
+          gegl_color_get_pixel (color, babl_format_with_space ("R'G'B' u16", space), rgb);
+          gegl_color_get_pixel (color, babl_format_with_space ("Y' u16", space), &gray);
+
+          background.red   = rgb[0];
+          background.green = rgb[1];
+          background.blue  = rgb[2];
+          background.gray  = gray;
+        }
+
       png_set_bKGD (pp, info, &background);
+      g_object_unref (color);
     }
 
   if (save_offs)
@@ -2250,7 +2248,7 @@ respin_cmap (png_structp   pp,
   gint          colors;
   guchar       *before;
 
-  before = gimp_image_get_colormap (image, NULL, &colors);
+  before = gimp_palette_get_colormap (gimp_image_get_palette (image), babl_format ("R'G'B' u8"), &colors, NULL);
   buffer = gimp_drawable_get_buffer (drawable);
 
   /* Make sure there is something in the colormap.
@@ -2360,10 +2358,10 @@ read_unknown_chunk (png_structp        png_ptr,
 }
 
 static gboolean
-save_dialog (GimpImage     *image,
-             GimpProcedure *procedure,
-             GObject       *config,
-             gboolean       alpha)
+export_dialog (GimpImage     *image,
+               GimpProcedure *procedure,
+               GObject       *config,
+               gboolean       alpha)
 {
   GtkWidget *dialog;
   gboolean   run;
@@ -2371,9 +2369,9 @@ save_dialog (GimpImage     *image,
 
   indexed = (gimp_image_get_base_type (image) == GIMP_INDEXED);
 
-  dialog = gimp_save_procedure_dialog_new (GIMP_SAVE_PROCEDURE (procedure),
-                                           GIMP_PROCEDURE_CONFIG (config),
-                                           image);
+  dialog = gimp_export_procedure_dialog_new (GIMP_EXPORT_PROCEDURE (procedure),
+                                             GIMP_PROCEDURE_CONFIG (config),
+                                             image);
 
   gimp_procedure_dialog_get_widget (GIMP_PROCEDURE_DIALOG (dialog),
                                     "compression", GIMP_TYPE_SPIN_SCALE);
@@ -2386,10 +2384,10 @@ save_dialog (GimpImage     *image,
                                        "optimize-palette",
                                        indexed, NULL, NULL, FALSE);
 
-  gimp_save_procedure_dialog_add_metadata (GIMP_SAVE_PROCEDURE_DIALOG (dialog), "bkgd");
-  gimp_save_procedure_dialog_add_metadata (GIMP_SAVE_PROCEDURE_DIALOG (dialog), "offs");
-  gimp_save_procedure_dialog_add_metadata (GIMP_SAVE_PROCEDURE_DIALOG (dialog), "phys");
-  gimp_save_procedure_dialog_add_metadata (GIMP_SAVE_PROCEDURE_DIALOG (dialog), "time");
+  gimp_export_procedure_dialog_add_metadata (GIMP_EXPORT_PROCEDURE_DIALOG (dialog), "bkgd");
+  gimp_export_procedure_dialog_add_metadata (GIMP_EXPORT_PROCEDURE_DIALOG (dialog), "offs");
+  gimp_export_procedure_dialog_add_metadata (GIMP_EXPORT_PROCEDURE_DIALOG (dialog), "phys");
+  gimp_export_procedure_dialog_add_metadata (GIMP_EXPORT_PROCEDURE_DIALOG (dialog), "time");
   gimp_procedure_dialog_fill (GIMP_PROCEDURE_DIALOG (dialog),
                               "format", "compression",
                               "interlaced", "save-transparent",

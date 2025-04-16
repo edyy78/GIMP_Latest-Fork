@@ -94,7 +94,7 @@ enum
 };
 
 
-struct _GimpColorButtonPrivate
+typedef struct _GimpColorButtonPrivate
 {
   gchar              *title;
   gboolean            continuous_update;
@@ -107,9 +107,9 @@ struct _GimpColorButtonPrivate
   GMenu              *menu;
 
   GimpColorConfig    *config;
-};
+} GimpColorButtonPrivate;
 
-#define GET_PRIVATE(obj) (((GimpColorButton *) (obj))->priv)
+#define GET_PRIVATE(obj) ((GimpColorButtonPrivate *) gimp_color_button_get_instance_private ((GimpColorButton *) (obj)))
 
 
 static void     gimp_color_button_constructed         (GObject         *object);
@@ -237,10 +237,10 @@ gimp_color_button_class_init (GimpColorButtonClass *klass)
    * Since: 2.4
    */
   g_object_class_install_property (object_class, PROP_COLOR,
-                                   gegl_param_spec_color_from_string ("color",
+                                   gimp_param_spec_color_from_string ("color",
                                                                       "Color",
                                                                       "The color displayed in the button's color area",
-                                                                      "black",
+                                                                      TRUE, "black",
                                                                       GIMP_PARAM_READWRITE |
                                                                       G_PARAM_CONSTRUCT));
   /**
@@ -319,9 +319,7 @@ gimp_color_button_class_init (GimpColorButtonClass *klass)
 static void
 gimp_color_button_init (GimpColorButton *button)
 {
-  GimpColorButtonPrivate *priv = gimp_color_button_get_instance_private (button);
-
-  button->priv = priv;
+  GimpColorButtonPrivate *priv = GET_PRIVATE (button);
 
   priv->color_area = g_object_new (GIMP_TYPE_COLOR_AREA,
                                    "drag-mask", GDK_BUTTON1_MASK,

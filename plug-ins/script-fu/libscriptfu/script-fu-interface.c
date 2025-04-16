@@ -30,6 +30,7 @@
 
 #include "scheme-wrapper.h"
 
+#include "script-fu-lib.h"
 #include "script-fu-types.h"
 
 #include "script-fu-interface.h"
@@ -54,13 +55,7 @@ typedef struct
   GtkWidget  *grid;
   GtkWidget **widgets;
 
-  GtkWidget  *progress_label;
-  GtkWidget  *progress_bar;
-
   gchar      *title;
-  gchar      *last_command;
-  gint        command_count;
-  gint        consec_command_count;
 
   gboolean    running;
 } SFInterface;
@@ -83,14 +78,14 @@ static void   script_fu_file_callback       (GtkWidget     *widget,
 static void   script_fu_combo_callback      (GtkWidget     *widget,
                                              SFOption      *option);
 static void   script_fu_color_button_update (GimpColorButton *button,
-                                             GimpRGB         *rgb);
+                                             SFColorType      color);
 
 static void   script_fu_resource_set_handler (gpointer       data,
                                               gpointer       resource,
                                               gboolean       closing);
 
 static GtkWidget * script_fu_resource_widget (const gchar    *title,
-                                              SFResourceType *model,
+                                              SFArg          *arg,
                                               GType           resource_type);
 
 static void   script_fu_flush_events         (void);
@@ -118,63 +113,19 @@ script_fu_interface_is_active (void)
   return (sf_interface != NULL);
 }
 
-void
-script_fu_interface_report_cc (const gchar *command)
-{
-  if (sf_interface == NULL)
-    return;
-
-  if (sf_interface->last_command &&
-      strcmp (sf_interface->last_command, command) == 0)
-    {
-      sf_interface->command_count++;
-
-      if (! g_str_has_prefix (command, "gimp-progress-"))
-        {
-          gchar *new_command;
-
-          new_command = g_strdup_printf ("%s <%d>",
-                                         command, sf_interface->command_count);
-          gtk_label_set_text (GTK_LABEL (sf_interface->progress_label),
-                              new_command);
-          g_free (new_command);
-        }
-    }
-  else
-    {
-      sf_interface->command_count = 1;
-
-      g_free (sf_interface->last_command);
-      sf_interface->last_command = g_strdup (command);
-
-      if (! g_str_has_prefix (command, "gimp-progress-"))
-        {
-          gtk_label_set_text (GTK_LABEL (sf_interface->progress_label),
-                              command);
-        }
-      else
-        {
-          gtk_label_set_text (GTK_LABEL (sf_interface->progress_label), "");
-        }
-    }
-
-  while (gtk_events_pending ())
-    gtk_main_iteration ();
-}
 
 GimpPDBStatusType
-script_fu_interface (SFScript  *script,
-                     gint       start_arg)
+script_fu_interface_dialog (SFScript  *script,
+                            gint       start_arg)
 {
   GtkWidget    *dialog;
   GtkWidget    *vbox;
-  GtkWidget    *vbox2;
   GtkSizeGroup *group;
   GSList       *list;
   gchar        *title;
   gint          i;
 
-  static gboolean gtk_initted = FALSE;
+  /* Requires gimp_ui_init called previously. */
 
   g_debug ("%s", G_STRFUNC);
 
@@ -197,13 +148,6 @@ script_fu_interface (SFScript  *script,
     }
 
   g_return_val_if_fail (script != NULL, FALSE);
-
-  if (!gtk_initted)
-    {
-      gimp_ui_init ("script-fu");
-
-      gtk_initted = TRUE;
-    }
 
   sf_status = GIMP_PDB_SUCCESS;
 
@@ -307,7 +251,7 @@ script_fu_interface (SFScript  *script,
               break;
 
             case SF_VECTORS:
-              widget = gimp_vectors_combo_box_new (NULL, NULL, NULL);
+              widget = gimp_path_combo_box_new (NULL, NULL, NULL);
               ID_ptr = &arg->value.sfa_vectors;
               break;
 
@@ -323,7 +267,7 @@ script_fu_interface (SFScript  *script,
         case SF_COLOR:
           {
             GimpColorConfig *config;
-            GeglColor       *color = sf_color_get_gegl_color (&arg->value.sfa_color);
+            GeglColor       *color = sf_color_get_gegl_color (arg->value.sfa_color);
 
             left_align = TRUE;
             widget = gimp_color_button_new (_("Script-Fu Color Selection"),
@@ -340,7 +284,7 @@ script_fu_interface (SFScript  *script,
 
             g_signal_connect (widget, "color-changed",
                               G_CALLBACK (script_fu_color_button_update),
-                              &arg->value.sfa_color);
+                              arg->value.sfa_color);
           }
           break;
 
@@ -356,7 +300,6 @@ script_fu_interface (SFScript  *script,
                             &arg->value.sfa_toggle);
           break;
 
-        case SF_VALUE:
         case SF_STRING:
           widget = gtk_entry_new ();
           gtk_widget_set_size_request (widget, TEXT_WIDTH, -1);
@@ -406,6 +349,13 @@ script_fu_interface (SFScript  *script,
                                                  arg->default_value.sfa_adjustment.lower,
                                                  arg->default_value.sfa_adjustment.upper,
                                                  arg->default_value.sfa_adjustment.digits);
+
+                  /* #12157 We should not need to set value, since we just passed it.
+                   * But seems to be a flaw in the widget.
+                   * The comments in gimp_label_spin_init, says it inits to bogus.
+                   */
+                  gimp_label_spin_set_value ((GimpLabelSpin*)widget, arg->value.sfa_adjustment.value);
+
                   gimp_label_spin_set_increments (GIMP_LABEL_SPIN (widget),
                                                   arg->default_value.sfa_adjustment.step,
                                                   arg->default_value.sfa_adjustment.page);
@@ -468,44 +418,35 @@ script_fu_interface (SFScript  *script,
           break;
 
         case SF_FONT:
-          /* FIXME this should be a method of the arg.
-          in script-fu-resource and it should return the default.
-          */
-          script_fu_arg_init_resource (arg, GIMP_TYPE_FONT);
           widget = script_fu_resource_widget (label_text,
-                                              /* FIXME and the call can go here*/
-                                              &arg->value.sfa_resource,
+                                              arg,
                                               GIMP_TYPE_FONT);
           break;
 
         case SF_PALETTE:
-          script_fu_arg_init_resource (arg, GIMP_TYPE_PALETTE);
           widget = script_fu_resource_widget (label_text,
-                                              &arg->value.sfa_resource,
+                                              arg,
                                               GIMP_TYPE_PALETTE);
           break;
 
         case SF_PATTERN:
           left_align = TRUE;
-          script_fu_arg_init_resource (arg, GIMP_TYPE_PATTERN);
           widget = script_fu_resource_widget (label_text,
-                                              &arg->value.sfa_resource,
+                                              arg,
                                               GIMP_TYPE_PATTERN);
           break;
 
         case SF_GRADIENT:
           left_align = TRUE;
-          script_fu_arg_init_resource (arg, GIMP_TYPE_GRADIENT);
           widget = script_fu_resource_widget (label_text,
-                                              &arg->value.sfa_resource,
+                                              arg,
                                               GIMP_TYPE_GRADIENT);
           break;
 
         case SF_BRUSH:
           left_align = TRUE;
-          script_fu_arg_init_resource (arg, GIMP_TYPE_BRUSH);
           widget = script_fu_resource_widget (label_text,
-                                              &arg->value.sfa_resource,
+                                              arg,
                                               GIMP_TYPE_BRUSH);
           break;
 
@@ -568,26 +509,6 @@ script_fu_interface (SFScript  *script,
 
   g_object_unref (group);
 
-  /* the script progress bar */
-  vbox2 = gtk_box_new (GTK_ORIENTATION_VERTICAL, 6);
-  gtk_box_pack_end (GTK_BOX (vbox), vbox2, FALSE, FALSE, 0);
-  gtk_widget_show (vbox2);
-
-  sf_interface->progress_bar = gimp_progress_bar_new ();
-  gtk_box_pack_start (GTK_BOX (vbox2), sf_interface->progress_bar,
-                      FALSE, FALSE, 0);
-  gtk_widget_show (sf_interface->progress_bar);
-
-  sf_interface->progress_label = gtk_label_new (NULL);
-  gtk_label_set_xalign (GTK_LABEL (sf_interface->progress_label), 0.0);
-  gtk_label_set_ellipsize (GTK_LABEL (sf_interface->progress_label),
-                           PANGO_ELLIPSIZE_MIDDLE);
-  gimp_label_set_attributes (GTK_LABEL (sf_interface->progress_label),
-                             PANGO_ATTR_STYLE, PANGO_STYLE_ITALIC,
-                             -1);
-  gtk_box_pack_start (GTK_BOX (vbox2), sf_interface->progress_label,
-                      FALSE, FALSE, 0);
-  gtk_widget_show (sf_interface->progress_label);
 #ifdef G_OS_WIN32
     {
       HWND foreground = GetForegroundWindow ();
@@ -596,6 +517,12 @@ script_fu_interface (SFScript  *script,
   gtk_widget_show (dialog);
 
   gtk_main ();
+  /* The script ran, or was canceled, and called gtk_main_quit */
+
+#ifdef GDK_WINDOWING_QUARTZ
+  /* Make dock icon go away. */
+  [NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
+#endif
 
 #ifdef G_OS_WIN32
       if (! GetForegroundWindow ())
@@ -607,45 +534,53 @@ script_fu_interface (SFScript  *script,
 
 /* Return a widget for choosing a resource.
  * Dispatch on resource type.
- * Widget will show initial choice from context.
+ *
+ * On first show, widget will show initial choice : declared by script.
+ * Thereafter, the choice from prior use of filter.
+ *
  * Widget will update model if user touches widget.
  */
 static GtkWidget *
 script_fu_resource_widget (const gchar    *title,
-                           SFResourceType *model,
+                           SFArg          *arg,
                            GType           resource_type)
 {
   GtkWidget    *result_widget = NULL;
+  GimpResource *initial_value;
 
   g_debug ("%s type: %" G_GSIZE_FORMAT, G_STRFUNC, resource_type);
+
+  /* Init the arg's value (ID).
+   * On first run, initialize to default.
+   * On second run, init to prior choice.
+   * Can't do it at registration time, resources are not loaded.
+   */
+  sf_resource_arg_init_current_value (arg);
 
   /* Passing empty string for outer widget label,
    * since this old-style interface makes the label.
    */
+  /* Create a widget with initial value of the arg. */
+  initial_value = sf_resource_arg_get_value (arg);
   if (g_type_is_a (resource_type, GIMP_TYPE_FONT))
     {
-      result_widget = gimp_font_chooser_new (title, "",
-                                             sf_resource_get_default (model));
+      result_widget = gimp_font_chooser_new (title, "", GIMP_FONT (initial_value));
     }
   else if (g_type_is_a (resource_type, GIMP_TYPE_BRUSH))
     {
-      result_widget = gimp_brush_chooser_new (title, "",
-                                             sf_resource_get_default (model));
+      result_widget = gimp_brush_chooser_new (title, "", GIMP_BRUSH (initial_value));
     }
   else if (g_type_is_a (resource_type, GIMP_TYPE_GRADIENT))
     {
-      result_widget = gimp_gradient_chooser_new (title, "",
-                                             sf_resource_get_default (model));
+      result_widget = gimp_gradient_chooser_new (title, "", GIMP_GRADIENT (initial_value));
     }
   else if (g_type_is_a (resource_type, GIMP_TYPE_PALETTE))
     {
-      result_widget = gimp_palette_chooser_new (title, "",
-                                             sf_resource_get_default (model));
+      result_widget = gimp_palette_chooser_new (title, "", GIMP_PALETTE (initial_value));
     }
   else if (g_type_is_a (resource_type, GIMP_TYPE_PATTERN))
     {
-      result_widget = gimp_pattern_chooser_new (title, "",
-                                             sf_resource_get_default (model));
+      result_widget = gimp_pattern_chooser_new (title, "", GIMP_PATTERN (initial_value));
     }
   else
     {
@@ -655,12 +590,13 @@ script_fu_resource_widget (const gchar    *title,
   if (result_widget != NULL)
   {
     /* All resource widgets emit signal resource-set
-     * Connect to our handler which will be passed the id_handle,
+     * Connect to our handler which will be passed
+     * a Resource* and int* to the arg's value,
      * the model of the new choice of resource.
      */
     g_signal_connect_swapped (result_widget, "resource-set",
                               G_CALLBACK (script_fu_resource_set_handler),
-                              model);  /* data */
+                              &arg->value.sfa_resource.history);  /* data */
   }
 
   return result_widget;
@@ -674,7 +610,6 @@ script_fu_interface_quit (SFScript *script)
 
   g_free (sf_interface->title);
   g_free (sf_interface->widgets);
-  g_free (sf_interface->last_command);
 
   g_slice_free (SFInterface, sf_interface);
   sf_interface = NULL;
@@ -707,11 +642,11 @@ script_fu_combo_callback (GtkWidget *widget,
 
 static void
 script_fu_color_button_update (GimpColorButton *button,
-                               SFColorType     *arg_value)
+                               SFColorType      arg_value)
 {
   GeglColor *color = gimp_color_button_get_color (button);
 
-  sf_color_set_from_gegl_color (arg_value, color);
+  sf_color_set_from_gegl_color (&arg_value, color);
 
   g_object_unref (color);
 }
@@ -817,7 +752,6 @@ script_fu_update_models (SFScript *script)
 
       switch (script->args[i].type)
         {
-        case SF_VALUE:
         case SF_STRING:
           g_free (arg_value->sfa_value);
           arg_value->sfa_value =
@@ -851,11 +785,16 @@ script_fu_update_models (SFScript *script)
 }
 
 
-/* Handler for event: OK button clicked. */
+/* Handler for event: OK button clicked.
+ *
+ * Run the scripts with values from the dialog.
+ *
+ * Sets a global status of the PDB call to this plugin,
+ * which is returned later by interface_dialog.
+ */
 static void
 script_fu_ok (SFScript *script)
 {
-  GString *output;
   gchar   *command;
 
   script_fu_update_models (script);
@@ -863,25 +802,28 @@ script_fu_ok (SFScript *script)
   command = script_fu_script_get_command (script);
 
   /*  run the command through the interpreter  */
-  output = g_string_new (NULL);
-  ts_register_output_func (ts_gstring_output_func, output);
 
   gimp_plug_in_set_pdb_error_handler (gimp_get_plug_in (),
                                       GIMP_PDB_ERROR_HANDLER_PLUGIN);
 
+  script_fu_redirect_output_to_stdout ();
+
+  /* Returns non-zero error code on failure. */
   if (ts_interpret_string (command))
     {
-      gchar *message = g_strdup_printf (_("Error while executing %s:"),
-                                        script->name);
+      gchar *message;
 
-      g_message ("%s\n\n%s", message, output->str);
+      /* Log to stdout.  Later to Gimp. */
+      message = g_strdup_printf (_("Error while executing %s:"), script->name);
+      g_message ("%s\n", message);
       g_free (message);
+
+      /* Set global to be returned by script-fu-interface-dialog. */
+      sf_status = GIMP_PDB_EXECUTION_ERROR;
     }
 
   gimp_plug_in_set_pdb_error_handler (gimp_get_plug_in (),
                                       GIMP_PDB_ERROR_HANDLER_INTERNAL);
-
-  g_string_free (output, TRUE);
 
   g_free (command);
 }
@@ -898,7 +840,8 @@ script_fu_reset (SFScript *script)
   /* Reset the view to the model values. */
   for (i = 0; i < script->n_args; i++)
     {
-      SFArgValue *value  = &script->args[i].value;
+      SFArg      *arg    = &script->args[i];
+      SFArgValue *value  = &arg->value;
       GtkWidget  *widget = sf_interface->widgets[i];
 
       switch (script->args[i].type)
@@ -913,7 +856,7 @@ script_fu_reset (SFScript *script)
 
         case SF_COLOR:
           {
-            GeglColor *color = sf_color_get_gegl_color (&value->sfa_color);
+            GeglColor *color = sf_color_get_gegl_color (value->sfa_color);
 
             gimp_color_button_set_color (GIMP_COLOR_BUTTON (widget), color);
             g_object_unref (color);
@@ -925,7 +868,6 @@ script_fu_reset (SFScript *script)
                                         value->sfa_toggle);
           break;
 
-        case SF_VALUE:
         case SF_STRING:
           gtk_entry_set_text (GTK_ENTRY (widget), value->sfa_value);
           break;
@@ -984,8 +926,7 @@ script_fu_reset (SFScript *script)
         case SF_GRADIENT:
         case SF_BRUSH:
           gimp_resource_chooser_set_resource (GIMP_RESOURCE_CHOOSER (widget),
-                                              sf_resource_get_default (
-                                                &value->sfa_resource));
+                                              sf_resource_arg_get_default (arg));
           break;
 
         case SF_OPTION:
@@ -1069,9 +1010,9 @@ script_fu_activate_main_dialog (void)
 {
   /* Ensure the main dialog of the script-fu extension process is not obscured. */
 #ifdef GDK_WINDOWING_QUARTZ
-  /* In Objective-C, get instance of NSApplication
-   * and send it a "activateIgnoringOtherApps" message, i.e. bring to front.
-   */
+  /* Make Dock icon appear. */
+  [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+  /* Bring to front. */
   [NSApp activateIgnoringOtherApps: YES];
 #else
   /* empty function, optimized out. */

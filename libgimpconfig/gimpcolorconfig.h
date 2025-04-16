@@ -27,39 +27,9 @@
 #define __GIMP_COLOR_CONFIG_H__
 
 
-#define GIMP_TYPE_COLOR_CONFIG            (gimp_color_config_get_type ())
-#define GIMP_COLOR_CONFIG(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_COLOR_CONFIG, GimpColorConfig))
-#define GIMP_COLOR_CONFIG_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_COLOR_CONFIG, GimpColorConfigClass))
-#define GIMP_IS_COLOR_CONFIG(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_COLOR_CONFIG))
-#define GIMP_IS_COLOR_CONFIG_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_COLOR_CONFIG))
+#define GIMP_TYPE_COLOR_CONFIG (gimp_color_config_get_type ())
+G_DECLARE_FINAL_TYPE (GimpColorConfig, gimp_color_config, GIMP, COLOR_CONFIG, GObject)
 
-
-typedef struct _GimpColorConfigPrivate GimpColorConfigPrivate;
-typedef struct _GimpColorConfigClass   GimpColorConfigClass;
-
-struct _GimpColorConfig
-{
-  GObject                 parent_instance;
-
-  GimpColorConfigPrivate *priv;
-};
-
-struct _GimpColorConfigClass
-{
-  GObjectClass  parent_class;
-
-  void (* _gimp_reserved1) (void);
-  void (* _gimp_reserved2) (void);
-  void (* _gimp_reserved3) (void);
-  void (* _gimp_reserved4) (void);
-  void (* _gimp_reserved5) (void);
-  void (* _gimp_reserved6) (void);
-  void (* _gimp_reserved7) (void);
-  void (* _gimp_reserved8) (void);
-};
-
-
-GType              gimp_color_config_get_type                     (void) G_GNUC_CONST;
 
 GimpColorManagementMode
                    gimp_color_config_get_mode                     (GimpColorConfig  *config);

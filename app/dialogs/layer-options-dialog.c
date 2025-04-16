@@ -194,9 +194,12 @@ layer_options_dialog_new (GimpImage                *image,
                     private);
 
   space_model =
-    gimp_enum_store_new_with_range (GIMP_TYPE_LAYER_COLOR_SPACE,
-                                    GIMP_LAYER_COLOR_SPACE_AUTO,
-                                    GIMP_LAYER_COLOR_SPACE_RGB_PERCEPTUAL);
+    gimp_enum_store_new_with_values (GIMP_TYPE_LAYER_COLOR_SPACE,
+                                     4,
+                                     GIMP_LAYER_COLOR_SPACE_AUTO,
+                                     GIMP_LAYER_COLOR_SPACE_RGB_LINEAR,
+                                     GIMP_LAYER_COLOR_SPACE_RGB_NON_LINEAR,
+                                     GIMP_LAYER_COLOR_SPACE_RGB_PERCEPTUAL);
 
   private->blend_space_combo = combo =
     gimp_enum_combo_box_new_with_model (GIMP_ENUM_STORE (space_model));
@@ -265,7 +268,7 @@ layer_options_dialog_new (GimpImage                *image,
       gtk_spin_button_set_numeric (GTK_SPIN_BUTTON (spinbutton), TRUE);
       gtk_entry_set_width_chars (GTK_ENTRY (spinbutton), 10);
 
-      private->size_se = gimp_size_entry_new (1, GIMP_UNIT_PIXEL, "%a",
+      private->size_se = gimp_size_entry_new (1, gimp_unit_pixel (), "%a",
                                               TRUE, TRUE, FALSE, 10,
                                               GIMP_SIZE_ENTRY_UPDATE_SIZE);
 
@@ -278,7 +281,7 @@ layer_options_dialog_new (GimpImage                *image,
       gtk_widget_show (private->size_se);
 
       gimp_size_entry_set_unit (GIMP_SIZE_ENTRY (private->size_se),
-                                GIMP_UNIT_PIXEL);
+                                gimp_unit_pixel ());
 
       gimp_size_entry_set_resolution (GIMP_SIZE_ENTRY (private->size_se), 0,
                                       xres, FALSE);
@@ -322,7 +325,7 @@ layer_options_dialog_new (GimpImage                *image,
   gtk_spin_button_set_numeric (GTK_SPIN_BUTTON (spinbutton), TRUE);
   gtk_entry_set_width_chars (GTK_ENTRY (spinbutton), 10);
 
-  private->offset_se = gimp_size_entry_new (1, GIMP_UNIT_PIXEL, "%a",
+  private->offset_se = gimp_size_entry_new (1, gimp_unit_pixel (), "%a",
                                             TRUE, TRUE, FALSE, 10,
                                             GIMP_SIZE_ENTRY_UPDATE_SIZE);
 
@@ -335,7 +338,7 @@ layer_options_dialog_new (GimpImage                *image,
   gtk_widget_show (private->offset_se);
 
   gimp_size_entry_set_unit (GIMP_SIZE_ENTRY (private->offset_se),
-                            GIMP_UNIT_PIXEL);
+                            gimp_unit_pixel ());
 
   gimp_size_entry_set_resolution (GIMP_SIZE_ENTRY (private->offset_se), 0,
                                   xres, FALSE);

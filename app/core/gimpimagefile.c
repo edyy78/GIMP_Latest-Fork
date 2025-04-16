@@ -242,9 +242,16 @@ gimp_imagefile_get_description (GimpViewable   *viewable,
   GimpImagefilePrivate *private   = GET_PRIVATE (imagefile);
   GimpThumbnail        *thumbnail = private->thumbnail;
   gchar                *basename;
+  gint                  image_width;
+  gint                  image_height;
 
   if (! private->file)
     return NULL;
+
+  g_object_get (thumbnail,
+                "image-width",  &image_width,
+                "image-height", &image_height,
+                NULL);
 
   if (tooltip)
     {
@@ -262,14 +269,14 @@ gimp_imagefile_get_description (GimpViewable   *viewable,
 
   basename = g_path_get_basename (gimp_file_get_utf8_name (private->file));
 
-  if (thumbnail->image_width > 0 && thumbnail->image_height > 0)
+  if (image_width > 0 && image_height > 0)
     {
       gchar *tmp = basename;
 
       basename = g_strdup_printf ("%s (%d × %d)",
                                   tmp,
-                                  thumbnail->image_width,
-                                  thumbnail->image_height);
+                                  image_width,
+                                  image_height);
       g_free (tmp);
     }
 
@@ -506,8 +513,9 @@ gimp_imagefile_create_thumbnail (GimpImagefile  *imagefile,
                 }
 
               image = file_open_image (private->gimp, context, progress,
-                                       private->file,
-                                       FALSE, NULL, GIMP_RUN_NONINTERACTIVE,
+                                       private->file, size, size,
+                                       FALSE, NULL,
+                                       GIMP_RUN_NONINTERACTIVE,
                                        &status, &mime_type, error);
 
               if (image)
@@ -749,6 +757,15 @@ gimp_imagefile_get_desc_string (GimpImagefile *imagefile)
 {
   GimpImagefilePrivate *private;
   GimpThumbnail        *thumbnail;
+  GimpThumbState        image_state;
+  GimpThumbState        thumb_state;
+  gint                  image_width;
+  gint                  image_height;
+  gchar                *image_uri;
+  gchar                *image_type;
+  gint64                image_filesize;
+  gint                  image_num_layers;
+  gint                  image_not_found_errno;
 
   g_return_val_if_fail (GIMP_IS_IMAGEFILE (imagefile), NULL);
 
@@ -759,7 +776,19 @@ gimp_imagefile_get_desc_string (GimpImagefile *imagefile)
 
   thumbnail = private->thumbnail;
 
-  switch (thumbnail->image_state)
+  g_object_get (thumbnail,
+                "image-state",           &image_state,
+                "thumb-state",           &thumb_state,
+                "image-width",           &image_width,
+                "image-height",          &image_height,
+                "image-uri",             &image_uri,
+                "image-type",            &image_type,
+                "image-filesize",        &image_filesize,
+                "image-num-layers",      &image_num_layers,
+                "image-not-found-errno", &image_not_found_errno,
+                NULL);
+
+  switch (image_state)
     {
     case GIMP_THUMB_STATE_UNKNOWN:
       private->description = NULL;
@@ -778,7 +807,7 @@ gimp_imagefile_get_desc_string (GimpImagefile *imagefile)
 
     case GIMP_THUMB_STATE_NOT_FOUND:
       private->description =
-        (gchar *) g_strerror (thumbnail->image_not_found_errno);
+        (gchar *) g_strerror (image_not_found_errno);
       private->static_desc = TRUE;
       break;
 
@@ -786,14 +815,14 @@ gimp_imagefile_get_desc_string (GimpImagefile *imagefile)
       {
         GString *str = g_string_new (NULL);
 
-        if (thumbnail->image_state == GIMP_THUMB_STATE_REMOTE)
+        if (image_state == GIMP_THUMB_STATE_REMOTE)
           {
             g_string_append (str, _("Remote File"));
           }
 
-        if (thumbnail->image_filesize > 0)
+        if (image_filesize > 0)
           {
-            gchar *size = g_format_size (thumbnail->image_filesize);
+            gchar *size = g_format_size (image_filesize);
 
             if (str->len > 0)
               g_string_append_c (str, '\n');
@@ -802,7 +831,7 @@ gimp_imagefile_get_desc_string (GimpImagefile *imagefile)
             g_free (size);
           }
 
-        switch (thumbnail->thumb_state)
+        switch (thumb_state)
           {
           case GIMP_THUMB_STATE_NOT_FOUND:
             if (str->len > 0)
@@ -830,7 +859,7 @@ gimp_imagefile_get_desc_string (GimpImagefile *imagefile)
 
           case GIMP_THUMB_STATE_OK:
             {
-              if (thumbnail->image_state == GIMP_THUMB_STATE_REMOTE)
+              if (image_state == GIMP_THUMB_STATE_REMOTE)
                 {
                   if (str->len > 0)
                     g_string_append_c (str, '\n');
@@ -838,7 +867,7 @@ gimp_imagefile_get_desc_string (GimpImagefile *imagefile)
                   g_string_append (str, _("(Preview may be out of date)"));
                 }
 
-              if (thumbnail->image_width > 0 && thumbnail->image_height > 0)
+              if (image_width > 0 && image_height > 0)
                 {
                   if (str->len > 0)
                     g_string_append_c (str, '\n');
@@ -846,22 +875,22 @@ gimp_imagefile_get_desc_string (GimpImagefile *imagefile)
                   g_string_append_printf (str,
                                           ngettext ("%d × %d pixel",
                                                     "%d × %d pixels",
-                                                    thumbnail->image_height),
-                                          thumbnail->image_width,
-                                          thumbnail->image_height);
+                                                    image_height),
+                                          image_width,
+                                          image_height);
                 }
 
-              if (thumbnail->image_type)
+              if (image_type)
                 {
                   if (str->len > 0)
                     g_string_append_c (str, '\n');
 
-                  g_string_append (str, gettext (thumbnail->image_type));
+                  g_string_append (str, gettext (image_type));
                 }
 
-              if (thumbnail->image_num_layers > 0)
+              if (image_num_layers > 0)
                 {
-                  if (thumbnail->image_type)
+                  if (image_type)
                     g_string_append_len (str, ", ", 2);
                   else if (str->len > 0)
                     g_string_append_c (str, '\n');
@@ -869,8 +898,8 @@ gimp_imagefile_get_desc_string (GimpImagefile *imagefile)
                   g_string_append_printf (str,
                                           ngettext ("%d layer",
                                                     "%d layers",
-                                                    thumbnail->image_num_layers),
-                                          thumbnail->image_num_layers);
+                                                    image_num_layers),
+                                          image_num_layers);
                 }
             }
             break;
@@ -894,6 +923,10 @@ gimp_imagefile_load_thumb (GimpImagefile *imagefile,
 {
   GimpImagefilePrivate *private   = GET_PRIVATE (imagefile);
   GimpThumbnail        *thumbnail = private->thumbnail;
+  GimpThumbState        image_state;
+  gchar                *image_uri;
+  gint                  image_width;
+  gint                  image_height;
   GdkPixbuf            *pixbuf    = NULL;
   GError               *error     = NULL;
   gint                  size      = MAX (width, height);
@@ -902,10 +935,17 @@ gimp_imagefile_load_thumb (GimpImagefile *imagefile,
   gint                  preview_width;
   gint                  preview_height;
 
+  g_object_get (thumbnail,
+                "image-state",  &image_state,
+                "image-uri",    &image_uri,
+                "image-width",  &image_width,
+                "image-height", &image_height,
+                NULL);
+
   if (gimp_thumbnail_peek_thumb (thumbnail, size) < GIMP_THUMB_STATE_EXISTS)
     return NULL;
 
-  if (thumbnail->image_state == GIMP_THUMB_STATE_NOT_FOUND)
+  if (image_state == GIMP_THUMB_STATE_NOT_FOUND)
     return NULL;
 
   pixbuf = gimp_thumbnail_load_thumb (thumbnail, size, &error);
@@ -914,10 +954,18 @@ gimp_imagefile_load_thumb (GimpImagefile *imagefile,
     {
       if (error)
         {
+          GimpThumbSize  thumb_size = size;
+          gchar         *thumb_filename;
+
+          thumb_filename = gimp_thumb_find_thumb (image_uri, &thumb_size);
+
           gimp_message (private->gimp, NULL, GIMP_MESSAGE_ERROR,
                         _("Could not open thumbnail '%s': %s"),
-                        thumbnail->thumb_filename, error->message);
+                        thumb_filename, error->message);
           g_clear_error (&error);
+
+          if (thumb_filename)
+            g_free (thumb_filename);
         }
 
       return NULL;

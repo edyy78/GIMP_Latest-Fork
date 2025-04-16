@@ -68,9 +68,11 @@ resource_get_by_name_invoker (GimpProcedure         *procedure,
     {
       resource = gimp_pdb_get_resource (gimp, g_type_from_name (type_name), resource_name,
                                         GIMP_PDB_DATA_ACCESS_READ, error);
-
-      if (! resource)
-        success = FALSE;
+      /* gimp_pdb_get_resource can return errors about writeable or renameable when not ACCESS_READ,
+       * but only "not found" error for ACCESS_READ.
+       * Ignore "not found" error, just return NULL.
+       */
+       g_clear_error (error);
     }
 
   return_vals = gimp_procedure_get_return_values (procedure, success,
@@ -510,12 +512,13 @@ register_resource_procs (GimpPDB *pdb)
   /*
    * gimp-resource-get-by-name
    */
-  procedure = gimp_procedure_new (resource_get_by_name_invoker);
+  procedure = gimp_procedure_new (resource_get_by_name_invoker, TRUE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-resource-get-by-name");
   gimp_procedure_set_static_help (procedure,
                                   "Returns a resource with the given name.",
-                                  "Returns a resource with the given name.",
+                                  "Returns an existing resource having the given name. Returns %NULL when no resource exists of that name.\n"
+                                  "There may be many fonts having the same name. See 'gimp-font-get-by-name'.",
                                   NULL);
   gimp_procedure_set_static_attribution (procedure,
                                          "Jehan",
@@ -524,7 +527,7 @@ register_resource_procs (GimpPDB *pdb)
   gimp_procedure_add_argument (procedure,
                                gimp_param_spec_string ("type-name",
                                                        "type name",
-                                                       "The name of the resource type",
+                                                       "The name of the resource type e.g. GimpFont",
                                                        FALSE, FALSE, TRUE,
                                                        NULL,
                                                        GIMP_PARAM_READWRITE));
@@ -539,6 +542,9 @@ register_resource_procs (GimpPDB *pdb)
                                    gimp_param_spec_resource ("resource",
                                                              "resource",
                                                              "The resource",
+                                                             GIMP_TYPE_RESOURCE,
+                                                             TRUE,
+                                                             NULL,
                                                              FALSE,
                                                              GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
@@ -547,7 +553,7 @@ register_resource_procs (GimpPDB *pdb)
   /*
    * gimp-resource-get-by-identifiers
    */
-  procedure = gimp_procedure_new (resource_get_by_identifiers_invoker);
+  procedure = gimp_procedure_new (resource_get_by_identifiers_invoker, TRUE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-resource-get-by-identifiers");
   gimp_procedure_set_static_help (procedure,
@@ -589,6 +595,9 @@ register_resource_procs (GimpPDB *pdb)
                                    gimp_param_spec_resource ("resource",
                                                              "resource",
                                                              "The resource",
+                                                             GIMP_TYPE_RESOURCE,
+                                                             FALSE,
+                                                             NULL,
                                                              FALSE,
                                                              GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
@@ -597,12 +606,14 @@ register_resource_procs (GimpPDB *pdb)
   /*
    * gimp-resource-id-is-valid
    */
-  procedure = gimp_procedure_new (resource_id_is_valid_invoker);
+  procedure = gimp_procedure_new (resource_id_is_valid_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-resource-id-is-valid");
   gimp_procedure_set_static_help (procedure,
                                   "Returns TRUE if the resource ID is valid.",
-                                  "This procedure checks if the given resource ID is valid and refers to an existing resource.",
+                                  "This procedure checks if the given resource ID is valid and refers to an existing resource.\n"
+                                  "\n"
+                                  "*Note*: in most use cases, you should not use this function. If you got a [class@Gimp.Resource] from the API, you should trust it is valid. This function is mostly for internal usage.",
                                   NULL);
   gimp_procedure_set_static_attribution (procedure,
                                          "Michael Natterer <mitch@gimp.org>",
@@ -626,7 +637,7 @@ register_resource_procs (GimpPDB *pdb)
   /*
    * gimp-resource-id-is-brush
    */
-  procedure = gimp_procedure_new (resource_id_is_brush_invoker);
+  procedure = gimp_procedure_new (resource_id_is_brush_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-resource-id-is-brush");
   gimp_procedure_set_static_help (procedure,
@@ -655,7 +666,7 @@ register_resource_procs (GimpPDB *pdb)
   /*
    * gimp-resource-id-is-pattern
    */
-  procedure = gimp_procedure_new (resource_id_is_pattern_invoker);
+  procedure = gimp_procedure_new (resource_id_is_pattern_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-resource-id-is-pattern");
   gimp_procedure_set_static_help (procedure,
@@ -684,7 +695,7 @@ register_resource_procs (GimpPDB *pdb)
   /*
    * gimp-resource-id-is-gradient
    */
-  procedure = gimp_procedure_new (resource_id_is_gradient_invoker);
+  procedure = gimp_procedure_new (resource_id_is_gradient_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-resource-id-is-gradient");
   gimp_procedure_set_static_help (procedure,
@@ -713,7 +724,7 @@ register_resource_procs (GimpPDB *pdb)
   /*
    * gimp-resource-id-is-palette
    */
-  procedure = gimp_procedure_new (resource_id_is_palette_invoker);
+  procedure = gimp_procedure_new (resource_id_is_palette_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-resource-id-is-palette");
   gimp_procedure_set_static_help (procedure,
@@ -742,7 +753,7 @@ register_resource_procs (GimpPDB *pdb)
   /*
    * gimp-resource-id-is-font
    */
-  procedure = gimp_procedure_new (resource_id_is_font_invoker);
+  procedure = gimp_procedure_new (resource_id_is_font_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-resource-id-is-font");
   gimp_procedure_set_static_help (procedure,
@@ -771,7 +782,7 @@ register_resource_procs (GimpPDB *pdb)
   /*
    * gimp-resource-get-name
    */
-  procedure = gimp_procedure_new (resource_get_name_invoker);
+  procedure = gimp_procedure_new (resource_get_name_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-resource-get-name");
   gimp_procedure_set_static_help (procedure,
@@ -786,6 +797,9 @@ register_resource_procs (GimpPDB *pdb)
                                gimp_param_spec_resource ("resource",
                                                          "resource",
                                                          "The resource",
+                                                         GIMP_TYPE_RESOURCE,
+                                                         FALSE,
+                                                         NULL,
                                                          FALSE,
                                                          GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
@@ -801,13 +815,14 @@ register_resource_procs (GimpPDB *pdb)
   /*
    * gimp-resource-get-identifiers
    */
-  procedure = gimp_procedure_new (resource_get_identifiers_invoker);
+  procedure = gimp_procedure_new (resource_get_identifiers_invoker, TRUE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-resource-get-identifiers");
   gimp_procedure_set_static_help (procedure,
                                   "Returns a triplet identifying the resource.",
                                   "This procedure returns 2 strings and a boolean. The first string is the resource name, similar to what you would obtain calling 'gimp-resource-get-name'. The second is an opaque identifier for the collection this resource belongs to.\n"
-                                  "Note: as far as GIMP is concerned, a collection of resource usually corresponds to a single file on disk (which may or may not contain several resources). Therefore the identifier may be derived from the local file path. Nevertheless you should not use this string as such as this is not guaranteed to be always the case. You should consider it as an opaque identifier only to be used again through _'gimp-resource-get-by-identifier'.",
+                                  "\n"
+                                  "*Note*: as far as GIMP is concerned, a collection of resource usually corresponds to a single file on disk (which may or may not contain several resources). Therefore the identifier may be derived from the local file path. Nevertheless you should not use this string as such as this is not guaranteed to be always the case. You should consider it as an opaque identifier only to be used again through _'gimp-resource-get-by-identifier'.",
                                   NULL);
   gimp_procedure_set_static_attribution (procedure,
                                          "Jehan",
@@ -817,6 +832,9 @@ register_resource_procs (GimpPDB *pdb)
                                gimp_param_spec_resource ("resource",
                                                          "resource",
                                                          "The resource",
+                                                         GIMP_TYPE_RESOURCE,
+                                                         FALSE,
+                                                         NULL,
                                                          FALSE,
                                                          GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
@@ -845,7 +863,7 @@ register_resource_procs (GimpPDB *pdb)
   /*
    * gimp-resource-is-editable
    */
-  procedure = gimp_procedure_new (resource_is_editable_invoker);
+  procedure = gimp_procedure_new (resource_is_editable_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-resource-is-editable");
   gimp_procedure_set_static_help (procedure,
@@ -860,6 +878,9 @@ register_resource_procs (GimpPDB *pdb)
                                gimp_param_spec_resource ("resource",
                                                          "resource",
                                                          "The resource",
+                                                         GIMP_TYPE_RESOURCE,
+                                                         FALSE,
+                                                         NULL,
                                                          FALSE,
                                                          GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
@@ -874,7 +895,7 @@ register_resource_procs (GimpPDB *pdb)
   /*
    * gimp-resource-duplicate
    */
-  procedure = gimp_procedure_new (resource_duplicate_invoker);
+  procedure = gimp_procedure_new (resource_duplicate_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-resource-duplicate");
   gimp_procedure_set_static_help (procedure,
@@ -889,12 +910,18 @@ register_resource_procs (GimpPDB *pdb)
                                gimp_param_spec_resource ("resource",
                                                          "resource",
                                                          "The resource",
+                                                         GIMP_TYPE_RESOURCE,
+                                                         FALSE,
+                                                         NULL,
                                                          FALSE,
                                                          GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    gimp_param_spec_resource ("resource-copy",
                                                              "resource copy",
                                                              "A copy of the resource.",
+                                                             GIMP_TYPE_RESOURCE,
+                                                             FALSE,
+                                                             NULL,
                                                              FALSE,
                                                              GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
@@ -903,7 +930,7 @@ register_resource_procs (GimpPDB *pdb)
   /*
    * gimp-resource-rename
    */
-  procedure = gimp_procedure_new (resource_rename_invoker);
+  procedure = gimp_procedure_new (resource_rename_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-resource-rename");
   gimp_procedure_set_static_help (procedure,
@@ -918,6 +945,9 @@ register_resource_procs (GimpPDB *pdb)
                                gimp_param_spec_resource ("resource",
                                                          "resource",
                                                          "The resource",
+                                                         GIMP_TYPE_RESOURCE,
+                                                         FALSE,
+                                                         NULL,
                                                          FALSE,
                                                          GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
@@ -933,7 +963,7 @@ register_resource_procs (GimpPDB *pdb)
   /*
    * gimp-resource-delete
    */
-  procedure = gimp_procedure_new (resource_delete_invoker);
+  procedure = gimp_procedure_new (resource_delete_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-resource-delete");
   gimp_procedure_set_static_help (procedure,
@@ -948,6 +978,9 @@ register_resource_procs (GimpPDB *pdb)
                                gimp_param_spec_resource ("resource",
                                                          "resource",
                                                          "The resource",
+                                                         GIMP_TYPE_RESOURCE,
+                                                         FALSE,
+                                                         NULL,
                                                          FALSE,
                                                          GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);

@@ -35,7 +35,7 @@
 #include "core/gimplayer.h"
 #include "core/gimppalette.h"
 
-#include "vectors/gimpvectors.h"
+#include "vectors/gimppath.h"
 
 #include "gimpviewrenderer-utils.h"
 #include "gimpviewrendererbrush.h"
@@ -45,7 +45,7 @@
 #include "gimpviewrendererimage.h"
 #include "gimpviewrendererimagefile.h"
 #include "gimpviewrendererpalette.h"
-#include "gimpviewrenderervectors.h"
+#include "gimpviewrendererpath.h"
 
 
 GType
@@ -81,9 +81,9 @@ gimp_view_renderer_type_from_viewable_type (GType viewable_type)
     {
       type = GIMP_TYPE_VIEW_RENDERER_GRADIENT;
     }
-  else if (g_type_is_a (viewable_type, GIMP_TYPE_VECTORS))
+  else if (g_type_is_a (viewable_type, GIMP_TYPE_PATH))
     {
-      type = GIMP_TYPE_VIEW_RENDERER_VECTORS;
+      type = GIMP_TYPE_VIEW_RENDERER_PATH;
     }
   else if (g_type_is_a (viewable_type, GIMP_TYPE_IMAGEFILE))
     {

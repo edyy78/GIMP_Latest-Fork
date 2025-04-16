@@ -36,7 +36,7 @@
 #include "gimpscanconvert.h"
 #include "gimpstrokeoptions.h"
 
-#include "vectors/gimpvectors.h"
+#include "vectors/gimppath.h"
 
 #include "gimp-intl.h"
 
@@ -74,25 +74,25 @@ gimp_drawable_stroke_boundary (GimpDrawable       *drawable,
 }
 
 gboolean
-gimp_drawable_stroke_vectors (GimpDrawable       *drawable,
-                              GimpStrokeOptions  *options,
-                              GimpVectors        *vectors,
-                              gboolean            push_undo,
-                              GError            **error)
+gimp_drawable_stroke_path (GimpDrawable       *drawable,
+                           GimpStrokeOptions  *options,
+                           GimpPath           *vectors,
+                           gboolean            push_undo,
+                           GError            **error)
 {
   const GimpBezierDesc *bezier;
 
   g_return_val_if_fail (GIMP_IS_DRAWABLE (drawable), FALSE);
   g_return_val_if_fail (gimp_item_is_attached (GIMP_ITEM (drawable)), FALSE);
   g_return_val_if_fail (GIMP_IS_STROKE_OPTIONS (options), FALSE);
-  g_return_val_if_fail (GIMP_IS_VECTORS (vectors), FALSE);
+  g_return_val_if_fail (GIMP_IS_PATH (vectors), FALSE);
   g_return_val_if_fail (gimp_fill_options_get_style (GIMP_FILL_OPTIONS (options)) !=
                         GIMP_FILL_STYLE_PATTERN ||
                         gimp_context_get_pattern (GIMP_CONTEXT (options)) != NULL,
                         FALSE);
   g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
 
-  bezier = gimp_vectors_get_bezier (vectors);
+  bezier = gimp_path_get_bezier (vectors);
 
   if (bezier && bezier->num_data >= 2)
     {
@@ -119,8 +119,8 @@ gimp_drawable_stroke_scan_convert (GimpDrawable      *drawable,
                                    GimpScanConvert   *scan_convert,
                                    gboolean           push_undo)
 {
-  gdouble  width;
-  GimpUnit unit;
+  gdouble   width;
+  GimpUnit *unit;
 
   g_return_if_fail (GIMP_IS_DRAWABLE (drawable));
   g_return_if_fail (gimp_item_is_attached (GIMP_ITEM (drawable)));
@@ -136,7 +136,7 @@ gimp_drawable_stroke_scan_convert (GimpDrawable      *drawable,
   width = gimp_stroke_options_get_width (options);
   unit  = gimp_stroke_options_get_unit (options);
 
-  if (unit != GIMP_UNIT_PIXEL)
+  if (unit != gimp_unit_pixel ())
     {
       GimpImage *image = gimp_item_get_image (GIMP_ITEM (drawable));
       gdouble    xres;

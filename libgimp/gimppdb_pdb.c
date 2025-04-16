@@ -344,7 +344,7 @@ _gimp_pdb_get_proc_return_value (const gchar *procedure_name,
 /**
  * _gimp_pdb_set_proc_image_types:
  * @procedure_name: The procedure for which to install the menu path.
- * @image_types: The procedure's supported image types.
+ * @image_types: (nullable): The procedure's supported image types.
  *
  * Set the supported image types for a plug-in procedure.
  *
@@ -653,9 +653,9 @@ _gimp_pdb_set_proc_icon (const gchar  *procedure_name,
 /**
  * _gimp_pdb_set_proc_documentation:
  * @procedure_name: The procedure for which to install the menu path.
- * @blurb: A short blurb.
- * @help: Detailed procedure help.
- * @help_id: The procedure help_id.
+ * @blurb: (nullable): A short blurb.
+ * @help: (nullable): Detailed procedure help.
+ * @help_id: (nullable): The procedure help_id.
  *
  * Set the documentation for a plug-in procedure.
  *
@@ -751,9 +751,9 @@ _gimp_pdb_get_proc_documentation (const gchar  *procedure_name,
 /**
  * _gimp_pdb_set_proc_attribution:
  * @procedure_name: The procedure for which to install the menu path.
- * @authors: Authors of the procedure.
- * @copyright: The copyright.
- * @date: Copyright date.
+ * @authors: (nullable): Authors of the procedure.
+ * @copyright: (nullable): The copyright.
+ * @date: (nullable): Copyright date.
  *
  * Set the attribution for a plug-in procedure.
  *
@@ -890,22 +890,22 @@ _gimp_pdb_set_file_proc_load_handler (const gchar *procedure_name,
 }
 
 /**
- * _gimp_pdb_set_file_proc_save_handler:
+ * _gimp_pdb_set_file_proc_export_handler:
  * @procedure_name: The name of the procedure to be used for saving.
- * @extensions: comma separated list of extensions this handler can save (i.e. \"jpg,jpeg\").
- * @prefixes: comma separated list of prefixes this handler can save (i.e. \"http:,ftp:\").
+ * @extensions: comma separated list of extensions this handler can export as (i.e. \"jpg,jpeg\").
+ * @prefixes: comma separated list of prefixes this handler can export to (i.e. \"http:,ftp:\").
  *
- * Registers a file save handler procedure.
+ * Registers a file export handler procedure.
  *
- * Registers a procedural database procedure to be called to save files
- * in a particular file format.
+ * Registers a procedural database procedure to be called to export
+ * files in a particular file format.
  *
  * Returns: TRUE on success.
  **/
 gboolean
-_gimp_pdb_set_file_proc_save_handler (const gchar *procedure_name,
-                                      const gchar *extensions,
-                                      const gchar *prefixes)
+_gimp_pdb_set_file_proc_export_handler (const gchar *procedure_name,
+                                        const gchar *extensions,
+                                        const gchar *prefixes)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
@@ -918,7 +918,7 @@ _gimp_pdb_set_file_proc_save_handler (const gchar *procedure_name,
                                           G_TYPE_NONE);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
-                                               "gimp-pdb-set-file-proc-save-handler",
+                                               "gimp-pdb-set-file-proc-export-handler",
                                                args);
   gimp_value_array_unref (args);
 
@@ -979,10 +979,10 @@ _gimp_pdb_set_file_proc_priority (const gchar *procedure_name,
  * Associates MIME types with a file handler procedure.
  *
  * Registers MIME types for a file handler procedure. This allows GIMP
- * to determine the MIME type of the file opened or saved using this
+ * to determine the MIME type of the file opened or exported using this
  * procedure. It is recommended that only one MIME type is registered
  * per file procedure; when registering more than one MIME type, GIMP
- * will associate the first one with files opened or saved with this
+ * will associate the first one with files opened or exported with this
  * procedure.
  *
  * Returns: TRUE on success.
@@ -1061,7 +1061,7 @@ _gimp_pdb_set_file_proc_handles_remote (const gchar *procedure_name)
  *
  * Registers a file handler procedure as capable of handling raw
  * digital camera files. Use this procedure only to register raw load
- * handlers, calling it on a save handler will generate an error.
+ * handlers, calling it on an export handler will generate an error.
  *
  * Returns: TRUE on success.
  *
@@ -1080,6 +1080,43 @@ _gimp_pdb_set_file_proc_handles_raw (const gchar *procedure_name)
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
                                                "gimp-pdb-set-file-proc-handles-raw",
+                                               args);
+  gimp_value_array_unref (args);
+
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
+
+  return success;
+}
+
+/**
+ * _gimp_pdb_set_file_proc_handles_vector:
+ * @procedure_name: The name of the vector load procedure.
+ *
+ * Registers a load handler procedure as handling vector formats.
+ *
+ * Registers a file handler procedure as handling vector image formats.
+ * Use this procedure only to register a GimpVectorLoadProcedure,
+ * calling it on any other handler will generate an error.
+ *
+ * Returns: TRUE on success.
+ *
+ * Since: 3.0
+ **/
+gboolean
+_gimp_pdb_set_file_proc_handles_vector (const gchar *procedure_name)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean success = TRUE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_STRING, procedure_name,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-pdb-set-file-proc-handles-vector",
                                                args);
   gimp_value_array_unref (args);
 

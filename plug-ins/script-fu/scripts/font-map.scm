@@ -18,24 +18,25 @@
                             colors)
 
   (define (max-font-width text use-name list-cnt list font-size)
-    (let* ((count    0)
-           (width    0)
-           (maxwidth 0)
-           (font     "")
-           (extents  '()))
+    (let* ((count        0)
+           (width        0)
+           (maxwidth     0)
+           (font         "")
+           (font-object '())
+           (extents     '()))
       (while (< count list-cnt)
-        (set! font (car list))
+        (set! font-object (vector-ref list count))
+        (set! font (car (gimp-resource-get-name font-object)))
 
         (if (= use-name TRUE)
             (set! text font))
         (set! extents (gimp-text-get-extents-font     text
                                                       font-size
-                                                      font))
+                                                      font-object))
         (set! width (car extents))
         (if (> width maxwidth)
             (set! maxwidth width))
 
-        (set! list (cdr list))
         (set! count (+ count 1))
       )
 
@@ -44,26 +45,27 @@
   )
 
   (define (max-font-height text use-name list-cnt list font-size)
-    (let* ((count     0)
-           (height    0)
-           (maxheight 0)
-           (font      "")
-           (extents   '()))
+    (let* ((count       0)
+           (height      0)
+           (maxheight   0)
+           (font        "")
+           (font-object '())
+           (extents     '()))
       (while (< count list-cnt)
-        (set! font (car list))
+        (set! font-object (vector-ref list count))
+        (set! font (car (gimp-resource-get-name font-object)))
 
         (if (= use-name TRUE)
             (set! text font)
         )
         (set! extents (gimp-text-get-extents-font     text
                                                       font-size
-                                                      font))
+                                                      font-object))
         (set! height (cadr extents))
         (if (> height maxheight)
             (set! maxheight height)
         )
 
-        (set! list (cdr list))
         (set! count (+ count 1))
       )
 
@@ -74,23 +76,25 @@
   (let* (
         ; gimp-fonts-get-list returns a one element list of results,
         ; the only element is itself a list of fonts, possibly empty.
-        (font-list  (car (gimp-fonts-get-list font-filter)))
-        (num-fonts  (length font-list))
-        (label-size (/ font-size 2))
-        (border     (+ border (* labels (/ label-size 2))))
-        (y          border)
-        (maxheight  (max-font-height text use-name num-fonts font-list font-size))
-        (maxwidth   (max-font-width  text use-name num-fonts font-list font-size))
-        (width      (+ maxwidth (* 2 border)))
-        (height     (+ (+ (* maxheight num-fonts) (* 2 border))
-                       (* labels (* label-size num-fonts))))
-        (img        (car (gimp-image-new width height (if (= colors 0)
-                                                          GRAY RGB))))
-        (drawable   (car (gimp-layer-new img width height (if (= colors 0)
-                                                              GRAY-IMAGE RGB-IMAGE)
-                                         "Background" 100 LAYER-MODE-NORMAL)))
-        (count      0)
-        (font       "")
+        (font-list   (car (gimp-fonts-get-list font-filter)))
+        (num-fonts   (vector-length font-list))
+        (label-size  (/ font-size 2))
+        (border      (+ border (* labels (/ label-size 2))))
+        (y           border)
+        (maxheight   (max-font-height text use-name num-fonts font-list font-size))
+        (maxwidth    (max-font-width  text use-name num-fonts font-list font-size))
+        (width       (+ maxwidth (* 2 border)))
+        (height      (+ (+ (* maxheight num-fonts) (* 2 border))
+                        (* labels (* label-size num-fonts))))
+        (img         (car (gimp-image-new width height (if (= colors 0)
+                                                           GRAY RGB))))
+        (drawable    (car (gimp-layer-new img "Background"
+                                          width height (if (= colors 0)
+                                                         GRAY-IMAGE RGB-IMAGE)
+                                          100 LAYER-MODE-NORMAL)))
+        (count       0)
+        (font        "")
+        (font-object '())
         )
 
     (gimp-context-push)
@@ -107,15 +111,16 @@
 
     (if (= labels TRUE)
         (begin
-          (set! drawable (car (gimp-layer-new img width height
+          (set! drawable (car (gimp-layer-new img "Labels" width height
                                               (if (= colors 0)
                                                   GRAYA-IMAGE RGBA-IMAGE)
-                                              "Labels" 100 LAYER-MODE-NORMAL)))
+                                              100 LAYER-MODE-NORMAL)))
           (gimp-image-insert-layer img drawable 0 -1)))
           (gimp-drawable-edit-clear drawable)
 
     (while (< count num-fonts)
-      (set! font (car font-list))
+      (set! font-object (vector-ref font-list count))
+      (set! font (car (gimp-resource-get-name font-object)))
 
       (if (= use-name TRUE)
           (set! text font))
@@ -125,7 +130,7 @@
                           y
                           text
                           0 TRUE font-size
-                          font)
+                          font-object)
 
       (set! y (+ y maxheight))
 
@@ -139,16 +144,15 @@
                                                                font
                                                                0 TRUE
                                                                label-size
-                                                               "Sans")))
+                                                               font-object)))
           (set! y (+ y label-size))
           )
       )
 
-      (set! font-list (cdr font-list))
       (set! count (+ count 1))
     )
 
-    (gimp-image-set-selected-layers img 1 (vector drawable))
+    (gimp-image-set-selected-layers img (vector drawable))
 
     (gimp-image-undo-enable img)
     (gimp-display-new img)
@@ -157,13 +161,11 @@
   )
 )
 
-(script-fu-register "script-fu-font-map"
+(script-fu-register-procedure "script-fu-font-map"
   _"Render _Font Map..."
   _"Create an image filled with previews of fonts matching a fontname filter"
   "Spencer Kimball"
-  "Spencer Kimball"
   "1997"
-  ""
   SF-STRING     _"_Text"                  "How quickly daft jumping zebras vex."
   SF-TOGGLE     _"Use font _name as text" FALSE
   SF-TOGGLE     _"_Labels"                TRUE

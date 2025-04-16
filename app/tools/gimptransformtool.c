@@ -39,7 +39,7 @@
 #include "core/gimpprogress.h"
 #include "core/gimp-transform-resize.h"
 
-#include "vectors/gimpvectors.h"
+#include "vectors/gimppath.h"
 
 #include "display/gimpdisplay.h"
 #include "display/gimpdisplayshell.h"
@@ -559,7 +559,7 @@ gimp_transform_tool_bounds (GimpTransformTool *tr_tool,
             tr_tool->x2 = G_MININT;
             tr_tool->y2 = G_MININT;
 
-            for (iter = gimp_image_get_selected_vectors (image); iter; iter = iter->next)
+            for (iter = gimp_image_get_selected_paths (image); iter; iter = iter->next)
               {
                 GimpItem *item   = iter->data;
                 gint      x;
@@ -659,7 +659,7 @@ gimp_transform_tool_get_selected_objects (GimpTransformTool  *tr_tool,
       break;
 
     case GIMP_TRANSFORM_TYPE_PATH:
-      objects = g_list_copy (gimp_image_get_selected_vectors (image));
+      objects = g_list_copy (gimp_image_get_selected_paths (image));
       break;
 
     case GIMP_TRANSFORM_TYPE_IMAGE:
@@ -749,7 +749,7 @@ gimp_transform_tool_check_selected_objects (GimpTransformTool  *tr_tool,
             locked_message = _("The selected path's strokes are locked.");
           else if (gimp_item_is_position_locked (item, &locked_item))
             locked_message = _("The selected path's position is locked.");
-          else if (! gimp_vectors_get_n_strokes (GIMP_VECTORS (item)))
+          else if (! gimp_path_get_n_strokes (GIMP_PATH (item)))
             locked_message = _("The selected path has no strokes.");
         }
       break;

@@ -58,7 +58,6 @@ static GimpProcedure  * wavelet_create_procedure (GimpPlugIn           *plug_in,
 static GimpValueArray * wavelet_run              (GimpProcedure        *procedure,
                                                   GimpRunMode           run_mode,
                                                   GimpImage            *image,
-                                                  gint                  n_drawables,
                                                   GimpDrawable        **drawables,
                                                   GimpProcedureConfig  *config,
                                                   gpointer              run_data);
@@ -127,25 +126,25 @@ wavelet_create_procedure (GimpPlugIn  *plug_in,
                                       "Miroslav Talasek <miroslav.talasek@seznam.cz>",
                                       "19 January 2017");
 
-      GIMP_PROC_ARG_INT (procedure, "scales",
-                         _("Scal_es"),
-                         _("Number of scales"),
-                         1, 7, 5,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "scales",
+                                       _("Scal_es"),
+                                       _("Number of scales"),
+                                       1, 7, 5,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "create-group",
-                             _("Create a layer group to store the "
-                               "_decomposition"),
-                             _("Create a layer group to store the "
-                             "decomposition"),
-                             TRUE,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "create-group",
+                                           _("Create a layer group to store the "
+                                             "_decomposition"),
+                                           _("Create a layer group to store the "
+                                           "decomposition"),
+                                           TRUE,
+                                           G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "create-masks",
-                             _("_Add a layer mask to each scales layer"),
-                             _("Add a layer mask to each scales layer"),
-                             FALSE,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "create-masks",
+                                           _("_Add a layer mask to each scales layer"),
+                                           _("Add a layer mask to each scales layer"),
+                                           FALSE,
+                                           G_PARAM_READWRITE);
     }
 
   return procedure;
@@ -155,7 +154,6 @@ static GimpValueArray *
 wavelet_run (GimpProcedure        *procedure,
               GimpRunMode           run_mode,
               GimpImage            *image,
-              gint                  n_drawables,
               GimpDrawable        **drawables,
               GimpProcedureConfig  *config,
               gpointer              run_data)
@@ -173,7 +171,7 @@ wavelet_run (GimpProcedure        *procedure,
 
   gegl_init (NULL, NULL);
 
-  if (n_drawables != 1)
+  if (gimp_core_object_array_get_length ((GObject **) drawables) != 1)
     {
       GError *error = NULL;
 
@@ -209,9 +207,8 @@ wavelet_run (GimpProcedure        *procedure,
 
   if (create_group)
     {
-      parent = gimp_layer_group_new (image);
+      parent = GIMP_LAYER (gimp_group_layer_new (image, _("Decomposition")));
 
-      gimp_item_set_name (GIMP_ITEM (parent), _("Decomposition"));
       gimp_item_set_visible (GIMP_ITEM (parent), FALSE);
       gimp_image_insert_layer (image, parent,
                                GIMP_LAYER (gimp_item_get_parent (GIMP_ITEM (drawable))),

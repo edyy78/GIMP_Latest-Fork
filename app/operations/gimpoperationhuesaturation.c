@@ -178,8 +178,14 @@ map_lightness_achromatic (GimpHueSaturationConfig *config, gfloat value)
 static void
 gimp_operation_hue_saturation_prepare (GeglOperation *operation)
 {
-  const Babl *format = babl_format_with_space ("HSLA float",
-                                               gegl_operation_get_format (operation, "input"));
+  /* We work in HSLA within sRGB space which is much faster to convert
+   * to than with specific spaces. Eventually though, I'm not sure if we
+   * may not want to work in the source space. So it would be wise to
+   * study this possible enhancement once babl got faster conversion
+   * from "R'G'B'" with space to HSL. TODO.
+   * See: https://gitlab.gnome.org/GNOME/babl/-/issues/103
+   */
+  const Babl *format = babl_format_with_space ("HSLA float", NULL);
 
   gegl_operation_set_format (operation, "input", format);
   gegl_operation_set_format (operation, "output", format);
@@ -206,7 +212,7 @@ gimp_operation_hue_saturation_process (GeglOperation       *operation,
 
   while (samples--)
     {
-      GimpHSL  hsl;
+      gfloat   hsl[4];
       gfloat   h;
       gint     hue_counter;
       gint     hue                 = 0;
@@ -215,11 +221,9 @@ gimp_operation_hue_saturation_process (GeglOperation       *operation,
       gfloat   primary_intensity   = 0.0f;
       gfloat   secondary_intensity = 0.0f;
 
-      hsl.h = src[0];
-      hsl.s = src[1];
-      hsl.l = src[2];
-      hsl.a = src[3];
-      h = hsl.h * 6.0f;
+      for (gint i = 0; i < 4; i++)
+        hsl[i] = src[i];
+      h = hsl[0] * 6.0f;
 
       for (hue_counter = 0; hue_counter < 7; hue_counter++)
         {
@@ -266,32 +270,31 @@ gimp_operation_hue_saturation_process (GeglOperation       *operation,
 
       if (use_secondary_hue)
         {
-          hsl.h = map_hue_overlap (config, hue, secondary_hue, hsl.h,
-                                   primary_intensity, secondary_intensity);
+          hsl[0] = map_hue_overlap (config, hue, secondary_hue, hsl[0],
+                                    primary_intensity, secondary_intensity);
 
-          hsl.s = (map_saturation (config, hue,           hsl.s) * primary_intensity +
-                   map_saturation (config, secondary_hue, hsl.s) * secondary_intensity);
+          hsl[1] = (map_saturation (config, hue,           hsl[1]) * primary_intensity +
+                    map_saturation (config, secondary_hue, hsl[1]) * secondary_intensity);
 
-          hsl.l = (map_lightness (config, hue,           hsl.l) * primary_intensity +
-                   map_lightness (config, secondary_hue, hsl.l) * secondary_intensity);
+          hsl[2] = (map_lightness (config, hue,           hsl[2]) * primary_intensity +
+                    map_lightness (config, secondary_hue, hsl[2]) * secondary_intensity);
         }
       else
         {
-          if (hsl.s <= 0.0)
+          if (hsl[1] <= 0.0)
             {
-              hsl.l = map_lightness_achromatic (config, hsl.l);
+              hsl[2] = map_lightness_achromatic (config, hsl[2]);
             }
           else
             {
-              hsl.h = map_hue (config, hue, hsl.h);
-              hsl.l = map_lightness (config, hue, hsl.l);
-              hsl.s = map_saturation (config, hue, hsl.s);
+              hsl[0] = map_hue (config, hue, hsl[0]);
+              hsl[2] = map_lightness (config, hue, hsl[2]);
+              hsl[1] = map_saturation (config, hue, hsl[1]);
             }
         }
 
-      dest[0] = hsl.h;
-      dest[1] = hsl.s;
-      dest[2] = hsl.l;
+      for (gint i = 0; i < 3; i++)
+        dest[i] = hsl[i];
       dest[3] = src[3];
 
       src  += 4;

@@ -77,7 +77,6 @@ static GimpProcedure  * film_create_procedure (GimpPlugIn           *plug_in,
 static GimpValueArray * film_run              (GimpProcedure        *procedure,
                                                GimpRunMode           run_mode,
                                                GimpImage            *image,
-                                               gint                  n_drawables,
                                                GimpDrawable        **drawables,
                                                GimpProcedureConfig  *config,
                                                gpointer              run_data);
@@ -196,114 +195,115 @@ film_create_procedure (GimpPlugIn  *plug_in,
                                       "Peter Kirchgessner (peter@kirchgessner.net)",
                                       "1997");
 
-      GIMP_PROC_ARG_INT (procedure, "film-height",
-                         _("Film _height"),
-                         _("Height of film (0: fit to images)"),
-                         0, GIMP_MAX_IMAGE_SIZE, 0,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "film-height",
+                                       _("Film _height"),
+                                       _("Height of film (0: fit to images)"),
+                                       0, GIMP_MAX_IMAGE_SIZE, 0,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_COLOR (procedure, "film-color",
-                           _("_Film color"),
-                           _("Color of the film"),
-                           TRUE, default_film_color,
-                           G_PARAM_READWRITE);
+      gimp_procedure_add_color_argument (procedure, "film-color",
+                                         _("_Film color"),
+                                         _("Color of the film"),
+                                         TRUE, default_film_color,
+                                         G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "number-start",
-                         _("Start _index"),
-                         _("Start index for numbering"),
-                         0, G_MAXINT, 1,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "number-start",
+                                       _("Start _index"),
+                                       _("Start index for numbering"),
+                                       0, G_MAXINT, 1,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_FONT (procedure, "number-font",
-                          _("Number _font"),
-                          _("Font for drawing numbers"),
-                          G_PARAM_READWRITE);
+      gimp_procedure_add_font_argument (procedure, "number-font",
+                                        _("Number _font"),
+                                        _("Font for drawing numbers"),
+                                        FALSE, NULL, TRUE,
+                                        G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_COLOR (procedure, "number-color",
-                           _("_Number color"),
-                           _("Color for numbers"),
-                           TRUE, default_number_color,
-                           G_PARAM_READWRITE);
+      gimp_procedure_add_color_argument (procedure, "number-color",
+                                         _("_Number color"),
+                                         _("Color for numbers"),
+                                         TRUE, default_number_color,
+                                         G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "at-top",
-                             _("At _top"),
-                             _("Draw numbers at top"),
-                             TRUE,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "at-top",
+                                           _("At _top"),
+                                           _("Draw numbers at top"),
+                                           TRUE,
+                                           G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "at-bottom",
-                             _("At _bottom"),
-                             _("Draw numbers at bottom"),
-                             TRUE,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "at-bottom",
+                                           _("At _bottom"),
+                                           _("Draw numbers at bottom"),
+                                           TRUE,
+                                           G_PARAM_READWRITE);
 
       /* Arguments ignored in interactive mode. */
 
-      GIMP_PROC_ARG_OBJECT_ARRAY (procedure, "images",
-                                  "Images",
-                                  "Images to be used for film",
-                                  GIMP_TYPE_IMAGE,
-                                  G_PARAM_READWRITE);
+      gimp_procedure_add_core_object_array_argument (procedure, "images",
+                                                     "Images",
+                                                     "Images to be used for film",
+                                                     GIMP_TYPE_IMAGE,
+                                                     G_PARAM_READWRITE);
 
       /* The more specific settings. */
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "picture-height",
-                            _("Image _height"),
-                            _("As fraction of the strip height"),
-                            0.0, 1.0, 0.695,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "picture-height",
+                                          _("Image _height"),
+                                          _("As fraction of the strip height"),
+                                          0.0, 1.0, 0.695,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "picture-spacing",
-                            _("Image s_pacing"),
-                            _("The spacing between 2 images, as fraction of the strip height"),
-                            0.0, 1.0, 0.040,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "picture-spacing",
+                                          _("Image s_pacing"),
+                                          _("The spacing between 2 images, as fraction of the strip height"),
+                                          0.0, 1.0, 0.040,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "hole-offset",
-                            _("Hole offse_t"),
-                            _("The offset from the edge of film, as fraction of the strip height"),
-                            0.0, 1.0, 0.058,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "hole-offset",
+                                          _("Hole offse_t"),
+                                          _("The offset from the edge of film, as fraction of the strip height"),
+                                          0.0, 1.0, 0.058,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "hole-width",
-                            _("Hole _width"),
-                            _("The width of the holes, as fraction of the strip height"),
-                            0.0, 1.0, 0.052,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "hole-width",
+                                          _("Hole _width"),
+                                          _("The width of the holes, as fraction of the strip height"),
+                                          0.0, 1.0, 0.052,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "hole-height",
-                            _("Hole hei_ght"),
-                            _("The height of the holes, as fraction of the strip height"),
-                            0.0, 1.0, 0.081,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "hole-height",
+                                          _("Hole hei_ght"),
+                                          _("The height of the holes, as fraction of the strip height"),
+                                          0.0, 1.0, 0.081,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "hole-spacing",
-                            _("Hole _distance"),
-                            _("The distance between holes, as fraction of the strip height"),
-                            0.0, 1.0, 0.081,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "hole-spacing",
+                                          _("Hole _distance"),
+                                          _("The distance between holes, as fraction of the strip height"),
+                                          0.0, 1.0, 0.081,
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_DOUBLE (procedure, "number-height",
-                            _("_Number height"),
-                            _("The height of drawn numbers, as fraction of the strip height"),
-                            0.0, 1.0, 0.052,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_double_argument (procedure, "number-height",
+                                          _("_Number height"),
+                                          _("The height of drawn numbers, as fraction of the strip height"),
+                                          0.0, 1.0, 0.052,
+                                          G_PARAM_READWRITE);
 
       /* Auxiliary argument mostly for the GUI. */
 
-      GIMP_PROC_AUX_ARG_BOOLEAN (procedure, "keep-height",
-                                 _("F_it height to images"),
-                                 _("Keep maximum image height"),
-                                 TRUE,
-                                 G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_aux_argument (procedure, "keep-height",
+                                               _("F_it height to images"),
+                                               _("Keep maximum image height"),
+                                               TRUE,
+                                               G_PARAM_READWRITE);
 
       /* Returned image. */
 
-      GIMP_PROC_VAL_IMAGE (procedure, "new-image",
-                           "New image",
-                           "Output image",
-                           FALSE,
-                           G_PARAM_READWRITE);
+      gimp_procedure_add_image_return_value (procedure, "new-image",
+                                             "New image",
+                                             "Output image",
+                                             FALSE,
+                                             G_PARAM_READWRITE);
     }
 
   g_object_unref (default_film_color);
@@ -316,7 +316,6 @@ static GimpValueArray *
 film_run (GimpProcedure        *procedure,
           GimpRunMode           run_mode,
           GimpImage            *image,
-          gint                  n_drawables,
           GimpDrawable        **drawables,
           GimpProcedureConfig  *config,
           gpointer              run_data)
@@ -404,43 +403,43 @@ film_run (GimpProcedure        *procedure,
 static GimpImage *
 film (GimpProcedureConfig *config)
 {
-  GimpObjectArray *images;
-  gint             width, height;
-  guchar          *hole;
-  gint             film_height;
-  gint             film_width;
-  gint             picture_width;
-  gdouble          picture_height;
-  gdouble          picture_space;
-  gint             picture_x0;
-  gint             picture_y0;
-  gdouble          hole_offset;
-  gdouble          hole_width;
-  gdouble          hole_height;
-  gdouble          hole_space;
-  gint             hole_x;
-  gdouble          number_height;
-  gint             num_pictures;
-  gint             number_start;
-  gboolean         at_top;
-  gboolean         at_bottom;
-  gint             picture_count;
-  GeglColor       *number_color = NULL;
-  GeglColor       *film_color   = NULL;
-  gboolean         keep_height;
-  gdouble          f;
-  GimpImage       *image_dst;
-  GimpImage       *image_tmp;
-  GimpLayer       *layer_src;
-  GimpLayer       *layer_dst;
-  GimpLayer       *new_layer;
-  GimpLayer       *floating_sel;
+  GimpImage **images;
+  gint        width, height;
+  guchar     *hole;
+  gint        film_height;
+  gint        film_width;
+  gint        picture_width;
+  gdouble     picture_height;
+  gdouble     picture_space;
+  gint        picture_x0;
+  gint        picture_y0;
+  gdouble     hole_offset;
+  gdouble     hole_width;
+  gdouble     hole_height;
+  gdouble     hole_space;
+  gint        hole_x;
+  gdouble     number_height;
+  gint        num_pictures;
+  gint        number_start;
+  gboolean    at_top;
+  gboolean    at_bottom;
+  gint        picture_count;
+  GeglColor  *number_color = NULL;
+  GeglColor  *film_color   = NULL;
+  gboolean    keep_height;
+  gdouble     f;
+  GimpImage  *image_dst;
+  GimpImage  *image_tmp;
+  GimpLayer  *layer_src;
+  GimpLayer  *layer_dst;
+  GimpLayer  *new_layer;
+  GimpLayer  *floating_sel;
 
-  GimpFont        *number_font;
+  GimpFont   *number_font;
 
-  GList           *layers     = NULL;
-  GList           *iter2;
-  gint             i;
+  GList      *layers     = NULL;
+  GList      *iter2;
+  gint        i;
 
   g_object_get (config,
                 "images",          &images,
@@ -461,7 +460,7 @@ film (GimpProcedureConfig *config)
                 "at-bottom",       &at_bottom,
                 NULL);
 
-  if (images->length <= 0)
+  if (images[0] == NULL)
     return NULL;
 
   if (film_color == NULL)
@@ -483,9 +482,9 @@ film (GimpProcedureConfig *config)
     {
       gdouble max_height = 0;
 
-      for (i = 0; i < images->length; i++)
+      for (i = 0; images[i] != NULL; i++)
         {
-          GimpImage *image = GIMP_IMAGE (images->data[i]);
+          GimpImage *image = images[i];
 
           height = gimp_image_get_height (image);
           if ((gdouble) height > max_height)
@@ -504,9 +503,9 @@ film (GimpProcedureConfig *config)
   /* Calculate total film width */
   film_width = 0;
   num_pictures = 0;
-  for (i = 0; i < images->length; i++)
+  for (i = 0; images[i] != NULL; i++)
     {
-      GimpImage *image = GIMP_IMAGE (images->data[i]);
+      GimpImage *image = images[i];
 
       layers = gimp_image_list_layers (image);
 
@@ -591,9 +590,9 @@ film (GimpProcedureConfig *config)
   /* Compose all images and layers */
   picture_x0 = 0;
   picture_count = 0;
-  for (i = 0; i < images->length; i++)
+  for (i = 0; images[i] != NULL; i++)
     {
-      GimpImage *image = GIMP_IMAGE (images->data[i]);
+      GimpImage *image = images[i];
 
       image_tmp = gimp_image_duplicate (image);
       width = gimp_image_get_width (image_tmp);
@@ -662,7 +661,7 @@ film (GimpProcedureConfig *config)
 
   gimp_context_pop ();
 
-  gimp_object_array_free (images);
+  g_free (images);
   g_clear_object (&number_color);
   g_clear_object (&film_color);
   g_clear_object (&number_font);
@@ -676,11 +675,11 @@ static gboolean
 check_filmvals (GimpProcedureConfig  *config,
                 GError              **error)
 {
-  GimpFont        *font = NULL;
-  GimpObjectArray *images;
-  gint             film_height;
-  gint             i, j;
-  gboolean         success = FALSE;
+  GimpFont   *font = NULL;
+  GimpImage **images;
+  gint        film_height;
+  gint        i, j;
+  gboolean    success = FALSE;
 
   g_object_get (config,
                 "images",      &images,
@@ -697,20 +696,20 @@ check_filmvals (GimpProcedureConfig  *config,
       g_object_set (config, "number-font", gimp_context_get_font (), NULL);
     }
 
-  if (images != NULL)
+  if (images != NULL && images[0] != NULL)
     {
-      for (i = 0, j = 0; i < images->length; i++)
+      for (i = 0, j = 0; images[i] != NULL; i++)
         {
-          if (gimp_image_is_valid (GIMP_IMAGE (images->data[i])))
+          if (gimp_image_is_valid (images[i]))
             {
-              images->data[j] = images->data[i];
+              images[j] = images[i];
               j++;
             }
         }
 
       if (j > 0)
         {
-          images->length = j;
+          images[j] = NULL;
           g_object_set (config,
                         "images", images,
                         NULL);
@@ -718,11 +717,11 @@ check_filmvals (GimpProcedureConfig  *config,
         }
     }
 
-  if (images == NULL || images->length == 0)
+  if (images == NULL || images[0] == NULL)
     g_set_error_literal (error, GIMP_PLUG_IN_ERROR, 0,
                          _("\"Filmstrip\" cannot be run without any input images"));
 
-  gimp_object_array_free (images);
+  g_free (images);
   g_clear_object (&font);
 
   return success;
@@ -1175,11 +1174,10 @@ film_dialog (GimpImage           *image,
 
   if (run)
     {
-      GimpObjectArray *images_array;
-      GimpImage       *images[MAX_FILM_PICTURES];
-      gint             num_images = 0;
-      gboolean         iter_valid;
-      GtkTreeIter      iter;
+      GimpImage    *images[MAX_FILM_PICTURES + 1];
+      gint          num_images = 0;
+      gboolean      iter_valid;
+      GtkTreeIter   iter;
 
       for (iter_valid = gtk_tree_model_get_iter_first (filmint.image_list_film,
                                                        &iter);
@@ -1199,14 +1197,11 @@ film_dialog (GimpImage           *image,
               num_images++;
             }
         }
-
-      images_array = gimp_object_array_new (GIMP_TYPE_IMAGE, (GObject **) images, num_images, TRUE);
+      images[num_images] = NULL;
 
       g_object_set (config,
-                    "images", images_array,
+                    "images", images,
                     NULL);
-
-      gimp_object_array_free (images_array);
     }
 
   gtk_widget_destroy (dialog);

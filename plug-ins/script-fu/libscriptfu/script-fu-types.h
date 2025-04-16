@@ -93,6 +93,8 @@ typedef struct
   SFArg        *args;
   SFDrawableArity drawable_arity;
   GType           proc_class; /* GimpProcedure or GimpImageProcedure. */
+  /* is declared using script-fu-register and dialog is old-style. */
+  gboolean       is_old_style;
 } SFScript;
 
 /* ScriptFu keeps array of SFArg, it's private arg specs.
@@ -115,5 +117,22 @@ gboolean   sf_color_arg_set_default_by_name  (SFArg       *arg,
 void       sf_color_arg_set_default_by_color (SFArg       *arg,
                                               GeglColor   *color);
 GeglColor* sf_color_arg_get_default_color    (SFArg       *arg);
+
+/* defined in script-fu-resource. c */
+void          sf_resource_arg_set_name_default   (SFArg *arg,
+                                                  GType  resource_type,
+                                                  gchar *name_of_default);
+gchar        *sf_resource_arg_get_name_default   (SFArg *arg);
+GimpResource *sf_resource_arg_get_default        (SFArg *arg);
+GimpResource *sf_resource_arg_get_value          (SFArg *arg);
+
+void          sf_resource_arg_set                (SFArg *arg,
+                                                  gint32 ID);
+
+void          sf_resource_arg_free               (SFArg *arg);
+void          sf_resource_arg_reset              (SFArg *arg);
+gchar        *sf_resource_arg_get_repr           (SFArg *arg);
+void          sf_resource_arg_init_current_value (SFArg *arg);
+
 
 #endif /*  __SCRIPT_FU_TYPES__  */

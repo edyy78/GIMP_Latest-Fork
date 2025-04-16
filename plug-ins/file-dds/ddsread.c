@@ -146,7 +146,7 @@ read_dds (GFile                *file,
   GimpPrecision      precision = GIMP_PRECISION_U8_NON_LINEAR;
   gboolean           read_mipmaps;
   gboolean           flip_import;
-  gint               i, j;
+  gint               i;
 
   if (interactive)
     {
@@ -223,6 +223,7 @@ read_dds (GFile                *file,
           fclose (fp);
           return GIMP_PDB_EXECUTION_ERROR;
         }
+      load_info.array_items = dx10hdr.arraySize;
     }
 
   /* If format search was successful, get info needed to parse the file */
@@ -289,6 +290,13 @@ read_dds (GFile                *file,
             case DXGI_FORMAT_BC5_SNORM:
               load_info.comp_format = DDS_COMPRESS_BC5;
               break;
+            /* TODO: Implement BC6 format */
+            case DXGI_FORMAT_BC7_TYPELESS:
+            case DXGI_FORMAT_BC7_UNORM:
+            case DXGI_FORMAT_BC7_UNORM_SRGB:
+              load_info.comp_format = DDS_COMPRESS_BC7;
+              break;
+
             default:
               load_info.comp_format = DDS_COMPRESS_MAX;
               break;
@@ -338,8 +346,6 @@ read_dds (GFile                *file,
       if ((dx10hdr.resourceDimension == D3D10_RESOURCE_DIMENSION_TEXTURE2D) &&
           (dx10hdr.miscFlag & D3D10_RESOURCE_MISC_TEXTURECUBE))
         load_info.cubemap_faces = DDSCAPS2_CUBEMAP_ALL_FACES;
-
-      load_info.array_items = dx10hdr.arraySize;
     }
   else
     {
@@ -516,6 +522,10 @@ read_dds (GFile                *file,
   /* Read palette for indexed DDS */
   if (load_info.fmt_flags & DDPF_PALETTEINDEXED8)
     {
+      const Babl  *format  = babl_format ("R'G'B' u8");
+      GimpPalette *palette = gimp_image_get_palette (image);
+      GeglColor   *color   = gegl_color_new (NULL);
+
       load_info.palette = g_malloc (256 * 4);
       if (fread (load_info.palette, 1, 1024, fp) != 1024)
         {
@@ -525,13 +535,19 @@ read_dds (GFile                *file,
           gimp_image_delete (image);
           return GIMP_PDB_EXECUTION_ERROR;
         }
-      for (i = j = 0; i < 768; i += 3, j += 4)
+      for (i = 0; i < 1024; i += 4)
         {
-          load_info.palette[i + 0] = load_info.palette[j + 0];
-          load_info.palette[i + 1] = load_info.palette[j + 1];
-          load_info.palette[i + 2] = load_info.palette[j + 2];
+          gint entry_num;
+
+          /* Looks like DDS indexed images have an alpha channel (or
+           * what else is this fourth byte?) and we just ignore it since
+           * our own palette colors are opaque?
+           */
+          gegl_color_set_pixel (color, format, &load_info.palette[i]);
+          gimp_palette_add_entry (palette, NULL, color, &entry_num);
         }
-      gimp_image_set_colormap (image, load_info.palette, 256);
+
+      g_object_unref (color);
     }
 
   load_info.tile_height = gimp_tile_height ();
@@ -961,7 +977,13 @@ validate_dx10_header (dds_header_dx10_t  *dx10hdr,
     case DXGI_FORMAT_BC5_TYPELESS:
     case DXGI_FORMAT_BC5_UNORM:
     case DXGI_FORMAT_BC5_SNORM:
+    /* TODO: Implement BC6 format */
+    case DXGI_FORMAT_BC7_TYPELESS:
+    case DXGI_FORMAT_BC7_UNORM:
+    case DXGI_FORMAT_BC7_UNORM_SRGB:
+
       /* Return early for supported compressed formats */
+      load_info->dxgi_format = dx10hdr->dxgiFormat & 0xFF;
       return TRUE;
     default:
       /* Unset FourCC flag for uncompressed formats */
@@ -1010,7 +1032,7 @@ load_layer (FILE             *fp,
   GimpImageType  type     = GIMP_RGBA_IMAGE;
   guint          width    = load_info->width  >> level;
   guint          height   = load_info->height >> level;
-  guint          size     = load_info->linear_size >> (2 * level);
+  guint          size     = width * height * load_info->bpp;
   gchar         *layer_name;
   GimpLayer     *layer;
   guint          layerw;

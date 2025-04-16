@@ -167,6 +167,7 @@ static void       gimp_drawable_real_update        (GimpDrawable      *drawable,
                                                     gint               width,
                                                     gint               height);
 
+static void    gimp_drawable_real_filters_changed  (GimpDrawable      *drawable);
 static gint64  gimp_drawable_real_estimate_memsize (GimpDrawable      *drawable,
                                                     GimpComponentType  component_type,
                                                     gint               width,
@@ -310,7 +311,7 @@ gimp_drawable_class_init (GimpDrawableClass *klass)
   klass->format_changed           = NULL;
   klass->alpha_changed            = NULL;
   klass->bounding_box_changed     = NULL;
-  klass->filters_changed          = NULL;
+  klass->filters_changed          = gimp_drawable_real_filters_changed;
   klass->estimate_memsize         = gimp_drawable_real_estimate_memsize;
   klass->update_all               = gimp_drawable_real_update_all;
   klass->invalidate_boundary      = NULL;
@@ -580,7 +581,7 @@ gimp_drawable_scale (GimpItem              *item,
           if (GIMP_IS_DRAWABLE_FILTER (list->data))
             {
               GimpDrawableFilter *filter = list->data;
-              GimpChannel        *mask   = gimp_drawable_filter_get_mask (filter);
+              GimpChannel        *mask   = GIMP_CHANNEL (gimp_drawable_filter_get_mask (filter));
               GeglRectangle      *rect   = GEGL_RECTANGLE (0, 0,
                                                            new_width,
                                                            new_height);
@@ -689,7 +690,7 @@ gimp_drawable_resize (GimpItem     *item,
           if (GIMP_IS_DRAWABLE_FILTER (list->data))
             {
               GimpDrawableFilter *filter = list->data;
-              GimpChannel        *mask   = gimp_drawable_filter_get_mask (filter);
+              GimpChannel        *mask   = GIMP_CHANNEL (gimp_drawable_filter_get_mask (filter));
               GeglRectangle       rect   = {0, 0, new_width, new_height};
 
               /* Don't resize partial layer effects */
@@ -869,6 +870,12 @@ gimp_drawable_real_update (GimpDrawable *drawable,
                            gint          height)
 {
   gimp_viewable_invalidate_preview (GIMP_VIEWABLE (drawable));
+}
+
+static void
+gimp_drawable_real_filters_changed (GimpDrawable *drawable)
+{
+  gimp_drawable_update_bounding_box (drawable);
 }
 
 static gint64
@@ -1330,10 +1337,11 @@ gimp_drawable_convert_type (GimpDrawable      *drawable,
                             gboolean           push_undo,
                             GimpProgress      *progress)
 {
-  const Babl *old_format;
-  const Babl *new_format;
-  gint        old_bits;
-  gint        new_bits;
+  const Babl    *old_format;
+  const Babl    *new_format;
+  gint           old_bits;
+  gint           new_bits;
+  GimpContainer *filters;
 
   g_return_if_fail (GIMP_IS_DRAWABLE (drawable));
   g_return_if_fail (GIMP_IS_IMAGE (dest_image));
@@ -1378,6 +1386,44 @@ gimp_drawable_convert_type (GimpDrawable      *drawable,
                                                     mask_dither_type,
                                                     push_undo,
                                                     progress);
+
+  /* Update the masks of any filters */
+  /* TODO: Move to gimp_drawable_real_convert_type () once it's updated
+   * to run for all GimpDrawable child classes */
+  filters = gimp_drawable_get_filters (drawable);
+  if (gimp_container_get_n_children (filters) > 0)
+    {
+      const Babl    *mask_format;
+      GList         *filter_list;
+      GimpPrecision  new_mask_precision;
+
+      mask_format        = gimp_image_get_mask_format (dest_image);
+      new_mask_precision = gimp_babl_format_get_precision (mask_format);
+
+      for (filter_list = GIMP_LIST (filters)->queue->tail;
+           filter_list;
+           filter_list = g_list_previous (filter_list))
+        {
+          if (GIMP_IS_DRAWABLE_FILTER (filter_list->data))
+            {
+              GimpDrawableFilter     *filter = filter_list->data;
+              GimpDrawableFilterMask *mask;
+
+              mask = gimp_drawable_filter_get_mask (filter);
+
+              if (new_mask_precision == gimp_drawable_get_precision (GIMP_DRAWABLE (mask)))
+                /* The only change which may happen for masks is the bit-depth. */
+                break;
+
+              gimp_drawable_convert_type (GIMP_DRAWABLE (mask), dest_image,
+                                          GIMP_GRAY, new_mask_precision,
+                                          FALSE,
+                                          NULL, NULL,
+                                          layer_dither_type, mask_dither_type,
+                                          push_undo, progress);
+            }
+        }
+    }
 
   if (progress)
     gimp_progress_set_value (progress, 1.0);
@@ -1509,7 +1555,7 @@ gimp_drawable_get_buffer_with_effects (GimpDrawable *drawable)
 
   if (drawable->private->paint_count == 0)
     {
-      if (gimp_drawable_has_filters (drawable))
+      if (gimp_drawable_has_visible_filters (drawable))
         {
           GeglNode                *source = NULL;
           GeglBuffer              *buffer;
@@ -1537,17 +1583,17 @@ gimp_drawable_get_buffer_with_effects (GimpDrawable *drawable)
             }
           else
             {
-              return buffer;
+              return g_object_ref (buffer);
             }
         }
       else
         {
-          return GIMP_DRAWABLE_GET_CLASS (drawable)->get_buffer (drawable);
+          return g_object_ref (GIMP_DRAWABLE_GET_CLASS (drawable)->get_buffer (drawable));
         }
     }
   else
     {
-      return drawable->private->paint_buffer;
+      return g_object_ref (drawable->private->paint_buffer);
     }
 }
 
@@ -2037,7 +2083,7 @@ gimp_drawable_end_paint (GimpDrawable *drawable)
   drawable->private->paint_count--;
 
   /* Refresh filters after painting */
-  if (gimp_drawable_has_filters (drawable) &&
+  if (gimp_drawable_has_visible_filters (drawable) &&
       drawable->private->paint_count == 0)
     {
       gimp_item_set_visible (GIMP_ITEM (drawable), FALSE, FALSE);

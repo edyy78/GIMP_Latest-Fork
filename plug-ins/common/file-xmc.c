@@ -77,7 +77,7 @@
 
 #define LOAD_PROC              "file-xmc-load"
 #define LOAD_THUMB_PROC        "file-xmc-load-thumb"
-#define SAVE_PROC              "file-xmc-save"
+#define EXPORT_PROC            "file-xmc-export"
 
 #define PLUG_IN_BINARY         "file-xmc"
 #define PLUG_IN_ROLE           "gimp-file-xmc"
@@ -169,12 +169,11 @@ static GimpValueArray * xmc_load_thumb               (GimpProcedure         *pro
                                                       gint                   size,
                                                       GimpProcedureConfig   *config,
                                                       gpointer               run_data);
-static GimpValueArray * xmc_save                     (GimpProcedure         *procedure,
+static GimpValueArray * xmc_export                   (GimpProcedure         *procedure,
                                                       GimpRunMode            run_mode,
                                                       GimpImage             *image,
-                                                      gint                   n_drawables,
-                                                      GimpDrawable         **drawables,
                                                       GFile                 *file,
+                                                      GimpExportOptions     *options,
                                                       GimpMetadata          *metadata,
                                                       GimpProcedureConfig   *config,
                                                       gpointer               run_data);
@@ -192,10 +191,10 @@ static GimpImage      * load_thumbnail               (GFile                 *fil
 static guint32          read32                       (FILE                  *f,
                                                       GError               **error);
 
-static gboolean         save_image                   (GFile                 *file,
+static gboolean         export_image                 (GFile                 *file,
                                                       GimpImage             *image,
                                                       gint                   n_drawables,
-                                                      GimpDrawable         **drawables,
+                                                      GList                *drawables,
                                                       GimpImage             *orig_image,
                                                       GObject               *config,
                                                       GError               **error);
@@ -281,7 +280,7 @@ xmc_query_procedures (GimpPlugIn *plug_in)
 
   list = g_list_append (list, g_strdup (LOAD_THUMB_PROC));
   list = g_list_append (list, g_strdup (LOAD_PROC));
-  list = g_list_append (list, g_strdup (SAVE_PROC));
+  list = g_list_append (list, g_strdup (EXPORT_PROC));
 
   return list;
 }
@@ -301,10 +300,10 @@ xmc_create_procedure (GimpPlugIn  *plug_in,
       gimp_procedure_set_menu_label (procedure, _("X11 Mouse Cursor"));
 
       gimp_procedure_set_documentation (procedure,
-                                        "Loads files of X11 Mouse Cursor "
-                                        "file format",
-                                        "This plug-in loads X11 Mouse Cursor "
-                                        "(XMC) files.",
+                                        _("Loads files of X11 Mouse Cursor "
+                                          "file format"),
+                                        _("This plug-in loads X11 Mouse Cursor "
+                                          "(XMC) files."),
                                         name);
       gimp_procedure_set_attribution (procedure,
                                       "Takeshi Matsuyama <tksmashiw@gmail.com>",
@@ -328,10 +327,10 @@ xmc_create_procedure (GimpPlugIn  *plug_in,
                                                 xmc_load_thumb, NULL, NULL);
 
       gimp_procedure_set_documentation (procedure,
-                                        "Loads only first frame of X11 Mouse "
-                                        "Cursor's animation sequence which "
-                                        "nominal size is the closest of "
-                                        "thumb-size to be used as a thumbnail",
+                                        _("Loads only first frame of X11 Mouse "
+                                          "Cursor's animation sequence which "
+                                          "nominal size is the closest of "
+                                          "thumb-size to be used as a thumbnail"),
                                         "",
                                         name);
       gimp_procedure_set_attribution (procedure,
@@ -339,20 +338,22 @@ xmc_create_procedure (GimpPlugIn  *plug_in,
                                       "Takeshi Matsuyama",
                                       "26 May 2009");
     }
-  else if (! strcmp (name, SAVE_PROC))
+  else if (! strcmp (name, EXPORT_PROC))
     {
-      procedure = gimp_save_procedure_new (plug_in, name,
-                                           GIMP_PDB_PROC_TYPE_PLUGIN,
-                                           FALSE, xmc_save, NULL, NULL);
+      procedure = gimp_export_procedure_new (plug_in, name,
+                                             GIMP_PDB_PROC_TYPE_PLUGIN,
+                                             FALSE, xmc_export, NULL, NULL);
 
       gimp_procedure_set_image_types (procedure, "RGBA");
 
       gimp_procedure_set_menu_label (procedure, _("X11 Mouse Cursor"));
+      gimp_file_procedure_set_format_name (GIMP_FILE_PROCEDURE (procedure),
+                                           _("X11 Mouse Cursor"));
 
       gimp_procedure_set_documentation (procedure,
-                                        "Exports files of X11 cursor file",
-                                        "This plug-in exports X11 Mouse Cursor "
-                                        "(XMC) files",
+                                        _("Exports files of X11 cursor file"),
+                                        _("This plug-in exports X11 Mouse Cursor "
+                                          "(XMC) files"),
                                         name);
       gimp_procedure_set_attribution (procedure,
                                       "Takeshi Matsuyama <tksmashiw@gmail.com>",
@@ -364,73 +365,90 @@ xmc_create_procedure (GimpPlugIn  *plug_in,
       gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
                                           XCURSOR_EXTENSION);
 
-      GIMP_PROC_ARG_INT (procedure, "hot-spot-x",
-                         "Hot spot X",
-                         "X-coordinate of hot spot "
-                         "(use -1, -1 to keep original hot spot",
-                         -1, GIMP_MAX_IMAGE_SIZE, -1,
-                         G_PARAM_READWRITE);
+      gimp_export_procedure_set_capabilities (GIMP_EXPORT_PROCEDURE (procedure),
+                                              GIMP_EXPORT_CAN_HANDLE_RGB    |
+                                              GIMP_EXPORT_CAN_HANDLE_ALPHA  |
+                                              GIMP_EXPORT_CAN_HANDLE_LAYERS |
+                                              GIMP_EXPORT_NEEDS_ALPHA,
+                                              NULL, NULL, NULL);
 
-      GIMP_PROC_ARG_INT (procedure, "hot-spot-y",
-                         "Hot spot Y",
-                         "Y-coordinate of hot spot "
-                         "(use -1, -1 to keep original hot spot",
-                         -1, GIMP_MAX_IMAGE_SIZE, -1,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "hot-spot-x",
+                                       _("Hot spot _X"),
+                                       _("X-coordinate of hot spot "
+                                         "(use -1, -1 to keep original hot spot)"),
+                                       -1, GIMP_MAX_IMAGE_SIZE, -1,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "crop",
-                             "Crop",
-                             "Auto-crop or not",
-                             FALSE,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "hot-spot-y",
+                                       _("Hot spot _Y"),
+                                       _("Y-coordinate of hot spot "
+                                         "(use -1, -1 to keep original hot spot)"),
+                                       -1, GIMP_MAX_IMAGE_SIZE, -1,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "size",
-                         "Size",
-                         "Default nominal size",
-                         1, G_MAXINT, 32,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "crop",
+                                           _("_Auto Crop all frames"),
+                                           _("Remove the empty borders of all frames."),
+                                           FALSE,
+                                           G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "size-replace",
-                             "Size replace",
-                             _("Replace existent size or not"),
-                             FALSE,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_choice_argument (procedure, "size",
+                                          _("Si_ze where unspecified"),
+                                          _("Default frame size if unspecified"),
+                                          gimp_choice_new_with_values ("size-12px", 12, ("12px"), NULL,
+                                                                       "size-16px", 16, ("16px"), NULL,
+                                                                       "size-24px", 24, ("24px"), NULL,
+                                                                       "size-32px", 32, ("32px"), NULL,
+                                                                       "size-36px", 36, ("36px"), NULL,
+                                                                       "size-40px", 40, ("40px"), NULL,
+                                                                       "size-48px", 48, ("48px"), NULL,
+                                                                       "size-64px", 64, ("64px"), NULL,
+                                                                       NULL),
+                                          "size-32px",
+                                          G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_INT (procedure, "delay",
-                         "Delay",
-                         _("Default delay"),
-                         CURSOR_MINIMUM_DELAY, G_MAXINT, CURSOR_DEFAULT_DELAY,
-                         G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "size-replace",
+                                           _("_Use default size for all frames"),
+                                           _("Use default size for all frames"),
+                                           FALSE,
+                                           G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_BOOLEAN (procedure, "delay-replace",
-                             "Delay replace",
-                             _("Replace existent delay or not"),
-                             FALSE,
-                             G_PARAM_READWRITE);
+      gimp_procedure_add_int_argument (procedure, "delay",
+                                       _("_Delay where unspecified"),
+                                       _("Default time span in milliseconds in which "
+                                         "each frame is rendered"),
+                                       CURSOR_MINIMUM_DELAY, G_MAXINT, CURSOR_DEFAULT_DELAY,
+                                       G_PARAM_READWRITE);
 
-      GIMP_PROC_ARG_STRING (procedure, "xmc-copyright",
-                            "Copyright",
-                            "Copyright information",
-                            NULL,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_boolean_argument (procedure, "delay-replace",
+                                           _("Use default delay for all _frames"),
+                                           _("Use default delay for all frames"),
+                                           FALSE,
+                                           G_PARAM_READWRITE);
+
+      gimp_procedure_add_string_argument (procedure, "xmc-copyright",
+                                          _("C_opyright"),
+                                          _("Copyright information"),
+                                          NULL,
+                                          G_PARAM_READWRITE);
 
       gimp_procedure_set_argument_sync (procedure, "xmc-copyright",
                                         GIMP_ARGUMENT_SYNC_PARASITE);
 
-      GIMP_PROC_ARG_STRING (procedure, "xmc-license",
-                            "License",
-                            "License information",
-                            NULL,
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_string_argument (procedure, "xmc-license",
+                                          _("Lice_nse"),
+                                          _("License information"),
+                                          NULL,
+                                          G_PARAM_READWRITE);
 
       gimp_procedure_set_argument_sync (procedure, "xmc-license",
                                         GIMP_ARGUMENT_SYNC_PARASITE);
 
-      GIMP_PROC_ARG_STRING (procedure, "gimp-comment",
-                            "Other",
-                            "Other comment (taken from 'gimp-comment' parasite)",
-                            gimp_get_default_comment (),
-                            G_PARAM_READWRITE);
+      gimp_procedure_add_string_argument (procedure, "gimp-comment",
+                                          _("Co_mment"),
+                                          _("Optional comment"),
+                                          gimp_get_default_comment (),
+                                          G_PARAM_READWRITE);
 
       gimp_procedure_set_argument_sync (procedure, "gimp-comment",
                                         GIMP_ARGUMENT_SYNC_PARASITE);
@@ -511,23 +529,24 @@ xmc_load_thumb (GimpProcedure       *procedure,
 }
 
 static GimpValueArray *
-xmc_save (GimpProcedure        *procedure,
-          GimpRunMode           run_mode,
-          GimpImage            *image,
-          gint                  n_drawables,
-          GimpDrawable        **drawables,
-          GFile                *file,
-          GimpMetadata         *metadata,
-          GimpProcedureConfig  *config,
-          gpointer              run_data)
+xmc_export (GimpProcedure        *procedure,
+            GimpRunMode           run_mode,
+            GimpImage            *image,
+            GFile                *file,
+            GimpExportOptions    *options,
+            GimpMetadata         *metadata,
+            GimpProcedureConfig  *config,
+            gpointer              run_data)
 {
-  GimpPDBStatusType  status = GIMP_PDB_SUCCESS;
-  GimpExportReturn   export = GIMP_EXPORT_CANCEL;
+  GimpPDBStatusType  status      = GIMP_PDB_SUCCESS;
+  GimpExportReturn   export      = GIMP_EXPORT_IGNORE;
+  GList             *drawables   = NULL;
+  gint               n_drawables = 0;
   GimpImage         *orig_image;
   GeglRectangle     *hotspot_range;
   gint               hot_spot_x;
   gint               hot_spot_y;
-  GError            *error = NULL;
+  GError            *error       = NULL;
 
   gegl_init (NULL, NULL);
 
@@ -550,28 +569,7 @@ xmc_save (GimpProcedure        *procedure,
   switch (run_mode)
     {
     case GIMP_RUN_INTERACTIVE:
-    case GIMP_RUN_WITH_LAST_VALS:
       gimp_ui_init (PLUG_IN_BINARY);
-
-      export = gimp_export_image (&image, &n_drawables, &drawables, "XMC",
-                                  GIMP_EXPORT_CAN_HANDLE_RGB    |
-                                  GIMP_EXPORT_CAN_HANDLE_ALPHA  |
-                                  GIMP_EXPORT_CAN_HANDLE_LAYERS |
-                                  GIMP_EXPORT_NEEDS_ALPHA);
-
-      if (export == GIMP_EXPORT_CANCEL)
-        return gimp_procedure_new_return_values (procedure,
-                                                 GIMP_PDB_CANCEL,
-                                                 NULL);
-      break;
-
-    default:
-      break;
-    }
-
-  switch (run_mode)
-    {
-    case GIMP_RUN_INTERACTIVE:
       load_default_hotspot (image, hotspot_range, G_OBJECT (config));
 
       if (! save_dialog (procedure, G_OBJECT (config), image, hotspot_range))
@@ -603,19 +601,21 @@ xmc_save (GimpProcedure        *procedure,
       break;
     }
 
-  if (! save_image (file, image, n_drawables, drawables,
-                    orig_image, G_OBJECT (config), &error))
+  export = gimp_export_options_get_image (options, &image);
+  drawables = gimp_image_list_layers (image);
+  n_drawables = g_list_length (drawables);
+
+  if (! export_image (file, image, n_drawables, drawables,
+                      orig_image, G_OBJECT (config), &error))
     {
       status = GIMP_PDB_EXECUTION_ERROR;
     }
 
   if (export == GIMP_EXPORT_EXPORT)
-    {
-      gimp_image_delete (image);
-      g_free (drawables);
-    }
+    gimp_image_delete (image);
 
   g_free (hotspot_range);
+  g_list_free (drawables);
 
   return gimp_procedure_new_return_values (procedure, status, error);
 }
@@ -1092,66 +1092,41 @@ save_dialog (GimpProcedure *procedure,
              GeglRectangle *hotspot_range)
 {
   GtkWidget     *dialog;
-  GtkWidget     *grid;
-  GtkWidget     *box;
   GtkWidget     *button;
-  GtkListStore  *store;
+  GtkWidget     *spin_button;
   GtkWidget     *combo;
-  GtkWidget     *label;
-  GtkWidget     *entry;
-  GtkTextBuffer *textbuffer;
-  GtkWidget     *view;
-  gint           row;
   gboolean       run;
 
-  dialog = gimp_procedure_dialog_new (procedure,
-                                      GIMP_PROCEDURE_CONFIG (config),
-                                      _("Export Image as X11 Mouse Cursor"));
+  dialog = gimp_export_procedure_dialog_new (GIMP_EXPORT_PROCEDURE (procedure),
+                                             GIMP_PROCEDURE_CONFIG (config),
+                                             image);
 
-  grid = gtk_grid_new ();
-  gtk_grid_set_row_spacing (GTK_GRID (grid), 6);
-  gtk_grid_set_column_spacing (GTK_GRID (grid), 6);
-  gtk_container_set_border_width (GTK_CONTAINER (grid), 12);
-  gtk_box_pack_start (GTK_BOX (gimp_export_dialog_get_content_area (dialog)),
-                      grid, TRUE, TRUE, 0);
-  gtk_widget_show (grid);
-
-  row = 0;
-
-  /* Hotspot */
-  button = gimp_prop_spin_button_new (config, "hot-spot-x",
-                                      1, 10, 0);
-  gtk_spin_button_set_range (GTK_SPIN_BUTTON (button),
-                             hotspot_range->x,
-                             hotspot_range->x + hotspot_range->width - 1);
-  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++,
-                            _("Hot spot _X:"), 0.0, 0.5,
-                            button, 1);
-
+  /* Define hot-spot ranges relative to the image */
+  button = gimp_procedure_dialog_get_widget (GIMP_PROCEDURE_DIALOG (dialog),
+                                             "hot-spot-x", G_TYPE_NONE);
   gimp_help_set_help_data (button,
                            _("Enter the X coordinate of the hot spot. "
                              "The origin is top left corner."),
                            NULL);
+  spin_button = gimp_label_spin_get_spin_button (GIMP_LABEL_SPIN (button));
+  gtk_spin_button_set_range (GTK_SPIN_BUTTON (spin_button),
+                             hotspot_range->x,
+                             hotspot_range->x + hotspot_range->width - 1);
 
-  button = gimp_prop_spin_button_new (config, "hot-spot-y",
-                                      1, 10, 0);
-  gtk_spin_button_set_range (GTK_SPIN_BUTTON (button),
-                             hotspot_range->y,
-                             hotspot_range->y + hotspot_range->height - 1);
-  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++,
-                            _("Hot spot _Y:"), 0.0, 0.5,
-                            button, 1);
-
+  button = gimp_procedure_dialog_get_widget (GIMP_PROCEDURE_DIALOG (dialog),
+                                             "hot-spot-y", G_TYPE_NONE);
   gimp_help_set_help_data (button,
                            _("Enter the Y coordinate of the hot spot. "
                              "The origin is top left corner."),
                            NULL);
+  spin_button = gimp_label_spin_get_spin_button (GIMP_LABEL_SPIN (button));
+  gtk_spin_button_set_range (GTK_SPIN_BUTTON (spin_button),
+                             hotspot_range->y,
+                             hotspot_range->y + hotspot_range->height - 1);
 
   /* Auto-crop */
-  button = gimp_prop_check_button_new (config, "crop",
-                                       _("_Auto-Crop all frames"));
-  gtk_grid_attach (GTK_GRID (grid), button, 0, row++, 2, 1);
-
+  button = gimp_procedure_dialog_get_widget (GIMP_PROCEDURE_DIALOG (dialog),
+                                             "crop", GTK_TYPE_CHECK_BUTTON);
   gimp_help_set_help_data (button,
                            _("Remove the empty borders of all frames.\n"
                              "This reduces the file size and may fix "
@@ -1162,19 +1137,8 @@ save_dialog (GimpProcedure *procedure,
                            NULL);
 
   /* Size */
-  store = gimp_int_store_new ("12px", 12, "16px", 16,
-                              "24px", 24, "32px", 32,
-                              "36px", 36, "40px", 40,
-                              "48px", 48, "64px", 64, NULL);
-
-  combo = gimp_prop_int_combo_box_new (config, "size",
-                                       GIMP_INT_STORE (store));
-  g_object_unref (store);
-
-  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++,
-                            _("_Size where\nunspecified:"), 0.0, 0.5,
-                            combo, 1);
-
+  combo = gimp_procedure_dialog_get_widget (GIMP_PROCEDURE_DIALOG (dialog),
+                                            "size", G_TYPE_NONE);
   gimp_help_set_help_data (combo,
                            _("Choose the nominal size of frames.\n"
                              "If you don't have plans to make multi-sized "
@@ -1187,81 +1151,8 @@ save_dialog (GimpProcedure *procedure,
                              "\"gtk-cursor-theme-size\"."),
                            NULL);
 
-  /* Replace size */
-  button = gimp_prop_check_button_new (config, "size-replace",
-                                       _("Use size entered above for "
-                                         "all frames"));
-  gtk_grid_attach (GTK_GRID (grid), button, 1, row++, 2, 1);
-
-  /* Delay */
-  box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++,
-                            _("_Delay where\nunspecified:"), 0, 0.5,
-                            box, 3);
-  gtk_widget_show (box);
-
-  gimp_help_set_help_data (box,
-                           _("Enter time span in milliseconds in which "
-                             "each frame is rendered."),
-                           NULL);
-
-  button = gimp_prop_spin_button_new (config, "delay",
-                                      1, 10, 0);
-  gtk_box_pack_start (GTK_BOX (box), button, FALSE, FALSE, 0);
-
-  label = gtk_label_new ("ms");
-  gtk_box_pack_start (GTK_BOX (box), label, FALSE, FALSE, 0);
-  gtk_widget_show (label);
-
-  /* Replace delay */
-  button = gimp_prop_check_button_new (config, "delay-replace",
-                                       _("Use delay entered above for "
-                                         "all frames"));
-  gtk_grid_attach (GTK_GRID (grid), button, 1, row++, 2, 1);
-
-  /* Copyright */
-  entry = gimp_prop_entry_new (config, "xmc-copyright",
-                               XCURSOR_COMMENT_MAX_LEN);
-  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++, _("_Copyright:"),
-                            0, 0.5, entry, 3);
-
-  gimp_help_set_help_data (entry,
-                           _("Enter copyright information."),
-                           NULL);
-
-  /* License */
-  entry = gimp_prop_entry_new (config, "xmc-license",
-                               XCURSOR_COMMENT_MAX_LEN);
-  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++, _("_License:"),
-                            0, 0.5, entry, 3);
-
-  gimp_help_set_help_data (entry,
-                           _("Enter license information."),
-                           NULL);
-
-  /* Other */
-  box = gtk_scrolled_window_new (NULL, NULL);
-  gtk_scrolled_window_set_shadow_type (GTK_SCROLLED_WINDOW (box),
-                                       GTK_SHADOW_IN);
-  gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (box),
-                                  GTK_POLICY_AUTOMATIC,
-                                  GTK_POLICY_AUTOMATIC);
-  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++, _("_Other:"),
-                            0, 0.5, box, 3);
-
-  textbuffer = gimp_prop_text_buffer_new (config, "gimp-comment",
-                                          XCURSOR_COMMENT_MAX_LEN);
-  view = gtk_text_view_new_with_buffer (GTK_TEXT_BUFFER (textbuffer));
-  gtk_text_view_set_accepts_tab (GTK_TEXT_VIEW (view), FALSE);
-  gtk_text_view_set_wrap_mode (GTK_TEXT_VIEW (view), GTK_WRAP_WORD);
-  g_object_unref (textbuffer);
-
-  gtk_container_add (GTK_CONTAINER (box), view);
-  gtk_widget_show (view);
-
-  gimp_help_set_help_data (view,
-                           _("Enter other comment if you want."),
-                           NULL);
+  gimp_procedure_dialog_fill (GIMP_PROCEDURE_DIALOG (dialog),
+                              NULL);
 
   gtk_widget_show (dialog);
 
@@ -1307,17 +1198,17 @@ load_default_hotspot (GimpImage     *image,
 }
 
 /*
- * 'save_image ()' - Save the specified image to X cursor file.
+ * 'export_image ()' - Export the specified image to X cursor file.
  */
 
 static gboolean
-save_image (GFile         *file,
-            GimpImage     *image,
-            gint           n_drawables,
-            GimpDrawable **drawables,
-            GimpImage     *orig_image,
-            GObject       *config,
-            GError       **error)
+export_image (GFile         *file,
+              GimpImage     *image,
+              gint           n_drawables,
+              GList         *drawables,
+              GimpImage     *orig_image,
+              GObject       *config,
+              GError       **error)
 {
   FILE            *fp;                     /* File pointer */
   gboolean         dimension_warn = FALSE; /* become TRUE if even one
@@ -1935,15 +1826,16 @@ set_size_and_delay (GObject     *config,
   g_return_if_fail (re);
 
   g_object_get (config,
-                "size",          &config_size,
                 "size-replace",  &config_size_replace,
                 "delay",         &config_delay,
                 "delay-replace", &config_delay_replace,
                 NULL);
+  config_size =
+    gimp_procedure_config_get_choice_id (GIMP_PROCEDURE_CONFIG (config), "size");
 
   DM_XMC ("function: set_size_and_delay\tframename=%s\n", framename);
 
-  /* re is defined at the start of save_image() as
+  /* re is defined at the start of export_image() as
         [(]                : open parenthesis
         [ ]*               : ignore zero or more spaces
         (\\d+)             : the number we want to get out

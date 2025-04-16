@@ -540,10 +540,10 @@ gimp_statusbar_init (GimpStatusbar *statusbar)
                     statusbar);
 
   combo_store =
-    gimp_int_store_new ("Perceptual",            GIMP_COLOR_RENDERING_INTENT_PERCEPTUAL,
-                        "Relative Colorimetric", GIMP_COLOR_RENDERING_INTENT_RELATIVE_COLORIMETRIC,
-                        "Saturation",            GIMP_COLOR_RENDERING_INTENT_SATURATION,
-                        "Absolute Colorimetric", GIMP_COLOR_RENDERING_INTENT_ABSOLUTE_COLORIMETRIC,
+    gimp_int_store_new (_("Perceptual"),            GIMP_COLOR_RENDERING_INTENT_PERCEPTUAL,
+                        _("Relative Colorimetric"), GIMP_COLOR_RENDERING_INTENT_RELATIVE_COLORIMETRIC,
+                        _("Saturation"),            GIMP_COLOR_RENDERING_INTENT_SATURATION,
+                        _("Absolute Colorimetric"), GIMP_COLOR_RENDERING_INTENT_ABSOLUTE_COLORIMETRIC,
                         NULL);
   statusbar->rendering_intent_combo = g_object_new (GIMP_TYPE_INT_COMBO_BOX,
                             "model", combo_store,
@@ -670,10 +670,19 @@ gimp_statusbar_style_updated (GtkWidget *widget)
 {
   GimpStatusbar *statusbar = GIMP_STATUSBAR (widget);
   PangoLayout   *layout;
+  GList         *children;
+  gint           pixel_size;
 
   GTK_WIDGET_CLASS (parent_class)->style_updated (widget);
 
+  gtk_icon_size_lookup (statusbar->icon_size, &pixel_size, NULL);
+
   g_clear_pointer (&statusbar->icon_hash, g_hash_table_unref);
+
+  children =
+    gtk_container_get_children (GTK_CONTAINER (statusbar->soft_proof_button));
+  gtk_image_set_pixel_size (GTK_IMAGE (children->data), pixel_size);
+  g_list_free (children);
 
   layout = gtk_widget_create_pango_layout (widget, " ");
   pango_layout_get_pixel_size (layout, &statusbar->icon_space_width, NULL);
@@ -1477,7 +1486,7 @@ gimp_statusbar_push_coords (GimpStatusbar       *statusbar,
       break;
     }
 
-  if (shell->unit == GIMP_UNIT_PIXEL)
+  if (shell->unit == gimp_unit_pixel ())
     {
       if (precision == GIMP_CURSOR_PRECISION_SUBPIXEL)
         {
@@ -1540,7 +1549,7 @@ gimp_statusbar_push_length (GimpStatusbar       *statusbar,
 
   shell = statusbar->shell;
 
-  if (shell->unit == GIMP_UNIT_PIXEL)
+  if (shell->unit == gimp_unit_pixel ())
     {
       gimp_statusbar_push (statusbar, context,
                            icon_name,
@@ -1768,7 +1777,7 @@ gimp_statusbar_update_cursor (GimpStatusbar       *statusbar,
     }
   statusbar->cursor_precision = precision;
 
-  if (shell->unit == GIMP_UNIT_PIXEL)
+  if (shell->unit == gimp_unit_pixel ())
     {
       if (precision == GIMP_CURSOR_PRECISION_SUBPIXEL)
         {
@@ -1911,7 +1920,7 @@ gimp_statusbar_shell_scaled (GimpDisplayShell *shell,
   g_signal_handlers_unblock_by_func (statusbar->unit_combo,
                                      gimp_statusbar_unit_changed, statusbar);
 
-  if (shell->unit == GIMP_UNIT_PIXEL)
+  if (shell->unit == gimp_unit_pixel ())
     {
       g_snprintf (statusbar->cursor_format_str,
                   sizeof (statusbar->cursor_format_str),
@@ -2049,23 +2058,15 @@ gimp_statusbar_shell_set_image (GimpStatusbar *statusbar,
 {
   g_return_if_fail (image == NULL || GIMP_IS_IMAGE (image));
 
-  if (image != statusbar->image)
-    {
-      if (statusbar->image)
-        {
-          g_signal_handlers_disconnect_by_func (statusbar->image,
-                                                gimp_statusbar_shell_image_simulation_changed,
-                                                statusbar);
-          g_object_unref (statusbar->image);
-        }
-    }
+  if (statusbar->image)
+    g_signal_handlers_disconnect_by_func (statusbar->image,
+                                          gimp_statusbar_shell_image_simulation_changed,
+                                          statusbar);
 
-  statusbar->image = image;
+  g_set_weak_pointer (&statusbar->image, image);
 
   if (statusbar->image)
     {
-      g_object_ref (statusbar->image);
-
       g_signal_connect (statusbar->image, "simulation-profile-changed",
                         G_CALLBACK (gimp_statusbar_shell_image_simulation_changed),
                         statusbar);
@@ -2413,6 +2414,7 @@ gimp_statusbar_load_icon (GimpStatusbar *statusbar,
                           const gchar   *icon_name)
 {
   GdkPixbuf *icon;
+  gint       pixel_size;
 
   if (G_UNLIKELY (! statusbar->icon_hash))
     {
@@ -2428,10 +2430,13 @@ gimp_statusbar_load_icon (GimpStatusbar *statusbar,
   if (icon)
     return g_object_ref (icon);
 
-  icon = gimp_widget_load_icon (statusbar->label, icon_name, 16);
+  gtk_icon_size_lookup (statusbar->icon_size, &pixel_size, NULL);
+
+  icon = gimp_widget_load_icon (statusbar->label, icon_name,
+                                pixel_size);
 
   /* this is not optimal but so what */
-  if (g_hash_table_size (statusbar->icon_hash) > 16)
+  if (g_hash_table_size (statusbar->icon_hash) > pixel_size)
     g_hash_table_remove_all (statusbar->icon_hash);
 
   g_hash_table_insert (statusbar->icon_hash,
@@ -2476,7 +2481,7 @@ gimp_statusbar_queue_pos_redraw (gpointer data)
        * Of course, it could still happen for people going way
        * off-canvas but that's acceptable edge-case.
        */
-      if (shell->unit == GIMP_UNIT_PIXEL)
+      if (shell->unit == gimp_unit_pixel ())
         {
           label_width_chars = floor (log10 (2 * image_width)) + floor (log10 (2 * image_height)) + 6;
 

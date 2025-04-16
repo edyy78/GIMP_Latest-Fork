@@ -4,7 +4,7 @@ plugin_sources = [
   'psd-image-res-load.c',
   'psd-layer-res-load.c',
   'psd-load.c',
-  'psd-save.c',
+  'psd-export.c',
   'psd-thumb-load.c',
   'psd-util.c',
   'psd.c',
@@ -24,15 +24,16 @@ if platform_windows
   )
 endif
 
-executable(plugin_name,
-  plugin_sources,
-  c_args: '-DG_LOG_DOMAIN="file-psd"',
-  dependencies: [
-    libgimpui_dep,
-    libjpeg,
-    math,
-    zlib,
-  ],
-  install: true,
-  install_dir: gimpplugindir / 'plug-ins' / plugin_name,
-)
+plugin_exe = executable(plugin_name,
+                        plugin_sources,
+                        c_args: '-DG_LOG_DOMAIN="file-psd"',
+                        dependencies: [
+                          libgimpui_dep,
+                          libjpeg,
+                          math,
+                          zlib,
+                        ],
+                        win_subsystem: 'windows',
+                        install: true,
+                        install_dir: gimpplugindir / 'plug-ins' / plugin_name)
+plugin_executables += [plugin_exe.full_path()]

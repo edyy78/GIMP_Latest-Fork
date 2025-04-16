@@ -90,6 +90,7 @@ static GtkWidget * prefs_dialog_new                (Gimp       *gimp,
 static void        prefs_response                  (GtkWidget  *widget,
                                                     gint        response_id,
                                                     GtkWidget  *dialog);
+static void        prefs_box_style_updated         (GtkWidget  *widget);
 
 static void   prefs_color_management_reset         (GtkWidget    *widget,
                                                     GObject      *config);
@@ -137,6 +138,12 @@ static void   prefs_help_language_change_callback  (GtkComboBox  *combo,
 static void   prefs_help_language_change_callback2 (GtkComboBox  *combo,
                                                     GtkContainer *box);
 static void   prefs_check_style_callback           (GObject      *config,
+                                                    GParamSpec   *pspec,
+                                                    GtkWidget    *widget);
+static void   prefs_theme_reset_callback           (GObject      *config,
+                                                    GParamSpec   *pspec,
+                                                    GtkWidget    *widget);
+static void   prefs_icon_theme_reset_callback      (GObject      *config,
                                                     GParamSpec   *pspec,
                                                     GtkWidget    *widget);
 
@@ -195,7 +202,8 @@ prefs_response (GtkWidget *widget,
                 gint       response_id,
                 GtkWidget *dialog)
 {
-  Gimp *gimp = g_object_get_data (G_OBJECT (dialog), "gimp");
+  Gimp   *gimp = g_object_get_data (G_OBJECT (dialog), "gimp");
+  gulong  reset_handler;
 
   switch (response_id)
     {
@@ -216,9 +224,9 @@ prefs_response (GtkWidget *widget,
                                            NULL);
 
         gimp_dialog_set_alternative_button_order (GTK_DIALOG (confirm),
-                                                 GTK_RESPONSE_OK,
-                                                 GTK_RESPONSE_CANCEL,
-                                                 -1);
+                                                  GTK_RESPONSE_OK,
+                                                  GTK_RESPONSE_CANCEL,
+                                                  -1);
 
         gimp_message_box_set_primary_text (GIMP_MESSAGE_DIALOG (confirm)->box,
                                            _("Do you really want to reset all "
@@ -367,10 +375,29 @@ prefs_response (GtkWidget *widget,
       tool_editor = NULL;
     }
 
+  /* Disconnect the signals used to update the selection of the
+   * theme and icon theme list boxes, since they're not directly
+   * connected to their properties like the other widgets */
+  reset_handler = GPOINTER_TO_UINT (g_object_get_data (G_OBJECT (dialog),
+                                    "gimp-theme-reset-handler"));
+  g_signal_handler_disconnect (gimp->config, reset_handler);
+
+  reset_handler = GPOINTER_TO_UINT (g_object_get_data (G_OBJECT (dialog),
+                                    "gimp-icon-theme-reset-handler"));
+  g_signal_handler_disconnect (gimp->config, reset_handler);
+
   /*  enable autosaving again  */
   gimp_rc_set_autosave (GIMP_RC (gimp->edit_config), TRUE);
 
   gtk_widget_destroy (dialog);
+}
+
+static void
+prefs_box_style_updated (GtkWidget *widget)
+{
+  GimpPrefsBox *box = GIMP_PREFS_BOX (widget);
+
+  GTK_WIDGET_GET_CLASS (box)->style_updated (GTK_WIDGET (box));
 }
 
 static void
@@ -381,7 +408,6 @@ prefs_color_management_reset (GtkWidget *widget,
 
   gimp_config_reset (GIMP_CONFIG (core_config->color_management));
   gimp_config_reset_property (config, "color-profile-policy");
-  gimp_config_reset_property (config, "filter-tool-show-color-options");
 }
 
 static void
@@ -407,7 +433,6 @@ prefs_dialog_defaults_reset (GtkWidget *widget,
 
   gimp_config_reset_property (config, "filter-tool-max-recent");
   gimp_config_reset_property (config, "filter-tool-use-last-settings");
-  gimp_config_reset_property (config, "filter-tool-show-color-options");
 
   g_object_thaw_notify (config);
 
@@ -596,9 +621,9 @@ prefs_menus_remove_callback (GtkWidget *widget,
                                     NULL);
 
   gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
-                                           GTK_RESPONSE_OK,
-                                           GTK_RESPONSE_CANCEL,
-                                           -1);
+                                            GTK_RESPONSE_OK,
+                                            GTK_RESPONSE_CANCEL,
+                                            -1);
 
   g_signal_connect_object (gtk_widget_get_toplevel (widget), "unmap",
                            G_CALLBACK (gtk_widget_destroy),
@@ -865,7 +890,14 @@ prefs_theme_select_callback (GtkListBox    *listbox,
   g_return_if_fail (row != NULL);
 
   theme = g_object_get_data (G_OBJECT (row), "theme");
+
+  g_signal_handlers_block_by_func (gimp->config,
+                                   G_CALLBACK (prefs_theme_reset_callback),
+                                   listbox);
   g_object_set (gimp->config, "theme", theme, NULL);
+  g_signal_handlers_unblock_by_func (gimp->config,
+                                     G_CALLBACK (prefs_theme_reset_callback),
+                                     listbox);
 }
 
 static void
@@ -876,14 +908,80 @@ prefs_theme_reload_callback (GtkWidget *button,
 }
 
 static void
+prefs_theme_reset_callback (GObject    *config,
+                            GParamSpec *pspec,
+                            GtkWidget  *widget)
+{
+  const gchar    *theme;
+  GtkListBoxRow  *row;
+  gint            i = 0;
+
+  g_object_get (config, "theme", &theme, NULL);
+
+  row = gtk_list_box_get_row_at_index (GTK_LIST_BOX (widget), i);
+
+  while (row != NULL)
+    {
+      const gchar *row_theme = g_object_get_data (G_OBJECT (row), "theme");
+
+      if (! strcmp (theme, row_theme))
+        {
+          gtk_list_box_select_row (GTK_LIST_BOX (widget), row);
+          break;
+        }
+
+      i++;
+      row = gtk_list_box_get_row_at_index (GTK_LIST_BOX (widget), i);
+    }
+}
+
+static void
 prefs_icon_theme_select_callback (GtkListBox    *listbox,
                                   GtkListBoxRow *row,
                                   Gimp          *gimp)
 {
   const char *icon_theme;
 
+  g_return_if_fail (row != NULL);
+
   icon_theme = g_object_get_data (G_OBJECT (row), "icon-theme");
+
+  g_signal_handlers_block_by_func (gimp->config,
+                                   G_CALLBACK (prefs_icon_theme_reset_callback),
+                                   listbox);
   g_object_set (gimp->config, "icon-theme", icon_theme, NULL);
+  g_signal_handlers_unblock_by_func (gimp->config,
+                                     G_CALLBACK (prefs_icon_theme_reset_callback),
+                                     listbox);
+}
+
+static void
+prefs_icon_theme_reset_callback (GObject    *config,
+                                 GParamSpec *pspec,
+                                 GtkWidget  *widget)
+{
+  const gchar    *icon_theme;
+  GtkListBoxRow  *row;
+  gint            i = 0;
+
+  g_object_get (config, "icon-theme", &icon_theme, NULL);
+
+  row = gtk_list_box_get_row_at_index (GTK_LIST_BOX (widget), i);
+
+  while (row != NULL)
+    {
+      const gchar *row_icon_theme =
+        g_object_get_data (G_OBJECT (row), "icon-theme");
+
+      if (! strcmp (icon_theme, row_icon_theme))
+        {
+          gtk_list_box_select_row (GTK_LIST_BOX (widget), row);
+          break;
+        }
+
+      i++;
+      row = gtk_list_box_get_row_at_index (GTK_LIST_BOX (widget), i);
+    }
 }
 
 static void
@@ -1084,10 +1182,10 @@ prefs_dialog_new (Gimp       *gimp,
                             NULL);
 
   gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
-                                           RESPONSE_RESET,
-                                           GTK_RESPONSE_OK,
-                                           GTK_RESPONSE_CANCEL,
-                                           -1);
+                                            RESPONSE_RESET,
+                                            GTK_RESPONSE_OK,
+                                            GTK_RESPONSE_CANCEL,
+                                            -1);
 
   g_signal_connect (dialog, "response",
                     G_CALLBACK (prefs_response),
@@ -1102,6 +1200,16 @@ prefs_dialog_new (Gimp       *gimp,
 
   g_object_set_data (G_OBJECT (dialog), "prefs-box", prefs_box);
 
+  /* Notify the prefs box to update its tree icon sizes
+   * based on user preferences */
+  g_signal_connect_object (config,
+                           "notify::override-theme-icon-size",
+                           G_CALLBACK (prefs_box_style_updated),
+                           prefs_box, G_CONNECT_AFTER | G_CONNECT_SWAPPED);
+  g_signal_connect_object (config,
+                           "notify::custom-icon-size",
+                           G_CALLBACK (prefs_box_style_updated),
+                           prefs_box, G_CONNECT_AFTER | G_CONNECT_SWAPPED);
 
   /**********************/
   /*  System Resources  */
@@ -1155,7 +1263,7 @@ prefs_dialog_new (Gimp       *gimp,
       prefs_switch_add (object, "check-updates",
                         _("Check for updates (requires internet)"),
                         GTK_BOX (vbox2),
-                        size_group);
+                        size_group, NULL);
     }
 #endif
 
@@ -1178,7 +1286,7 @@ prefs_dialog_new (Gimp       *gimp,
   prefs_switch_add (object, "save-document-history",
                     _("_Keep record of used files in the Recent Documents list"),
                     GTK_BOX (vbox2),
-                    size_group);
+                    size_group, NULL);
 
   g_clear_object (&size_group);
 
@@ -1346,11 +1454,11 @@ prefs_dialog_new (Gimp       *gimp,
                                          _("Mar_k out of gamut colors"));
     gtk_box_pack_start (GTK_BOX (hbox), button, TRUE, TRUE, 0);
 
-    button = gimp_prop_gegl_color_button_new (color_config, "out-of-gamut-color",
-                                              _("Select Warning Color"),
-                                              PREFS_COLOR_BUTTON_WIDTH,
-                                              PREFS_COLOR_BUTTON_HEIGHT,
-                                              GIMP_COLOR_AREA_FLAT);
+    button = gimp_prop_color_button_new (color_config, "out-of-gamut-color",
+                                         _("Select Warning Color"),
+                                         PREFS_COLOR_BUTTON_WIDTH,
+                                         PREFS_COLOR_BUTTON_HEIGHT,
+                                         GIMP_COLOR_AREA_FLAT);
     gtk_box_pack_start (GTK_BOX (hbox), button, FALSE, FALSE, 0);
 
     gimp_color_panel_set_context (GIMP_COLOR_PANEL (button),
@@ -1395,14 +1503,6 @@ prefs_dialog_new (Gimp       *gimp,
     button = prefs_enum_combo_box_add (object, "color-profile-policy", 0, 0,
                                        _("_File Open behavior:"),
                                        GTK_GRID (grid), 0, size_group);
-
-    /*  Filter Dialogs  */
-    vbox2 = prefs_frame_new (_("Filter Dialogs"), GTK_CONTAINER (vbox),
-                             FALSE);
-
-    button = prefs_check_button_add (object, "filter-tool-show-color-options",
-                                     _("Show _advanced color options"),
-                                     GTK_BOX (vbox2));
 
     g_clear_object (&size_group);
 
@@ -1571,7 +1671,7 @@ prefs_dialog_new (Gimp       *gimp,
       prefs_switch_add (object, "use-opencl",
                         _("Use O_penCL"),
                         GTK_BOX (vbox2),
-                        NULL);
+                        NULL, NULL);
 
       /*  Very unstable tools  */
       vbox2 = prefs_frame_new (_("Experimental"),
@@ -1871,6 +1971,7 @@ prefs_dialog_new (Gimp       *gimp,
     gchar            **themes;
     gint               n_themes;
     gint               i;
+    gulong             reset_handler;
 
     scrolled_win = gtk_scrolled_window_new (NULL, NULL);
     gtk_widget_set_size_request (scrolled_win, -1, 80);
@@ -1933,6 +2034,12 @@ prefs_dialog_new (Gimp       *gimp,
     g_signal_connect (listbox, "row-selected",
                       G_CALLBACK (prefs_theme_select_callback),
                       gimp);
+    reset_handler =
+      g_signal_connect (G_OBJECT (gimp->config), "notify::theme",
+                        G_CALLBACK (prefs_theme_reset_callback),
+                        listbox);
+    g_object_set_data (G_OBJECT (dialog), "gimp-theme-reset-handler",
+                       GUINT_TO_POINTER (reset_handler));
 
     grid = prefs_grid_new (GTK_CONTAINER (vbox2));
     button = prefs_enum_combo_box_add (object, "theme-color-scheme", 0, 0,
@@ -2030,6 +2137,7 @@ prefs_dialog_new (Gimp       *gimp,
     gint               scale_factor;
     gint               n_icon_themes;
     gint               i;
+    gulong             reset_handler;
 
     scrolled_win = gtk_scrolled_window_new (NULL, NULL);
     gtk_widget_set_size_request (scrolled_win, -1, 80);
@@ -2128,6 +2236,12 @@ prefs_dialog_new (Gimp       *gimp,
     g_signal_connect (listbox, "row-selected",
                       G_CALLBACK (prefs_icon_theme_select_callback),
                       gimp);
+    reset_handler =
+      g_signal_connect (G_OBJECT (gimp->config), "notify::icon-theme",
+                        G_CALLBACK (prefs_icon_theme_reset_callback),
+                        listbox);
+    g_object_set_data (G_OBJECT (dialog), "gimp-icon-theme-reset-handler",
+                       GUINT_TO_POINTER (reset_handler));
 
     prefs_check_button_add (object, "prefer-symbolic-icons",
                             _("Use symbolic icons if available"),
@@ -2184,7 +2298,7 @@ prefs_dialog_new (Gimp       *gimp,
   vbox2 = prefs_frame_new (_("Tools Configuration"),
                            GTK_CONTAINER (vbox), TRUE);
   tool_editor = gimp_tool_editor_new (gimp->tool_item_list, gimp->user_context,
-                                      GIMP_VIEW_SIZE_SMALL, 1);
+                                      GIMP_VIEW_SIZE_SMALL, 0);
 
   gtk_box_pack_start (GTK_BOX (vbox2), tool_editor, TRUE, TRUE, 0);
   gtk_widget_show (tool_editor);
@@ -2306,9 +2420,6 @@ prefs_dialog_new (Gimp       *gimp,
 
   button = prefs_check_button_add (object, "filter-tool-use-last-settings",
                                    _("Default to the last used settings"),
-                                   GTK_BOX (vbox2));
-  button = prefs_check_button_add (object, "filter-tool-show-color-options",
-                                   _("Show advanced color options"),
                                    GTK_BOX (vbox2));
 
   /*  Canvas Size Dialog  */
@@ -2725,7 +2836,7 @@ prefs_dialog_new (Gimp       *gimp,
                            GTK_CONTAINER (vbox), FALSE);
 
   {
-    gchar *pixels_per_unit = g_strconcat (_("Pixels"), "/%s", NULL);
+    gchar *pixels_per_unit = g_strconcat (_("Pixels"), "/%a", NULL);
 
     entry = gimp_prop_coordinates_new (object,
                                        "monitor-xresolution",

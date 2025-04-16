@@ -31,29 +31,15 @@ G_BEGIN_DECLS
 /* For information look into the C source or the html documentation */
 
 
-#define GIMP_TYPE_DIALOG            (gimp_dialog_get_type ())
-#define GIMP_DIALOG(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_DIALOG, GimpDialog))
-#define GIMP_DIALOG_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_DIALOG, GimpDialogClass))
-#define GIMP_IS_DIALOG(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_DIALOG))
-#define GIMP_IS_DIALOG_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_DIALOG))
-#define GIMP_DIALOG_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_DIALOG, GimpDialogClass))
-
-
-typedef struct _GimpDialogPrivate GimpDialogPrivate;
-typedef struct _GimpDialogClass   GimpDialogClass;
-
-struct _GimpDialog
-{
-  GtkDialog          parent_instance;
-
-  GimpDialogPrivate *priv;
-};
+#define GIMP_TYPE_DIALOG (gimp_dialog_get_type ())
+G_DECLARE_DERIVABLE_TYPE (GimpDialog, gimp_dialog, GIMP, DIALOG, GtkDialog)
 
 struct _GimpDialogClass
 {
   GtkDialogClass  parent_class;
 
   /* Padding for future expansion */
+  void (* _gimp_reserved0) (void);
   void (* _gimp_reserved1) (void);
   void (* _gimp_reserved2) (void);
   void (* _gimp_reserved3) (void);
@@ -62,10 +48,9 @@ struct _GimpDialogClass
   void (* _gimp_reserved6) (void);
   void (* _gimp_reserved7) (void);
   void (* _gimp_reserved8) (void);
+  void (* _gimp_reserved9) (void);
 };
 
-
-GType       gimp_dialog_get_type           (void) G_GNUC_CONST;
 
 GtkWidget * gimp_dialog_new                (const gchar    *title,
                                             const gchar    *role,

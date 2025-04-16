@@ -32,6 +32,7 @@
 #include "gimpdisplay-foreach.h"
 #include "gimpdisplayshell.h"
 #include "gimpdisplayshell-cursor.h"
+#include "gimpimagewindow.h"
 
 
 gboolean
@@ -305,4 +306,43 @@ gimp_displays_unset_busy (Gimp *gimp)
 
       gimp_display_shell_unset_override_cursor (shell);
     }
+}
+
+/**
+ * gimp_displays_accept_focus_events:
+ * @gimp:
+ *
+ * When this returns %FALSE, we should ignore focus events. In
+ * particular, I had weird cases in multi-window mode, before a new
+ * image window was actually displayed on screen, there seemed to be
+ * infinite loops of focus events switching the active window between
+ * the current active one and the one being created, with flickering
+ * window title and the new display never actually displayed until we
+ * broke the loop by manually getting out of focus (see #11957).
+ * This is why when any of the display is not fully drawn yet (which
+ * may mean it is either being created or moved to a new window), we
+ * temporarily ignore focus events on all displays.
+ */
+gboolean
+gimp_displays_accept_focus_events (Gimp *gimp)
+{
+  GList    *windows;
+  gboolean  accept = TRUE;
+
+  g_return_val_if_fail (GIMP_IS_GIMP (gimp), FALSE);
+
+  windows = gimp_get_image_windows (gimp);
+  for (GList *iter = windows; iter; iter = iter->next)
+    {
+      GimpDisplayShell *shell = gimp_image_window_get_active_shell (iter->data);
+
+      if (shell && ! gimp_display_shell_is_drawn (shell))
+        {
+          accept = FALSE;
+          break;
+        }
+    }
+  g_list_free (windows);
+
+  return accept;
 }

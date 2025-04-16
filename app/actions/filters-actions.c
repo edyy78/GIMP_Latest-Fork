@@ -804,7 +804,6 @@ filters_actions_setup (GimpActionGroup *group)
           g_free (action_name);
           action_name = g_strdup_printf ("filters-%s-%d", formatted_op_name, i++);
         }
-      g_free (formatted_op_name);
 
       title   = gegl_operation_class_get_key (op_class, "title");
       op_name = op_class->name;
@@ -823,6 +822,13 @@ filters_actions_setup (GimpActionGroup *group)
       entry.tooltip   = gegl_operation_class_get_key (op_class, "description");
       entry.value     = op_class->name;
       entry.help_id   = GIMP_HELP_TOOL_GEGL;
+
+      if (gegl_operation_class_get_key (op_class, "gimp:menu-path") &&
+          g_str_has_prefix (op_class->name, "gegl:"))
+        /* We automatically create an help ID from the operation name
+         * for all core GEGL operations with a menu path key.
+         */
+        entry.help_id = formatted_op_name;
 
       gimp_action_group_add_string_actions (group, "filters-action",
                                             &entry, 1,
@@ -856,6 +862,7 @@ filters_actions_setup (GimpActionGroup *group)
 
       g_free (label);
       g_free (action_name);
+      g_free (formatted_op_name);
     }
 
   g_object_set_data_full (G_OBJECT (group),
@@ -954,7 +961,7 @@ filters_actions_update (GimpActionGroup *group,
   SET_SENSITIVE ("filters-bayer-matrix",            writable);
   SET_SENSITIVE ("filters-bloom",                   writable);
   SET_SENSITIVE ("filters-brightness-contrast",     writable);
-  SET_SENSITIVE ("filters-bump-map",                writable);
+  SET_SENSITIVE ("filters-bump-map",                writable && !is_group);
   SET_SENSITIVE ("filters-c2g",                     writable && !gray);
   SET_SENSITIVE ("filters-cartoon",                 writable);
   SET_SENSITIVE ("filters-channel-mixer",           writable);
@@ -976,7 +983,7 @@ filters_actions_update (GimpActionGroup *group,
   SET_SENSITIVE ("filters-difference-of-gaussians", writable);
   SET_SENSITIVE ("filters-diffraction-patterns",    writable);
   SET_SENSITIVE ("filters-dilate",                  writable && !is_group);
-  SET_SENSITIVE ("filters-displace",                writable);
+  SET_SENSITIVE ("filters-displace",                writable && !is_group);
   SET_SENSITIVE ("filters-distance-map",            writable);
   SET_SENSITIVE ("filters-dropshadow",              writable && alpha);
   SET_SENSITIVE ("filters-edge",                    writable && !is_group);
@@ -991,8 +998,8 @@ filters_actions_update (GimpActionGroup *group,
   SET_SENSITIVE ("filters-focus-blur",              writable);
   SET_SENSITIVE ("filters-fractal-trace",           writable);
   SET_SENSITIVE ("filters-gaussian-blur",           writable);
-  SET_SENSITIVE ("filters-gaussian-blur-selective", writable);
-  SET_SENSITIVE ("filters-gegl-graph",              writable);
+  SET_SENSITIVE ("filters-gaussian-blur-selective", writable && !is_group);
+  SET_SENSITIVE ("filters-gegl-graph",              writable && !is_group);
   SET_SENSITIVE ("filters-grid",                    writable);
   SET_SENSITIVE ("filters-high-pass",               writable);
   SET_SENSITIVE ("filters-hue-chroma",              writable);
@@ -1003,7 +1010,7 @@ filters_actions_update (GimpActionGroup *group,
   SET_SENSITIVE ("filters-invert-value",            writable && !is_group);
   SET_SENSITIVE ("filters-image-gradient",          writable);
   SET_SENSITIVE ("filters-kaleidoscope",            writable);
-  SET_SENSITIVE ("filters-lens-blur",               writable);
+  SET_SENSITIVE ("filters-lens-blur",               writable && !is_group);
   SET_SENSITIVE ("filters-lens-distortion",         writable);
   SET_SENSITIVE ("filters-lens-flare",              writable);
   SET_SENSITIVE ("filters-levels",                  writable);
@@ -1034,7 +1041,7 @@ filters_actions_update (GimpActionGroup *group,
   SET_SENSITIVE ("filters-noise-spread",            writable);
   SET_SENSITIVE ("filters-normal-map",              writable);
   SET_SENSITIVE ("filters-offset",                  writable);
-  SET_SENSITIVE ("filters-oilify",                  writable);
+  SET_SENSITIVE ("filters-oilify",                  writable && !is_group);
   SET_SENSITIVE ("filters-panorama-projection",     writable);
   SET_SENSITIVE ("filters-photocopy",               writable);
   SET_SENSITIVE ("filters-pixelize",                writable);
@@ -1068,7 +1075,7 @@ filters_actions_update (GimpActionGroup *group,
   SET_SENSITIVE ("filters-tile-seamless",           writable);
   SET_SENSITIVE ("filters-unsharp-mask",            writable);
   SET_SENSITIVE ("filters-value-propagate",         writable);
-  SET_SENSITIVE ("filters-variable-blur",           writable);
+  SET_SENSITIVE ("filters-variable-blur",           writable && !is_group);
   SET_SENSITIVE ("filters-video-degradation",       writable);
   SET_SENSITIVE ("filters-vignette",                writable);
   SET_SENSITIVE ("filters-waterpixels",             writable);
@@ -1259,12 +1266,26 @@ filters_actions_history_changed (Gimp            *gimp,
         sensitive = gimp_action_get_sensitive (actual_action, NULL);
 
       g_object_set (action,
-                    "visible",   TRUE,
                     "sensitive", sensitive,
                     "procedure", proc,
                     "label",     label,
                     "icon-name", gimp_viewable_get_icon_name (GIMP_VIEWABLE (proc)),
                     "tooltip",   gimp_procedure_get_blurb (proc),
+                    /* It is very important that "visible" is set at the
+                     * end, because the docs says that:
+                     *
+                     * > "notify" signals are queued and only emitted (in reverse order) after all properties have been set.
+                     *
+                     * If "visible" is set before "label" in particular,
+                     * we end up in the inconsistent situation where the
+                     * "visible" callbacks have not been run yet, so
+                     * menus don't have the corresponding item whereas
+                     * the action already shows as visible. In
+                     * particular, g_menu_model_items_changed() may
+                     * crash on an empty item list in GIMP_GTK_MENUBAR
+                     * codepath.
+                     */
+                    "visible",   TRUE,
                     NULL);
     }
 

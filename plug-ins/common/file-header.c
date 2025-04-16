@@ -25,7 +25,7 @@
 #include "libgimp/stdplugins-intl.h"
 
 
-#define SAVE_PROC      "file-header-save"
+#define EXPORT_PROC    "file-header-export"
 #define PLUG_IN_BINARY "file-header"
 #define PLUG_IN_ROLE   "gimp-file-header"
 
@@ -53,17 +53,16 @@ static GList          * header_query_procedures (GimpPlugIn           *plug_in);
 static GimpProcedure  * header_create_procedure (GimpPlugIn           *plug_in,
                                                  const gchar          *name);
 
-static GimpValueArray * header_save             (GimpProcedure        *procedure,
+static GimpValueArray * header_export           (GimpProcedure        *procedure,
                                                  GimpRunMode           run_mode,
                                                  GimpImage            *image,
-                                                 gint                  n_drawables,
-                                                 GimpDrawable        **drawables,
                                                  GFile                *file,
+                                                 GimpExportOptions    *options,
                                                  GimpMetadata         *metadata,
                                                  GimpProcedureConfig  *config,
                                                  gpointer              run_data);
 
-static gboolean         save_image              (GFile                *file,
+static gboolean         export_image            (GFile                *file,
                                                  GimpImage            *image,
                                                  GimpDrawable         *drawable,
                                                  GError              **error);
@@ -98,7 +97,7 @@ header_init (Header *header)
 static GList *
 header_query_procedures (GimpPlugIn *plug_in)
 {
-  return  g_list_append (NULL, g_strdup (SAVE_PROC));
+  return  g_list_append (NULL, g_strdup (EXPORT_PROC));
 }
 
 static GimpProcedure *
@@ -107,19 +106,19 @@ header_create_procedure (GimpPlugIn  *plug_in,
 {
   GimpProcedure *procedure = NULL;
 
-  if (! strcmp (name, SAVE_PROC))
+  if (! strcmp (name, EXPORT_PROC))
     {
-      procedure = gimp_save_procedure_new (plug_in, name,
-                                           GIMP_PDB_PROC_TYPE_PLUGIN,
-                                           FALSE, header_save, NULL, NULL);
+      procedure = gimp_export_procedure_new (plug_in, name,
+                                             GIMP_PDB_PROC_TYPE_PLUGIN,
+                                             FALSE, header_export, NULL, NULL);
 
       gimp_procedure_set_image_types (procedure, "INDEXED, RGB");
 
       gimp_procedure_set_menu_label (procedure, _("C source code header"));
 
       gimp_procedure_set_documentation (procedure,
-                                        "saves files as C unsigned character "
-                                        "array",
+                                        _("Saves files as C unsigned character "
+                                          "array"),
                                         "FIXME: write help",
                                         name);
       gimp_procedure_set_attribution (procedure,
@@ -133,78 +132,54 @@ header_create_procedure (GimpPlugIn  *plug_in,
                                           "image/x-chdr");
       gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
                                           "h");
+
+      gimp_export_procedure_set_capabilities (GIMP_EXPORT_PROCEDURE (procedure),
+                                              GIMP_EXPORT_CAN_HANDLE_RGB |
+                                              GIMP_EXPORT_CAN_HANDLE_INDEXED,
+                                              NULL, NULL, NULL);
     }
 
   return procedure;
 }
 
 static GimpValueArray *
-header_save (GimpProcedure        *procedure,
-             GimpRunMode           run_mode,
-             GimpImage            *image,
-             gint                  n_drawables,
-             GimpDrawable        **drawables,
-             GFile                *file,
-             GimpMetadata         *metadata,
-             GimpProcedureConfig  *config,
-             gpointer              run_data)
+header_export (GimpProcedure        *procedure,
+               GimpRunMode           run_mode,
+               GimpImage            *image,
+               GFile                *file,
+               GimpExportOptions    *options,
+               GimpMetadata         *metadata,
+               GimpProcedureConfig  *config,
+               gpointer              run_data)
 {
   GimpPDBStatusType  status = GIMP_PDB_SUCCESS;
-  GimpExportReturn   export = GIMP_EXPORT_CANCEL;
+  GimpExportReturn   export = GIMP_EXPORT_IGNORE;
+  GList             *drawables;
   GError            *error  = NULL;
 
   gegl_init (NULL, NULL);
 
-  switch (run_mode)
-    {
-    case GIMP_RUN_INTERACTIVE:
-    case GIMP_RUN_WITH_LAST_VALS:
-      gimp_ui_init (PLUG_IN_BINARY);
+  export = gimp_export_options_get_image (options, &image);
+  drawables = gimp_image_list_layers (image);
 
-      export = gimp_export_image (&image, &n_drawables, &drawables, "Header",
-                                  GIMP_EXPORT_CAN_HANDLE_RGB |
-                                  GIMP_EXPORT_CAN_HANDLE_INDEXED);
-
-      if (export == GIMP_EXPORT_CANCEL)
-        return gimp_procedure_new_return_values (procedure,
-                                                 GIMP_PDB_CANCEL,
-                                                 NULL);
-      break;
-
-    default:
-      break;
-    }
-
-  if (n_drawables != 1)
-    {
-      g_set_error (&error, G_FILE_ERROR, 0,
-                   _("Header plug-in does not support multiple layers."));
-
-      return gimp_procedure_new_return_values (procedure,
-                                               GIMP_PDB_CALLING_ERROR,
-                                               error);
-    }
-
-  if (! save_image (file, image, drawables[0],
-                    &error))
+  if (! export_image (file, image, drawables->data,
+                      &error))
     {
       status = GIMP_PDB_EXECUTION_ERROR;
     }
 
   if (export == GIMP_EXPORT_EXPORT)
-    {
-      gimp_image_delete (image);
-      g_free (drawables);
-    }
+    gimp_image_delete (image);
 
+  g_list_free (drawables);
   return gimp_procedure_new_return_values (procedure, status, error);
 }
 
 static gboolean
-save_image (GFile         *file,
-            GimpImage     *image,
-            GimpDrawable  *drawable,
-            GError       **error)
+export_image (GFile         *file,
+              GimpImage     *image,
+              GimpDrawable  *drawable,
+              GError       **error)
 {
   GeglBuffer    *buffer;
   const Babl    *format;
@@ -342,7 +317,7 @@ save_image (GFile         *file,
         }
 
       /* save colormap */
-      cmap = gimp_image_get_colormap (image, NULL, &colors);
+      cmap = gimp_palette_get_colormap (gimp_image_get_palette (image), babl_format ("R'G'B' u8"), &colors, NULL);
 
       if (! print (output, error,
                    "static unsigned char header_data_cmap[256][3] = {") ||

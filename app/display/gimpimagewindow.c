@@ -1986,9 +1986,28 @@ gimp_image_window_hide_tooltip (GimpUIManager   *manager,
 static gboolean
 gimp_image_window_update_ui_manager_idle (GimpImageWindow *window)
 {
-  GimpImageWindowPrivate *private = GIMP_IMAGE_WINDOW_GET_PRIVATE (window);
+  GimpImageWindowPrivate *private      = GIMP_IMAGE_WINDOW_GET_PRIVATE (window);
+  GimpImage              *active_image = NULL;
+  GimpContext            *context;
 
   gimp_assert (private->active_shell != NULL);
+
+  context = gimp_get_user_context (private->active_shell->display->gimp);
+
+  if (context)
+    active_image = gimp_context_get_image (context);
+
+  /* Since we are running idle, it is possible this runs after the
+   * active display switched, and therefore we may call the wrong
+   * actions for an image. See #10441.
+   */
+  if ((active_image &&
+       (! private->active_shell->display || ! gimp_display_get_image (private->active_shell->display))) ||
+      active_image != gimp_display_get_image (private->active_shell->display))
+    {
+      private->update_ui_manager_idle_id = 0;
+      return G_SOURCE_REMOVE;
+    }
 
   gimp_ui_manager_update (menus_get_image_manager_singleton (private->active_shell->display->gimp),
                           private->active_shell->display);
@@ -2094,8 +2113,6 @@ gimp_image_window_switch_page (GtkNotebook     *notebook,
 
   gtk_window_set_title (GTK_WINDOW (window), shell->title);
 
-  gimp_display_shell_appearance_update (private->active_shell);
-
   if (gtk_widget_get_window (GTK_WIDGET (window)))
     {
       /*  we are fully initialized, use the window's current monitor
@@ -2119,6 +2136,8 @@ gimp_image_window_switch_page (GtkNotebook     *notebook,
 
   gimp_context_set_display (gimp_get_user_context (private->gimp),
                             active_display);
+
+  gimp_display_shell_appearance_update (private->active_shell);
 
   gimp_image_window_update_ui_manager (window);
 

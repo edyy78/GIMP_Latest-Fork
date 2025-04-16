@@ -22,14 +22,15 @@
 
 
 (define (script-fu-circuit image
-                           drawable
+                           drawables
                            mask-size
                            seed
                            remove-bg
                            keep-selection
                            separate-layer)
   (let* (
-        (type (car (gimp-drawable-type-with-alpha drawable)))
+        (layer (vector-ref drawables 0))
+        (type (car (gimp-drawable-type-with-alpha layer)))
         (image-width (car (gimp-image-get-width image)))
         (image-height (car (gimp-image-get-height image)))
         (active-selection 0)
@@ -48,11 +49,11 @@
 
     (gimp-image-undo-group-start image)
 
-    (gimp-layer-add-alpha drawable)
+    (gimp-layer-add-alpha layer)
 
     (if (= (car (gimp-selection-is-empty image)) TRUE)
         (begin
-          (gimp-image-select-item image CHANNEL-OP-REPLACE drawable)
+          (gimp-image-select-item image CHANNEL-OP-REPLACE layer)
           (set! active-selection (car (gimp-selection-save image)))
           (set! from-selection FALSE))
         (begin
@@ -68,10 +69,10 @@
     (if (= separate-layer TRUE)
         (begin
           (set! effect-layer (car (gimp-layer-new image
+                                                  _"Effect layer"
                                                   select-width
                                                   select-height
                                                   type
-                                                  _"Effect layer"
                                                   100
                                                   LAYER-MODE-NORMAL)))
 
@@ -80,17 +81,17 @@
           (gimp-selection-none image)
           (gimp-drawable-edit-clear effect-layer)
           (gimp-image-select-item image CHANNEL-OP-REPLACE active-selection)
-          (gimp-edit-copy 1 (vector drawable))
+          (gimp-edit-copy (vector layer))
 
           (let* (
-                 (pasted (gimp-edit-paste effect-layer FALSE))
-                 (num-pasted (car pasted))
-                 (floating-sel (aref (cadr pasted) (- num-pasted 1)))
+                 (pasted (car (gimp-edit-paste effect-layer FALSE)))
+                 (num-pasted (vector-length pasted))
+                 (floating-sel (vector-ref pasted (- num-pasted 1)))
                 )
            (gimp-floating-sel-anchor floating-sel)
           )
-          (gimp-image-set-selected-layers image 1 (vector effect-layer)))
-          (set! effect-layer drawable)
+          (gimp-image-set-selected-layers image (vector effect-layer)))
+          (set! effect-layer layer)
     )
     (set! active-layer effect-layer)
 
@@ -100,9 +101,12 @@
     )
 
     (gimp-image-select-item image CHANNEL-OP-REPLACE active-selection)
-    (plug-in-maze RUN-NONINTERACTIVE image active-layer 5 5 TRUE 0 seed 57 1)
-    (plug-in-oilify RUN-NONINTERACTIVE image active-layer mask-size 0)
-    (plug-in-edge RUN-NONINTERACTIVE image active-layer 2 1 0)
+    (gimp-drawable-merge-new-filter active-layer "gegl:maze" 0 LAYER-MODE-REPLACE 1.0 "x" 5 "y" 5 "tileable" TRUE "algorithm-type" "depth-first"
+                                                                                      "seed" seed
+                                                                                      "fg-color" (car (gimp-context-get-foreground))
+                                                                                      "bg-color" (car (gimp-context-get-background)))
+    (gimp-drawable-merge-new-filter active-layer "gegl:oilify" 0 LAYER-MODE-REPLACE 1.0 "mask-radius" (max 1 (/ mask-size 2)) "use-inten" FALSE)
+    (gimp-drawable-merge-new-filter active-layer "gegl:edge" 0 LAYER-MODE-REPLACE 1.0 "amount" 2.0 "border-behavior" "loop" "algorithm" "sobel")
     (if (= type RGBA-IMAGE)
       (gimp-drawable-desaturate active-layer DESATURATE-LIGHTNESS))
 
@@ -117,7 +121,7 @@
         (gimp-selection-none image))
 
     (gimp-image-remove-channel image active-selection)
-    (gimp-image-set-selected-layers image 1 (vector drawable))
+    (gimp-image-set-selected-layers image (vector layer))
 
     (gimp-image-undo-group-end image)
 
@@ -127,15 +131,14 @@
   )
 )
 
-(script-fu-register "script-fu-circuit"
+(script-fu-register-filter "script-fu-circuit"
   _"_Circuit..."
   _"Fill the selected region (or alpha) with traces like those on a circuit board"
   "Adrian Likins <adrian@gimp.org>"
   "Adrian Likins"
   "10/17/97"
   "RGB* GRAY*"
-  SF-IMAGE      "Image"             0
-  SF-DRAWABLE   "Drawable"          0
+  SF-ONE-OR-MORE-DRAWABLE
   SF-ADJUSTMENT _"Oilify mask size" '(17 3 50 1 10 0 1)
   SF-ADJUSTMENT _"Circuit seed"     '(3 1 3000000 1 10 0 1)
   SF-TOGGLE     _"No background (only for separate layer)" FALSE

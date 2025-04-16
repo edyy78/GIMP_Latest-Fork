@@ -84,6 +84,8 @@ struct _EXRLoader
   {
     const Channel* chan;
 
+    can_load_ = true;
+
     if (channels_.findChannel("R") ||
         channels_.findChannel("G") ||
         channels_.findChannel("B"))
@@ -102,13 +104,12 @@ struct _EXRLoader
              (channels_.findChannel("RY") ||
               channels_.findChannel("BY")))
       {
-        format_string_ = "RGB";
-        image_type_ = IMAGE_TYPE_RGB;
+        format_string_ = "Y'CbCr";
+        image_type_ = IMAGE_TYPE_YUV;
 
+        /* TODO: Use RGBA interface to incorporate
+         * RY/BY chroma channels */
         pt_ = channels_.findChannel("Y")->type;
-
-        // FIXME: no chroma handling for now.
-        throw;
       }
     else if (channels_.findChannel("Y"))
       {
@@ -146,7 +147,8 @@ struct _EXRLoader
           }
         else
           {
-            throw;
+            /* TODO: After string freeze ends add unsupported type notice. */
+            can_load_ = false;
           }
       }
 
@@ -194,6 +196,7 @@ struct _EXRLoader
         fb.insert(unknown_channel_name_, Slice(pt_, base, bpp, 0, 1, 1, 0.5));
         break;
 
+      case IMAGE_TYPE_YUV:
       case IMAGE_TYPE_GRAY:
         fb.insert("Y", Slice(pt_, base, bpp, 0, 1, 1, 0.5));
         if (hasAlpha())
@@ -252,6 +255,10 @@ struct _EXRLoader
 
   int hasAlpha() const {
     return has_alpha_ ? 1 : 0;
+  }
+
+  int canLoad() const {
+    return can_load_ ? 1 : 0;
   }
 
   GimpColorProfile *getProfile() const {
@@ -416,6 +423,7 @@ struct _EXRLoader
   int bpc_;
   EXRImageType image_type_;
   bool has_alpha_;
+  bool can_load_;
   std::string format_string_;
   std::string unknown_channel_name_;
 };
@@ -430,6 +438,12 @@ exr_loader_new (const char *filename)
     {
       Imf::BlobAttribute::registerAttributeType();
       file = new EXRLoader(filename);
+
+      if (file && ! file->canLoad())
+        {
+          exr_loader_unref (file);
+          file = NULL;
+        }
     }
   catch (...)
     {

@@ -24,7 +24,7 @@
 
 #define DDS_PLUGIN_VERSION_MAJOR     3
 #define DDS_PLUGIN_VERSION_MINOR     9
-#define DDS_PLUGIN_VERSION_REVISION  92
+#define DDS_PLUGIN_VERSION_REVISION  93
 
 #define DDS_PLUGIN_VERSION \
    ((guint) (DDS_PLUGIN_VERSION_MAJOR << 16) | \
@@ -48,6 +48,7 @@ typedef enum
   DDS_COMPRESS_BC3N,       /* DXT5n */
   DDS_COMPRESS_BC4,        /* ATI1  */
   DDS_COMPRESS_BC5,        /* ATI2  */
+  DDS_COMPRESS_BC7,
   DDS_COMPRESS_RXGB,       /* DXT5  */
   DDS_COMPRESS_AEXP,       /* DXT5  */
   DDS_COMPRESS_YCOCG,      /* DXT5  */
@@ -470,6 +471,9 @@ typedef enum _D3DFORMAT
   D3DFMT_A1                   = 118,
   D3DFMT_A2B10G10R10_XR_BIAS  = 119,
   D3DFMT_BINARYBUFFER         = 199,
+
+  /* Unofficial formats added by GIMP */
+  D3DFMT_B8G8R8               = 220,
 } D3DFORMAT;
 
 

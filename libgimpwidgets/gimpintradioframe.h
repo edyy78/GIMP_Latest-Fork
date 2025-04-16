@@ -31,35 +31,8 @@
 G_BEGIN_DECLS
 
 
-#define GIMP_TYPE_INT_RADIO_FRAME            (gimp_int_radio_frame_get_type ())
-#define GIMP_INT_RADIO_FRAME(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_INT_RADIO_FRAME, GimpIntRadioFrame))
-#define GIMP_INT_RADIO_FRAME_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_INT_RADIO_FRAME, GimpIntRadioFrameClass))
-#define GIMP_IS_INT_RADIO_FRAME(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_INT_RADIO_FRAME))
-#define GIMP_IS_INT_RADIO_FRAME_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_INT_RADIO_FRAME))
-#define GIMP_INT_RADIO_FRAME_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_INT_RADIO_FRAME, GimpIntRadioFrameClass))
-
-
-typedef struct _GimpIntRadioFrameClass   GimpIntRadioFrameClass;
-
-struct _GimpIntRadioFrame
-{
-  GimpFrame       parent_instance;
-};
-
-struct _GimpIntRadioFrameClass
-{
-  GimpFrameClass  parent_class;
-
-  /* Padding for future expansion */
-  void (* _gimp_reserved1) (void);
-  void (* _gimp_reserved2) (void);
-  void (* _gimp_reserved3) (void);
-  void (* _gimp_reserved4) (void);
-  void (* _gimp_reserved5) (void);
-  void (* _gimp_reserved6) (void);
-  void (* _gimp_reserved7) (void);
-  void (* _gimp_reserved8) (void);
-};
+#define GIMP_TYPE_INT_RADIO_FRAME (gimp_int_radio_frame_get_type ())
+G_DECLARE_FINAL_TYPE (GimpIntRadioFrame, gimp_int_radio_frame, GIMP, INT_RADIO_FRAME, GimpFrame)
 
 
 /**
@@ -88,8 +61,6 @@ typedef  gboolean (* GimpIntRadioFrameSensitivityFunc) (gint      value,
 
 
 
-GType         gimp_int_radio_frame_get_type        (void) G_GNUC_CONST;
-
 GtkWidget   * gimp_int_radio_frame_new_from_store  (const gchar       *title,
                                                     GimpIntStore      *store);
 GtkWidget   * gimp_int_radio_frame_new             (const gchar       *first_label,
@@ -105,6 +76,10 @@ void          gimp_int_radio_frame_prepend         (GimpIntRadioFrame *radio_fra
                                                     ...);
 void          gimp_int_radio_frame_append          (GimpIntRadioFrame *radio_frame,
                                                     ...);
+
+void          gimp_int_radio_frame_set_title       (GimpIntRadioFrame *frame,
+                                                    const gchar       *title,
+                                                    gboolean           with_mnemonic);
 
 gboolean      gimp_int_radio_frame_set_active      (GimpIntRadioFrame *radio_frame,
                                                     gint               value);

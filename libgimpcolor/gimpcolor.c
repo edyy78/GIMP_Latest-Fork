@@ -28,6 +28,8 @@
 #include <babl/babl.h>
 #include <gegl.h>
 
+#include "libgimpbase/gimpbase.h"
+
 #include "gimpcolor.h"
 
 
@@ -45,6 +47,10 @@ static const Babl * gimp_babl_format_get_with_alpha (const Babl *format);
 static gfloat       gimp_color_get_CIE2000_distance (GeglColor  *color1,
                                                      GeglColor  *color2);
 
+
+/*
+ * GEGL_TYPE_COLOR
+ */
 
 /**
  * gimp_color_set_alpha:
@@ -218,9 +224,9 @@ gimp_color_is_out_of_self_gamut (GeglColor *color)
                  model == babl_model ("cmyk")  ||
                  model == babl_model ("cmykA"))
         {
-            gdouble cmyk[4];
+            gfloat cmyk[4];
 
-            gegl_color_get_pixel (color, babl_format_with_space ("CMYK double", space), cmyk);
+            gegl_color_get_pixel (color, babl_format_with_space ("CMYK float", space), cmyk);
             oog = ((cmyk[0] < 0.0 && -cmyk[0] > CHANNEL_EPSILON)      ||
                    (cmyk[0] > 1.0 && cmyk[0] - 1.0 > CHANNEL_EPSILON) ||
                    (cmyk[1] < 0.0 && -cmyk[1] > CHANNEL_EPSILON)      ||
@@ -286,16 +292,16 @@ gimp_color_is_out_of_gamut (GeglColor  *color,
   else if (babl_space_is_cmyk (space))
     {
       GeglColor *c = gegl_color_new (NULL);
-      gdouble    cmyk[4];
+      gfloat     cmyk[4];
 
       /* CMYK conversion always produces colors in [0; 1] range. What we want
        * to check is whether the source and converted colors are the same in
        * Lab space.
        */
       gegl_color_get_pixel (color,
-                            babl_format_with_space ("CMYK double", space),
+                            babl_format_with_space ("CMYK float", space),
                             cmyk);
-      gegl_color_set_pixel (c, babl_format_with_space ("CMYK double", space), cmyk);
+      gegl_color_set_pixel (c, babl_format_with_space ("CMYK float", space), cmyk);
       is_out_of_gamut = (! gimp_color_is_perceptually_identical (color, c));
       g_object_unref (c);
     }
@@ -316,6 +322,275 @@ gimp_color_is_out_of_gamut (GeglColor  *color,
 #undef CHANNEL_EPSILON
 
   return is_out_of_gamut;
+}
+
+
+/*
+ * GIMP_TYPE_PARAM_COLOR
+ */
+
+#define GIMP_PARAM_SPEC_COLOR(pspec)    (G_TYPE_CHECK_INSTANCE_CAST ((pspec), GIMP_TYPE_PARAM_COLOR, GimpParamSpecColor))
+
+typedef struct _GimpParamSpecColor GimpParamSpecColor;
+
+struct _GimpParamSpecColor
+{
+  GimpParamSpecObject  parent_instance;
+
+  gboolean             has_alpha;
+
+  /* TODO: these 2 settings are not currently settable:
+   * - none_ok: whether a parameter were to allow NULL as a value. Of course, it
+   *   should imply that default_color must be set.
+   * - validate: legacy GimpRGB code was implying checking if the RGB values
+   *             were out of [0; 1], i.e. that new code should check if the
+   *             color is out of self-gamut (bounded value).
+   *             We could also add a check for invalid values regardless of
+   *             gamut (though maybe this validation should happen regardless
+   *             and the settings should just be oog_validate).
+   * These can be implemented later as independent functions, especially as the
+   * GimpParamSpecColor struct is private.
+   */
+  gboolean              none_ok;
+  gboolean              validate;
+};
+
+static void         gimp_param_color_class_init     (GimpParamSpecObjectClass *klass);
+static void         gimp_param_color_init           (GParamSpec               *pspec);
+static GParamSpec * gimp_param_color_duplicate      (GParamSpec               *pspec);
+static gboolean     gimp_param_color_validate       (GParamSpec               *pspec,
+                                                     GValue                   *value);
+static void         gimp_param_color_set_default    (GParamSpec               *pspec,
+                                                     GValue                   *value);
+static gint         gimp_param_color_cmp            (GParamSpec               *param_spec,
+                                                     const GValue             *value1,
+                                                     const GValue             *value2);
+
+GType
+gimp_param_color_get_type (void)
+{
+  static GType type = 0;
+
+  if (G_UNLIKELY (type == 0))
+    {
+      const GTypeInfo info =
+      {
+        sizeof (GimpParamSpecObjectClass),
+        NULL, NULL,
+        (GClassInitFunc) gimp_param_color_class_init,
+        NULL, NULL,
+        sizeof (GimpParamSpecColor),
+        0,
+        (GInstanceInitFunc) gimp_param_color_init
+      };
+
+      type = g_type_register_static (GIMP_TYPE_PARAM_OBJECT, "GimpParamColor", &info, 0);
+    }
+
+  return type;
+}
+
+static void
+gimp_param_color_class_init (GimpParamSpecObjectClass *klass)
+{
+  GParamSpecClass *pclass = G_PARAM_SPEC_CLASS (klass);
+
+  klass->duplicate          = gimp_param_color_duplicate;
+
+  pclass->value_type        = GEGL_TYPE_COLOR;
+  pclass->value_validate    = gimp_param_color_validate;
+  pclass->value_set_default = gimp_param_color_set_default;
+  pclass->values_cmp        = gimp_param_color_cmp;
+}
+
+static void
+gimp_param_color_init (GParamSpec *pspec)
+{
+  GimpParamSpecColor *cspec = GIMP_PARAM_SPEC_COLOR (pspec);
+
+  cspec->has_alpha     = TRUE;
+  cspec->none_ok       = TRUE;
+  cspec->validate      = FALSE;
+}
+
+static GParamSpec *
+gimp_param_color_duplicate (GParamSpec *pspec)
+{
+  GParamSpec         *duplicate;
+  GimpParamSpecColor *cspec;
+
+  g_return_val_if_fail (GIMP_IS_PARAM_SPEC_COLOR (pspec), NULL);
+
+  cspec = GIMP_PARAM_SPEC_COLOR (pspec);
+  duplicate = gimp_param_spec_color (pspec->name,
+                                     g_param_spec_get_nick (pspec),
+                                     g_param_spec_get_blurb (pspec),
+                                     cspec->has_alpha,
+                                     GEGL_COLOR (gimp_param_spec_object_get_default (pspec)),
+                                     pspec->flags);
+
+  return duplicate;
+}
+
+static gboolean
+gimp_param_color_validate (GParamSpec *pspec,
+                           GValue     *value)
+{
+  GimpParamSpecColor *cspec = GIMP_PARAM_SPEC_COLOR (pspec);
+  GeglColor          *color = value->data[0].v_pointer;
+
+  if (! cspec->none_ok && color == NULL)
+    return TRUE;
+
+  if (color && ! GEGL_IS_COLOR (color))
+    {
+      g_object_unref (color);
+      value->data[0].v_pointer = NULL;
+      return TRUE;
+    }
+
+  if (cspec->validate && gimp_color_is_out_of_self_gamut (color))
+    {
+      /* TODO: See g_param_value_validate() documentation. The value_validate()
+       * method must also modify the value to ensure validity. When it's done,
+       * return TRUE.
+       */
+      return FALSE;
+    }
+  return FALSE;
+}
+
+static void
+gimp_param_color_set_default (GParamSpec *pspec,
+                              GValue     *value)
+{
+  GeglColor *color;
+
+  color = GEGL_COLOR (gimp_param_spec_object_get_default (pspec));
+  if (color)
+    g_value_take_object (value, gegl_color_duplicate (color));
+}
+
+static gint
+gimp_param_color_cmp (GParamSpec   *param_spec,
+                      const GValue *value1,
+                      const GValue *value2)
+{
+  GeglColor  *color1 = g_value_get_object (value1);
+  GeglColor  *color2 = g_value_get_object (value2);
+  const Babl *format1;
+
+  if (! color1 || ! color2)
+    return color2 ? -1 : (color1 ? 1 : 0);
+
+  format1 = gegl_color_get_format (color1);
+  if (format1 != gegl_color_get_format (color2))
+    {
+      return 1;
+    }
+  else
+    {
+      guint8 pixel1[48];
+      guint8 pixel2[48];
+
+      gegl_color_get_pixel (color1, format1, pixel1);
+      gegl_color_get_pixel (color2, format1, pixel2);
+
+      return memcmp (pixel1, pixel2, babl_format_get_bytes_per_pixel (format1));
+    }
+}
+
+/**
+ * gimp_param_spec_color:
+ * @name: canonical name of the property specified
+ * @nick: nick name for the property specified
+ * @blurb: description of the property specified
+ * @has_alpha: %TRUE if the alpha channel has relevance.
+ * @default_color: the default value for the property specified
+ * @flags: flags for the property specified
+ *
+ * Creates a new #GParamSpec instance specifying a #GeglColor property.
+ * Note that the @default_color is duplicated, so reusing object will
+ * not change the default color of the returned %GimpParamSpecColor.
+ *
+ * Returns: (transfer full): a newly created parameter specification
+ */
+GParamSpec *
+gimp_param_spec_color (const gchar *name,
+                       const gchar *nick,
+                       const gchar *blurb,
+                       gboolean     has_alpha,
+                       GeglColor   *default_color,
+                       GParamFlags  flags)
+{
+  GimpParamSpecColor *cspec;
+  GeglColor          *dup_color = NULL;
+
+  cspec = g_param_spec_internal (GIMP_TYPE_PARAM_COLOR, name, nick, blurb, flags);
+
+  if (default_color)
+    dup_color = gegl_color_duplicate (default_color);
+
+  gimp_param_spec_object_set_default (G_PARAM_SPEC (cspec), G_OBJECT (dup_color));
+  g_clear_object (&dup_color);
+
+  cspec->has_alpha = has_alpha;
+
+  return G_PARAM_SPEC (cspec);
+}
+
+/**
+ * gimp_param_spec_color_from_string:
+ * @name: canonical name of the property specified
+ * @nick: nick name for the property specified
+ * @blurb: description of the property specified
+ * @has_alpha: %TRUE if the alpha channel has relevance.
+ * @default_color_string: the default value for the property specified
+ * @flags: flags for the property specified
+ *
+ * Creates a new #GParamSpec instance specifying a #GeglColor property.
+ *
+ * Returns: (transfer full): a newly created parameter specification
+ */
+GParamSpec *
+gimp_param_spec_color_from_string (const gchar *name,
+                                   const gchar *nick,
+                                   const gchar *blurb,
+                                   gboolean     has_alpha,
+                                   const gchar *default_color_string,
+                                   GParamFlags  flags)
+{
+  GimpParamSpecColor *cspec;
+  GeglColor          *default_color;
+
+  cspec = g_param_spec_internal (GIMP_TYPE_PARAM_COLOR,
+                                 name, nick, blurb, flags);
+
+  default_color = g_object_new (GEGL_TYPE_COLOR,
+                                "string", default_color_string,
+                                NULL);
+  gimp_param_spec_object_set_default (G_PARAM_SPEC (cspec), G_OBJECT (default_color));
+  cspec->has_alpha = has_alpha;
+
+  g_clear_object (&default_color);
+
+  return G_PARAM_SPEC (cspec);
+}
+
+/**
+ * gimp_param_spec_color_has_alpha:
+ * @pspec: a #GParamSpec to hold an #GeglColor value.
+ *
+ * Returns: %TRUE if the alpha channel is relevant.
+ *
+ * Since: 2.4
+ **/
+gboolean
+gimp_param_spec_color_has_alpha (GParamSpec *pspec)
+{
+  g_return_val_if_fail (GIMP_IS_PARAM_SPEC_COLOR (pspec), FALSE);
+
+  return GIMP_PARAM_SPEC_COLOR (pspec)->has_alpha;
 }
 
 
@@ -341,8 +616,17 @@ gimp_babl_format_get_with_alpha (const Babl *format)
   if (babl_format_is_palette (format))
     {
       gchar *alpha_palette = g_strdup (model);
+      gchar *last_hyphen;
 
+      /* Retrieving the alpha variant of the same palette.
+       * 1. The alpha variant starts with '\'.
+       * 2. Removing the last part of the name which represents the
+       *    space because babl will add it itself.
+       */
       alpha_palette[0] = '\\';
+      last_hyphen = g_strrstr (alpha_palette, "-");
+      if (last_hyphen != NULL)
+        *last_hyphen = '\0';
       babl_new_palette_with_space (alpha_palette, babl_format_get_space (format),
                                    NULL, &new_format);
       g_free (alpha_palette);
@@ -480,4 +764,40 @@ gimp_color_get_CIE2000_distance (GeglColor *color1,
                 RT * dC * dH / SC / SH);
 
   return dE00;
+}
+
+
+/*
+ * GIMP_TYPE_BABL_FORMAT
+ */
+
+static const Babl * gimp_babl_object_copy (const Babl *object);
+static void         gimp_babl_object_free (const Babl *object);
+
+G_DEFINE_BOXED_TYPE (GimpBablFormat, gimp_babl_format, (GBoxedCopyFunc) gimp_babl_object_copy, (GBoxedFreeFunc) gimp_babl_object_free)
+
+/**
+ * gimp_babl_object_copy: (skip)
+ * @object: a Babl object.
+ *
+ * Bogus function since [struct@Babl.Object] should just be used as
+ * never-ending pointers.
+ *
+ * Returns: (transfer none): the passed @object.
+ **/
+const Babl *
+gimp_babl_object_copy (const Babl *object)
+{
+  return object;
+}
+
+/**
+ * gimp_babl_object_free: (skip)
+ * @object: a Babl object.
+ *
+ * Bogus function since [struct@Babl.Object] must not be freed.
+ **/
+void
+gimp_babl_object_free (const Babl *object)
+{
 }

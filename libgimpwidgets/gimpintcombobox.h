@@ -29,29 +29,16 @@
 G_BEGIN_DECLS
 
 
-#define GIMP_TYPE_INT_COMBO_BOX            (gimp_int_combo_box_get_type ())
-#define GIMP_INT_COMBO_BOX(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_INT_COMBO_BOX, GimpIntComboBox))
-#define GIMP_INT_COMBO_BOX_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_INT_COMBO_BOX, GimpIntComboBoxClass))
-#define GIMP_IS_INT_COMBO_BOX(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_INT_COMBO_BOX))
-#define GIMP_IS_INT_COMBO_BOX_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_INT_COMBO_BOX))
-#define GIMP_INT_COMBO_BOX_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_INT_COMBO_BOX, GimpIntComboBoxClass))
+#define GIMP_TYPE_INT_COMBO_BOX (gimp_int_combo_box_get_type ())
+G_DECLARE_DERIVABLE_TYPE (GimpIntComboBox, gimp_int_combo_box, GIMP, INT_COMBO_BOX, GtkComboBox)
 
-
-typedef struct _GimpIntComboBoxPrivate GimpIntComboBoxPrivate;
-typedef struct _GimpIntComboBoxClass   GimpIntComboBoxClass;
-
-struct _GimpIntComboBox
-{
-  GtkComboBox             parent_instance;
-
-  GimpIntComboBoxPrivate *priv;
-};
 
 struct _GimpIntComboBoxClass
 {
   GtkComboBoxClass  parent_class;
 
   /* Padding for future expansion */
+  void (* _gimp_reserved0) (void);
   void (* _gimp_reserved1) (void);
   void (* _gimp_reserved2) (void);
   void (* _gimp_reserved3) (void);
@@ -60,6 +47,7 @@ struct _GimpIntComboBoxClass
   void (* _gimp_reserved6) (void);
   void (* _gimp_reserved7) (void);
   void (* _gimp_reserved8) (void);
+  void (* _gimp_reserved9) (void);
 };
 
 
@@ -71,9 +59,6 @@ struct _GimpIntComboBoxClass
 typedef  gboolean (* GimpIntSensitivityFunc) (gint      value,
                                               gpointer  data);
 
-
-
-GType         gimp_int_combo_box_get_type        (void) G_GNUC_CONST;
 
 GtkWidget   * gimp_int_combo_box_new             (const gchar     *first_label,
                                                   gint             first_value,

@@ -424,7 +424,7 @@ gimp_image_prop_view_update (GimpImagePropView *view)
   GimpColorProfile  *profile;
   GimpImageBaseType  type;
   GimpPrecision      precision;
-  GimpUnit           unit;
+  GimpUnit          *unit;
   gdouble            unit_factor;
   const gchar       *desc;
   gchar              format_buf[32];
@@ -448,7 +448,7 @@ gimp_image_prop_view_update (GimpImagePropView *view)
   g_snprintf (format_buf, sizeof (format_buf), "%%.%df × %%.%df %s",
               gimp_unit_get_scaled_digits (unit, xres),
               gimp_unit_get_scaled_digits (unit, yres),
-              gimp_unit_get_plural (unit));
+              gimp_unit_get_name (unit));
   g_snprintf (buf, sizeof (buf), format_buf,
               gimp_pixels_to_units (gimp_image_get_width  (image), unit, xres),
               gimp_pixels_to_units (gimp_image_get_height (image), unit, yres));
@@ -463,7 +463,7 @@ gimp_image_prop_view_update (GimpImagePropView *view)
   g_snprintf (buf, sizeof (buf), _("%g × %g %s"),
               xres / unit_factor,
               yres / unit_factor,
-              unit == GIMP_UNIT_INCH ? _("ppi") : format_buf);
+              unit == gimp_unit_inch () ? _("ppi") : format_buf);
   gtk_label_set_text (GTK_LABEL (view->resolution_label), buf);
 
   /*  color space  */
@@ -531,7 +531,7 @@ gimp_image_prop_view_update (GimpImagePropView *view)
 
   /*  number of vectors  */
   g_snprintf (buf, sizeof (buf), "%d",
-              gimp_image_get_n_vectors (image));
+              gimp_image_get_n_paths (image));
   gtk_label_set_text (GTK_LABEL (view->vectors_label), buf);
 }
 

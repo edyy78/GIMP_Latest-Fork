@@ -667,14 +667,14 @@ gimp_context_class_init (GimpContextClass *klass)
                           gimp_context_prop_names[GIMP_CONTEXT_PROP_FOREGROUND],
                           _("Foreground"),
                           _("Foreground color"),
-                          black,
+                          FALSE, black,
                           GIMP_PARAM_STATIC_STRINGS);
 
   GIMP_CONFIG_PROP_COLOR (object_class, GIMP_CONTEXT_PROP_BACKGROUND,
                           gimp_context_prop_names[GIMP_CONTEXT_PROP_BACKGROUND],
                           _("Background"),
                           _("Background color"),
-                          white,
+                          FALSE, white,
                           GIMP_PARAM_STATIC_STRINGS);
 
   GIMP_CONFIG_PROP_DOUBLE (object_class, GIMP_CONTEXT_PROP_OPACITY,
@@ -2410,10 +2410,6 @@ static void
 gimp_context_real_set_foreground (GimpContext *context,
                                   GeglColor   *color)
 {
-  if (context->foreground != NULL &&
-      gimp_color_is_perceptually_identical (context->foreground, color))
-    return;
-
   g_clear_object (&context->foreground);
   context->foreground = gegl_color_duplicate (color);
   gimp_color_set_alpha (context->foreground, GIMP_OPACITY_OPAQUE);
@@ -2460,10 +2456,6 @@ static void
 gimp_context_real_set_background (GimpContext *context,
                                   GeglColor   *color)
 {
-  if (context->background != NULL &&
-      gimp_color_is_perceptually_identical (context->background, color))
-    return;
-
   g_clear_object (&context->background);
   context->background = gegl_color_duplicate (color);
   gimp_color_set_alpha (context->background, GIMP_OPACITY_OPAQUE);
