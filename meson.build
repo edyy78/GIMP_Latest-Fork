@@ -1426,7 +1426,7 @@ module_dependencies = find_program('tools'/'module-dependencies.py')
 meson_install_subdir= find_program('tools'/'meson_install_subdir.py')
 
 gimp_mkenums = find_program('tools' / 'gimp-mkenums')
-mkenums_wrap = find_program(meson.current_source_dir() / 'tools' / 'meson-mkenums.sh')
+mkenums_wrap = find_program(meson.current_source_dir() / 'tools' / 'meson-mkenums.py')
 
 libgimp_mkenums_dtails = \
     '    { 0, NULL, NULL }\n'                                                      + \
@@ -1905,7 +1905,7 @@ custom_target('Changelog',
   build_by_default: false,
 )
 
-meson.add_dist_script('meson_dist_script.sh',
+meson.add_dist_script('meson_dist_script.py',
                       generate_version_h ?  gitversion_h.full_path() : gitversion_h,
                       meson.project_source_root(), meson.project_build_root())
 
