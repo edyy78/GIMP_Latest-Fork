@@ -37,100 +37,99 @@
     (gimp-image-undo-group-start image)
 
     (if (>= direction HORIZONTAL_REPEAT_INCL0)
-        (begin                  ; repeated with a guide at 0
-            (set! direction (- direction HORIZONTAL_REPEAT_INCL0))
-            (set! repeated 1)
-            (set! repeat_at_0 1)
-        )
+      (begin                  ; repeated with a guide at 0
+        (set! direction (- direction HORIZONTAL_REPEAT_INCL0))
+        (set! repeated 1)
+        (set! repeat_at_0 1)
+      )
     )
 
     (if (>= direction HORIZONTAL_REPEATING)
-        (begin                  ; repeated without a guide at 0
-            (set! direction (- direction HORIZONTAL_REPEATING))
-            (set! repeated 1)
-        )
+      (begin                  ; repeated without a guide at 0
+        (set! direction (- direction HORIZONTAL_REPEATING))
+        (set! repeated 1)
+      )
     )
 
     (if (>= direction HORIZONTAL_MIRRORED)
-        (begin                  ; mirrored
-            (set! direction (- direction HORIZONTAL_MIRRORED))
-            (set! mirrored 1)
-        )
+      (begin                  ; mirrored
+        (set! direction (- direction HORIZONTAL_MIRRORED))
+        (set! mirrored 1)
+      )
     )
 
     (if (or (= direction HORIZONTAL_ONLY) (= direction HORIZONTAL_AND_VERTICAL))
-        (begin
+      (begin
+        (gimp-image-add-hguide image position_h)
+
+        (if (and (= mirrored 1) (not (= position 50.0)))
+          (begin
+            (set! position_h (/ (* height (- 100.0 position)) 100))
             (gimp-image-add-hguide image position_h)
-
-            (if (and (= mirrored 1) (not (= position 50.0)))
-                (begin
-                    (set! position_h (/ (* height (- 100.0 position)) 100))
-      	            (gimp-image-add-hguide image position_h)
-                )
-            )
-
-            (if (and (= repeated 1) (> position 0.0))
-                (begin
-                    (if (= repeat_at_0 1)
-                        (gimp-image-add-hguide image 0)
-                    )
-                    (set! not_finished 1)
-                    (set! offset position_h)
-                    (while (= not_finished 1)
-                        (set! not_finished 0)
-                        (set! position_h (+ position_h offset))
-	                    (if (<= position_h (+ height 1))    ; +1 to allow for rounding errors
-                                                            ;  preventing (for instance) a guide
-                                                            ;  at 100% when repeating a 10%
-                                                            ;  setting
-                            (begin
-                                (gimp-image-add-hguide image position_h)
-                                (set! not_finished 1)
-                            )
-                        )
-                    )
-                )
-            )
+          )
         )
+
+        (if (and (= repeated 1) (> position 0.0))
+          (begin
+            (if (= repeat_at_0 1)
+              (gimp-image-add-hguide image 0)
+            )
+            (set! not_finished 1)
+            (set! offset position_h)
+            (while (= not_finished 1)
+              (set! not_finished 0)
+              (set! position_h (+ position_h offset))
+              (if (<= position_h (+ height 1))    ; +1 to allow for rounding errors
+                                                  ;  preventing (for instance) a guide
+                                                  ;  at 100% when repeating a 10%
+                                                  ;  setting
+                (begin
+                  (gimp-image-add-hguide image position_h)
+                  (set! not_finished 1)
+                )
+              )
+            )
+          )
+        )
+      )
     )
 
     (if (or (= direction VERTICAL_ONLY) (= direction HORIZONTAL_AND_VERTICAL))
-        (begin
+      (begin
+        (gimp-image-add-vguide image position_v)
+
+        (if (and (= mirrored 1) (not (= position 50.0)))
+          (begin
+            (set! position_v (/ (* width (- 100.0 position)) 100))
             (gimp-image-add-vguide image position_v)
-
-            (if (and (= mirrored 1) (not (= position 50.0)))
-                (begin
-                    (set! position_v (/ (* width (- 100.0 position)) 100))
-      	            (gimp-image-add-vguide image position_v)
-                )
-            )
-
-            (if (and (= repeated 1) (> position 0.0))
-                (begin
-                    (if (= repeat_at_0 1)
-                        (gimp-image-add-vguide image 0)
-                    )
-                    (set! not_finished 1)
-                    (set! offset position_v)
-                    (while (= not_finished 1)
-                        (set! not_finished 0)
-                        (set! position_v (+ position_v offset))
-	                    (if (<= position_v (+ width 1))     ; +1 to allow for rounding errors
-                                                            ;  preventing (for instance) a guide
-                                                            ;  at 100% when repeating a 10%
-                                                            ;  setting
-
-                            (begin
-                                (gimp-image-add-vguide image position_v)
-                                (set! not_finished 1)
-                            )
-                        )
-                    )
-                )
-            )
+          )
         )
-    )
 
+        (if (and (= repeated 1) (> position 0.0))
+          (begin
+            (if (= repeat_at_0 1)
+              (gimp-image-add-vguide image 0)
+            )
+            (set! not_finished 1)
+            (set! offset position_v)
+            (while (= not_finished 1)
+              (set! not_finished 0)
+              (set! position_v (+ position_v offset))
+              (if (<= position_v (+ width 1))     ; +1 to allow for rounding errors
+                                                  ;  preventing (for instance) a guide
+                                                  ;  at 100% when repeating a 10%
+                                                  ;  setting
+
+                (begin
+                  (gimp-image-add-vguide image position_v)
+                  (set! not_finished 1)
+                )
+              )
+            )
+          )
+        )
+      )
+    )
 
     (gimp-image-undo-group-end image)
     (gimp-displays-flush)

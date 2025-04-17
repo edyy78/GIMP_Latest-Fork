@@ -29,36 +29,36 @@
 
     (if (or (= direction HORIZONTAL_ONLY) (= direction HORIZONTAL_AND_VERTICAL)
             (= direction HORIZONTAL_MIRRORED) (= direction HORIZONTAL_AND_VERTICAL_MIRRORED))
-        (set! horizontal_reqd 1)
+      (set! horizontal_reqd 1)
     )
 
     (if (or (= direction VERTICAL_ONLY) (= direction HORIZONTAL_AND_VERTICAL)
             (= direction VERTICAL_MIRRORED) (= direction HORIZONTAL_AND_VERTICAL_MIRRORED))
-        (set! vertical_reqd 1)
+      (set! vertical_reqd 1)
     )
 
     (if (or (= direction HORIZONTAL_MIRRORED) (= direction VERTICAL_MIRRORED)
             (= direction HORIZONTAL_AND_VERTICAL_MIRRORED))
-        (set! mirrored 1)
+      (set! mirrored 1)
     )
 
     (if (= horizontal_reqd 1)
-        (gimp-image-add-hguide image position)
+      (gimp-image-add-hguide image position)
     )
 
     (if (= vertical_reqd 1)
-         (gimp-image-add-vguide image position)
+       (gimp-image-add-vguide image position)
     )
 
     (if (= mirrored 1)
-        (begin
-            (if (and (= horizontal_reqd 1) (not (= position (- image_max_y position))))
-                (gimp-image-add-hguide image (- image_max_y position))
-            )
-            (if (and (= vertical_reqd 1) (not (= position (- image_max_x position))))
-                (gimp-image-add-vguide image (- image_max_x position))
-            )
+      (begin
+        (if (and (= horizontal_reqd 1) (not (= position (- image_max_y position))))
+          (gimp-image-add-hguide image (- image_max_y position))
         )
+        (if (and (= vertical_reqd 1) (not (= position (- image_max_x position))))
+          (gimp-image-add-vguide image (- image_max_x position))
+        )
+      )
     )
 
     (gimp-image-undo-group-end image)
