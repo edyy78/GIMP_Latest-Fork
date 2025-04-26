@@ -45,6 +45,7 @@
 
 #include "dialogs/dialogs.h"
 
+#include "actions.h"
 #include "windows-actions.h"
 #include "windows-commands.h"
 
@@ -87,6 +88,8 @@ static void  windows_actions_recent_remove             (GimpContainer     *conta
 static void  windows_actions_single_window_mode_notify (GimpDisplayConfig *config,
                                                         GParamSpec        *pspec,
                                                         GimpActionGroup   *group);
+static void  windows_actions_layout_changed            (GdkKeymap         *keymap,
+                                                        gpointer           user_data);
 
 
 /* The only reason we have "Tab" in the action entries below is to
@@ -164,7 +167,8 @@ static const GimpRadioActionEntry windows_tabs_position_actions[] =
 void
 windows_actions_setup (GimpActionGroup *group)
 {
-  GList *list;
+  GList     *list;
+  GdkKeymap *keymap;
 
   gimp_action_group_add_actions (group, "windows-action",
                                  windows_actions,
@@ -237,6 +241,11 @@ windows_actions_setup (GimpActionGroup *group)
   g_signal_connect_object (group->gimp->config, "notify::single-window-mode",
                            G_CALLBACK (windows_actions_single_window_mode_notify),
                            group, 0);
+
+  keymap = gdk_keymap_get_for_display (gdk_display_get_default ());
+  g_signal_connect (keymap, "keys-changed",
+                    G_CALLBACK (windows_actions_layout_changed),
+                    group);
 }
 
 void
@@ -456,10 +465,7 @@ windows_actions_update_display_accels (GimpActionGroup *group)
                         "max-width-chars", 40,
                         NULL);
 
-          if (i < 9)
-            accel = gtk_accelerator_name (GDK_KEY_1 + i, GDK_MOD1_MASK);
-          else
-            accel = gtk_accelerator_name (GDK_KEY_0 + i, GDK_MOD1_MASK);
+          accel = gtk_accelerator_name (action_get_numrow_keyval (i), GDK_MOD1_MASK);
 
           gimp_action_set_accels (action, (const gchar*[]) { accel, NULL });
           g_free (accel);
@@ -621,4 +627,11 @@ windows_actions_single_window_mode_notify (GimpDisplayConfig *config,
   gimp_action_group_set_action_active (group,
                                        "windows-use-single-window-mode",
                                        GIMP_GUI_CONFIG (config)->single_window_mode);
+}
+
+static void
+windows_actions_layout_changed (GdkKeymap *keymap,
+                                gpointer   user_data)
+{
+  windows_actions_update_display_accels ((GimpActionGroup *) user_data);
 }
