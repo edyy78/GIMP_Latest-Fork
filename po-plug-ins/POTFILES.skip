@@ -17,6 +17,7 @@ libgimpwidgets
 menus
 modules
 plug-ins/goat-exercises/goat-exercise-vala.c
+plug-ins/file-dicom/gdcm-wrapper.cc
 plug-ins/imagemap/imap_cern_parse.c
 plug-ins/imagemap/imap_csim_parse.c
 plug-ins/imagemap/imap_ncsa_parse.c

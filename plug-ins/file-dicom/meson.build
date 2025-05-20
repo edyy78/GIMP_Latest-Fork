@@ -15,12 +15,12 @@ if have_gdcm
   gdcm_msff_dep = meson.get_compiler('cpp').find_library('libgdcmMSFF', required: true)
   gdcm_iod_dep = meson.get_compiler('cpp').find_library('libgdcmIOD', required: true)
   gdcm_mexd_dep = meson.get_compiler('cpp').find_library('libgdcmMEXD', required: true)
-  
+
   gdcm_dependencies = [
     libgimpui_dep,
     gdcm_jpeg12_dep,
     gdcm_common_dep,
-    gdcm_jpeg16_dep, 
+    gdcm_jpeg16_dep,
     gdcm_dict_dep,
     gdcm_jpeg8_dep,
     gdcm_dsed_dep,
@@ -28,7 +28,7 @@ if have_gdcm
     gdcm_iod_dep,
     gdcm_mexd_dep,
   ]
-  
+
   if platform_windows
     gdcm_charls_dep = meson.get_compiler('cpp').find_library('libgdcmcharls', required: true)
     gdcm_dependencies += gdcm_charls_dep
@@ -47,11 +47,13 @@ if have_gdcm
       ],
     )
   endif
-  
-  executable(plugin_name,
-    plugin_sources,
-    dependencies: gdcm_dependencies,
-    install: true,
-    install_dir: gimpplugindir / 'plug-ins' / plugin_name,
-  )
+
+  plugin_exe = executable(plugin_name,
+                          plugin_sources,
+                          dependencies: gdcm_dependencies,
+                          win_subsystem: 'windows',
+                          install: true,
+                          install_dir: gimpplugindir / 'plug-ins' / plugin_name,
+                        )
+  plugin_executables += [plugin_exe.full_path()]
 endif

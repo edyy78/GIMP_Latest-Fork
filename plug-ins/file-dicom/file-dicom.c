@@ -235,6 +235,17 @@ dicom_load (GimpProcedure         *procedure,
 
   gegl_init (NULL, NULL);
 
+  switch (run_mode)
+    {
+    case GIMP_RUN_INTERACTIVE:
+    case GIMP_RUN_WITH_LAST_VALS:
+      gimp_ui_init (PLUG_IN_BINARY);
+      break;
+
+    default:
+      break;
+    }
+
   image = load_image (file, &error);
 
   if (! image)
@@ -452,7 +463,9 @@ load_image (GFile   *file,
           /* Skipping alpha channel */
         }
 
-      gimp_image_set_colormap (image, palette, palette_size);
+      gimp_palette_set_colormap (gimp_image_get_palette (image),
+                                 babl_format ("R'G'B' u8"),
+                                 palette, palette_size);
       g_free (rgba_palette);
     }
 
