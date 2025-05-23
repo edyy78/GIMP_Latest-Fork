@@ -873,6 +873,82 @@ gimp_text_layer_set_justification (GimpTextLayer         *layer,
 }
 
 /**
+ * gimp_text_layer_get_vertical_justification:
+ * @layer: The text layer.
+ *
+ * Get the text vertical justification information of the text layer.
+ *
+ * This procedure returns the vertical alignment of the text relative
+ * to the text layer.
+ *
+ * Returns: The vertical justification used in the text layer.
+ *
+ * Since: 3.0.4
+ **/
+GimpTextVerticalJustification
+gimp_text_layer_get_vertical_justification (GimpTextLayer *layer)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpTextVerticalJustification justify = 0;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_TEXT_LAYER, layer,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-text-layer-get-vertical-justification",
+                                               args);
+  gimp_value_array_unref (args);
+
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    justify = GIMP_VALUES_GET_ENUM (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
+
+  return justify;
+}
+
+/**
+ * gimp_text_layer_set_vertical_justification:
+ * @layer: The text layer.
+ * @justify: The vertical justification for your text.
+ *
+ * Set the vertical justification of the text in a text layer.
+ *
+ * This procedure sets the vertical alignment of the text relative to
+ * the text layer.
+ *
+ * Returns: TRUE on success.
+ *
+ * Since: 3.0.4
+ **/
+gboolean
+gimp_text_layer_set_vertical_justification (GimpTextLayer                 *layer,
+                                            GimpTextVerticalJustification  justify)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean success = TRUE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_TEXT_LAYER, layer,
+                                          GIMP_TYPE_TEXT_VERTICAL_JUSTIFICATION, justify,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-text-layer-set-vertical-justification",
+                                               args);
+  gimp_value_array_unref (args);
+
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
+
+  return success;
+}
+
+/**
  * gimp_text_layer_get_color:
  * @layer: The text layer.
  *

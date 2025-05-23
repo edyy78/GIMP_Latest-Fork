@@ -68,6 +68,7 @@ enum
   PROP_LANGUAGE,
   PROP_BASE_DIR,
   PROP_JUSTIFICATION,
+  PROP_VERTICAL_JUSTIFICATION,
   PROP_INDENTATION,
   PROP_LINE_SPACING,
   PROP_LETTER_SPACING,
@@ -210,6 +211,14 @@ gimp_text_options_class_init (GimpTextOptionsClass *klass)
                          _("Text alignment"),
                          GIMP_TYPE_TEXT_JUSTIFICATION,
                          GIMP_TEXT_JUSTIFY_LEFT,
+                         GIMP_PARAM_STATIC_STRINGS);
+
+  GIMP_CONFIG_PROP_ENUM (object_class, PROP_VERTICAL_JUSTIFICATION,
+                         "vertically-justify",
+                         _("Vertically justify"),
+                         _("Text vertical alignment"),
+                         GIMP_TYPE_TEXT_VERTICAL_JUSTIFICATION,
+                         GIMP_TEXT_JUSTIFY_TOP,
                          GIMP_PARAM_STATIC_STRINGS);
 
   GIMP_CONFIG_PROP_DOUBLE (object_class, PROP_INDENTATION,
@@ -414,6 +423,9 @@ gimp_text_options_get_property (GObject    *object,
     case PROP_JUSTIFICATION:
       g_value_set_enum (value, options->justify);
       break;
+    case PROP_VERTICAL_JUSTIFICATION:
+      g_value_set_enum (value, options->vertically_justify);
+      break;
     case PROP_INDENTATION:
       g_value_set_double (value, options->indent);
       break;
@@ -521,6 +533,9 @@ gimp_text_options_set_property (GObject      *object,
     case PROP_JUSTIFICATION:
       options->justify = g_value_get_enum (value);
       break;
+    case PROP_VERTICAL_JUSTIFICATION:
+      options->vertically_justify = g_value_get_enum (value);
+      break;
     case PROP_INDENTATION:
       options->indent = g_value_get_double (value);
       break;
@@ -626,6 +641,7 @@ gimp_text_options_reset (GimpConfig *config)
   gimp_config_reset_property (object, "language");
   gimp_config_reset_property (object, "base-direction");
   gimp_config_reset_property (object, "justify");
+  gimp_config_reset_property (object, "vertically-justify");
   gimp_config_reset_property (object, "indent");
   gimp_config_reset_property (object, "line-spacing");
   gimp_config_reset_property (object, "letter-spacing");
@@ -884,6 +900,13 @@ gimp_text_options_gui (GimpToolOptions *tool_options)
   gtk_widget_set_halign (box, GTK_ALIGN_START);
   gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++,
                             _("Justify:"), 0.0, 0.5,
+                            box, 2);
+  gtk_size_group_add_widget (size_group, box);
+
+  box = gimp_prop_enum_icon_box_new (config, "vertically-justify", "format-justify", 0, 0);
+  gtk_widget_set_halign (box, GTK_ALIGN_START);
+  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++,
+                            "", 0.0, 0.5,
                             box, 2);
   gtk_size_group_add_widget (size_group, box);
   g_object_unref (size_group);

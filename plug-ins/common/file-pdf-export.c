@@ -1554,32 +1554,35 @@ drawText (GimpLayer *layer,
           gdouble    x_res,
           gdouble    y_res)
 {
-  GimpImageType         type   = gimp_drawable_type (GIMP_DRAWABLE (layer));
-  gchar                *text   = gimp_text_layer_get_text (GIMP_TEXT_LAYER (layer));
-  gchar                *markup = gimp_text_layer_get_markup (GIMP_TEXT_LAYER (layer));
-  gchar                *language;
-  cairo_font_options_t *options;
-  gint                  x;
-  gint                  y;
-  GeglColor            *color;
-  gdouble               rgb[3];
-  GimpUnit             *unit;
-  gdouble               size;
-  GimpTextHintStyle     hinting;
-  GimpTextJustification j;
-  gboolean              justify;
-  PangoAlignment        align;
-  GimpTextDirection     dir;
-  PangoLayout          *layout;
-  PangoContext         *context;
-  GimpFont             *font;
-  PangoFontDescription *font_description;
-  gdouble               indent;
-  gdouble               line_spacing;
-  gdouble               letter_spacing;
-  PangoAttribute       *letter_spacing_at;
-  PangoAttrList        *attr_list = pango_attr_list_new ();
-  PangoFontMap         *fontmap;
+  GimpImageType                  type   = gimp_drawable_type (GIMP_DRAWABLE (layer));
+  gchar                         *text   = gimp_text_layer_get_text (GIMP_TEXT_LAYER (layer));
+  gchar                         *markup = gimp_text_layer_get_markup (GIMP_TEXT_LAYER (layer));
+  gint                           layer_height = gimp_drawable_get_height (GIMP_DRAWABLE (layer));
+  gint                           layer_width  = gimp_drawable_get_width (GIMP_DRAWABLE (layer));
+  gchar                         *language;
+  cairo_font_options_t          *options;
+  gint                           x;
+  gint                           y;
+  GeglColor                     *color;
+  gdouble                        rgb[3];
+  GimpUnit                      *unit;
+  gdouble                        size;
+  GimpTextHintStyle              hinting;
+  GimpTextJustification          j;
+  gboolean                       justify;
+  GimpTextVerticalJustification  vertically_justify;
+  PangoAlignment                 align;
+  GimpTextDirection              dir;
+  PangoLayout                   *layout;
+  PangoContext                  *context;
+  GimpFont                      *font;
+  PangoFontDescription          *font_description;
+  gdouble                        indent;
+  gdouble                        line_spacing;
+  gdouble                        letter_spacing;
+  PangoAttribute                *letter_spacing_at;
+  PangoAttrList                 *attr_list = pango_attr_list_new ();
+  PangoFontMap                  *fontmap;
 
   cairo_save (cr);
 
@@ -1719,13 +1722,9 @@ drawText (GimpLayer *layer,
 
   /* Width */
   if (! PANGO_GRAVITY_IS_VERTICAL (pango_context_get_base_gravity (context)))
-    pango_layout_set_width (layout,
-                            gimp_drawable_get_width (GIMP_DRAWABLE (layer)) *
-                            PANGO_SCALE);
+    pango_layout_set_width (layout, layer_width * PANGO_SCALE);
   else
-    pango_layout_set_width (layout,
-                            gimp_drawable_get_height (GIMP_DRAWABLE (layer)) *
-                            PANGO_SCALE);
+    pango_layout_set_width (layout, layer_height * PANGO_SCALE);
 
   /* Justification, and Alignment */
   justify = FALSE;
@@ -1773,18 +1772,87 @@ drawText (GimpLayer *layer,
   else /* If we can't find a markup, then it has just text */
     pango_layout_set_text (layout, text, -1);
 
-  if (dir == GIMP_TEXT_DIRECTION_TTB_RTL ||
-      dir == GIMP_TEXT_DIRECTION_TTB_RTL_UPRIGHT)
+  switch (dir)
     {
-      cairo_translate (cr, gimp_drawable_get_width (GIMP_DRAWABLE (layer)), 0);
-      cairo_rotate (cr, G_PI_2);
+      case GIMP_TEXT_DIRECTION_TTB_RTL:
+      case GIMP_TEXT_DIRECTION_TTB_RTL_UPRIGHT:
+        cairo_translate (cr, layer_width, 0);
+        cairo_rotate (cr, G_PI_2);
+        break;
+
+      case GIMP_TEXT_DIRECTION_TTB_LTR:
+      case GIMP_TEXT_DIRECTION_TTB_LTR_UPRIGHT:
+        cairo_translate (cr, 0, layer_height);
+        cairo_rotate (cr, -G_PI_2);
+        break;
+
+      case GIMP_TEXT_DIRECTION_LTR:
+      case GIMP_TEXT_DIRECTION_RTL:
+        break;
     }
 
-  if (dir == GIMP_TEXT_DIRECTION_TTB_LTR ||
-      dir == GIMP_TEXT_DIRECTION_TTB_LTR_UPRIGHT)
+  /* Vertical justification */
+  vertically_justify = gimp_text_layer_get_vertical_justification (GIMP_TEXT_LAYER (layer));
+
+  if (vertically_justify == GIMP_TEXT_JUSTIFY_BOTTOM)
     {
-      cairo_translate (cr, 0, gimp_drawable_get_height (GIMP_DRAWABLE (layer)));
-      cairo_rotate (cr, -G_PI_2);
+      gint              height;
+
+      pango_layout_get_pixel_size (layout, NULL, &height);
+
+      switch (dir)
+        {
+          case GIMP_TEXT_DIRECTION_TTB_LTR:
+          case GIMP_TEXT_DIRECTION_TTB_LTR_UPRIGHT:
+            cairo_translate (cr, 0,
+                             PANGO_PIXELS (pango_layout_get_height (layout))
+                             - height + layer_width);
+            break;
+
+          case GIMP_TEXT_DIRECTION_TTB_RTL:
+          case GIMP_TEXT_DIRECTION_TTB_RTL_UPRIGHT:
+            cairo_translate (cr, 0,
+                             PANGO_PIXELS (pango_layout_get_height (layout))
+                             - height + layer_width);
+            break;
+
+          case GIMP_TEXT_DIRECTION_LTR:
+          case GIMP_TEXT_DIRECTION_RTL:
+            cairo_translate (cr, 0,
+                             PANGO_PIXELS (pango_layout_get_height (layout))
+                             - height + layer_height);
+            break;
+        }
+    }
+  else if (vertically_justify == GIMP_TEXT_JUSTIFY_MIDDLE)
+    {
+      gint              height;
+
+      pango_layout_get_pixel_size (layout, NULL, &height);
+
+      switch (dir)
+        {
+          case GIMP_TEXT_DIRECTION_TTB_LTR:
+          case GIMP_TEXT_DIRECTION_TTB_LTR_UPRIGHT:
+            cairo_translate (cr, 0,
+                             (PANGO_PIXELS (pango_layout_get_height (layout))
+                             - height + layer_width) / 2);
+            break;
+
+          case GIMP_TEXT_DIRECTION_TTB_RTL:
+          case GIMP_TEXT_DIRECTION_TTB_RTL_UPRIGHT:
+            cairo_translate (cr, 0,
+                             (PANGO_PIXELS (pango_layout_get_height (layout))
+                             - height + layer_width) / 2);
+            break;
+
+          case GIMP_TEXT_DIRECTION_LTR:
+          case GIMP_TEXT_DIRECTION_RTL:
+            cairo_translate (cr, 0,
+                             (PANGO_PIXELS (pango_layout_get_height (layout))
+                             - height + layer_height) / 2);
+            break;
+        }
     }
 
   pango_cairo_show_layout (cr, layout);

@@ -735,6 +735,66 @@ CODE
     );
 }
 
+sub text_layer_get_vertical_justification {
+    $blurb = 'Get the text vertical justification information of the text layer.';
+
+    $help = <<'HELP';
+This procedure returns the vertical alignment of the text relative to the
+text layer.
+HELP
+
+    &anon_pdb_misc('2025', '3.0.4');
+
+    @inargs = (
+        { name => 'layer', type => 'text_layer',
+          desc => 'The text layer.' }
+    );
+
+    @outargs = (
+        { name => 'justify', type => 'enum GimpTextVerticalJustification',
+          desc => 'The vertical justification used in the text layer.' }
+    );
+
+    %invoke = (
+        code => <<'CODE'
+{
+  g_object_get (gimp_text_layer_get_text (layer),
+                "vertically-justify", &justify,
+                NULL);
+}
+CODE
+    );
+}
+
+sub text_layer_set_vertical_justification {
+    $blurb = 'Set the vertical justification of the text in a text layer.';
+
+    $help = <<'HELP';
+This procedure sets the vertical alignment of the text relative to the
+text layer.
+HELP
+
+    &anon_pdb_misc('2025', '3.0.4');
+
+    @inargs = (
+        { name => 'layer', type => 'text_layer',
+          desc => 'The text layer' },
+        { name => 'justify', type => 'enum GimpTextVerticalJustification',
+          desc => 'The vertical justification for your text.' }
+    );
+
+    %invoke = (
+        code => <<'CODE'
+{
+  gimp_text_layer_set (layer,
+                       _("Set text layer attribute"),
+                       "vertically-justify", justify,
+                       NULL);
+}
+CODE
+    );
+}
+
 sub text_layer_get_color {
     $blurb = 'Get the color of the text in a text layer.';
 
@@ -1043,6 +1103,8 @@ CODE
             text_layer_set_base_direction
             text_layer_get_justification
             text_layer_set_justification
+            text_layer_get_vertical_justification
+            text_layer_set_vertical_justification
             text_layer_get_color
             text_layer_set_color
             text_layer_get_indent
