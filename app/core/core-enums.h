@@ -576,6 +576,7 @@ typedef enum /*< pdb-skip >*/
   GIMP_UNDO_GROUP_PARASITE_ATTACH,       /*< desc="Attach parasite"                >*/
   GIMP_UNDO_GROUP_PARASITE_REMOVE,       /*< desc="Remove parasite"                >*/
   GIMP_UNDO_GROUP_PATHS_IMPORT,          /*< desc="Import paths"                   >*/
+  GIMP_UNDO_GROUP_FILTER_VISIBILITY,     /*< desc="Effects visibility"             >*/
   GIMP_UNDO_GROUP_MISC,                  /*< desc="Plug-In"                        >*/
 
   GIMP_UNDO_GROUP_LAST = GIMP_UNDO_GROUP_MISC, /*< skip >*/
@@ -640,6 +641,7 @@ typedef enum /*< pdb-skip >*/
   GIMP_UNDO_FILTER_REMOVE,               /*< desc="Remove effect"                  >*/
   GIMP_UNDO_FILTER_REORDER,              /*< desc="Reorder effect"                 >*/
   GIMP_UNDO_FILTER_MODIFIED,             /*< desc="Effect modification"            >*/
+  GIMP_UNDO_FILTER_VISIBILITY,           /*< desc="Effect visibility"              >*/
 
   GIMP_UNDO_CANT                         /*< desc="Not undoable"                   >*/
 } GimpUndoType;
