@@ -38,6 +38,7 @@
 #include "core/gimpdrawable.h"
 #include "core/gimpdrawable-filters.h"
 #include "core/gimpdrawablefilter.h"
+#include "core/gimpdrawablefilterundo.h"
 #include "core/gimplist.h"
 #include "core/gimpimage.h"
 #include "core/gimpimage-undo.h"
@@ -591,7 +592,10 @@ gimp_drawable_filters_editor_view_visible_cell_toggled (GtkCellRendererToggle *t
         {
           GimpDrawable *drawable;
           GimpImage    *image;
+          GimpContext  *context;
           gboolean      active;
+          GimpUndo     *undo;
+          gboolean      push_undo = TRUE;
 
           g_object_get (toggle,
                         "active", &active,
@@ -599,12 +603,28 @@ gimp_drawable_filters_editor_view_visible_cell_toggled (GtkCellRendererToggle *t
 
           drawable = gimp_drawable_filter_get_drawable (filter);
           image    = gimp_item_get_image (GIMP_ITEM (drawable));
+          context  = gimp_container_view_get_context (GIMP_CONTAINER_VIEW (view));
 
-          gimp_image_undo_push_filter_visibility (image,
-                                                   _("Effect visibility"),
-                                                   drawable,
-                                                   filter);
+
+          undo = gimp_image_undo_can_compress(image,
+                                              GIMP_TYPE_DRAWABLE_FILTER_UNDO,
+                                              GIMP_UNDO_FILTER_VISIBILITY);
+
+          if (undo != NULL && GIMP_DRAWABLE_FILTER_UNDO (undo)->filter == filter)
+            {
+              push_undo = FALSE;
+            }
+          else
+           {
+              gimp_image_undo_push_filter_visibility (image,
+                                                      _("Effect visibility"),
+                                                      drawable,
+                                                      filter);
+           }
           gimp_filter_set_active (GIMP_FILTER (filter), ! active);
+
+          if (! push_undo)
+            gimp_undo_refresh_preview (undo, context);
 
           gimp_drawable_update (drawable, 0, 0, -1, -1);
           gimp_image_flush (gimp_item_get_image (GIMP_ITEM (drawable)));
