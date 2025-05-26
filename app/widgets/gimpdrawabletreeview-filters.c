@@ -687,12 +687,15 @@ gimp_drawable_filters_editor_visible_all_toggled (GtkWidget            *widget,
   GList                             *iter;
   gint                               n_filters = 0;
   gboolean                           visible;
+  GimpUndo                          *undo;
 
   visible = gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (widget));
 
   image   = gimp_item_tree_view_get_image (GIMP_ITEM_TREE_VIEW (view));
   filters = gimp_drawable_get_filters (editor->drawable);
   list    = GIMP_LIST (filters)->queue->head;
+
+  undo = gimp_drawable_filter_undo_can_compress_visibility (image, list);
 
   for (iter = list; iter; iter = g_list_next (iter))
     {
@@ -703,9 +706,11 @@ gimp_drawable_filters_editor_visible_all_toggled (GtkWidget            *widget,
         }
     }
 
-  if (n_filters > 1)
+  if (n_filters <= 0)
+    return;
+
+  if (undo == NULL)
     {
-      /* TODO: undo groups cannot be compressed so far. */
       gimp_image_undo_group_start (image,
                                   GIMP_UNDO_GROUP_FILTER_VISIBILITY,
                                   "Effects visibility");
@@ -718,7 +723,12 @@ gimp_drawable_filters_editor_visible_all_toggled (GtkWidget            *widget,
           GimpFilter         *filter  = iter->data;
           GimpDrawableFilter *dfilter = iter->data;
 
-          if (visible != gimp_filter_get_active (filter))
+          /**
+           * Undos are pushed for every filters, even if they weren't
+           * actually toggled, so that the undo group can be compressed with
+           * subsequent toggles.
+           */
+          if (undo == NULL)
             {
               gimp_image_undo_push_filter_visibility (image,
                                                       _("Effect visibility"),
@@ -730,8 +740,17 @@ gimp_drawable_filters_editor_visible_all_toggled (GtkWidget            *widget,
         }
     }
 
-  if (n_filters > 1)
-    gimp_image_undo_group_end (image);
+  if (undo == NULL)
+    {
+      gimp_image_undo_group_end (image);
+    }
+  else
+    {
+      GimpContext *context;
+
+      context = gimp_container_view_get_context (GIMP_CONTAINER_VIEW (view));
+      gimp_undo_refresh_preview (undo, context);
+    }
 
   gimp_drawable_update (editor->drawable, 0, 0, -1, -1);
   gimp_image_flush (gimp_item_get_image (GIMP_ITEM (editor->drawable)));
