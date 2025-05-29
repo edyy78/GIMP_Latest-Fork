@@ -1,6 +1,7 @@
 subdir('common')
 subdir('file-bmp')
 subdir('file-dds')
+subdir('file-dicom')
 subdir('file-exr')
 subdir('file-faxg3')
 subdir('file-fits')

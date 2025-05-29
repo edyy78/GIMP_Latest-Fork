@@ -34,6 +34,8 @@
 
 #include "libgimp/stdplugins-intl.h"
 
+#include "gdcm-wrapper.h"
+
 
 #define LOAD_PROC      "file-dicom-load"
 #define EXPORT_PROC    "file-dicom-export"
@@ -45,21 +47,6 @@
  * we can get around this problem.
  */
 #define GUESS_ENDIAN 1
-
-/* Declare local data types */
-typedef struct _DicomInfo
-{
-  guint      width, height;      /* The size of the image                  */
-  gint       maxval;             /* For 16 and 24 bit image files, the max
-                                    value which we need to normalize to    */
-  gint       samples_per_pixel;  /* Number of image planes (0 for pbm)     */
-  gint       bpp;
-  gint       bits_stored;
-  gint       high_bit;
-  gboolean   is_signed;
-  gboolean   planar;
-  gboolean   bw_inverted;
-} DicomInfo;
 
 
 typedef struct _Dicom      Dicom;
@@ -103,17 +90,12 @@ static GimpValueArray * dicom_export           (GimpProcedure         *procedure
 
 static GimpImage      * load_image             (GFile                 *file,
                                                 GError               **error);
+static const Babl     * dicom_get_format       (gchar                 *type,
+                                                GDCMPIType             model);
 static gboolean         export_image           (GFile                 *file,
                                                 GimpImage             *image,
                                                 GimpDrawable          *drawable,
                                                 GError               **error);
-static void             dicom_loader           (guint8                *pix_buf,
-                                                DicomInfo             *info,
-                                                GeglBuffer            *buffer);
-static void             guess_and_set_endian2  (guint16               *buf16,
-                                                gint                   length);
-static void             toggle_endian2         (guint16               *buf16,
-                                                gint                   length);
 static void             add_tag_pointer        (GByteArray            *group_stream,
                                                 gint                   group,
                                                 gint                   element,
@@ -253,6 +235,17 @@ dicom_load (GimpProcedure         *procedure,
 
   gegl_init (NULL, NULL);
 
+  switch (run_mode)
+    {
+    case GIMP_RUN_INTERACTIVE:
+    case GIMP_RUN_WITH_LAST_VALS:
+      gimp_ui_init (PLUG_IN_BINARY);
+      break;
+
+    default:
+      break;
+    }
+
   image = load_image (file, &error);
 
   if (! image)
@@ -306,668 +299,268 @@ dicom_export (GimpProcedure        *procedure,
   return gimp_procedure_new_return_values (procedure, status, error);
 }
 
-/**
- * add_parasites_to_image:
- * @data:      pointer to a GimpParasite to be attached to the image
- *             specified by @user_data.
- * @user_data: pointer to the image_ID to which parasite @data should
- *             be added.
- *
- * Attaches parasite to image and also frees that parasite
-**/
-static void
-add_parasites_to_image (gpointer data,
-                        gpointer user_data)
-{
-  GimpParasite *parasite = data;
-  GimpImage    *image    = user_data;
-
-  gimp_image_attach_parasite (image, parasite);
-  gimp_parasite_free (parasite);
-}
-
 static GimpImage *
 load_image (GFile   *file,
             GError **error)
 {
-  GimpImage  *image = NULL;
-  GimpLayer  *layer;
-  GeglBuffer *buffer;
-  GSList     *elements          = NULL;
-  FILE       *dicom;
-  gchar       buf[500];    /* buffer for random things like scanning */
-  DicomInfo  *dicominfo;
-  guint       width             = 0;
-  guint       height            = 0;
-  gint        samples_per_pixel = 0;
-  gint        bpp               = 0;
-  gint        bits_stored       = 0;
-  gint        high_bit          = 0;
-  guint8     *pix_buf           = NULL;
-  gboolean    is_signed         = FALSE;
-  guint8      in_sequence       = 0;
-  gboolean    implicit_encoding = FALSE;
-  gboolean    big_endian        = FALSE;
+  GDCMLoader        *loader;
+  GimpImage         *image        = NULL;
+  GimpLayer         *layer;
+  GeglBuffer        *buffer;
+  gint               width;
+  gint               height;
+  GimpImageBaseType  image_type;
+  GDCMPIType         gdcm_image_type;
+  GimpImageType      layer_type;
+  GimpPrecision      image_precision;
+  GDCMScalarType     gdcm_image_precision;
+  gchar             *pixels       = NULL;
+  guint32            buffer_length;
+  const Babl        *format       = NULL;
+  gchar             *type         = NULL;
+  gint               dataset_size = 0;
 
   gimp_progress_init_printf (_("Opening '%s'"),
                              gimp_file_get_utf8_name (file));
 
-  dicom = g_fopen (g_file_peek_path (file), "rb");
+  loader = gdcm_loader_new (g_file_peek_path (file));
 
-  if (! dicom)
+  if (! loader)
     {
       g_set_error (error, G_FILE_ERROR, g_file_error_from_errno (errno),
                    _("Could not open '%s' for reading: %s"),
                    gimp_file_get_utf8_name (file), g_strerror (errno));
       return NULL;
     }
-
-  /* allocate the necessary structures */
-  dicominfo = g_new0 (DicomInfo, 1);
-
-  /* Parse the file */
-  fread (buf, 1, 128, dicom); /* skip past buffer */
-
-  /* Check for unsupported formats */
-  if (g_ascii_strncasecmp (buf, "PAPYRUS", 7) == 0)
-    {
-      g_message ("'%s' is a PAPYRUS DICOM file.\n"
-                 "This plug-in does not support this type yet.",
-                 gimp_file_get_utf8_name (file));
-      g_free (dicominfo);
-      fclose (dicom);
-      return NULL;
-    }
-
-  fread (buf, 1, 4, dicom); /* This should be dicom */
-  if (g_ascii_strncasecmp (buf,"DICM",4) != 0)
+  /* Notify if GDCM could not read the DICOM file */
+  if (! gdcm_loader_get_initialized (loader))
     {
       g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
-                   _("'%s' is not a DICOM file."),
+                   _("Could not read image from '%s'"),
                    gimp_file_get_utf8_name (file));
-      g_free (dicominfo);
-      fclose (dicom);
       return NULL;
     }
 
-  while (!feof (dicom))
+
+  width  = gdcm_loader_get_width (loader);
+  height = gdcm_loader_get_height (loader);
+
+  if ((width < 1) || (height < 1))
     {
-      guint16  group_word;
-      guint16  element_word;
-      gchar    value_rep[3];
-      guint32  element_length;
-      guint16  ctx_us;
-      guint8  *value;
-      guint32  tag;
-
-      if (fread (&group_word, 1, 2, dicom) == 0)
-        break;
-      group_word = g_ntohs (GUINT16_SWAP_LE_BE (group_word));
-
-      fread (&element_word, 1, 2, dicom);
-      element_word = g_ntohs (GUINT16_SWAP_LE_BE (element_word));
-
-      if (group_word != 0x0002 && big_endian)
-        {
-          group_word   = GUINT16_SWAP_LE_BE (group_word);
-          element_word = GUINT16_SWAP_LE_BE (element_word);
-        }
-
-      tag = (group_word << 16) | element_word;
-      fread(value_rep, 2, 1, dicom);
-      value_rep[2] = 0;
-
-      /* Check if the value rep looks valid. There probably is a
-         better way of checking this...
-       */
-      if ((/* Always need lookup for implicit encoding */
-           tag > 0x0002ffff && implicit_encoding)
-          /* This heuristics isn't used if we are doing implicit
-             encoding according to the value representation... */
-          || ((value_rep[0] < 'A' || value_rep[0] > 'Z'
-          || value_rep[1] < 'A' || value_rep[1] > 'Z')
-
-          /* I found this in one of Ednas images. It seems like a
-             bug...
-          */
-              && !(value_rep[0] == ' ' && value_rep[1]))
-          )
-        {
-          /* Look up type from the dictionary. At the time we don't
-             support this option... */
-          gchar element_length_chars[4];
-
-          /* Store the bytes that were read */
-          element_length_chars[0] = value_rep[0];
-          element_length_chars[1] = value_rep[1];
-
-          /* Unknown value rep. It is not used right now anyhow */
-          strcpy (value_rep, "??");
-
-          /* For implicit value_values the length is always four bytes,
-             so we need to read another two. */
-          fread (&element_length_chars[2], 1, 2, dicom);
-
-          /* Now cast to integer and insert into element_length */
-          if (big_endian && group_word != 0x0002)
-            element_length =
-              g_ntohl (*((gint *) element_length_chars));
-          else
-            element_length =
-              g_ntohl (GUINT32_SWAP_LE_BE (*((gint *) element_length_chars)));
-      }
-      /* Binary value reps are OB, OW, SQ or UN */
-      else if (strncmp (value_rep, "OB", 2) == 0
-          || strncmp (value_rep, "OW", 2) == 0
-          || strncmp (value_rep, "SQ", 2) == 0
-          || strncmp (value_rep, "UN", 2) == 0)
-        {
-          fread (&element_length, 1, 2, dicom); /* skip two bytes */
-          fread (&element_length, 1, 4, dicom);
-          if (big_endian && group_word != 0x0002)
-            element_length = g_ntohl (element_length);
-          else
-            element_length = g_ntohl (GUINT32_SWAP_LE_BE (element_length));
-        }
-      /* Short length */
-      else
-        {
-          guint16 el16;
-
-          fread (&el16, 1, 2, dicom);
-          if (big_endian && group_word != 0x0002)
-            element_length = g_ntohs (el16);
-          else
-            element_length = g_ntohs (GUINT16_SWAP_LE_BE (el16));
-        }
-
-      /* Sequence of items - just ignore the delimiters... */
-      if (element_length == 0xffffffff)
-        {
-          in_sequence = 1;
-          continue;
-        }
-      /* End of Sequence tag */
-      if (tag == 0xFFFEE0DD)
-        {
-          in_sequence = 0;
-          continue;
-        }
-
-      /* Sequence of items item tag... Ignore as well */
-      if (tag == 0xFFFEE000)
-        continue;
-
-      /* Even for pixel data, we don't handle very large element
-         lengths */
-
-      if (element_length >= (G_MAXUINT - 6))
-        {
-          g_message ("'%s' seems to have an incorrect value field length.",
-                     gimp_file_get_utf8_name (file));
-          gimp_quit ();
-        }
-
-      /* Read contents. Allocate a bit more to make room for casts to int
-       below. */
-      value = g_new0 (guint8, element_length + 4);
-      fread (value, 1, element_length, dicom);
-
-      /* ignore everything inside of a sequence */
-      if (in_sequence)
-        {
-          g_free (value);
-          continue;
-        }
-      /* Some special casts that are used below */
-      ctx_us = *(guint16 *) value;
-      if (big_endian && group_word != 0x0002)
-        ctx_us = GUINT16_SWAP_LE_BE (ctx_us);
-
-      g_debug ("group: %04x, element: %04x, length: %d",
-               group_word, element_word, element_length);
-      g_debug ("Value: %s", (char*)value);
-      /* Recognize some critical tags */
-      if (group_word == 0x0002)
-        {
-          switch (element_word)
-            {
-            case 0x0010:   /* transfer syntax id */
-              if (strcmp("1.2.840.10008.1.2", (char*)value) == 0)
-                {
-                  implicit_encoding = TRUE;
-                  g_debug ("Transfer syntax: Implicit VR Endian: Default Transfer Syntax for DICOM.");
-                }
-              else if (strcmp("1.2.840.10008.1.2.1", (char*)value) == 0)
-                {
-                  g_debug ("Transfer syntax: Explicit VR Little Endian.");
-                }
-              else if (strcmp("1.2.840.10008.1.2.1.99", (char*)value) == 0)
-                {
-                  g_debug ("Transfer syntax: Deflated Explicit VR Little Endian.");
-                }
-              else if (strcmp("1.2.840.10008.1.2.2", (char*)value) == 0)
-                {
-                  /* This Transfer Syntax was retired in 2006. For the most recent description of it, see PS3.5 2016b */
-                  big_endian = TRUE;
-                  g_debug ("Transfer syntax: Deprecated Explicit VR Big Endian.");
-                }
-              else
-                {
-                  g_debug ("Transfer syntax %s is not supported by GIMP.", (gchar *) value);
-                  g_set_error (error, GIMP_PLUG_IN_ERROR, 0,
-                              _("Transfer syntax %s is not supported by GIMP."),
-                              (gchar *) value);
-                  g_free (dicominfo);
-                  fclose (dicom);
-                  return NULL;
-                }
-              break;
-            }
-        }
-      else if (group_word == 0x0028)
-        {
-          gboolean supported = TRUE;
-
-          switch (element_word)
-            {
-            case 0x0002:  /* samples per pixel */
-              samples_per_pixel = ctx_us;
-              g_debug ("spp: %d", samples_per_pixel);
-              break;
-            case 0x0004:  /* photometric interpretation */
-              g_debug ("photometric interpretation: %s", (gchar *) value);
-
-              if (samples_per_pixel == 1)
-                {
-                  if (strncmp ((gchar *) value, "MONOCHROME1", 11) == 0)
-                    {
-                      /* The minimum sample value is intended to be displayed
-                       * as white after any VOI gray scale transformations
-                       * have been performed. */
-                      dicominfo->bw_inverted = TRUE;
-                    }
-                  else if (strncmp ((gchar *) value, "MONOCHROME2", 11) == 0)
-                    {
-                      /* The minimum sample value is intended to be displayed
-                       * as black after any VOI gray scale transformations
-                       * have been performed. */
-                      dicominfo->bw_inverted = FALSE;
-                    }
-                  else
-                    supported = FALSE;
-                }
-              else if (samples_per_pixel == 3)
-                {
-                  if (strncmp ((gchar *) value, "RGB", 2) != 0)
-                    {
-                      supported = FALSE;
-                    }
-                }
-              else
-                {
-                  supported = FALSE;
-                }
-              if (! supported)
-                {
-                  g_set_error (error, GIMP_PLUG_IN_ERROR, 0,
-                               _("%s is not supported by GIMP in combination "
-                                 "with samples per pixel: %d"),
-                               (gchar *) value, samples_per_pixel);
-                  g_free (dicominfo);
-                  fclose (dicom);
-                  return NULL;
-                }
-
-              break;
-            case 0x0006:  /* planar configuration */
-              g_debug ("planar configuration: %u", ctx_us);
-              dicominfo->planar = (ctx_us == 1);
-              break;
-            case 0x0008:  /* number of frames */
-              g_debug ("number of frames: %d", ctx_us);
-              break;
-            case 0x0010:  /* rows */
-              height = ctx_us;
-              g_debug ("height: %d", height);
-              break;
-            case 0x0011:  /* columns */
-              width = ctx_us;
-              g_debug ("width: %d", width);
-              break;
-            case 0x0100:  /* bits allocated */
-              bpp = ctx_us;
-              g_debug ("bpp: %d", bpp);
-              break;
-            case 0x0101:  /* bits stored */
-              bits_stored = ctx_us;
-              g_debug ("bits stored: %d", bits_stored);
-              break;
-            case 0x0102:  /* high bit */
-              high_bit = ctx_us;
-              g_debug ("high bit: %d", high_bit);
-              break;
-            case 0x0103:  /* is pixel representation signed? */
-              is_signed = (ctx_us == 0) ? FALSE : TRUE;
-              g_debug ("is signed: %d", ctx_us);
-              break;
-            }
-        }
-
-      /* Pixel data */
-      if (group_word == 0x7fe0 && element_word == 0x0010)
-        {
-          pix_buf = value;
-        }
-      else
-        {
-          /* save this element to a parasite for later writing */
-          GimpParasite *parasite;
-          gchar         pname[255];
-
-          /* all elements are retrievable using gimp_get_parasite_list() */
-          g_snprintf (pname, sizeof (pname),
-                      "dcm/%04x-%04x-%s", group_word, element_word, value_rep);
-          if ((parasite = gimp_parasite_new (pname,
-                                             GIMP_PARASITE_PERSISTENT,
-                                             element_length, value)))
-            {
-              /*
-               * at this point, the image has not yet been created, so
-               * image is not valid.  keep the parasite around until
-               * we're able to attach it.
-               */
-
-              /* add to our list of parasites to be added (prepending
-               * for speed. we'll reverse it later)
-               */
-              elements = g_slist_prepend (elements, parasite);
-            }
-
-          g_free (value);
-        }
+      g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                   _("Error querying image dimensions from '%s'"),
+                   gimp_file_get_utf8_name (file));
+      return NULL;
     }
 
-  if ((bpp != 8) && (bpp != 16))
+  gdcm_image_precision = gdcm_loader_get_precision (loader);
+  switch (gdcm_image_precision)
     {
-      g_message ("'%s' has a bpp of %d which GIMP cannot handle.",
-                 gimp_file_get_utf8_name (file), bpp);
-      gimp_quit ();
+    case UINT8:
+    case INT8:
+    case SINGLEBIT:
+      image_precision = GIMP_PRECISION_U8_NON_LINEAR;
+      type = "u8";
+      break;
+
+    case UINT12:
+    case INT12:
+    case UINT16:
+    case INT16:
+      type = "u16";
+      image_precision = GIMP_PRECISION_U16_NON_LINEAR;
+      break;
+
+    case UINT32:
+    case INT32:
+      type = "u32";
+      image_precision = GIMP_PRECISION_U32_NON_LINEAR;
+      break;
+
+    case FLOAT16:
+      type = "half";
+      image_precision = GIMP_PRECISION_HALF_NON_LINEAR;
+      break;
+
+    case FLOAT32:
+      type = "float";
+      image_precision = GIMP_PRECISION_FLOAT_NON_LINEAR;
+      break;
+
+    case FLOAT64:
+      type = "double";
+      image_precision = GIMP_PRECISION_DOUBLE_NON_LINEAR;
+      break;
+
+    default:
+      g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                   _("Error querying image precision from '%s'"),
+                   gimp_file_get_utf8_name (file));
+      return NULL;
     }
 
-  if ((width > GIMP_MAX_IMAGE_SIZE) || (height > GIMP_MAX_IMAGE_SIZE))
+  gdcm_image_type = gdcm_loader_get_image_type (loader);
+  switch (gdcm_image_type)
     {
-      g_message ("'%s' has a larger image size (%d x %d) than GIMP can handle.",
-                 gimp_file_get_utf8_name (file), width, height);
-      gimp_quit ();
+    case GDCM_MONOCHROME1:
+    case GDCM_MONOCHROME2:
+      image_type = GIMP_GRAY;
+      layer_type = GIMP_GRAY_IMAGE;
+      break;
+
+    case GDCM_PALETTE_COLOR:
+      image_type = GIMP_INDEXED;
+      layer_type = GIMP_INDEXED_IMAGE;
+      break;
+
+    case GDCM_RGB:
+    case GDCM_HSV:
+    case GDCM_ARGB:
+    case GDCM_CMYK:
+    case GDCM_YBR_FULL:
+    case GDCM_YBR_FULL_422:
+    case GDCM_YBR_PARTIAL_422:
+    case GDCM_YBR_PARTIAL_420:
+    case GDCM_YBR_ICT:
+    case GDCM_YBR_RCT:
+      image_type = GIMP_RGB;
+      layer_type = GIMP_RGB_IMAGE;
+      break;
+
+    default:
+      g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                   _("Error querying image type from '%s'"),
+                   gimp_file_get_utf8_name (file));
+      return NULL;
     }
 
-  if (samples_per_pixel > 3)
-    {
-      g_message ("'%s' has samples per pixel of %d which GIMP cannot handle.",
-                 gimp_file_get_utf8_name (file), samples_per_pixel);
-      gimp_quit ();
-    }
+  format = dicom_get_format (type, gdcm_image_type);
 
-  dicominfo->width  = width;
-  dicominfo->height = height;
-  dicominfo->bpp    = bpp;
+  image = gimp_image_new_with_precision (width, height, image_type,
+                                         image_precision);
 
-  dicominfo->bits_stored = bits_stored;
-  dicominfo->high_bit = high_bit;
-  dicominfo->is_signed = is_signed;
-  dicominfo->samples_per_pixel = samples_per_pixel;
-  dicominfo->maxval = -1;   /* External normalization factor - not used yet */
-
-  /* Create a new image of the proper size and associate the filename with it.
-   */
-  image = gimp_image_new (dicominfo->width, dicominfo->height,
-                          (dicominfo->samples_per_pixel >= 3 ?
-                           GIMP_RGB : GIMP_GRAY));
-
-  layer = gimp_layer_new (image, _("Background"),
-                          dicominfo->width, dicominfo->height,
-                          (dicominfo->samples_per_pixel >= 3 ?
-                           GIMP_RGB_IMAGE : GIMP_GRAY_IMAGE),
-                          100,
+  layer = gimp_layer_new (image, _("Background"), width, height,
+                          layer_type, 100,
                           gimp_image_get_default_new_layer_mode (image));
   gimp_image_insert_layer (image, layer, NULL, 0);
 
-  buffer = gimp_drawable_get_buffer (GIMP_DRAWABLE (layer));
-
-#if GUESS_ENDIAN
-  if (bpp == 16)
-    guess_and_set_endian2 ((guint16 *) pix_buf, width * height);
-#endif
-
-  dicom_loader (pix_buf, dicominfo, buffer);
-
-  if (elements)
+  if (gdcm_image_type == GDCM_PALETTE_COLOR)
     {
-      /* flip the parasites back around into the order they were
-       * created (read from the file)
-       */
-      elements = g_slist_reverse (elements);
-      /* and add each one to the image */
-      g_slist_foreach (elements, add_parasites_to_image, image);
-      g_slist_free (elements);
+      guint32  palette_size;
+      guchar  *rgba_palette;
+      guchar   palette[768];
+
+      palette_size = gdcm_loader_get_palette_size (loader);
+
+      rgba_palette = g_new0 (guchar, palette_size * 4);
+      gdcm_loader_get_palette (loader, rgba_palette);
+
+      for (gint i = 0; i < palette_size; i++)
+        {
+          palette[i * 3] = rgba_palette[i * 4];
+          palette[(i * 3) + 1] = rgba_palette[(i * 4) + 1];
+          palette[(i * 3) + 2] = rgba_palette[(i * 4) + 2];
+          /* Skipping alpha channel */
+        }
+
+      gimp_palette_set_colormap (gimp_image_get_palette (image),
+                                 babl_format ("R'G'B' u8"),
+                                 palette, palette_size);
+      g_free (rgba_palette);
     }
 
-  g_free (pix_buf);
-  g_free (dicominfo);
+  buffer_length = gdcm_loader_get_buffer_size (loader);
 
-  fclose (dicom);
+  pixels = g_new0 (gchar, buffer_length);
 
-  g_object_unref (buffer);
+  gdcm_loader_get_buffer (loader, pixels);
+
+  buffer = gimp_drawable_get_buffer (GIMP_DRAWABLE (layer));
+
+  gegl_buffer_set (buffer, GEGL_RECTANGLE (0, 0, width, height),
+                   0, format, pixels, GEGL_AUTO_ROWSTRIDE);
+
+  /* Load any metadata */
+  dataset_size = gdcm_loader_get_dataset_size (loader);
+  for (gint i = 0; i < dataset_size; i++)
+    {
+      GimpParasite *parasite;
+      GDCMTag      *dcm_tag;
+
+      dcm_tag = gdcm_loader_get_tag (loader, i);
+      if (dcm_tag)
+        {
+          if ((parasite = gimp_parasite_new (dcm_tag->parasite_name,
+                                             GIMP_PARASITE_PERSISTENT,
+                                             dcm_tag->element_length,
+                                             dcm_tag->value)))
+            {
+              gimp_image_attach_parasite (image, parasite);
+              gimp_parasite_free (parasite);
+            }
+
+          g_free (dcm_tag->parasite_name);
+          g_free (dcm_tag->value);
+          g_free (dcm_tag);
+        }
+    }
+
+  g_clear_object (&buffer);
+  g_clear_pointer (&pixels, g_free);
+  g_clear_pointer (&loader, gdcm_loader_unref);
 
   return image;
 }
 
-static void
-dicom_loader (guint8     *pix_buffer,
-              DicomInfo  *info,
-              GeglBuffer *buffer)
+static const Babl *
+dicom_get_format (gchar      *type,
+                  GDCMPIType  model)
 {
-  guchar  *data;
-  gint     row_idx;
-  gint     width             = info->width;
-  gint     height            = info->height;
-  gint     samples_per_pixel = info->samples_per_pixel;
-  guint16 *buf16             = (guint16 *) pix_buffer;
+  const Babl *format      = NULL;
+  gchar      *format_name = NULL;
 
-  if (info->bpp == 16)
+  switch (model)
     {
-      gulong pix_idx;
-      guint  shift = info->high_bit + 1 - info->bits_stored;
+    case GDCM_MONOCHROME1:
+    case GDCM_MONOCHROME2:
+      format_name = g_strdup_printf ("Y %s", type);
+      break;
 
-      /* Reorder the buffer; also shift the data so that the LSB
-       * of the pixel data is at the LSB of the 16-bit array entries
-       * (i.e., compensate for high_bit and bits_stored).
-       */
-      for (pix_idx = 0; pix_idx < width * height * samples_per_pixel; pix_idx++)
-        buf16[pix_idx] = g_ntohs (GUINT16_SWAP_LE_BE  (buf16[pix_idx])) >> shift;
+    case GDCM_RGB:
+      format_name = g_strdup_printf ("RGB %s", type);
+      break;
+
+    case GDCM_HSV:
+      format_name = g_strdup_printf ("HSV %s", type);
+      break;
+
+    case GDCM_ARGB:
+      break;
+
+    case GDCM_CMYK:
+      format_name = g_strdup_printf ("CMYK %s", type);
+      break;
+
+    case GDCM_YBR_FULL:
+    case GDCM_YBR_FULL_422:
+    case GDCM_YBR_PARTIAL_422:
+    case GDCM_YBR_PARTIAL_420:
+    case GDCM_YBR_ICT:
+    case GDCM_YBR_RCT:
+      format_name = g_strdup_printf ("Y'CbCr %s", type);
+      break;
+
+    default:
+      break;
     }
 
-  data = g_malloc (gimp_tile_height () * width * samples_per_pixel);
-
-  for (row_idx = 0; row_idx < height; )
+  if (format_name)
     {
-      guchar *d = data;
-      gint    start;
-      gint    end;
-      gint    scanlines;
-      gint    i;
-
-      start = row_idx;
-      end   = row_idx + gimp_tile_height ();
-      end   = MIN (end, height);
-
-      scanlines = end - start;
-
-      for (i = 0; i < scanlines; i++)
-        {
-          if (info->bpp == 16)
-            {
-              guint16 *row_start;
-              gint     col_idx;
-
-              row_start = buf16 + (row_idx + i) * width * samples_per_pixel;
-
-              for (col_idx = 0; col_idx < width * samples_per_pixel; col_idx++)
-                {
-                  /* Shift it by 8 bits, or less in case bits_stored
-                   * is less than bpp.
-                   */
-                  d[col_idx] = (guint8) (row_start[col_idx] >>
-                                         (info->bits_stored - 8));
-                  if (info->bw_inverted)
-                    {
-                      d[col_idx] = ~d[col_idx];
-                    }
-
-                  if (info->is_signed)
-                    {
-                      /* If the data is negative, make it 0. Otherwise,
-                       * multiply the positive value by 2, so that the
-                       * positive values span between 0 and 254.
-                       */
-                      if (d[col_idx] > 127)
-                        d[col_idx] = 0;
-                      else
-                        d[col_idx] <<= 1;
-                    }
-                }
-            }
-          else if (info->bpp == 8)
-            {
-              if (! info->planar)
-                {
-                  guint8 *row_start;
-                  gint    col_idx;
-
-                  row_start = (pix_buffer +
-                              (row_idx + i) * width * samples_per_pixel);
-
-                  for (col_idx = 0; col_idx < width * samples_per_pixel; col_idx++)
-                    {
-                      /* Shift it by 0 bits, or more in case bits_stored is
-                       * less than bpp.
-                       */
-                      d[col_idx] = row_start[col_idx] << (8 - info->bits_stored);
-                      if (info->bw_inverted)
-                        {
-                          d[col_idx] = ~d[col_idx];
-                        }
-
-                      if (info->is_signed)
-                        {
-                          /* If the data is negative, make it 0. Otherwise,
-                           * multiply the positive value by 2, so that the
-                           * positive values span between 0 and 254.
-                           */
-                          if (d[col_idx] > 127)
-                            d[col_idx] = 0;
-                          else
-                            d[col_idx] <<= 1;
-                        }
-                    }
-                }
-              else
-                {
-                  /* planar organization of color data */
-                  guint8 *row_start;
-                  gint    col_idx;
-                  gint    plane_size = width * height;
-
-                  row_start = (pix_buffer + (row_idx + i) * width);
-
-                  for (col_idx = 0; col_idx < width; col_idx++)
-                    {
-                      /* Shift it by 0 bits, or more in case bits_stored is
-                       * less than bpp.
-                       */
-                      gint  pix_idx;
-                      gint  src_offset = col_idx;
-
-                      for (pix_idx = 0; pix_idx < samples_per_pixel; pix_idx++)
-                        {
-                          gint  dest_idx = col_idx * samples_per_pixel + pix_idx;
-
-                          d[dest_idx] = row_start[src_offset] << (8 - info->bits_stored);
-                          if (info->is_signed)
-                            {
-                              /* If the data is negative, make it 0. Otherwise,
-                               * multiply the positive value by 2, so that the
-                               * positive values span between 0 and 254.
-                               */
-                              if (d[dest_idx] > 127)
-                                d[dest_idx] = 0;
-                              else
-                                d[dest_idx] <<= 1;
-                            }
-                          src_offset += plane_size;
-                        }
-                    }
-                }
-            }
-
-          d += width * samples_per_pixel;
-        }
-
-      gegl_buffer_set (buffer, GEGL_RECTANGLE (0, row_idx, width, scanlines), 0,
-                       NULL, data, GEGL_AUTO_ROWSTRIDE);
-
-      row_idx += scanlines;
-
-      gimp_progress_update ((gdouble) row_idx / (gdouble) height);
+      format = babl_format (format_name);
+      g_free (format_name);
     }
 
-  g_free (data);
-
-  gimp_progress_update (1.0);
-}
-
-
-/* Guess and set endian. Guesses the endian of a buffer by
- * checking the maximum value of the first and the last byte
- * in the words of the buffer. It assumes that the least
- * significant byte has a larger maximum than the most
- * significant byte.
- */
-static void
-guess_and_set_endian2 (guint16 *buf16,
-                       int length)
-{
-  guint16 *p          = buf16;
-  gint     max_first  = -1;
-  gint     max_second = -1;
-
-  while (p<buf16+length)
-    {
-      if (*(guint8*)p > max_first)
-        max_first = *(guint8*)p;
-      if (((guint8*)p)[1] > max_second)
-        max_second = ((guint8*)p)[1];
-      p++;
-    }
-
-  if (   ((max_second > max_first) && (G_BYTE_ORDER == G_LITTLE_ENDIAN))
-         || ((max_second < max_first) && (G_BYTE_ORDER == G_BIG_ENDIAN)))
-    toggle_endian2 (buf16, length);
-}
-
-/* toggle_endian2 toggles the endian for a 16 bit entity.  */
-static void
-toggle_endian2 (guint16 *buf16,
-                gint     length)
-{
-  guint16 *p = buf16;
-
-  while (p < buf16 + length)
-    {
-      *p = ((*p & 0xff) << 8) | (*p >> 8);
-      p++;
-    }
+  return format;
 }
 
 typedef struct

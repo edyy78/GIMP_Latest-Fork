@@ -973,6 +973,11 @@ if have_heif
   endif
 endif
 
+have_gdcm = cxx.has_header('gdcm-3.0/gdcmReader.h')
+if have_gdcm
+  MIMEtypes += 'application/dicom'
+endif
+
 have_vala = add_languages('vala', required: get_option('vala'), native: false)
 if have_vala
   babl = declare_dependency(
@@ -2215,6 +2220,7 @@ final_message = [
 '''  Amiga IFF/ILBM:      @0@'''.format(have_ilbm),
 '''  Email:               @0@'''.format(email_message),
 '''  FITS:                @0@'''.format(cfitsio_dep.found()),
+'''  dicom:               @0@'''.format(have_gdcm),
 '',
 '''Experimental Plug-Ins (discouraged except for developers):''',
 '''  Lua plug-ins:        @0@'''.format(have_lua_output),

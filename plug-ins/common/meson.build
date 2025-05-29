@@ -26,7 +26,6 @@ common_plugins_list = [
   { 'name': 'file-desktop-link',
     'deps': [ gtk3, gegl, gdk_pixbuf, cairo, ],
   },
-  { 'name': 'file-dicom', },
   { 'name': 'file-farbfeld', },
   { 'name': 'file-gbr', },
   { 'name': 'file-gegl', },
