@@ -523,13 +523,15 @@ gimp_component_editor_get_iter (GimpComponentEditor *editor,
                                 GimpChannelType      channel,
                                 GtkTreeIter         *iter)
 {
-  gint index;
+  GimpImage *image = gimp_image_editor_get_image (GIMP_IMAGE_EDITOR (editor));
 
-  index = gimp_image_get_component_index (GIMP_IMAGE_EDITOR (editor)->image,
-                                          channel);
+  if (image != NULL)
+    {
+      gint index = gimp_image_get_component_index (image, channel);
 
-  if (index != -1)
-    return gtk_tree_model_iter_nth_child (editor->model, iter, NULL, index);
+      if (index != -1)
+        return gtk_tree_model_iter_nth_child (editor->model, iter, NULL, index);
+    }
 
   return FALSE;
 }
