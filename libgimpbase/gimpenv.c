@@ -128,7 +128,7 @@ gimp_env_init (gboolean plug_in)
 
       const gchar *ldpath = g_getenv ("LD_LIBRARY_PATH");
       gchar       *libdir = g_build_filename (gimp_installation_directory (),
-                                              "lib",
+                                              LIBDIR_BASENAME,
                                               NULL);
 
       if (ldpath && *ldpath)
@@ -466,6 +466,42 @@ gimp_installation_directory (void)
 }
 
 /**
+ * gimp_lib_directory:
+ *
+ * Returns the directory where GIMP would look for libraries. On Unix the
+ * compile-time defined installation prefix is used. On Windows and OSX,
+ * gimp_installation_directory() is consulted.
+ *
+ * In config files such as gimprc, the string ${gimp_lib_dir} expands to
+ * this directory.
+ *
+ * The returned string is owned by GIMP and must not be modified or
+ * freed. The returned string is in the encoding used for filenames by
+ * GLib, which isn't necessarily UTF-8. (On Windows it always is
+ * UTF-8.)
+ *
+ * Since: 3.0.6
+ *
+ * Returns: The library directory of GIMP.
+ **/
+const gchar *
+gimp_lib_directory (void)
+{
+  static gchar *libdir = NULL;
+
+  if (! libdir)
+    {
+#if defined(G_OS_WIN32) || defined(PLATFORM_OSX)
+      libdir = g_build_filename (gimp_installation_directory (), "lib");
+#else
+      libdir = LIBDIR;
+#endif
+    }
+
+  return libdir;
+}
+
+/**
  * gimp_data_directory:
  *
  * Returns the default top directory for GIMP data. If the environment
@@ -611,7 +647,7 @@ gimp_plug_in_directory (void)
 
   if (! gimp_plug_in_dir)
     {
-      gchar *tmp = g_build_filename ("lib",
+      gchar *tmp = g_build_filename (LIBDIR_BASENAME,
                                      GIMP_PACKAGE,
                                      GIMP_PLUGIN_VERSION,
                                      NULL);

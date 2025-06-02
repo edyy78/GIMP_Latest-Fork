@@ -467,6 +467,7 @@ _gimp_reloc_find_prefix (const gchar *default_prefix)
   dir2 = g_path_get_dirname (dir1);
 
   exe_dir = g_path_get_basename (dir1);
+  /* This shouldn’t use LIBDIR_BASENAME, multiarch folders are beneath e.g. /usr/lib */
   if (g_strcmp0 (exe_dir, "bin") != 0 && ! g_str_has_prefix (exe_dir, "lib"))
     {
       g_free (exe_dir);
