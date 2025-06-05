@@ -1363,6 +1363,11 @@ gimp_display_shell_transform_overlay (GimpDisplayShell *shell,
       *x -= requisition.width + overlay->spacing_x;
       *y -= requisition.height / 2;
       break;
+
+    default:
+      *x -= overlay->spacing_x;
+      *y -= overlay->spacing_y;
+      break;
     }
 }
 
