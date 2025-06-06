@@ -43,6 +43,7 @@
 #include "widgets/gimpdialogfactory.h"
 #include "widgets/gimpdockcontainer.h"
 #include "widgets/gimpoverlaybox.h"
+#include "widgets/gimpoverlaychild.h"
 #include "widgets/gimpoverlayframe.h"
 #include "widgets/gimptextbuffer.h"
 #include "widgets/gimptexteditor.h"
@@ -1928,9 +1929,12 @@ gimp_text_tool_style_overlay_button_press (GtkWidget      *widget,
                                            GdkEventButton *event,
                                            gpointer        user_data)
 {
-  GimpTextTool        *text_tool    = GIMP_TEXT_TOOL (user_data);
-  GtkWidget           *event_widget = gtk_get_event_widget ((GdkEvent*) event);
-  GimpTextStyleEditor *editor       = GIMP_TEXT_STYLE_EDITOR (text_tool->style_editor);
+  GimpTextTool        *text_tool     = GIMP_TEXT_TOOL (user_data);
+  GtkWidget           *event_widget  = gtk_get_event_widget ((GdkEvent*) event);
+  GimpTextStyleEditor *editor        = GIMP_TEXT_STYLE_EDITOR (text_tool->style_editor);
+  GimpTool            *tool          = GIMP_TOOL (text_tool);
+  GimpDisplayShell    *shell         = gimp_display_get_shell (tool->display);
+  GimpOverlayChild    *child_overlay = NULL;
 
   if (event_widget != GTK_WIDGET (editor->dnd_handle) &&
       gtk_widget_is_ancestor (event_widget, GTK_WIDGET (text_tool->style_editor)))
@@ -1954,6 +1958,10 @@ gimp_text_tool_style_overlay_button_press (GtkWidget      *widget,
   text_tool->drag_offset_x    = event->x;
   text_tool->drag_offset_y    = event->y;
 
+  child_overlay = gimp_overlay_child_find (GIMP_OVERLAY_BOX (shell->canvas),
+                                           text_tool->style_overlay);
+  gimp_overlay_child_set_relative_to_shell (child_overlay, FALSE);
+
   return TRUE;
 }
 
@@ -1962,9 +1970,12 @@ gimp_text_tool_style_overlay_button_release (GtkWidget      *widget,
                                              GdkEventButton *event,
                                              gpointer        user_data)
 {
-  GimpTextTool        *text_tool    = GIMP_TEXT_TOOL (user_data);
-  GtkWidget           *event_widget = gtk_get_event_widget ((GdkEvent*) event);
-  GimpTextStyleEditor *editor       = GIMP_TEXT_STYLE_EDITOR (text_tool->style_editor);
+  GimpTextTool        *text_tool     = GIMP_TEXT_TOOL (user_data);
+  GtkWidget           *event_widget  = gtk_get_event_widget ((GdkEvent*) event);
+  GimpTextStyleEditor *editor        = GIMP_TEXT_STYLE_EDITOR (text_tool->style_editor);
+  GimpTool            *tool          = GIMP_TOOL (text_tool);
+  GimpDisplayShell    *shell         = gimp_display_get_shell (tool->display);
+  GimpOverlayChild    *child_overlay = NULL;
 
   if (event_widget != GTK_WIDGET (editor->dnd_handle) &&
       gtk_widget_is_ancestor (event_widget, GTK_WIDGET (text_tool->style_editor)))
@@ -1973,6 +1984,10 @@ gimp_text_tool_style_overlay_button_release (GtkWidget      *widget,
     }
 
   text_tool->overlay_dragging = FALSE;
+
+  child_overlay = gimp_overlay_child_find (GIMP_OVERLAY_BOX (shell->canvas),
+                                           text_tool->style_overlay);
+  gimp_overlay_child_set_relative_to_shell (child_overlay, TRUE);
 
   if (gtk_widget_get_window (GTK_WIDGET (text_tool->style_overlay)))
     gdk_window_set_cursor (gtk_widget_get_window (GTK_WIDGET (text_tool->style_overlay)), NULL);
