@@ -575,6 +575,8 @@ gimp_config_path_expand_only (const gchar  *path,
                 s = gimp_sysconf_directory ();
               else if (strcmp (token, "gimp_installation_dir") == 0)
                 s = gimp_installation_directory ();
+              else if (strcmp (token, "gimp_lib_dir") == 0)
+                s = gimp_lib_directory ();
               else if (strcmp (token, "gimp_cache_dir") == 0)
                 s = gimp_cache_directory ();
               else if (strcmp (token, "gimp_temp_dir") == 0)
