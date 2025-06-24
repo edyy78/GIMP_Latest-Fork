@@ -62,13 +62,17 @@ development discussion. There is more info at:
 
 For the real junkies, there are IRC channels (e.g. #gimp or #gimp-user)
 devoted to GIMP on GIMPNet (a private free software oriented network).
-Many of the developers hang out there. Some of the GIMPNet servers are:
+Many of the developers hang out there. GIMPNet can be reached via:
 
-	irc.gimp.org:6667
-	irc.us.gimp.org:6667
-	irc.eu.gimp.org:6667
+	irc.gimp.org:6697 (ircs)
+        irc.gimp.org:6667 (irc)
+        irc.gimp.ca:6697 (ircs)
+        irc.gimp.ca:6667 (irc)
 
-More discussion channels, such as forums, will be listed on the above
+Note that irc.gnome.org does not connect to GIMPnet anymore, so if you
+are using that hostname, you will need to change it to connect.
+
+Additional discussion channels, included forums, are listed on the above
 "discuss" page when they are moderated by a team member.
 Links to archives of former discussion methods (e.g. mailing lists) are
 also included in that page.
