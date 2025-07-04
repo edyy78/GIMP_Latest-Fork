@@ -327,12 +327,9 @@ gimp_mirror_update_strokes (GimpSymmetry *sym,
   GList      *strokes = NULL;
   GimpCoords *coords;
   gdouble     mirror_position_x, mirror_position_y;
-  gint        offset_x,          offset_y;
 
-  gimp_item_get_offset (GIMP_ITEM (drawable), &offset_x, &offset_y);
-
-  mirror_position_x = mirror->mirror_position_x - offset_x;
-  mirror_position_y = mirror->mirror_position_y - offset_y;
+  mirror_position_x = mirror->mirror_position_x;
+  mirror_position_y = mirror->mirror_position_y;
 
   g_list_free_full (sym->strokes, g_free);
   strokes = g_list_prepend (strokes,

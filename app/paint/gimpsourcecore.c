@@ -342,8 +342,6 @@ gimp_source_core_motion (GimpSourceCore   *source_core,
   coords    = origin;
   coords.x -= off_x;
   coords.y -= off_y;
-  gimp_symmetry_set_origin (sym, drawable, &coords);
-  paint_core->sym = sym;
 
   /* Some settings are based on the original stroke. */
   opacity = gimp_dynamics_get_linear_value (dynamics,
@@ -404,6 +402,9 @@ gimp_source_core_motion (GimpSourceCore   *source_core,
   for (i = 0; i < n_strokes; i++)
     {
       coords    = *(gimp_symmetry_get_coords (sym, i));
+      gimp_item_get_offset (GIMP_ITEM (drawable), &off_x, &off_y);
+      coords.x -= off_x;
+      coords.y -= off_y;
 
       gimp_brush_core_eval_transform_symmetry (brush_core, sym, i);
 
@@ -414,6 +415,12 @@ gimp_source_core_motion (GimpSourceCore   *source_core,
                                                        &paint_buffer_x,
                                                        &paint_buffer_y,
                                                        NULL, NULL);
+
+      coords    = *(gimp_symmetry_get_coords (sym, i));
+      gimp_item_get_offset (GIMP_ITEM (drawable), &off_x, &off_y);
+      coords.x -= off_x;
+      coords.y -= off_y;
+
       if (! paint_buffer)
         continue;
 
