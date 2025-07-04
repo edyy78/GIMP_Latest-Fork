@@ -216,7 +216,6 @@ EXPORTS
 	gimp_text_direction_get_type
 	gimp_text_hint_style_get_type
 	gimp_text_justification_get_type
-	gimp_text_vertical_justification_get_type
 	gimp_transfer_mode_get_type
 	gimp_transform_direction_get_type
 	gimp_transform_resize_get_type

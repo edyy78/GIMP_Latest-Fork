@@ -736,24 +736,24 @@ text_layer_set_justification_invoker (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
-text_layer_get_vertical_justification_invoker (GimpProcedure         *procedure,
-                                               Gimp                  *gimp,
-                                               GimpContext           *context,
-                                               GimpProgress          *progress,
-                                               const GimpValueArray  *args,
-                                               GError               **error)
+text_layer_get_block_alignment_invoker (GimpProcedure         *procedure,
+                                        Gimp                  *gimp,
+                                        GimpContext           *context,
+                                        GimpProgress          *progress,
+                                        const GimpValueArray  *args,
+                                        GError               **error)
 {
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpTextLayer *layer;
-  gint justify = 0;
+  gint align = 0;
 
   layer = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
       g_object_get (gimp_text_layer_get_text (layer),
-                    "vertically-justify", &justify,
+                    "block-alignment", &align,
                     NULL);
     }
 
@@ -761,31 +761,31 @@ text_layer_get_vertical_justification_invoker (GimpProcedure         *procedure,
                                                   error ? *error : NULL);
 
   if (success)
-    g_value_set_enum (gimp_value_array_index (return_vals, 1), justify);
+    g_value_set_enum (gimp_value_array_index (return_vals, 1), align);
 
   return return_vals;
 }
 
 static GimpValueArray *
-text_layer_set_vertical_justification_invoker (GimpProcedure         *procedure,
-                                               Gimp                  *gimp,
-                                               GimpContext           *context,
-                                               GimpProgress          *progress,
-                                               const GimpValueArray  *args,
-                                               GError               **error)
+text_layer_set_block_alignment_invoker (GimpProcedure         *procedure,
+                                        Gimp                  *gimp,
+                                        GimpContext           *context,
+                                        GimpProgress          *progress,
+                                        const GimpValueArray  *args,
+                                        GError               **error)
 {
   gboolean success = TRUE;
   GimpTextLayer *layer;
-  gint justify;
+  gint align;
 
   layer = g_value_get_object (gimp_value_array_index (args, 0));
-  justify = g_value_get_enum (gimp_value_array_index (args, 1));
+  align = g_value_get_enum (gimp_value_array_index (args, 1));
 
   if (success)
     {
       gimp_text_layer_set (layer,
                            _("Set text layer attribute"),
-                           "vertically-justify", justify,
+                           "block-alignment", align,
                            NULL);
     }
 
@@ -1745,14 +1745,14 @@ register_text_layer_procs (GimpPDB *pdb)
   g_object_unref (procedure);
 
   /*
-   * gimp-text-layer-get-vertical-justification
+   * gimp-text-layer-get-block-alignment
    */
-  procedure = gimp_procedure_new (text_layer_get_vertical_justification_invoker, FALSE);
+  procedure = gimp_procedure_new (text_layer_get_block_alignment_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-text-layer-get-vertical-justification");
+                               "gimp-text-layer-get-block-alignment");
   gimp_procedure_set_static_help (procedure,
-                                  "Get the text vertical justification information of the text layer.",
-                                  "This procedure returns the vertical alignment of the text relative to the text layer.",
+                                  "Get the block alignment information of the text layer.",
+                                  "This procedure returns the block alignment of the text relative to the text layer.",
                                   NULL);
   gimp_procedure_set_static_attribution (procedure,
                                          "Anonymous",
@@ -1765,24 +1765,24 @@ register_text_layer_procs (GimpPDB *pdb)
                                                            FALSE,
                                                            GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   g_param_spec_enum ("justify",
-                                                      "justify",
-                                                      "The vertical justification used in the text layer.",
-                                                      GIMP_TYPE_TEXT_VERTICAL_JUSTIFICATION,
-                                                      GIMP_TEXT_JUSTIFY_TOP,
+                                   g_param_spec_enum ("align",
+                                                      "align",
+                                                      "The block alignment of a text layer.",
+                                                      GIMP_TYPE_BLOCK_ALIGNMENT,
+                                                      GIMP_BLOCK_ALIGN_START,
                                                       GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
-   * gimp-text-layer-set-vertical-justification
+   * gimp-text-layer-set-block-alignment
    */
-  procedure = gimp_procedure_new (text_layer_set_vertical_justification_invoker, FALSE);
+  procedure = gimp_procedure_new (text_layer_set_block_alignment_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-text-layer-set-vertical-justification");
+                               "gimp-text-layer-set-block-alignment");
   gimp_procedure_set_static_help (procedure,
-                                  "Set the vertical justification of the text in a text layer.",
-                                  "This procedure sets the vertical alignment of the text relative to the text layer.",
+                                  "Set the block alignment of the text in a text layer.",
+                                  "This procedure sets the block alignment of the text relative to the text layer.",
                                   NULL);
   gimp_procedure_set_static_attribution (procedure,
                                          "Anonymous",
@@ -1795,11 +1795,11 @@ register_text_layer_procs (GimpPDB *pdb)
                                                            FALSE,
                                                            GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               g_param_spec_enum ("justify",
-                                                  "justify",
-                                                  "The vertical justification for your text.",
-                                                  GIMP_TYPE_TEXT_VERTICAL_JUSTIFICATION,
-                                                  GIMP_TEXT_JUSTIFY_TOP,
+                               g_param_spec_enum ("align",
+                                                  "align",
+                                                  "The block alignment for your text.",
+                                                  GIMP_TYPE_BLOCK_ALIGNMENT,
+                                                  GIMP_BLOCK_ALIGN_START,
                                                   GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);

@@ -873,59 +873,59 @@ gimp_text_layer_set_justification (GimpTextLayer         *layer,
 }
 
 /**
- * gimp_text_layer_get_vertical_justification:
+ * gimp_text_layer_get_block_alignment:
  * @layer: The text layer.
  *
- * Get the text vertical justification information of the text layer.
+ * Get the block alignment information of the text layer.
  *
- * This procedure returns the vertical alignment of the text relative
- * to the text layer.
+ * This procedure returns the block alignment of the text relative to
+ * the text layer.
  *
- * Returns: The vertical justification used in the text layer.
+ * Returns: The block alignment of a text layer.
  *
- * Since: 3.0.4
+ * Since: 3.2
  **/
-GimpTextVerticalJustification
-gimp_text_layer_get_vertical_justification (GimpTextLayer *layer)
+GimpBlockAlignment
+gimp_text_layer_get_block_alignment (GimpTextLayer *layer)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
-  GimpTextVerticalJustification justify = 0;
+  GimpBlockAlignment align = 0;
 
   args = gimp_value_array_new_from_types (NULL,
                                           GIMP_TYPE_TEXT_LAYER, layer,
                                           G_TYPE_NONE);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
-                                               "gimp-text-layer-get-vertical-justification",
+                                               "gimp-text-layer-get-block-alignment",
                                                args);
   gimp_value_array_unref (args);
 
   if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
-    justify = GIMP_VALUES_GET_ENUM (return_vals, 1);
+    align = GIMP_VALUES_GET_ENUM (return_vals, 1);
 
   gimp_value_array_unref (return_vals);
 
-  return justify;
+  return align;
 }
 
 /**
- * gimp_text_layer_set_vertical_justification:
+ * gimp_text_layer_set_block_alignment:
  * @layer: The text layer.
- * @justify: The vertical justification for your text.
+ * @align: The block alignment for your text.
  *
- * Set the vertical justification of the text in a text layer.
+ * Set the block alignment of the text in a text layer.
  *
- * This procedure sets the vertical alignment of the text relative to
- * the text layer.
+ * This procedure sets the block alignment of the text relative to the
+ * text layer.
  *
  * Returns: TRUE on success.
  *
- * Since: 3.0.4
+ * Since: 3.2
  **/
 gboolean
-gimp_text_layer_set_vertical_justification (GimpTextLayer                 *layer,
-                                            GimpTextVerticalJustification  justify)
+gimp_text_layer_set_block_alignment (GimpTextLayer      *layer,
+                                     GimpBlockAlignment  align)
 {
   GimpValueArray *args;
   GimpValueArray *return_vals;
@@ -933,11 +933,11 @@ gimp_text_layer_set_vertical_justification (GimpTextLayer                 *layer
 
   args = gimp_value_array_new_from_types (NULL,
                                           GIMP_TYPE_TEXT_LAYER, layer,
-                                          GIMP_TYPE_TEXT_VERTICAL_JUSTIFICATION, justify,
+                                          GIMP_TYPE_BLOCK_ALIGNMENT, align,
                                           G_TYPE_NONE);
 
   return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
-                                               "gimp-text-layer-set-vertical-justification",
+                                               "gimp-text-layer-set-block-alignment",
                                                args);
   gimp_value_array_unref (args);
 

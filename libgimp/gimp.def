@@ -1037,7 +1037,6 @@ EXPORTS
 	gimp_text_layer_get_markup
 	gimp_text_layer_get_text
 	gimp_text_layer_get_type
-	gimp_text_layer_get_vertical_justification
 	gimp_text_layer_new
 	gimp_text_layer_resize
 	gimp_text_layer_set_antialias
@@ -1055,7 +1054,6 @@ EXPORTS
 	gimp_text_layer_set_line_spacing
 	gimp_text_layer_set_markup
 	gimp_text_layer_set_text
-	gimp_text_layer_set_vertical_justification
 	gimp_thumbnail_procedure_get_type
 	gimp_thumbnail_procedure_new
 	gimp_tile_height

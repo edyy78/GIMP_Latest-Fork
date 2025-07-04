@@ -1789,21 +1789,21 @@ gimp_text_justification_get_type (void)
 }
 
 GType
-gimp_text_vertical_justification_get_type (void)
+gimp_block_alignment_get_type (void)
 {
   static const GEnumValue values[] =
   {
-    { GIMP_TEXT_JUSTIFY_TOP, "GIMP_TEXT_JUSTIFY_TOP", "top" },
-    { GIMP_TEXT_JUSTIFY_MIDDLE, "GIMP_TEXT_JUSTIFY_MIDDLE", "middle" },
-    { GIMP_TEXT_JUSTIFY_BOTTOM, "GIMP_TEXT_JUSTIFY_BOTTOM", "bottom" },
+    { GIMP_BLOCK_ALIGN_START, "GIMP_BLOCK_ALIGN_START", "start" },
+    { GIMP_BLOCK_ALIGN_MIDDLE, "GIMP_BLOCK_ALIGN_MIDDLE", "middle" },
+    { GIMP_BLOCK_ALIGN_END, "GIMP_BLOCK_ALIGN_END", "end" },
     { 0, NULL, NULL }
   };
 
   static const GimpEnumDesc descs[] =
   {
-    { GIMP_TEXT_JUSTIFY_TOP, NC_("text-vertical-justification", "To the top"), NULL },
-    { GIMP_TEXT_JUSTIFY_MIDDLE, NC_("text-vertical-justification", "To the middle"), NULL },
-    { GIMP_TEXT_JUSTIFY_BOTTOM, NC_("text-vertical-justification", "To the bottom"), NULL },
+    { GIMP_BLOCK_ALIGN_START, NC_("block-alignment", "Align to the start of the block flow"), NULL },
+    { GIMP_BLOCK_ALIGN_MIDDLE, NC_("block-alignment", "Center contents in the block"), NULL },
+    { GIMP_BLOCK_ALIGN_END, NC_("block-alignment", "Align to the end of the block flow"), NULL },
     { 0, NULL, NULL }
   };
 
@@ -1811,9 +1811,9 @@ gimp_text_vertical_justification_get_type (void)
 
   if (G_UNLIKELY (! type))
     {
-      type = g_enum_register_static ("GimpTextVerticalJustification", values);
+      type = g_enum_register_static ("GimpBlockAlignment", values);
       gimp_type_set_translation_domain (type, GETTEXT_PACKAGE "-libgimp");
-      gimp_type_set_translation_context (type, "text-vertical-justification");
+      gimp_type_set_translation_context (type, "block-alignment");
       gimp_enum_set_value_descriptions (type, descs);
     }
 

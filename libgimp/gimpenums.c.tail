@@ -5,6 +5,7 @@ static const GimpGetTypeFunc get_type_funcs[] =
 {
   gegl_distance_metric_get_type,
   gimp_add_mask_type_get_type,
+  gimp_block_alignment_get_type,
   gimp_brush_application_mode_get_type,
   gimp_brush_generated_shape_get_type,
   gimp_cap_style_get_type,
@@ -62,7 +63,6 @@ static const GimpGetTypeFunc get_type_funcs[] =
   gimp_text_direction_get_type,
   gimp_text_hint_style_get_type,
   gimp_text_justification_get_type,
-  gimp_text_vertical_justification_get_type,
   gimp_transfer_mode_get_type,
   gimp_transform_direction_get_type,
   gimp_transform_resize_get_type
@@ -72,6 +72,7 @@ static const gchar * const type_names[] =
 {
   "GeglDistanceMetric",
   "GimpAddMaskType",
+  "GimpBlockAlignment",
   "GimpBrushApplicationMode",
   "GimpBrushGeneratedShape",
   "GimpCapStyle",
@@ -129,7 +130,6 @@ static const gchar * const type_names[] =
   "GimpTextDirection",
   "GimpTextHintStyle",
   "GimpTextJustification",
-  "GimpTextVerticalJustification",
   "GimpTransferMode",
   "GimpTransformDirection",
   "GimpTransformResize"
