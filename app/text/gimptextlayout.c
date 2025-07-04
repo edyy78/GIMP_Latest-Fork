@@ -782,7 +782,7 @@ gimp_text_layout_position (GimpTextLayout *layout)
           layout->extents.x +=
             (PANGO_PIXELS (pango_layout_get_width (layout->layout)) - width) / 2;
         }
-      if (layout->text->vertically_justify == GIMP_TEXT_JUSTIFY_BOTTOM)
+      if (layout->text->block_alignment == GIMP_BLOCK_ALIGN_END)
         {
           switch (base_dir)
             {
@@ -808,7 +808,7 @@ gimp_text_layout_position (GimpTextLayout *layout)
                 break;
             }
         }
-      else if (layout->text->vertically_justify == GIMP_TEXT_JUSTIFY_MIDDLE)
+      else if (layout->text->block_alignment == GIMP_BLOCK_ALIGN_MIDDLE)
         {
           switch (base_dir)
             {

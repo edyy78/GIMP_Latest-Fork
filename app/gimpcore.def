@@ -47,6 +47,7 @@ EXPORTS
 	gimp_base_config_get_type
 	gimp_bezier_stroke_extend
 	gimp_bezier_stroke_new
+	gimp_block_alignment_get_type
 	gimp_brush_core_get_type
 	gimp_brush_core_set_brush
 	gimp_brush_generated_get_angle
@@ -450,7 +451,7 @@ EXPORTS
 	gimp_marshal_VOID__OBJECT_OBJECT
 	gimp_marshal_VOID__OBJECT_POINTER
 	gimp_marshal_VOID__POINTER_BOXED
-	gimp_marshal_VOID__POINTER_ENUM 
+	gimp_marshal_VOID__POINTER_ENUM
 	gimp_marshal_VOID__STRING_BOOLEAN_UINT_FLAGS
 	gimp_marshal_VOID__STRING_FLAGS
 	gimp_message

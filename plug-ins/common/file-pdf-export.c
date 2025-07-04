@@ -1554,35 +1554,35 @@ drawText (GimpLayer *layer,
           gdouble    x_res,
           gdouble    y_res)
 {
-  GimpImageType                  type   = gimp_drawable_type (GIMP_DRAWABLE (layer));
-  gchar                         *text   = gimp_text_layer_get_text (GIMP_TEXT_LAYER (layer));
-  gchar                         *markup = gimp_text_layer_get_markup (GIMP_TEXT_LAYER (layer));
-  gint                           layer_height = gimp_drawable_get_height (GIMP_DRAWABLE (layer));
-  gint                           layer_width  = gimp_drawable_get_width (GIMP_DRAWABLE (layer));
-  gchar                         *language;
-  cairo_font_options_t          *options;
-  gint                           x;
-  gint                           y;
-  GeglColor                     *color;
-  gdouble                        rgb[3];
-  GimpUnit                      *unit;
-  gdouble                        size;
-  GimpTextHintStyle              hinting;
-  GimpTextJustification          j;
-  gboolean                       justify;
-  GimpTextVerticalJustification  vertically_justify;
-  PangoAlignment                 align;
-  GimpTextDirection              dir;
-  PangoLayout                   *layout;
-  PangoContext                  *context;
-  GimpFont                      *font;
-  PangoFontDescription          *font_description;
-  gdouble                        indent;
-  gdouble                        line_spacing;
-  gdouble                        letter_spacing;
-  PangoAttribute                *letter_spacing_at;
-  PangoAttrList                 *attr_list = pango_attr_list_new ();
-  PangoFontMap                  *fontmap;
+  GimpImageType          type   = gimp_drawable_type (GIMP_DRAWABLE (layer));
+  gchar                 *text   = gimp_text_layer_get_text (GIMP_TEXT_LAYER (layer));
+  gchar                 *markup = gimp_text_layer_get_markup (GIMP_TEXT_LAYER (layer));
+  gint                   layer_height = gimp_drawable_get_height (GIMP_DRAWABLE (layer));
+  gint                   layer_width  = gimp_drawable_get_width (GIMP_DRAWABLE (layer));
+  gchar                 *language;
+  cairo_font_options_t  *options;
+  gint                   x;
+  gint                   y;
+  GeglColor             *color;
+  gdouble                rgb[3];
+  GimpUnit              *unit;
+  gdouble                size;
+  GimpTextHintStyle      hinting;
+  GimpTextJustification  j;
+  gboolean               justify;
+  GimpBlockAlignment     block_alignment;
+  PangoAlignment         align;
+  GimpTextDirection      dir;
+  PangoLayout           *layout;
+  PangoContext          *context;
+  GimpFont              *font;
+  PangoFontDescription  *font_description;
+  gdouble                indent;
+  gdouble                line_spacing;
+  gdouble                letter_spacing;
+  PangoAttribute        *letter_spacing_at;
+  PangoAttrList         *attr_list = pango_attr_list_new ();
+  PangoFontMap          *fontmap;
 
   cairo_save (cr);
 
@@ -1791,10 +1791,10 @@ drawText (GimpLayer *layer,
         break;
     }
 
-  /* Vertical justification */
-  vertically_justify = gimp_text_layer_get_vertical_justification (GIMP_TEXT_LAYER (layer));
+  /* Block alignment */
+  block_alignment = gimp_text_layer_get_block_alignment (GIMP_TEXT_LAYER (layer));
 
-  if (vertically_justify == GIMP_TEXT_JUSTIFY_BOTTOM)
+  if (block_alignment == GIMP_BLOCK_ALIGN_END)
     {
       gint              height;
 
@@ -1824,7 +1824,7 @@ drawText (GimpLayer *layer,
             break;
         }
     }
-  else if (vertically_justify == GIMP_TEXT_JUSTIFY_MIDDLE)
+  else if (block_alignment == GIMP_BLOCK_ALIGN_MIDDLE)
     {
       gint              height;
 

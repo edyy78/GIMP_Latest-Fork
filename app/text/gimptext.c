@@ -65,7 +65,7 @@ enum
   PROP_COLOR,
   PROP_OUTLINE,
   PROP_JUSTIFICATION,
-  PROP_VERTICAL_JUSTIFICATION,
+  PROP_BLOCK_ALIGNMENT,
   PROP_INDENTATION,
   PROP_LINE_SPACING,
   PROP_LETTER_SPACING,
@@ -255,11 +255,11 @@ gimp_text_class_init (GimpTextClass *klass)
                          GIMP_TEXT_JUSTIFY_LEFT,
                          GIMP_PARAM_STATIC_STRINGS);
 
-  GIMP_CONFIG_PROP_ENUM (object_class, PROP_VERTICAL_JUSTIFICATION,
-                         "vertically-justify",
+  GIMP_CONFIG_PROP_ENUM (object_class, PROP_BLOCK_ALIGNMENT,
+                         "block-alignment",
                          NULL, NULL,
-                         GIMP_TYPE_TEXT_VERTICAL_JUSTIFICATION,
-                         GIMP_TEXT_JUSTIFY_TOP,
+                         GIMP_TYPE_BLOCK_ALIGNMENT,
+                         GIMP_BLOCK_ALIGN_START,
                          GIMP_PARAM_STATIC_STRINGS);
 
   GIMP_CONFIG_PROP_DOUBLE (object_class, PROP_INDENTATION,
@@ -482,8 +482,8 @@ gimp_text_get_property (GObject      *object,
     case PROP_JUSTIFICATION:
       g_value_set_enum (value, text->justify);
       break;
-    case PROP_VERTICAL_JUSTIFICATION:
-      g_value_set_enum (value, text->vertically_justify);
+    case PROP_BLOCK_ALIGNMENT:
+      g_value_set_enum (value, text->block_alignment);
       break;
     case PROP_INDENTATION:
       g_value_set_double (value, text->indent);
@@ -631,8 +631,8 @@ gimp_text_set_property (GObject      *object,
     case PROP_JUSTIFICATION:
       text->justify = g_value_get_enum (value);
       break;
-    case PROP_VERTICAL_JUSTIFICATION:
-      text->vertically_justify = g_value_get_enum (value);
+    case PROP_BLOCK_ALIGNMENT:
+      text->block_alignment = g_value_get_enum (value);
       break;
     case PROP_INDENTATION:
       text->indent = g_value_get_double (value);

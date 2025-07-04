@@ -1022,6 +1022,7 @@ EXPORTS
 	gimp_text_get_extents_font
 	gimp_text_layer_get_antialias
 	gimp_text_layer_get_base_direction
+	gimp_text_layer_get_block_alignment
 	gimp_text_layer_get_by_id
 	gimp_text_layer_get_color
 	gimp_text_layer_get_font
@@ -1041,6 +1042,7 @@ EXPORTS
 	gimp_text_layer_resize
 	gimp_text_layer_set_antialias
 	gimp_text_layer_set_base_direction
+	gimp_text_layer_set_block_alignment
 	gimp_text_layer_set_color
 	gimp_text_layer_set_font
 	gimp_text_layer_set_font_size

@@ -1198,23 +1198,23 @@ typedef enum
 
 
 /**
- * GimpTextVerticalJustification:
- * @GIMP_TEXT_JUSTIFY_TOP:    To the top
- * @GIMP_TEXT_JUSTIFY_MIDDLE: To the middle
- * @GIMP_TEXT_JUSTIFY_BOTTOM: To the bottom
+ * GimpBlockAlignment
+ * @GIMP_BLOCK_ALIGN_START:  Align to the start of the block flow
+ * @GIMP_BLOCK_ALIGN_MIDDLE: Center contents in the block
+ * @GIMP_BLOCK_ALIGN_END:    Align to the end of the block flow
  *
- * Text vertical justifications.
+ * Block alignment for text.
  **/
-#define GIMP_TYPE_TEXT_VERTICAL_JUSTIFICATION (gimp_text_vertical_justification_get_type ())
+#define GIMP_TYPE_BLOCK_ALIGNMENT (gimp_block_alignment_get_type ())
 
-GType gimp_text_vertical_justification_get_type (void) G_GNUC_CONST;
+GType gimp_block_alignment_get_type (void) G_GNUC_CONST;
 
 typedef enum
 {
-  GIMP_TEXT_JUSTIFY_TOP,     /*< desc="To the top"    >*/
-  GIMP_TEXT_JUSTIFY_MIDDLE,  /*< desc="To the middle" >*/
-  GIMP_TEXT_JUSTIFY_BOTTOM   /*< desc="To the bottom" >*/
-} GimpTextVerticalJustification;
+  GIMP_BLOCK_ALIGN_START,   /*< desc="Align to the start of the block flow" >*/
+  GIMP_BLOCK_ALIGN_MIDDLE,  /*< desc="Center contents in the block"         >*/
+  GIMP_BLOCK_ALIGN_END      /*< desc="Align to the end of the block flow"   >*/
+} GimpBlockAlignment;
 
 
 /**
