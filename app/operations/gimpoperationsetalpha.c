@@ -21,8 +21,10 @@
 #include "config.h"
 
 #include <gegl.h>
+#include "opencl/gegl-cl.h"
 
 #include "operations-types.h"
+#include "app/operations/opencl/set-alpha.cl.h"
 
 #include "gimpoperationsetalpha.h"
 
@@ -49,6 +51,13 @@ static gboolean   gimp_operation_set_alpha_process      (GeglOperation       *op
                                                          void                *aux_buf,
                                                          void                *out_buf,
                                                          glong                samples,
+                                                         const GeglRectangle *roi,
+                                                         gint                 level);
+static gboolean   gimp_operation_set_alpha_cl_process   (GeglOperation       *self,
+                                                         cl_mem               in_tex,
+                                                         cl_mem               aux_tex,
+                                                         cl_mem               out_tex,
+                                                         size_t               global_worksize,
                                                          const GeglRectangle *roi,
                                                          gint                 level);
 
@@ -78,6 +87,7 @@ gimp_operation_set_alpha_class_init (GimpOperationSetAlphaClass *klass)
   operation_class->prepare = gimp_operation_set_alpha_prepare;
 
   point_class->process     = gimp_operation_set_alpha_process;
+  point_class->cl_process  = gimp_operation_set_alpha_cl_process;
 
   g_object_class_install_property (object_class, PROP_VALUE,
                                    g_param_spec_double ("value",
@@ -184,5 +194,65 @@ gimp_operation_set_alpha_process (GeglOperation       *operation,
         }
     }
 
+  return TRUE;
+}
+
+static gboolean
+gimp_operation_set_alpha_cl_process (GeglOperation       *operation,
+                                     cl_mem               in_tex,
+                                     cl_mem               aux_tex,
+                                     cl_mem               out_tex,
+                                     size_t               global_worksize,
+                                     const GeglRectangle *roi,
+                                     gint                 level)
+{
+  static GeglClRunData  *cl_data   = NULL;
+  GimpOperationSetAlpha *self      = GIMP_OPERATION_SET_ALPHA (operation);
+  /* self->value needs to be cast down to float to properly fit into cl_float */
+  float                  value     = (float)self->value;
+  gint                   cl_kernel = 0;
+  gint                   cl_err    = 0;
+
+  if (cl_data == NULL)
+    {
+      const char *kernel_name[] = { "kernel_gimp_operation_set_alpha_with_aux",
+                                    "kernel_gimp_operation_set_alpha", NULL };
+      cl_data = gegl_cl_compile_and_build (set_alpha_cl_source,
+                                           kernel_name);
+      if (cl_data == NULL)
+        goto error;
+    }
+
+  if (aux_tex != NULL)
+    {
+      cl_kernel = 0;
+      cl_err = gegl_cl_set_kernel_args (cl_data->kernel[cl_kernel],
+                                        sizeof(cl_mem),   &in_tex,
+                                        sizeof(cl_mem),   &aux_tex,
+                                        sizeof(cl_mem),   &out_tex,
+                                        sizeof(cl_float), &value,
+                                        NULL);
+      CL_CHECK;
+    }
+  else
+    {
+      cl_kernel = 1;
+      cl_err = gegl_cl_set_kernel_args (cl_data->kernel[cl_kernel],
+                                        sizeof(cl_mem),   &in_tex,
+                                        sizeof(cl_mem),   &out_tex,
+                                        sizeof(cl_float), &value,
+                                        NULL);
+      CL_CHECK;
+    }
+
+  cl_err = gegl_clEnqueueNDRangeKernel (gegl_cl_get_command_queue (),
+                                        cl_data->kernel[cl_kernel], 1,
+                                        NULL, &global_worksize, NULL,
+                                        0, NULL, NULL);
+  CL_CHECK;
+
+  return FALSE;
+
+error:
   return TRUE;
 }
