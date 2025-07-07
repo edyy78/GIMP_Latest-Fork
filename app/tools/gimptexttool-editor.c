@@ -520,6 +520,16 @@ gimp_text_tool_editor_key_press (GimpTextTool *text_tool,
                          GIMP_TOOL (text_tool)->display);
       break;
 
+    /* this key binding (Ctrl-Shift-V) is dedicated for action `text-tool-
+     * paste-unformatted`, which could not be connected to signal source since
+     * GTKTextView did not provide us a built-in one.
+     */
+    case GDK_KEY_v:
+    case GDK_KEY_V:
+      if ((kevent->state & gimp_get_all_modifiers_mask()) == (GDK_CONTROL_MASK | GDK_SHIFT_MASK))
+        gimp_text_tool_paste_clipboard_unformatted (text_tool);
+      break;
+
     default:
       retval = FALSE;
     }
