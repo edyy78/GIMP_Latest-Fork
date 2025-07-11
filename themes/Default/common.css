@@ -33,6 +33,12 @@
   color: @fg-color;
 }
 
+/* Titlebar color when window is out of focus */
+.titlebar:backdrop, .titlebar label:backdrop
+{
+  background-color: @hover-color;
+}
+
 /* TreeViews, e.g. in a file picker or the Prefs dialog */
 .view {
   background-color: @extreme-bg-color;
@@ -696,7 +702,7 @@ popover button {
 
 /* give the menu bar a color, fix for the default color being too dark */
 menubar {
-  background-color: @bg-color;
+  background-color: transparent;
   background-image: none;
   box-shadow: 0 -1px @edge-border-color inset;
 }
@@ -852,6 +858,7 @@ headerbar {
 
 headerbar:backdrop * {
   color: @disabled-fg-color;
+  background-color: transparent;
 }
 
 headerbar:backdrop menuitem {
