@@ -787,6 +787,8 @@ gimp_text_options_gui (GimpToolOptions *tool_options)
   GtkSizeGroup      *size_group;
   gint               row = 0;
 
+  size_group = gtk_size_group_new (GTK_SIZE_GROUP_HORIZONTAL);
+
   async_set =
     gimp_data_factory_get_async_set (tool_options->tool_info->gimp->font_factory);
 
@@ -822,41 +824,13 @@ gimp_text_options_gui (GimpToolOptions *tool_options)
   entry = gimp_prop_size_entry_new (config,
                                     "font-size", FALSE, "font-size-unit", "%n",
                                     GIMP_SIZE_ENTRY_UPDATE_SIZE, 72.0);
+  gtk_widget_set_halign (entry, GTK_ALIGN_START);
   gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++,
                             _("Size:"), 0.0, 0.5,
                             entry, 2);
+  gtk_size_group_add_widget (size_group, entry);
 
   options->size_entry = entry;
-
-  vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
-  gtk_box_pack_start (GTK_BOX (options_vbox), vbox, FALSE, FALSE, 0);
-  gtk_widget_show (vbox);
-
-  button = gimp_prop_check_button_new (config, "use-editor", NULL);
-  gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
-
-  button = gimp_prop_check_button_new (config, "show-on-canvas", NULL);
-  gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
-
-  button = gimp_prop_check_button_new (config, "antialias", NULL);
-  gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
-
-  grid = gtk_grid_new ();
-  gtk_grid_set_column_spacing (GTK_GRID (grid), 2);
-  gtk_grid_set_row_spacing (GTK_GRID (grid), 2);
-  gtk_box_pack_start (GTK_BOX (options_vbox), grid, FALSE, FALSE, 0);
-  gtk_widget_show (grid);
-
-  row = 0;
-
-  size_group = gtk_size_group_new (GTK_SIZE_GROUP_HORIZONTAL);
-
-  button = gimp_prop_enum_combo_box_new (config, "hint-style", -1, -1);
-  gtk_widget_set_halign (button, GTK_ALIGN_START);
-  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++,
-                            _("Hinting:"), 0.0, 0.5,
-                            button, 1);
-  gtk_size_group_add_widget (size_group, button);
 
   button = gimp_prop_color_button_new (config, "foreground", _("Text Color"),
                                        40, 24, GIMP_COLOR_AREA_FLAT);
@@ -897,54 +871,11 @@ gimp_text_options_gui (GimpToolOptions *tool_options)
                             NULL, 0.0, 0.5,
                             button, 1);
 
-  grid = gtk_grid_new ();
-  gtk_grid_set_column_spacing (GTK_GRID (grid), 2);
-  gtk_grid_set_row_spacing (GTK_GRID (grid), 2);
-  gtk_box_pack_start (GTK_BOX (options_vbox), grid, FALSE, FALSE, 0);
-  gtk_widget_show (grid);
-
-  row = 0;
-
-  box = gimp_prop_enum_icon_box_new (config, "justify", "format-justify", 0, 0);
-  gtk_widget_set_halign (box, GTK_ALIGN_START);
-  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++,
-                            _("Justify:"), 0.0, 0.5,
-                            box, 2);
-  gtk_size_group_add_widget (size_group, box);
-  g_object_unref (size_group);
-
-  spinbutton = gimp_prop_spin_button_new (config, "indent", 1.0, 10.0, 1);
-  gtk_entry_set_width_chars (GTK_ENTRY (spinbutton), 5);
-  gtk_widget_set_halign (spinbutton, GTK_ALIGN_START);
-  gimp_grid_attach_icon (GTK_GRID (grid), row++,
-                         GIMP_ICON_FORMAT_INDENT_MORE,
-                         spinbutton, 1);
-
-  spinbutton = gimp_prop_spin_button_new (config, "line-spacing", 1.0, 10.0, 1);
-  gtk_entry_set_width_chars (GTK_ENTRY (spinbutton), 5);
-  gtk_widget_set_halign (spinbutton, GTK_ALIGN_START);
-  gimp_grid_attach_icon (GTK_GRID (grid), row++,
-                         GIMP_ICON_FORMAT_TEXT_SPACING_LINE,
-                         spinbutton, 1);
-
-  spinbutton = gimp_prop_spin_button_new (config,
-                                          "letter-spacing", 1.0, 10.0, 1);
-  gtk_entry_set_width_chars (GTK_ENTRY (spinbutton), 5);
-  gtk_widget_set_halign (spinbutton, GTK_ALIGN_START);
-  gimp_grid_attach_icon (GTK_GRID (grid), row++,
-                         GIMP_ICON_FORMAT_TEXT_SPACING_LETTER,
-                         spinbutton, 1);
-
-  combo = gimp_prop_enum_combo_box_new (config, "box-mode", 0, 0);
-  gtk_widget_set_halign (combo, GTK_ALIGN_START);
-  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++,
-                            _("Box:"), 0.0, 0.5,
-                            combo, 1);
   stroke_options = gimp_stroke_options_new (GIMP_CONTEXT (options)->gimp,
                                             NULL, FALSE);
-#define BIND(a)                                    \
-  g_object_bind_property (options, "outline-" #a,  \
-                          stroke_options, #a,                           \
+#define BIND(a)                                   \
+  g_object_bind_property (options, "outline-" #a, \
+                          stroke_options, #a,     \
                           G_BINDING_BIDIRECTIONAL | G_BINDING_SYNC_CREATE)
   BIND (custom-style);
   BIND (foreground);
@@ -966,7 +897,65 @@ gimp_text_options_gui (GimpToolOptions *tool_options)
 
   g_object_unref (stroke_options);
 
-  /*  Only add the language entry if the iso-codes package is available.  */
+  grid = gtk_grid_new ();
+  gtk_grid_set_column_spacing (GTK_GRID (grid), 2);
+  gtk_grid_set_row_spacing (GTK_GRID (grid), 2);
+  gtk_box_pack_start (GTK_BOX (options_vbox), grid, FALSE, FALSE, 0);
+  gtk_widget_show (grid);
+
+  row = 0;
+
+  box = gimp_prop_enum_icon_box_new (config, "justify", "format-justify", 0, 0);
+  gtk_widget_set_halign (box, GTK_ALIGN_START);
+  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++,
+                            _("Justify:"), 0.0, 0.5,
+                            box, 2);
+
+  spinbutton = gimp_prop_spin_button_new (config, "indent", 1.0, 10.0, 1);
+  gtk_entry_set_width_chars (GTK_ENTRY (spinbutton), 5);
+  gtk_widget_set_halign (spinbutton, GTK_ALIGN_START);
+  gimp_grid_attach_icon (GTK_GRID (grid), row++,
+                         GIMP_ICON_FORMAT_INDENT_MORE,
+                         spinbutton, 1);
+
+  hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
+
+  spinbutton = gimp_prop_spin_button_new (config, "line-spacing", 1.0, 10.0, 1);
+  gtk_entry_set_width_chars (GTK_ENTRY (spinbutton), 5);
+  gtk_box_pack_start (GTK_BOX (hbox), spinbutton, FALSE, FALSE, 0);
+
+  spinbutton = gimp_prop_spin_button_new (config,
+                                          "letter-spacing", 1.0, 10.0, 1);
+  gtk_entry_set_width_chars (GTK_ENTRY (spinbutton), 5);
+  gtk_box_pack_start (GTK_BOX (hbox), spinbutton, FALSE, FALSE, 0);
+
+  gimp_grid_attach_icon (GTK_GRID (grid), row++,
+                         GIMP_ICON_FORMAT_TEXT_SPACING_LINE,
+                         hbox, 2);
+
+  combo = gimp_prop_enum_combo_box_new (config, "box-mode", 0, 0);
+  gtk_widget_set_halign (combo, GTK_ALIGN_START);
+  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++,
+                            _("Box:"), 0.0, 0.5,
+                            combo, 1);
+  gtk_size_group_add_widget (size_group, combo);
+
+  vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
+  gtk_widget_show (vbox);
+
+  button = gimp_prop_check_button_new (config, "antialias", NULL);
+  gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
+  gtk_widget_set_halign (button, GTK_ALIGN_START);
+  gtk_grid_attach (GTK_GRID (grid), vbox, 0, row++, 2, 1);
+
+  button = gimp_prop_enum_combo_box_new (config, "hint-style", -1, -1);
+  gtk_widget_set_halign (button, GTK_ALIGN_START);
+  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row,
+                            _("Hinting:"), 0.0, 0.5,
+                            button, 1);
+  gtk_size_group_add_widget (size_group, button);
+
+   g_object_unref (size_group);
 
 #ifdef HAVE_ISO_CODES
   {
@@ -988,6 +977,12 @@ gimp_text_options_gui (GimpToolOptions *tool_options)
     gtk_box_pack_start (GTK_BOX (vbox), entry, FALSE, FALSE, 0);
   }
 #endif
+
+  button = gimp_prop_check_button_new (config, "use-editor", NULL);
+  gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
+
+  button = gimp_prop_check_button_new (config, "show-on-canvas", NULL);
+  gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
 
   return main_vbox;
 }
