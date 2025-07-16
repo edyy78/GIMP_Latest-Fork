@@ -47,6 +47,8 @@ struct _GimpTextOptions
   gdouble                   letter_spacing;
   GimpTextBoxMode           box_mode;
 
+  gboolean                  fill_enable;
+  gboolean                  outline_enable;
   GimpTextOutline           outline;
   GimpCustomStyle           outline_style;
   GeglColor                *outline_foreground;

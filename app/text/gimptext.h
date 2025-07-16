@@ -59,6 +59,8 @@ struct _GimpText
   gboolean                  outline_antialias;
   gdouble                   outline_dash_offset;
   GArray                   *outline_dash_info;
+  gboolean                  outline_enable;
+  gboolean                  fill_enable;
   GimpTextOutline           outline;
   GimpTextJustification     justify;
   gdouble                   indent;
