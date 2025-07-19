@@ -28,8 +28,9 @@
 #define GIMP_TEXT_OPTIONS_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_TEXT_OPTIONS, GimpTextOptionsClass))
 
 
-typedef struct _GimpTextOptions      GimpTextOptions;
-typedef struct _GimpToolOptionsClass GimpTextOptionsClass;
+typedef struct _GimpTextOptions        GimpTextOptions;
+typedef struct _GimpTextOptionsPrivate GimpTextOptionsPrivate;
+typedef struct _GimpToolOptionsClass   GimpTextOptionsClass;
 
 struct _GimpTextOptions
 {
@@ -71,6 +72,8 @@ struct _GimpTextOptions
 
   /*  options gui  */
   GtkWidget                *size_entry;
+
+  GimpTextOptionsPrivate   *private;
 };
 
 
@@ -80,6 +83,8 @@ void        gimp_text_options_connect_text (GimpTextOptions *options,
                                             GimpText        *text);
 
 GtkWidget * gimp_text_options_gui          (GimpToolOptions *tool_options);
+
+void        gimp_text_options_update_gui   (GimpTextOptions *options);
 
 GtkWidget * gimp_text_options_editor_new   (GtkWindow       *parent,
                                             Gimp            *gimp,

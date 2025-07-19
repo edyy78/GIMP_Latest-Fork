@@ -1338,6 +1338,8 @@ gimp_text_tool_connect (GimpTextTool  *text_tool,
                                    text_tool, 0);
         }
     }
+
+  gimp_text_options_update_gui (GIMP_TEXT_TOOL_GET_OPTIONS (text_tool));
 }
 
 static void

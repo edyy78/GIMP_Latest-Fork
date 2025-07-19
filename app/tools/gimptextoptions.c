@@ -94,6 +94,11 @@ enum
   PROP_FONT_VIEW_SIZE
 };
 
+struct _GimpTextOptionsPrivate
+{
+  GimpStrokeEditor *stroke_editor;
+};
+
 
 static void
              gimp_text_options_config_iface_init    (GimpConfigInterface *config_iface);
@@ -135,12 +140,13 @@ static void  gimp_text_options_notify_color         (GimpContext         *contex
 static void  gimp_text_options_notify_text_color    (GimpText            *text,
                                                      GParamSpec          *pspec,
                                                      GimpContext         *context);
-static void  gimp_text_options_set_outline_style    (GimpTextOptions     *options);
+static void  gimp_text_options_set_outline          (GimpTextOptions     *options);
 
 
 
 G_DEFINE_TYPE_WITH_CODE (GimpTextOptions, gimp_text_options,
                          GIMP_TYPE_TOOL_OPTIONS,
+                         G_ADD_PRIVATE (GimpTextOptions)
                          G_IMPLEMENT_INTERFACE (GIMP_TYPE_CONFIG,
                                                 gimp_text_options_config_iface_init))
 
@@ -377,10 +383,12 @@ gimp_text_options_config_iface_init (GimpConfigInterface *config_iface)
 static void
 gimp_text_options_init (GimpTextOptions *options)
 {
-  GeglColor *gray = gegl_color_new ("gray");
+  GeglColor              *gray = gegl_color_new ("gray");
+  GimpTextOptionsPrivate *priv = gimp_text_options_get_instance_private (options);
 
   options->size_entry         = NULL;
   options->outline_foreground = gray;
+  options->private            = priv;
 }
 
 static void
@@ -440,11 +448,11 @@ gimp_text_options_get_property (GObject    *object,
 
     case PROP_FILL:
       g_value_set_boolean (value, options->fill_enable);
-      gimp_text_options_set_outline_style (options);
+      gimp_text_options_set_outline (options);
       break;
     case PROP_OUTLINE:
       g_value_set_boolean (value, options->outline_enable);
-      gimp_text_options_set_outline_style (options);
+      gimp_text_options_set_outline (options);
       break;
     case PROP_OUTLINE_STYLE:
       g_value_set_enum (value, options->outline_style);
@@ -554,11 +562,11 @@ gimp_text_options_set_property (GObject      *object,
 
     case PROP_FILL:
       options->fill_enable = g_value_get_boolean (value);
-      gimp_text_options_set_outline_style (options);
+      gimp_text_options_set_outline (options);
       break;
     case PROP_OUTLINE:
       options->outline_enable = g_value_get_boolean (value);
-      gimp_text_options_set_outline_style (options);
+      gimp_text_options_set_outline (options);
       break;
     case PROP_OUTLINE_STYLE:
       options->outline_style = g_value_get_enum (value);
@@ -905,6 +913,8 @@ gimp_text_options_gui (GimpToolOptions *tool_options)
                             editor, 1);
   gtk_widget_set_visible (editor, TRUE);
 
+  options->private->stroke_editor = GIMP_STROKE_EDITOR (editor);
+
   g_object_unref (stroke_options);
 
   expander = gimp_prop_expanding_frame_new (config, "outline-enable", _("Outline"),
@@ -1001,6 +1011,24 @@ gimp_text_options_gui (GimpToolOptions *tool_options)
   return main_vbox;
 }
 
+void
+gimp_text_options_update_gui (GimpTextOptions *options)
+{
+  const gchar *style;
+
+  g_return_if_fail (GIMP_IS_TEXT_OPTIONS (options));
+
+  if (options->private->stroke_editor)
+    {
+      if (options->outline_style == GIMP_CUSTOM_STYLE_PATTERN)
+        style = "pattern";
+      else
+        style = "color-fg";
+
+      gimp_stroke_editor_outline_style_changed (options->private->stroke_editor, style);
+    }
+}
+
 static void
 gimp_text_options_editor_dir_changed (GimpTextEditor  *editor,
                                       GimpTextOptions *options)
@@ -1037,7 +1065,7 @@ gimp_text_options_editor_notify_font (GimpTextOptions *options,
 }
 
 static void
-gimp_text_options_set_outline_style (GimpTextOptions *options)
+gimp_text_options_set_outline (GimpTextOptions *options)
 {
   g_return_if_fail (GIMP_IS_TEXT_OPTIONS (options));
 

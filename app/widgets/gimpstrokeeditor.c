@@ -42,6 +42,11 @@ enum
   PROP_RESOLUTION
 };
 
+struct _GimpStrokeEditorPrivate
+{
+  GimpFillEditor *fill_editor;
+};
+
 
 static void      gimp_stroke_editor_constructed  (GObject           *object);
 static void      gimp_stroke_editor_set_property (GObject           *object,
@@ -63,7 +68,8 @@ static void      gimp_stroke_editor_combo_fill   (GimpStrokeOptions *options,
                                                   GtkComboBox       *box);
 
 
-G_DEFINE_TYPE (GimpStrokeEditor, gimp_stroke_editor, GIMP_TYPE_FILL_EDITOR)
+G_DEFINE_TYPE_WITH_PRIVATE (GimpStrokeEditor, gimp_stroke_editor,
+                            GIMP_TYPE_FILL_EDITOR)
 
 #define parent_class gimp_stroke_editor_parent_class
 
@@ -95,6 +101,13 @@ gimp_stroke_editor_class_init (GimpStrokeEditorClass *klass)
 static void
 gimp_stroke_editor_init (GimpStrokeEditor *editor)
 {
+  GimpStrokeEditorPrivate *priv;
+
+  g_return_if_fail (GIMP_IS_STROKE_EDITOR (editor));
+
+  priv = gimp_stroke_editor_get_instance_private (editor);
+
+  editor->private = priv;
 }
 
 static void
@@ -122,6 +135,8 @@ gimp_stroke_editor_constructed (GObject *object)
   gimp_assert (GIMP_IS_STROKE_OPTIONS (fill_editor->options));
 
   options = GIMP_STROKE_OPTIONS (fill_editor->options);
+
+  editor->private->fill_editor = GIMP_FILL_EDITOR (fill_editor);
 
   box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
   gtk_box_pack_start (GTK_BOX (editor), box, FALSE, FALSE, 0);
@@ -414,4 +429,13 @@ gimp_stroke_editor_combo_fill (GimpStrokeOptions *options,
           gimp_dash_pattern_free (pattern);
         }
     }
+}
+
+void
+gimp_stroke_editor_outline_style_changed (GimpStrokeEditor *editor,
+                                          const gchar      *style)
+{
+  g_return_if_fail (GIMP_IS_STROKE_EDITOR (editor));
+
+  gimp_fill_editor_outline_style_changed (editor->private->fill_editor, style);
 }

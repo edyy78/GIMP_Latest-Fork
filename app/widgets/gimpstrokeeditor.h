@@ -31,13 +31,16 @@
 #define GIMP_STROKE_EDITOR_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_STROKE_EDITOR, GimpStrokeEditorClass))
 
 
-typedef struct _GimpStrokeEditorClass GimpStrokeEditorClass;
+typedef struct _GimpStrokeEditorClass   GimpStrokeEditorClass;
+typedef struct _GimpStrokeEditorPrivate GimpStrokeEditorPrivate;
 
 struct _GimpStrokeEditor
 {
-  GimpFillEditor  parent_instance;
+  GimpFillEditor           parent_instance;
 
-  gdouble         resolution;
+  gdouble                  resolution;
+
+  GimpStrokeEditorPrivate *private;
 };
 
 struct _GimpStrokeEditorClass
@@ -52,3 +55,7 @@ GtkWidget * gimp_stroke_editor_new      (GimpStrokeOptions *options,
                                          gdouble            resolution,
                                          gboolean           edit_context,
                                          gboolean           use_custom_style);
+
+void        gimp_stroke_editor_outline_style_changed
+                                        (GimpStrokeEditor  *editor,
+                                         const gchar       *style);
