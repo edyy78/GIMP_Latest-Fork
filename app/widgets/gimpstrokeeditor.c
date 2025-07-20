@@ -178,11 +178,16 @@ gimp_stroke_editor_constructed (GObject *object)
                             _("_Miter limit:"),
                             0.0, 0.5, scale, 2);
 
+  label = gtk_label_new (_("Dash pattern:"));
+  gtk_widget_set_halign (label, GTK_ALIGN_START);
+  gtk_grid_attach (GTK_GRID (grid), label, 0, row++, 1, 1);
+  gtk_widget_show (label);
+
   frame = gtk_frame_new (NULL);
   gtk_frame_set_shadow_type (GTK_FRAME (frame), GTK_SHADOW_IN);
-  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++,
-                            _("Dash pattern:"), 0.0, 0.5,
-                            frame, 2);
+  gtk_widget_set_halign (frame, GTK_ALIGN_FILL);
+  gtk_grid_attach (GTK_GRID (grid), frame, 0, row++, 3, 1);
+  gtk_widget_show (frame);
 
   box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
   gtk_container_add (GTK_CONTAINER (frame), box);
