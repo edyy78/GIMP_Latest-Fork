@@ -42,6 +42,7 @@ G_BEGIN_DECLS
  * @GIMP_ADD_MASK_SELECTION:      Selection
  * @GIMP_ADD_MASK_COPY:           Grayscale copy of layer
  * @GIMP_ADD_MASK_CHANNEL:        Channel
+ * @GIMP_ADD_MASK_COPY_OF:        Grayscale copy of another layer
  *
  * Modes of initialising a layer mask.
  **/
@@ -57,7 +58,8 @@ typedef enum
   GIMP_ADD_MASK_ALPHA_TRANSFER, /*< desc="_Transfer layer's alpha channel" >*/
   GIMP_ADD_MASK_SELECTION,      /*< desc="_Selection"                      >*/
   GIMP_ADD_MASK_COPY,           /*< desc="_Grayscale copy of layer"        >*/
-  GIMP_ADD_MASK_CHANNEL         /*< desc="C_hannel"                        >*/
+  GIMP_ADD_MASK_CHANNEL,        /*< desc="C_hannel"                        >*/
+  GIMP_ADD_MASK_COPY_OF         /*< desc="_Grayscale copy of another layer" >*/
 } GimpAddMaskType;
 
 

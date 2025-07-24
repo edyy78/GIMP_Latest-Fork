@@ -49,6 +49,7 @@ struct _LayerAddMaskDialog
   GList               *layers;
   GimpAddMaskType      add_mask_type;
   GimpChannel         *channel;
+  GimpLayer           *source_layer;
   gboolean             invert;
   GimpAddMaskCallback  callback;
   gpointer             user_data;
@@ -62,6 +63,11 @@ static void       layer_add_mask_dialog_response         (GtkWidget          *di
                                                           gint                response_id,
                                                           LayerAddMaskDialog *private);
 static gboolean   layer_add_mask_dialog_channel_selected (GimpContainerView  *view,
+                                                          GList              *viewables,
+                                                          GList              *paths,
+                                                          LayerAddMaskDialog *private);
+static gboolean
+layer_add_mask_dialog_source_layer_selected              (GimpContainerView  *view,
                                                           GList              *viewables,
                                                           GList              *paths,
                                                           LayerAddMaskDialog *private);
@@ -83,10 +89,12 @@ layer_add_mask_dialog_new (GList               *layers,
   GtkWidget          *vbox;
   GtkWidget          *frame;
   GtkWidget          *combo;
+  GtkWidget          *combo_source_layer;
   GtkWidget          *button;
   GimpImage          *image;
   GimpChannel        *channel;
   GList              *channels;
+  GimpLayer          *source_layer;
   gchar              *title;
   gchar              *desc;
   gint                n_layers = g_list_length (layers);
@@ -182,6 +190,21 @@ layer_add_mask_dialog_new (GList               *layers,
   gimp_container_view_select_item (GIMP_CONTAINER_VIEW (combo),
                                    GIMP_VIEWABLE (channel));
 
+  combo_source_layer = gimp_container_combo_box_new (gimp_image_get_layers (image),
+                                                     context,
+                                                     GIMP_VIEW_SIZE_SMALL, 1);
+  gimp_enum_radio_frame_add (GTK_FRAME (frame), combo_source_layer,
+                             GIMP_ADD_MASK_COPY_OF, TRUE);
+  gtk_widget_show (combo_source_layer);
+
+  g_signal_connect (combo_source_layer, "select-items",
+                    G_CALLBACK (layer_add_mask_dialog_source_layer_selected),
+                    private);
+
+  source_layer = GIMP_LAYER (gimp_container_get_first_child (gimp_image_get_layers (image)));
+  gimp_container_view_select_item (GIMP_CONTAINER_VIEW (combo_source_layer),
+                                   GIMP_VIEWABLE (source_layer));
+
   button = gtk_check_button_new_with_mnemonic (_("In_vert mask"));
   gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (button), private->invert);
   gtk_box_pack_end (GTK_BOX (vbox), button, FALSE, FALSE, 0);
@@ -220,11 +243,19 @@ layer_add_mask_dialog_response (GtkWidget          *dialog,
                                 _("Please select a channel first"));
           return;
         }
-
+      if (private->add_mask_type == GIMP_ADD_MASK_COPY_OF &&
+          ! private->source_layer)
+        {
+          gimp_message_literal (image->gimp,
+                                G_OBJECT (dialog), GIMP_MESSAGE_WARNING,
+                                _("Please select a source layer first"));
+          return;
+        }
       private->callback (dialog,
                          private->layers,
                          private->add_mask_type,
                          private->channel,
+                         private->source_layer,
                          private->invert,
                          private->user_data);
     }
@@ -243,6 +274,19 @@ layer_add_mask_dialog_channel_selected (GimpContainerView  *view,
   g_return_val_if_fail (g_list_length (viewables) < 2, FALSE);
 
   private->channel = viewables? GIMP_CHANNEL (viewables->data) : NULL;
+
+  return TRUE;
+}
+
+static gboolean
+layer_add_mask_dialog_source_layer_selected (GimpContainerView  *view,
+                                             GList              *viewables,
+                                             GList              *paths,
+                                             LayerAddMaskDialog *private)
+{
+  g_return_val_if_fail (g_list_length (viewables) < 2, FALSE);
+
+  private->source_layer = viewables? GIMP_LAYER (viewables->data) : NULL;
 
   return TRUE;
 }
