@@ -27,6 +27,7 @@
 #include "libgimpwidgets/gimpwidgets-private.h"
 
 #include "tools-types.h"
+#include "tool_manager.h"
 
 #include "config/gimpconfig-utils.h"
 
@@ -52,6 +53,7 @@
 #include "widgets/gimpviewablebox.h"
 #include "widgets/gimpwidgets-utils.h"
 
+#include "gimptexttool.h"
 #include "gimptextoptions.h"
 #include "gimptooloptions-gui.h"
 
@@ -97,6 +99,9 @@ enum
 struct _GimpTextOptionsPrivate
 {
   GimpStrokeEditor *stroke_editor;
+
+  /* List of toggles for bold, italic, underline and strikethrough */
+  GList            *toggles;
 };
 
 
@@ -141,6 +146,14 @@ static void  gimp_text_options_notify_text_color    (GimpText            *text,
                                                      GParamSpec          *pspec,
                                                      GimpContext         *context);
 static void  gimp_text_options_set_outline          (GimpTextOptions     *options);
+
+static GtkWidget *
+             gimp_text_options_create_toggle        (GimpTextOptions     *options,
+                                                     const gchar         *prop_name,
+                                                     const gchar         *icon_name,
+                                                     const gchar         *tooltip);
+static void  gimp_text_options_toggle_changed       (GtkToggleButton     *toggle,
+                                                     GimpTextOptions     *options);
 
 
 
@@ -835,6 +848,10 @@ gimp_text_options_gui (GimpToolOptions *tool_options)
                           options_vbox, "sensitive",
                           G_BINDING_SYNC_CREATE);
 
+  hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
+  gtk_box_pack_start (GTK_BOX (options_vbox), hbox, FALSE, FALSE, 0);
+  gtk_widget_show (hbox);
+
   hbox = gimp_prop_font_box_new (NULL, GIMP_CONTEXT (tool_options),
                                  _("Font"), 2,
                                  "font-view-type", "font-view-size");
@@ -956,6 +973,32 @@ gimp_text_options_gui (GimpToolOptions *tool_options)
   gimp_grid_attach_icon (GTK_GRID (grid), row++,
                          GIMP_ICON_FORMAT_TEXT_SPACING_LINE,
                          hbox, 2);
+
+  hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
+  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++,
+                            _("Style:"), 0.0, 0.5,
+                            hbox, 2);
+  gtk_box_pack_start (GTK_BOX (hbox), NULL, FALSE, FALSE, 0);
+
+  button = gimp_text_options_create_toggle (options, "bold",
+                                            GIMP_ICON_FORMAT_TEXT_BOLD, _("Bold"));
+  gtk_box_pack_start (GTK_BOX (hbox), button, FALSE, FALSE, 0);
+  gtk_widget_show (button);
+
+  button = gimp_text_options_create_toggle (options, "italic",
+                                            GIMP_ICON_FORMAT_TEXT_ITALIC, _("Italic"));
+  gtk_box_pack_start (GTK_BOX (hbox), button, FALSE, FALSE, 0);
+  gtk_widget_show (button);
+
+  button = gimp_text_options_create_toggle (options, "underline",
+                                            GIMP_ICON_FORMAT_TEXT_UNDERLINE, _("Underline"));
+  gtk_box_pack_start (GTK_BOX (hbox), button, FALSE, FALSE, 0);
+  gtk_widget_show (button);
+
+  button = gimp_text_options_create_toggle (options, "strikethrough",
+                                            GIMP_ICON_FORMAT_TEXT_STRIKETHROUGH, _("Strikethrough"));
+  gtk_box_pack_start (GTK_BOX (hbox), button, FALSE, FALSE, 0);
+  gtk_widget_show (button);
 
   combo = gimp_prop_enum_combo_box_new (config, "box-mode", 0, 0);
   gtk_widget_set_halign (combo, GTK_ALIGN_START);
@@ -1079,6 +1122,58 @@ gimp_text_options_set_outline (GimpTextOptions *options)
     options->outline = GIMP_TEXT_OUTLINE_NONE;
 }
 
+static GtkWidget *
+gimp_text_options_create_toggle (GimpTextOptions *options,
+                                 const gchar     *prop_name,
+                                 const gchar     *icon_name,
+                                 const gchar     *tooltip)
+{
+  GtkWidget *toggle;
+  GtkWidget *image;
+
+  toggle = gtk_toggle_button_new ();
+  gtk_widget_set_can_focus (toggle, FALSE);
+  gtk_widget_show (toggle);
+
+  gimp_help_set_help_data (toggle, tooltip, NULL);
+
+  image = gtk_image_new_from_icon_name (icon_name, GTK_ICON_SIZE_MENU);
+  gtk_container_add (GTK_CONTAINER (toggle), image);
+  gtk_widget_show (image);
+
+  g_object_set_data_full (G_OBJECT (toggle), "decoration-prop-name",
+                          g_strdup (prop_name), g_free);
+
+  options->private->toggles = g_list_append (options->private->toggles, toggle);
+
+  g_signal_connect_object (toggle, "toggled",
+                           G_CALLBACK (gimp_text_options_toggle_changed),
+                           options, 0);
+
+  return toggle;
+}
+
+static void
+gimp_text_options_toggle_changed (GtkToggleButton *toggle,
+                                  GimpTextOptions *options)
+{
+  Gimp        *gimp;
+  GimpTool    *tool;
+  const gchar *prop_name;
+
+  g_return_if_fail (GIMP_IS_TEXT_OPTIONS (options));
+
+  gimp = options->tool_options.tool_info->gimp;
+  tool = tool_manager_get_active (gimp);
+
+  prop_name = g_object_get_data (G_OBJECT (toggle), "decoration-prop-name");
+
+  if (gtk_toggle_button_get_active (toggle))
+    gimp_text_tool_tag_apply (tool, prop_name, TRUE);
+  else
+    gimp_text_tool_tag_apply (tool, prop_name, FALSE);
+}
+
 GtkWidget *
 gimp_text_options_editor_new (GtkWindow       *parent,
                               Gimp            *gimp,
@@ -1193,3 +1288,64 @@ gimp_text_options_deserialize_property (GimpConfig *object,
 
   return FALSE;
 }
+
+void
+gimp_text_options_update_toggles (GimpTextOptions *options,
+                                  GimpTextBuffer  *text_buffer)
+{
+  gboolean       vals[]  = { TRUE, TRUE, TRUE, TRUE };
+  const gchar   *names[] = { "bold", "italic", "underline", "strikethrough" };
+  GtkTextTag    *tags[4];
+  GtkTextBuffer *buffer;
+  GtkTextIter    start, end, iter;
+  GList         *list;
+  gint           i;
+
+  g_return_if_fail (GIMP_IS_TEXT_OPTIONS (options));
+  g_return_if_fail (GIMP_IS_TEXT_BUFFER (text_buffer));
+
+  buffer = GTK_TEXT_BUFFER (text_buffer);
+
+  tags[0] = text_buffer->bold_tag;
+  tags[1] = text_buffer->italic_tag;
+  tags[2] = text_buffer->underline_tag;
+  tags[3] = text_buffer->strikethrough_tag;
+
+  if (gtk_text_buffer_get_has_selection (buffer))
+    gtk_text_buffer_get_selection_bounds (buffer, &start, &end);
+  else
+    gtk_text_buffer_get_bounds (buffer, &start, &end);
+
+  for (iter = start;
+       gtk_text_iter_in_range (&iter, &start, &end);
+       gtk_text_iter_forward_cursor_position (&iter))
+    {
+      for (i = 0; i < 4; i++)
+        if (vals[i] &&
+            (! tags[i] ||
+             ! gtk_text_iter_has_tag (&iter, tags[i])))
+          vals[i] = FALSE;
+
+      for (i = 0; i < 4; i++)
+        if (vals[i])
+          break;
+      if (i == 4)
+        break;
+    }
+
+  for (list = options->private->toggles; list; list = list->next)
+    {
+      GtkToggleButton *tog  = GTK_TOGGLE_BUTTON (list->data);
+      const char      *prop = g_object_get_data (G_OBJECT (tog), "decoration-prop-name");
+
+      for (i = 0; i < 4; i++)
+        if (g_strcmp0 (prop, names[i]) == 0)
+          {
+            g_signal_handlers_block_by_func (tog, gimp_text_options_toggle_changed, options);
+            gtk_toggle_button_set_active (tog, vals[i]);
+            g_signal_handlers_unblock_by_func (tog, gimp_text_options_toggle_changed, options);
+            break;
+          }
+    }
+}
+

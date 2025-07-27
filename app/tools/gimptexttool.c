@@ -198,6 +198,8 @@ static void    gimp_text_tool_buffer_color_applied
                                                  GeglColor         *color,
                                                  GimpTextTool      *text_tool);
 
+static void    gimp_text_tool_tag_applied       (GimpTextTool      *text_tool);
+
 
 G_DEFINE_TYPE (GimpTextTool, gimp_text_tool, GIMP_TYPE_DRAW_TOOL)
 
@@ -308,6 +310,23 @@ gimp_text_tool_constructed (GObject *object)
                            "notify::empty",
                            G_CALLBACK (gimp_text_tool_fonts_async_set_empty_notify),
                            text_tool, 0);
+
+  g_signal_connect_data (text_tool->buffer, "changed",
+                         G_CALLBACK (gimp_text_tool_tag_applied),
+                         text_tool, 0,
+                         G_CONNECT_AFTER | G_CONNECT_SWAPPED);
+  g_signal_connect_data (text_tool->buffer, "apply-tag",
+                         G_CALLBACK (gimp_text_tool_tag_applied),
+                         text_tool, 0,
+                         G_CONNECT_AFTER | G_CONNECT_SWAPPED);
+  g_signal_connect_data (text_tool->buffer, "remove-tag",
+                         G_CALLBACK (gimp_text_tool_tag_applied),
+                         text_tool, 0,
+                         G_CONNECT_AFTER | G_CONNECT_SWAPPED);
+  g_signal_connect_data (text_tool->buffer, "mark-set",
+                         G_CALLBACK (gimp_text_tool_tag_applied),
+                         text_tool, 0,
+                         G_CONNECT_AFTER | G_CONNECT_SWAPPED);
 }
 
 static void
@@ -2010,6 +2029,19 @@ gimp_text_tool_buffer_color_applied (GimpTextBuffer *buffer,
   gimp_palettes_add_color_history (GIMP_TOOL (text_tool)->tool_info->gimp, color);
 }
 
+static void
+gimp_text_tool_tag_applied (GimpTextTool *text_tool)
+{
+  GimpTextOptions *options;
+  GimpTextBuffer  *buffer;
+
+  g_return_if_fail (GIMP_IS_TEXT_TOOL (text_tool));
+
+  options = GIMP_TEXT_TOOL_GET_OPTIONS (text_tool);
+  buffer  = text_tool->buffer;
+
+  gimp_text_options_update_toggles (options, buffer);
+}
 
 /*  public functions  */
 
@@ -2461,4 +2493,50 @@ gimp_text_tool_get_direction  (GimpTextTool *text_tool)
 {
   GimpTextOptions *options = GIMP_TEXT_TOOL_GET_OPTIONS (text_tool);
   return options->base_dir;
+}
+
+void
+gimp_text_tool_tag_apply (GimpTool    *tool,
+                          const gchar *prop_name,
+                          gboolean     apply)
+{
+  GimpTextTool   *text_tool;
+  GimpTextBuffer *text_buffer;
+  GtkTextBuffer  *buffer;
+  gboolean        has_selection;
+  GtkTextIter     start, end;
+  GtkTextTag     *tag;
+
+  g_return_if_fail (GIMP_IS_TOOL (tool));
+
+  text_tool   = GIMP_TEXT_TOOL (tool);
+  text_buffer = text_tool->buffer;
+  buffer      = GTK_TEXT_BUFFER (text_buffer);
+
+  if (g_strcmp0 (prop_name, "bold") == 0)
+    tag = text_buffer->bold_tag;
+  else if (g_strcmp0 (prop_name, "italic") == 0)
+    tag = text_buffer->italic_tag;
+  else if (g_strcmp0 (prop_name, "underline") == 0)
+    tag = text_buffer->underline_tag;
+  else if (g_strcmp0 (prop_name, "strikethrough") == 0)
+    tag = text_buffer->strikethrough_tag;
+  else
+    return;
+
+  has_selection = gimp_text_tool_get_has_text_selection (text_tool);
+
+  if (has_selection)
+    gtk_text_buffer_get_selection_bounds (buffer, &start, &end);
+  else
+    gtk_text_buffer_get_bounds (buffer, &start, &end);
+
+  gtk_text_buffer_begin_user_action (buffer);
+
+  if (apply)
+    gtk_text_buffer_apply_tag (buffer, tag, &start, &end);
+  else
+    gtk_text_buffer_remove_tag (buffer, tag, &start, &end);
+
+  gtk_text_buffer_end_user_action (buffer);
 }

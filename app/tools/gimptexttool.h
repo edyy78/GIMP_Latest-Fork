@@ -127,3 +127,7 @@ void       gimp_text_tool_clear_layout           (GimpTextTool  *text_tool);
 gboolean   gimp_text_tool_ensure_layout          (GimpTextTool  *text_tool);
 void       gimp_text_tool_apply                  (GimpTextTool  *text_tool,
                                                   gboolean       push_undo);
+
+void       gimp_text_tool_tag_apply              (GimpTool      *tool,
+                                                  const gchar   *prop_nam,
+                                                  gboolean       apply);

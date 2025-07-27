@@ -95,3 +95,6 @@ GtkWidget * gimp_text_options_editor_new   (GtkWindow       *parent,
                                             GimpTextBuffer  *text_buffer,
                                             gdouble          xres,
                                             gdouble          yres);
+
+void      gimp_text_options_update_toggles (GimpTextOptions *options,
+                                            GimpTextBuffer  *text_buffer);
