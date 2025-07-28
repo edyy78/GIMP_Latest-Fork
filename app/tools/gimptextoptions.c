@@ -848,10 +848,6 @@ gimp_text_options_gui (GimpToolOptions *tool_options)
                           options_vbox, "sensitive",
                           G_BINDING_SYNC_CREATE);
 
-  hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-  gtk_box_pack_start (GTK_BOX (options_vbox), hbox, FALSE, FALSE, 0);
-  gtk_widget_show (hbox);
-
   hbox = gimp_prop_font_box_new (NULL, GIMP_CONTEXT (tool_options),
                                  _("Font"), 2,
                                  "font-view-type", "font-view-size");
@@ -999,6 +995,14 @@ gimp_text_options_gui (GimpToolOptions *tool_options)
                                             GIMP_ICON_FORMAT_TEXT_STRIKETHROUGH, _("Strikethrough"));
   gtk_box_pack_start (GTK_BOX (hbox), button, FALSE, FALSE, 0);
   gtk_widget_show (button);
+
+  box = gimp_prop_enum_icon_box_new_multiprefix (config, "base-direction",
+                                                 "format-text-direction", "gimp-text-dir",
+                                                 NULL);
+  gtk_widget_set_halign (box, GTK_ALIGN_START);
+  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++,
+                            _("Base direction:"), 0.0, 0.5,
+                            box, 2);
 
   combo = gimp_prop_enum_combo_box_new (config, "box-mode", 0, 0);
   gtk_widget_set_halign (combo, GTK_ALIGN_START);

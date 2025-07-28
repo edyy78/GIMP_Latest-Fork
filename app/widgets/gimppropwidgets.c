@@ -63,6 +63,8 @@
 static void         set_param_spec     (GObject     *object,
                                         GtkWidget   *widget,
                                         GParamSpec  *param_spec);
+static void         set_radio_spec     (GObject    *object,
+                                        GParamSpec *param_spec);
 static GParamSpec * get_param_spec     (GObject     *object);
 
 static GParamSpec * find_param_spec    (GObject     *object,
@@ -332,6 +334,182 @@ gimp_prop_layer_mode_box_new (GObject              *config,
   return box;
 }
 
+/*****************/
+/* enum icon box */
+/*****************/
+static GtkWidget * gimp_enum_icon_box_new_multiprefix (GType            enum_type,
+                                                       gint             minimum,
+                                                       gint             maximum,
+                                                       gchar          **icon_prefix,
+                                                       GtkIconSize      icon_size,
+                                                       GCallback        callback,
+                                                       gpointer         callback_data,
+                                                       GDestroyNotify   callback_data_destroy,
+                                                       GtkWidget      **first_button);
+
+GtkWidget *
+gimp_prop_enum_icon_box_new_multiprefix (GObject      *config,
+                                         const gchar  *property_name,
+                                         const gchar  *first_icon_prefix,
+                                         ...)
+{
+  const gchar *prefix;
+  guint        count;
+  va_list      args;
+  gchar      **prefix_list;
+  GParamSpec *param_spec;
+  GtkWidget  *box;
+  GtkWidget  *button;
+  gint        value;
+  GEnumClass *enum_class;
+
+  g_return_val_if_fail (G_IS_OBJECT (config), NULL);
+  g_return_val_if_fail (property_name != NULL, NULL);
+
+  va_start (args, first_icon_prefix);
+  count = 1;
+  while (va_arg (args, const gchar *) != NULL)
+    count++;
+  va_end (args);
+
+  prefix_list = g_new0 (gchar *, count + 1);
+
+  va_start (args, first_icon_prefix);
+  prefix_list[0] = g_strdup (first_icon_prefix);
+  for (guint i = 1; i < count; i++)
+    {
+      prefix = va_arg (args, const gchar *);
+      prefix_list[i] = g_strdup (prefix);
+    }
+  va_end (args);
+
+  param_spec = check_param_spec_w (config, property_name,
+                                   G_TYPE_PARAM_ENUM, G_STRFUNC);
+  if (! param_spec)
+    return NULL;
+
+  g_object_get (config,
+                property_name, &value,
+                NULL);
+
+  enum_class = g_type_class_ref (param_spec->value_type);
+
+  box = gimp_enum_icon_box_new_multiprefix (param_spec->value_type,
+                                            enum_class->minimum,
+                                            enum_class->maximum,
+                                            prefix_list,
+                                            GTK_ICON_SIZE_MENU,
+                                            G_CALLBACK (gimp_prop_radio_button_callback),
+                                            config, NULL,
+                                            &button);
+
+  gimp_int_radio_group_set_active (GTK_RADIO_BUTTON (button), value);
+
+  set_radio_spec (G_OBJECT (button), param_spec);
+
+  connect_notify (config, property_name,
+                  G_CALLBACK (gimp_prop_radio_button_notify),
+                  button);
+
+  gimp_widget_set_bound_property (box, config, property_name);
+
+  gtk_widget_show (box);
+
+  return box;
+}
+
+static GtkWidget *
+gimp_enum_icon_box_new_multiprefix (GType            enum_type,
+                                    gint             minimum,
+                                    gint             maximum,
+                                    gchar          **icon_prefix,
+                                    GtkIconSize      icon_size,
+                                    GCallback        callback,
+                                    gpointer         callback_data,
+                                    GDestroyNotify   callback_data_destroy,
+                                    GtkWidget      **first_button)
+{
+  GtkWidget  *hbox;
+  GtkWidget  *button;
+  GtkWidget  *image;
+  GEnumClass *enum_class;
+  GEnumValue *value;
+  gchar      *icon_name;
+  GSList     *group = NULL;
+
+  g_return_val_if_fail (G_TYPE_IS_ENUM (enum_type), NULL);
+  g_return_val_if_fail (icon_prefix != NULL, NULL);
+
+  enum_class = g_type_class_ref (enum_type);
+
+  hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
+  g_object_weak_ref (G_OBJECT (hbox),
+                     (GWeakNotify) g_type_class_unref, enum_class);
+
+  if (callback_data_destroy)
+    g_object_weak_ref (G_OBJECT (hbox),
+                       (GWeakNotify) callback_data_destroy, callback_data);
+
+  if (first_button)
+    *first_button = NULL;
+
+  for (value = enum_class->values; value->value_name; value++)
+    {
+      if (value->value < minimum || value->value > maximum)
+        continue;
+
+      button = gtk_radio_button_new (group);
+
+      gtk_button_set_relief (GTK_BUTTON (button), GTK_RELIEF_NONE);
+      gtk_toggle_button_set_mode (GTK_TOGGLE_BUTTON (button), FALSE);
+
+      if (first_button && *first_button == NULL)
+        *first_button = button;
+
+      for (guint i = 0; icon_prefix[i] != NULL; i++)
+        {
+          icon_name = g_strconcat (icon_prefix[i], "-", value->value_nick, NULL);
+
+          if (gtk_icon_theme_has_icon (gtk_icon_theme_get_default (),
+                                       icon_name))
+            {
+              image = gtk_image_new_from_icon_name (icon_name, icon_size);
+              g_free (icon_name);
+              break;
+            }
+
+          g_free (icon_name);
+          /* If no prefixes match, request a non‐existent icon name
+           * so that GTK shows the “broken” icon placeholder
+           */
+          image = gtk_image_new_from_icon_name ("broken-icon", icon_size);
+        }
+
+      if (image)
+        {
+          gtk_container_add (GTK_CONTAINER (button), image);
+          gtk_widget_show (image);
+        }
+
+      gimp_help_set_help_data (button,
+                               gimp_enum_value_get_desc (enum_class, value),
+                               NULL);
+
+      group = gtk_radio_button_get_group (GTK_RADIO_BUTTON (button));
+      gtk_box_pack_start (GTK_BOX (hbox), button, FALSE, FALSE, 0);
+      gtk_widget_show (button);
+
+      g_object_set_data (G_OBJECT (button), "gimp-item-data",
+                         GINT_TO_POINTER (value->value));
+
+      if (callback)
+        g_signal_connect (button, "toggled",
+                          callback,
+                          callback_data);
+    }
+
+  return hbox;
+}
 
 /******************/
 /*  color button  */
@@ -1866,6 +2044,20 @@ set_param_spec (GObject     *object,
 
       if (blurb)
         gimp_help_set_help_data (widget, blurb, NULL);
+    }
+}
+
+static void
+set_radio_spec (GObject    *object,
+                GParamSpec *param_spec)
+{
+  GSList *list;
+
+  for (list = gtk_radio_button_get_group (GTK_RADIO_BUTTON (object));
+       list;
+       list = g_slist_next (list))
+    {
+      set_param_spec (list->data, NULL, param_spec);
     }
 }
 

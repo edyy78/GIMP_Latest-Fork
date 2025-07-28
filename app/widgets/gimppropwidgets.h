@@ -43,6 +43,12 @@ GtkWidget * gimp_prop_layer_mode_box_new    (GObject       *config,
                                              const gchar   *property_name,
                                              GimpLayerModeContext  context);
 
+GtkWidget * gimp_prop_enum_icon_box_new_multiprefix
+                                            (GObject      *config,
+                                             const gchar  *property_name,
+                                             const gchar  *first_icon_prefix,
+                                             ...); G_GNUC_NULL_TERMINATED
+
 
 /*  GeglParamColor  */
 
