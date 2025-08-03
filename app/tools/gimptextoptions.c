@@ -40,9 +40,10 @@
 #include "core/gimptoolinfo.h"
 #include "core/gimpviewable.h"
 
-#include "text/gimptext.h"
+#include "menus/menus.h"
 
 #include "text/gimpfont.h"
+#include "text/gimptext.h"
 
 #include "widgets/gimpcolorpanel.h"
 #include "widgets/gimpmenufactory.h"
@@ -50,6 +51,7 @@
 #include "widgets/gimpstrokeeditor.h"
 #include "widgets/gimptextbuffer.h"
 #include "widgets/gimptexteditor.h"
+#include "widgets/gimpuimanager.h"
 #include "widgets/gimpviewablebox.h"
 #include "widgets/gimpwidgets-utils.h"
 
@@ -153,6 +155,8 @@ static GtkWidget *
                                                      const gchar         *icon_name,
                                                      const gchar         *tooltip);
 static void  gimp_text_options_toggle_changed       (GtkToggleButton     *toggle,
+                                                     GimpTextOptions     *options);
+static void  gimp_text_options_open_gegl_styles     (GtkButton           *button,
                                                      GimpTextOptions     *options);
 
 
@@ -934,6 +938,17 @@ gimp_text_options_gui (GimpToolOptions *tool_options)
                                             outline_grid, NULL);
   gtk_box_pack_start (GTK_BOX (options_vbox), expander, FALSE, FALSE, 0);
 
+  button = gtk_button_new_with_label (_("Text Styling"));
+  gtk_widget_set_tooltip_text (button,
+                               _("Open the GEGL styles dialog to create or edit text styles"));
+  gtk_widget_set_halign (button, GTK_ALIGN_FILL);
+  gtk_box_pack_start (GTK_BOX (options_vbox), button, FALSE, FALSE, 0);
+  gtk_widget_show (button);
+
+  g_signal_connect (button, "clicked",
+                    G_CALLBACK (gimp_text_options_open_gegl_styles),
+                    options);
+
   grid = gtk_grid_new ();
   gtk_grid_set_column_spacing (GTK_GRID (grid), 2);
   gtk_grid_set_row_spacing (GTK_GRID (grid), 2);
@@ -1176,6 +1191,21 @@ gimp_text_options_toggle_changed (GtkToggleButton *toggle,
     gimp_text_tool_tag_apply (tool, prop_name, TRUE);
   else
     gimp_text_tool_tag_apply (tool, prop_name, FALSE);
+}
+
+static void
+gimp_text_options_open_gegl_styles (GtkButton       *button,
+                                    GimpTextOptions *options)
+{
+  Gimp *gimp;
+
+  g_return_if_fail (GIMP_IS_TEXT_OPTIONS (options));
+
+  gimp = options->tool_options.tool_info->gimp;
+
+  gimp_ui_manager_activate_action (menus_get_image_manager_singleton (gimp),
+                                   "filters",
+                                   "filters-gegl-styles");
 }
 
 GtkWidget *
