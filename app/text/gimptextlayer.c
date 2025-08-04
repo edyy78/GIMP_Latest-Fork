@@ -626,15 +626,19 @@ gimp_text_layer_text_changed (GimpTextLayer *layer)
 
   if (layer->text->box_mode == GIMP_TEXT_BOX_DYNAMIC)
     {
-      gint                old_width;
-      gint                new_width;
-      GimpItem           *item         = GIMP_ITEM (layer);
-      GimpTextDirection   old_base_dir = layer->private->base_dir;
-      GimpTextDirection   new_base_dir = layer->text->base_dir;
+      gint                  old_width;
+      gint                  new_width;
+      gint                  delta;
+      GimpItem             *item         = GIMP_ITEM (layer);
+      GimpTextDirection     old_base_dir = layer->private->base_dir;
+      GimpTextDirection     new_base_dir = layer->text->base_dir;
+      GimpTextJustification justify      = layer->text->justify;
 
       old_width = gimp_item_get_width (item);
       gimp_text_layer_render (layer);
       new_width = gimp_item_get_width (item);
+
+      delta = new_width - old_width;
 
       if (old_base_dir != new_base_dir)
         {
@@ -677,11 +681,21 @@ gimp_text_layer_text_changed (GimpTextLayer *layer)
               break;
             }
         }
-      else if ((new_base_dir == GIMP_TEXT_DIRECTION_TTB_RTL ||
-              new_base_dir == GIMP_TEXT_DIRECTION_TTB_RTL_UPRIGHT))
+
+      if (delta != 0)
         {
-          if (old_width != new_width)
-            gimp_item_translate (item, old_width - new_width, 0, FALSE);
+          switch (justify)
+            {
+            case GIMP_TEXT_JUSTIFY_RIGHT:
+                gimp_item_translate (item, -delta, 0, FALSE);
+                break;
+            case GIMP_TEXT_JUSTIFY_CENTER:
+                gimp_item_translate (item, (gdouble) -delta / 2, 0, FALSE);
+                break;
+            case GIMP_TEXT_JUSTIFY_LEFT:
+            default:
+                break;
+            }
         }
     }
   else
