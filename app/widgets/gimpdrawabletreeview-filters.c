@@ -38,6 +38,7 @@
 #include "core/gimpdrawable.h"
 #include "core/gimpdrawable-filters.h"
 #include "core/gimpdrawablefilter.h"
+#include "core/gimpdrawablefilterundo.h"
 #include "core/gimplist.h"
 #include "core/gimpimage.h"
 #include "core/gimpimage-undo.h"
@@ -591,14 +592,40 @@ gimp_drawable_filters_editor_view_visible_cell_toggled (GtkCellRendererToggle *t
       if (GIMP_IS_DRAWABLE_FILTER (filter))
         {
           GimpDrawable *drawable;
+          GimpImage    *image;
+          GimpContext  *context;
           gboolean      active;
+          GimpUndo     *undo;
+          gboolean      push_undo = TRUE;
 
           g_object_get (toggle,
                         "active", &active,
                         NULL);
 
           drawable = gimp_drawable_filter_get_drawable (filter);
+          image    = gimp_item_get_image (GIMP_ITEM (drawable));
+          context  = gimp_container_view_get_context (GIMP_CONTAINER_VIEW (view));
+
+
+          undo = gimp_image_undo_can_compress(image,
+                                              GIMP_TYPE_DRAWABLE_FILTER_UNDO,
+                                              GIMP_UNDO_FILTER_VISIBILITY);
+
+          if (undo != NULL && GIMP_DRAWABLE_FILTER_UNDO (undo)->filter == filter)
+            {
+              push_undo = FALSE;
+            }
+          else
+           {
+              gimp_image_undo_push_filter_visibility (image,
+                                                      _("Effect visibility"),
+                                                      drawable,
+                                                      filter);
+           }
           gimp_filter_set_active (GIMP_FILTER (filter), ! active);
+
+          if (! push_undo)
+            gimp_undo_refresh_preview (undo, context);
 
           gimp_drawable_update (drawable, 0, 0, -1, -1);
           gimp_image_flush (gimp_item_get_image (GIMP_ITEM (drawable)));
@@ -655,24 +682,75 @@ gimp_drawable_filters_editor_visible_all_toggled (GtkWidget            *widget,
                                                   GimpDrawableTreeView *view)
 {
   GimpDrawableTreeViewFiltersEditor *editor = view->editor;
+  GimpImage                         *image;
   GimpContainer                     *filters;
   GList                             *list;
+  GList                             *iter;
+  gint                               n_filters = 0;
   gboolean                           visible;
+  GimpUndo                          *undo;
 
   visible = gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (widget));
 
+  image   = gimp_item_tree_view_get_image (GIMP_ITEM_TREE_VIEW (view));
   filters = gimp_drawable_get_filters (editor->drawable);
+  list    = GIMP_LIST (filters)->queue->head;
 
-  for (list = GIMP_LIST (filters)->queue->head;
-       list;
-       list = g_list_next (list))
+  undo = gimp_drawable_filter_undo_can_compress_visibility (image, list);
+
+  for (iter = list; iter; iter = g_list_next (iter))
     {
-      if (GIMP_IS_DRAWABLE_FILTER (list->data))
+      if (GIMP_IS_DRAWABLE_FILTER (iter->data) &&
+          visible != gimp_filter_get_active (GIMP_FILTER (iter->data)))
         {
-          GimpFilter *filter = list->data;
+          n_filters++;
+        }
+    }
+
+  if (n_filters <= 0)
+    return;
+
+  if (undo == NULL)
+    {
+      gimp_image_undo_group_start (image,
+                                  GIMP_UNDO_GROUP_FILTER_VISIBILITY,
+                                  "Effects visibility");
+    }
+
+  for (iter = list; iter; iter = g_list_next (iter))
+    {
+      if (GIMP_IS_DRAWABLE_FILTER (iter->data))
+        {
+          GimpFilter         *filter  = iter->data;
+          GimpDrawableFilter *dfilter = iter->data;
+
+          /**
+           * Undos are pushed for every filters, even if they weren't
+           * actually toggled, so that the undo group can be compressed with
+           * subsequent toggles.
+           */
+          if (undo == NULL)
+            {
+              gimp_image_undo_push_filter_visibility (image,
+                                                      _("Effect visibility"),
+                                                      editor->drawable,
+                                                      dfilter);
+            }
 
           gimp_filter_set_active (filter, visible);
         }
+    }
+
+  if (undo == NULL)
+    {
+      gimp_image_undo_group_end (image);
+    }
+  else
+    {
+      GimpContext *context;
+
+      context = gimp_container_view_get_context (GIMP_CONTAINER_VIEW (view));
+      gimp_undo_refresh_preview (undo, context);
     }
 
   gimp_drawable_update (editor->drawable, 0, 0, -1, -1);

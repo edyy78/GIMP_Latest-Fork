@@ -37,6 +37,7 @@ struct _GimpDrawableFilterUndo
 
   GimpDrawableFilter    *filter;
   gint                   row_index;
+  gboolean               active;
 
   GeglNode              *node;
   gdouble                opacity;
@@ -53,4 +54,7 @@ struct _GimpDrawableFilterUndoClass
 };
 
 
-GType   gimp_drawable_filter_undo_get_type (void) G_GNUC_CONST;
+GType      gimp_drawable_filter_undo_get_type (void) G_GNUC_CONST;
+
+GimpUndo * gimp_drawable_filter_undo_can_compress_visibility (GimpImage *image,
+                                                              GList     *filter_list);
