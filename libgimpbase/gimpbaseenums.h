@@ -365,6 +365,7 @@ typedef enum
  * @GIMP_FILL_BACKGROUND:         Background color
  * @GIMP_FILL_CIELAB_MIDDLE_GRAY: Middle Gray (CIELAB)
  * @GIMP_FILL_WHITE:              White
+ * @GIMP_FILL_BLACK:              Black
  * @GIMP_FILL_TRANSPARENT:        Transparency
  * @GIMP_FILL_PATTERN:            Pattern
  *
@@ -380,6 +381,7 @@ typedef enum
   GIMP_FILL_BACKGROUND,         /*< desc="Background color" >*/
   GIMP_FILL_CIELAB_MIDDLE_GRAY, /*< desc="Middle Gray (CIELAB)" >*/
   GIMP_FILL_WHITE,              /*< desc="White"            >*/
+  GIMP_FILL_BLACK,              /*< desc="Black"            >*/
   GIMP_FILL_TRANSPARENT,        /*< desc="Transparency"     >*/
   GIMP_FILL_PATTERN             /*< desc="Pattern"          >*/
 } GimpFillType;
