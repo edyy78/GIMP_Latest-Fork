@@ -61,6 +61,10 @@
  * transparency and opacity, but layer modes are not supported.
  */
 
+/* Most of the jpeg compression support came from Gimp's file-jpeg plug-in.
+ * Check it for reference.
+ * */
+
 /* Changelog
  *
  * April 29, 2009 | Barak Itkin <lightningismyname@gmail.com>
@@ -103,10 +107,14 @@
 #include "config.h"
 
 #include <errno.h>
+#include <setjmp.h>
 
 #include <glib/gstdio.h>
 #include <cairo-pdf.h>
 #include <pango/pangocairo.h>
+
+#include <jpeglib.h>
+#include <jerror.h>
 
 #include <libgimp/gimp.h>
 #include <libgimp/gimpui.h>
@@ -172,6 +180,18 @@ struct _PdfClass
 {
   GimpPlugInClass parent_class;
 };
+
+typedef struct my_jpeg_error_mgr
+{
+  struct jpeg_error_mgr pub;
+
+#ifdef __ia64__
+  /* We pad. See bug #138357 for details. */
+  long double           dummy;
+#endif
+
+  jmp_buf               setjmp_buffer;
+} * my_jpeg_error_ptr;
 
 
 #define PDF_TYPE  (pdf_get_type ())
@@ -392,6 +412,18 @@ pdf_create_procedure (GimpPlugIn  *plug_in,
                                              "layer has an alpha channel"),
                                            TRUE,
                                            G_PARAM_READWRITE);
+
+      gimp_procedure_add_boolean_argument (procedure, "jpeg-compress",
+          _("Compress images to _JPEG"),
+          _("Compress images to JPEG"),
+          FALSE,
+          G_PARAM_READWRITE);
+
+      gimp_procedure_add_double_argument (procedure, "jpeg-quality",
+          _("JPEG _Quality"),
+          _("Quality of the exported images"),
+          0.0, 1.0, 0.9,
+          G_PARAM_READWRITE);
     }
   else if (! strcmp (name, EXPORT_MULTI_PROC))
     {
@@ -950,6 +982,10 @@ gui_single (GimpProcedure       *procedure,
 
   gtk_widget_set_sensitive (widget, n_layers > 1);
 
+  dialog_props = g_list_prepend (dialog_props, "jpeg-quality");
+
+  dialog_props = g_list_prepend (dialog_props, "jpeg-compress");
+
   /* Warning for missing fonts (non-embeddable with rasterization
    * possible).
    */
@@ -1020,6 +1056,201 @@ gui_single (GimpProcedure       *procedure,
 
   return run;
 }
+
+/******************************************************/
+/* JPEG Compression                                   */
+/******************************************************/
+static void
+cairo_jpeg_free(void *ptr)
+{
+  g_free(ptr);
+}
+
+static void
+my_error_exit (j_common_ptr cinfo)
+{
+  my_jpeg_error_ptr myerr = (my_jpeg_error_ptr) cinfo->err;
+
+  /* Always display the message. */
+  (*cinfo->err->output_message) (cinfo);
+
+  /* Return control to the setjmp point */
+  longjmp (myerr->setjmp_buffer, 1);
+}
+
+static gboolean
+jpeg_compress (GimpDrawable     *drawable,
+               gdouble           quality,
+               cairo_surface_t **surface,
+               GError          **error)
+{
+  static struct jpeg_compress_struct  cinfo;
+  static struct my_jpeg_error_mgr     jerr;
+
+  unsigned char               *jpeg_buffer = NULL;
+  unsigned long                jpeg_buffer_size = 0;
+  gint                         final_quality;
+  gint                         rowstride = 0, yend = 0;
+  guchar                      *data = NULL;
+  guchar                      *src = NULL;
+  GimpImageType                drawable_type;
+  const gchar                 *encoding = "";
+  GeglBuffer                  *src_buffer;
+  const Babl                  *format;
+  const Babl                  *space;
+  cairo_status_t               status;
+  gint                         image_width;
+  gint                         image_height;
+
+  final_quality = (gint) (quality * 100.0 + 0.5);
+
+  drawable_type = gimp_drawable_type (drawable);
+  src_buffer = gimp_drawable_get_buffer (drawable);
+  space = gimp_drawable_get_format (drawable);
+
+  memset (&cinfo, 0, sizeof(cinfo));
+  cinfo.err = jpeg_std_error (&jerr.pub);
+  jerr.pub.error_exit = my_error_exit;
+
+  if (setjmp (jerr.setjmp_buffer))
+    {
+      /* If we get here, the JPEG code has signaled an error. */
+error_handler:
+      jpeg_destroy_compress (&cinfo);
+
+      if (src_buffer)
+        g_object_unref (src_buffer);
+
+      if (jpeg_buffer)
+        g_free (jpeg_buffer);
+
+      if (data)
+        g_free (data);
+
+      if (*surface)
+        cairo_surface_destroy(*surface);
+
+      return FALSE;
+    }
+
+  jpeg_create_compress (&cinfo);
+
+  jpeg_buffer_size = 0x1 << 23; /* 8 megabytes */
+  jpeg_buffer = g_malloc (sizeof(unsigned char) * jpeg_buffer_size);
+  if (!jpeg_buffer)
+    goto error_handler;
+  memset (jpeg_buffer, 0, jpeg_buffer_size);
+  jpeg_mem_dest (&cinfo, &jpeg_buffer, &jpeg_buffer_size);
+
+  switch (drawable_type)
+    {
+    case GIMP_RGB_IMAGE:
+    case GIMP_RGBA_IMAGE:
+      cinfo.input_components = 3;
+      cinfo.in_color_space = JCS_RGB;
+      encoding = "R'G'B' u8";
+      break;
+    case GIMP_GRAY_IMAGE:
+    case GIMP_GRAYA_IMAGE:
+      cinfo.input_components = 1;
+      cinfo.in_color_space = JCS_GRAYSCALE;
+      encoding = "Y' u8";
+      break;
+    case GIMP_INDEXED_IMAGE:
+    default:
+      g_free (jpeg_buffer);
+      return FALSE;
+      break;
+    }
+
+  format = babl_format_with_space (encoding, space);
+
+  cinfo.image_width  = image_width  = gegl_buffer_get_width (src_buffer);
+  cinfo.image_height = image_height = gegl_buffer_get_height (src_buffer);
+
+  jpeg_set_defaults (&cinfo);
+  jpeg_set_quality (&cinfo, final_quality, TRUE);
+
+  /* start compression */
+  jpeg_start_compress (&cinfo, FALSE);
+
+  /* Compression: while (scan lines remain to be written) */
+  /*                    jpeg_write_scanlines(...); */
+
+  /* Here we use the library's state variable cinfo.next_scanline as the
+   * loop counter, so that we don't have to keep track ourselves.
+   * To keep things simple, we pass one scanline per call; you can pass
+   * more if you wish, though.
+   */
+  /* JSAMPLEs per row in image_buffer */
+  rowstride = cinfo.input_components * cinfo.image_width;
+  data = g_new (guchar, rowstride * gimp_tile_height ());
+
+  /* fault if cinfo.next_scanline isn't initially a multiple of
+   * gimp_tile_height */
+  src = NULL;
+
+  /* iterate over the buffer and compress */
+  while (cinfo.next_scanline < cinfo.image_height)
+    {
+      if ((cinfo.next_scanline % gimp_tile_height ()) == 0)
+        {
+          yend = cinfo.next_scanline + gimp_tile_height ();
+          yend = MIN (yend, cinfo.image_height);
+          gegl_buffer_get (src_buffer,
+                           GEGL_RECTANGLE (0, cinfo.next_scanline,
+                                           cinfo.image_width,
+                                           (yend - cinfo.next_scanline)),
+                           1.0,
+                           format,
+                           data,
+                           GEGL_AUTO_ROWSTRIDE,
+                           GEGL_ABYSS_NONE);
+          src = data;
+        }
+
+      jpeg_write_scanlines (&cinfo, (JSAMPARRAY) &src, 1);
+      src += rowstride;
+    }
+
+  /* finish compression */
+  jpeg_finish_compress (&cinfo);
+  jpeg_destroy_compress (&cinfo);
+
+  /* free temporary resources */
+  g_free (data);
+  g_object_unref (src_buffer);
+
+  /* resize jpeg_buffer to actual compressed size */
+  jpeg_buffer = g_realloc (jpeg_buffer, jpeg_buffer_size);
+
+  *surface = cairo_image_surface_create_for_data (NULL, CAIRO_FORMAT_RGB24, image_width, image_height, cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, cinfo.image_width));
+  status = cairo_surface_status (*surface);
+  if (status != CAIRO_STATUS_SUCCESS)
+    {
+      g_set_error (error,
+                   GIMP_PLUGIN_PDF_EXPORT_ERROR,
+                   GIMP_PLUGIN_PDF_EXPORT_ERROR_FAILED,
+                   "Cairo error: %s",
+                   cairo_status_to_string (status));
+      goto error_handler;
+    }
+
+  status = cairo_surface_set_mime_data (*surface, CAIRO_MIME_TYPE_JPEG, jpeg_buffer, jpeg_buffer_size, cairo_jpeg_free, jpeg_buffer);
+  if (status != CAIRO_STATUS_SUCCESS)
+    {
+      g_set_error (error,
+                   GIMP_PLUGIN_PDF_EXPORT_ERROR,
+                   GIMP_PLUGIN_PDF_EXPORT_ERROR_FAILED,
+                   "Cairo error: %s",
+                   cairo_status_to_string (status));
+      cairo_surface_destroy(*surface);
+      goto error_handler;
+    }
+
+  return TRUE;
+}
+
 
 /* The main GUI function for saving multi-paged PDFs */
 
@@ -1826,10 +2057,14 @@ draw_layer (GimpLayer           **layers,
   gboolean   reverse_order   = FALSE;
   gboolean   root_layers_only;
   gboolean   convert_text;
+  gboolean   compress = TRUE;
+  gdouble    jpeg_quality = 0.9;
 
   g_object_get (config,
                 "vectorize",           &vectorize,
                 "ignore-hidden",       &ignore_hidden,
+                "jpeg-compress",       &compress,
+                "jpeg-quality",        &jpeg_quality,
                 NULL);
 
   if (single_image)
@@ -1926,10 +2161,19 @@ draw_layer (GimpLayer           **layers,
             }
           else
             {
-              cairo_surface_t *layer_image;
+              cairo_surface_t *layer_image = NULL;
 
-              layer_image = get_cairo_surface (GIMP_DRAWABLE (layer), FALSE,
-                                               error);
+              if (compress)
+                compress = jpeg_compress (GIMP_DRAWABLE (layer), jpeg_quality,
+                                          &layer_image, error);
+
+              /* atm if jpeg compress returns an error, fallback to the uncompressed format */
+              if (!compress)
+                {
+                  *error = NULL;
+                  layer_image = get_cairo_surface (GIMP_DRAWABLE (layer), FALSE,
+                                                   error);
+                }
 
               if (*error)
                 return FALSE;

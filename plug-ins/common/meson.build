@@ -122,9 +122,9 @@ if libmng.found()
   }
 endif
 
-if cairopdf.found()
+if cairopdf.found() and libjpeg.found()
   common_plugins_list += { 'name': 'file-pdf-export',
-    'deps': [ gtk3, gegl, gdk_pixbuf, poppler, cairo, cairopdf ],
+    'deps': [ gtk3, gegl, gdk_pixbuf, poppler, cairo, cairopdf, libjpeg, ],
   }
 endif
 
