@@ -35,9 +35,9 @@
  *    This procedures is more advanced, and it allows the creation of multiple
  *    paged pdf files. It will be located in File/Create/Multiple page PDF...
  *
- * It was suggested that file-pdf-export-multi will be removed from the UI as it
- * does not match the product vision (GIMP isn't a program for editing multiple
- * paged documents).
+ * file-pdf-export-multi is currently disabled behind a preprocessor flag
+ * because it was suggested it does not match the product vision (GIMP isn't a
+ * program for editing multiple paged documents).
  */
 
 /* Known Issues (except for the coding style issues):
