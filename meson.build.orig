@@ -815,11 +815,6 @@ foreach lib : webp_libs
   webp_found = webp_found and  lib.found()
 endforeach
 
-have_image_scanner = get_option('image-scanner')
-if platform_osx or platform_windows
-    have_image_scanner = false
-endif
-
 libheif_minver = '1.15.1'
 libheif = dependency('libheif', version: '>='+libheif_minver,
   required: get_option('heif')
@@ -2108,7 +2103,6 @@ final_message = [
 '''  MNG:                 @0@'''.format(libmng.found()),
 '''  OpenEXR:             @0@'''.format(openexr.found()),
 '''  WebP:                @0@'''.format(webp_found),
-'''  Image Scanner:       @0@'''.format(have_image_scanner),
 '''  HEIC:                import: @0@ - export: @1@'''
                                 .format(can_import_heic, can_export_heic),
 '''  AVIF:                import: @0@ - export: @1@'''
