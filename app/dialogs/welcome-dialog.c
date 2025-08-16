@@ -1536,9 +1536,11 @@ welcome_add_link (GtkGrid     *grid,
 
   ++(*row);
 
+#ifndef PLATFORM_OSX
   icon = gtk_label_new (emoji);
   gtk_box_pack_start (GTK_BOX (hbox), icon, FALSE, FALSE, 0);
   gtk_widget_set_visible (icon, TRUE);
+#endif
 
   button = gtk_link_button_new_with_label (link, title);
   gtk_box_pack_start (GTK_BOX (hbox), button, FALSE, FALSE, 0);
