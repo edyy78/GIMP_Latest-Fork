@@ -44,6 +44,7 @@
 
 #include "file/file-open.h"
 
+#include "widgets/gimpclipboard.h"
 #include "widgets/gimpdialogfactory.h"
 #include "widgets/gimphelp-ids.h"
 #include "widgets/gimpprefsbox.h"
@@ -63,10 +64,17 @@
 
 #include "gimp-intl.h"
 
+typedef struct _WelcomeDialog WelcomeDialog;
+
+struct _WelcomeDialog
+{
+  GtkWidget *from_clipboard_button;
+};
 
 static GtkWidget * welcome_dialog_new                (Gimp          *gimp,
                                                       GimpConfig    *config,
                                                       gboolean       show_welcome_page);
+static void   welcome_dialog_free                    (WelcomeDialog *private);
 static void   welcome_dialog_response                (GtkWidget     *widget,
                                                       gint           response_id,
                                                       GtkWidget     *dialog);
@@ -114,6 +122,7 @@ static void   welcome_open_activated_callback        (GtkListBox     *listbox,
                                                       GtkWidget      *welcome_dialog);
 static void   welcome_open_images_callback           (GtkWidget      *button,
                                                       GtkListBox     *listbox);
+static void   welcome_dialog_paste_image             (GtkWidget      *welcome_dialog);
 static void   welcome_dialog_new_image_accelerator   (GtkAccelGroup  *accel_group,
                                                       GObject        *accelerator_widget,
                                                       guint           keyval,
@@ -130,6 +139,15 @@ static void   welcome_dialog_open_image_accelerator  (GtkAccelGroup  *accel_grou
                                                       guint           keyval,
                                                       GdkModifierType mods,
                                                       gpointer        user_data);
+static void   welcome_dialog_paste_image_accelerator (GtkAccelGroup  *accel_group,
+                                                      GObject        *accelerator_widget,
+                                                      guint           keyval,
+                                                      GdkModifierType mods,
+                                                      gpointer        user_data);
+static gboolean
+              welcome_dialog_menu_button_press_event (GtkWidget      *widget,
+                                                      GdkEventButton *event,
+                                                      GtkWidget      *welcome_dialog);
 
 static gboolean welcome_scrollable_resize            (gpointer        data);
 
@@ -186,6 +204,7 @@ welcome_dialog_new (Gimp       *gimp,
                     gboolean    show_welcome_page)
 {
   GtkWidget      *dialog;
+  WelcomeDialog  *private;
   GList          *windows;
   GtkWidget      *switcher;
   GtkWidget      *stack;
@@ -201,6 +220,8 @@ welcome_dialog_new (Gimp       *gimp,
   guint           accel_key;
   GdkModifierType accel_mods;
   gchar         **accels;
+
+  private = g_slice_new0 (WelcomeDialog);
 
   /* Translators: the %s string will be the version, e.g. "3.0". */
   title = g_strdup_printf (_("Welcome to GIMP %s"), GIMP_VERSION);
@@ -218,6 +239,11 @@ welcome_dialog_new (Gimp       *gimp,
 
   gtk_widget_set_margin_start (GTK_WIDGET (gtk_dialog_get_content_area (GTK_DIALOG (dialog))), 0);
   gtk_widget_set_margin_end (GTK_WIDGET (gtk_dialog_get_content_area (GTK_DIALOG (dialog))), 0);
+
+  g_object_weak_ref (G_OBJECT (dialog),
+                     (GWeakNotify) welcome_dialog_free, private);
+
+  g_object_set_data (G_OBJECT (dialog), "welcome-dialog-private", private);
 
   g_signal_connect (dialog, "response",
                     G_CALLBACK (welcome_dialog_response),
@@ -372,7 +398,37 @@ welcome_dialog_new (Gimp       *gimp,
         }
     }
 
+  accels = gtk_application_get_accels_for_action (GTK_APPLICATION (gimp->app),
+                                                  "app.edit-paste-as-new-image");
+  if (accels && accels[0])
+    {
+      gtk_accelerator_parse (accels[0], &accel_key, &accel_mods);
+      gtk_accel_group_connect (accel_group,
+                               accel_key, accel_mods, 0,
+                               g_cclosure_new (G_CALLBACK (welcome_dialog_paste_image_accelerator),
+                                               dialog, NULL));
+      g_strfreev (accels);
+    }
+
+  accels = gtk_application_get_accels_for_action (GTK_APPLICATION (gimp->app),
+                                                  "app.edit-paste");
+  if (accels && accels[0])
+    {
+      gtk_accelerator_parse (accels[0], &accel_key, &accel_mods);
+      gtk_accel_group_connect (accel_group,
+                               accel_key, accel_mods, 0,
+                               g_cclosure_new (G_CALLBACK (welcome_dialog_paste_image_accelerator),
+                                               dialog, NULL));
+      g_strfreev (accels);
+    }
+
   return dialog;
+}
+
+static void
+welcome_dialog_free (WelcomeDialog *private)
+{
+  g_slice_free (WelcomeDialog, private);
 }
 
 static void
@@ -759,30 +815,68 @@ welcome_dialog_create_creation_page (Gimp       *gimp,
                                      GtkWidget  *welcome_dialog,
                                      GtkWidget  *main_vbox)
 {
-  GtkWidget *vbox;
-  GtkWidget *hbox;
-  GtkWidget *button;
-  GtkWidget *listbox;
-  GtkWidget *toggle;
-  gint       num_images;
-  gint       list_count;
+  WelcomeDialog *private = g_object_get_data (G_OBJECT (welcome_dialog),
+                                              "welcome-dialog-private");
+  GtkWidget     *vbox;
+  GtkWidget     *hbox;
+  GtkWidget     *label;
+  GtkWidget     *create_hbox;
+  GtkWidget     *button;
+  GtkWidget     *listbox;
+  GtkWidget     *toggle;
+  GtkWidget     *menu;
+  GtkWidget     *menu_button;
+  gint           num_images;
+  gint           list_count;
 
   hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
   gtk_box_set_homogeneous (GTK_BOX (hbox), TRUE);
   gtk_box_pack_start (GTK_BOX (main_vbox), hbox, FALSE, FALSE, 0);
   gtk_widget_set_visible (hbox, TRUE);
 
-  vbox = prefs_frame_new (_("Create a New Image"), GTK_CONTAINER (hbox),
-                          FALSE);
+  vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 6);
+  gtk_box_pack_start (GTK_BOX (hbox), vbox, FALSE, FALSE, 0);
+  gtk_widget_set_visible (vbox, TRUE);
+
+  label = gtk_label_new (NULL);
+  gtk_label_set_markup (GTK_LABEL (label), _("<b>Create a New Image</b>"));
+  gtk_box_pack_start (GTK_BOX (vbox), label, FALSE, FALSE, 0);
+  gtk_widget_set_halign (label, GTK_ALIGN_CENTER);
+  gtk_widget_set_visible (label, TRUE);
+
+  create_hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 2);
+  gtk_box_pack_start (GTK_BOX (vbox), create_hbox, FALSE, FALSE, 0);
+  gtk_widget_set_halign (create_hbox, GTK_ALIGN_CENTER);
+  gtk_widget_set_visible (create_hbox, TRUE);
 
   button = gtk_button_new_with_mnemonic (_("C_reate"));
-  /* Balancing the indent from the frame */
-  gtk_widget_set_margin_end (button, 12);
-  gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
+  gtk_box_pack_start (GTK_BOX (create_hbox), button, FALSE, FALSE, 0);
   gtk_widget_set_visible (button, TRUE);
   g_signal_connect (button, "clicked",
                     G_CALLBACK (welcome_dialog_new_image_dialog),
                     welcome_dialog);
+
+  menu = gtk_menu_new ();
+
+  menu_button = gtk_menu_button_new ();
+  gtk_style_context_add_class (gtk_widget_get_style_context (menu_button),
+                               "text-button");
+
+  g_signal_connect (menu_button, "button-press-event",
+                    G_CALLBACK (welcome_dialog_menu_button_press_event),
+                    welcome_dialog);
+
+  private->from_clipboard_button = gtk_menu_item_new_with_label (_("From Clipboard"));
+  gtk_menu_shell_append (GTK_MENU_SHELL (menu), private->from_clipboard_button);
+  gtk_menu_button_set_popup (GTK_MENU_BUTTON (menu_button), menu);
+  gtk_widget_show_all (menu);
+
+  g_signal_connect_swapped (private->from_clipboard_button, "activate",
+                            G_CALLBACK (welcome_dialog_paste_image),
+                            welcome_dialog);
+
+  gtk_box_pack_start (GTK_BOX (create_hbox), menu_button, FALSE, FALSE, 0);
+  gtk_widget_set_visible (menu_button, TRUE);
 
   vbox = prefs_frame_new (_("Open an Existing Image"), GTK_CONTAINER (hbox),
                           FALSE);
@@ -1286,6 +1380,24 @@ welcome_open_images_callback (GtkWidget  *button,
 }
 
 static void
+welcome_dialog_paste_image (GtkWidget *welcome_dialog)
+{
+  GimpUIManager *manager;
+  Gimp          *gimp;
+
+  gimp    = g_object_get_data (G_OBJECT (welcome_dialog), "gimp");
+  manager = menus_get_image_manager_singleton (gimp);
+
+  /* XXX: to avoid code duplication and divergence, we just call
+   * the "edit-paste-as-new-image" action, and we check if the clipboard contained
+   * an image to paste before destroy the dialog.
+   */
+  if (gimp_ui_manager_activate_action (manager, "edit", "edit-paste-as-new-image") &&
+      gimp_clipboard_get_object (gimp))
+    gtk_widget_destroy (welcome_dialog);
+}
+
+static void
 welcome_dialog_release_item_activated (GtkListBox    *listbox,
                                        GtkListBoxRow *row,
                                        gpointer       user_data)
@@ -1553,4 +1665,34 @@ welcome_dialog_open_image_accelerator (GtkAccelGroup  *accel_group,
 
   if (gimp_ui_manager_activate_action (manager, "file", action_name))
     gtk_widget_destroy (welcome_dialog);
+}
+
+static void
+welcome_dialog_paste_image_accelerator (GtkAccelGroup  *accel_group,
+                                        GObject        *accelerator_widget,
+                                        guint           keyval,
+                                        GdkModifierType mods,
+                                        gpointer        user_data)
+{
+  GtkWidget *dialog = GTK_WIDGET (user_data);
+
+  welcome_dialog_paste_image (dialog);
+}
+
+static gboolean
+welcome_dialog_menu_button_press_event (GtkWidget      *widget,
+                                        GdkEventButton *event,
+                                        GtkWidget      *welcome_dialog)
+{
+  Gimp          *gimp    = g_object_get_data (G_OBJECT (welcome_dialog), "gimp");
+  WelcomeDialog *private = g_object_get_data (G_OBJECT (welcome_dialog),
+                                              "welcome-dialog-private");
+
+  if (gimp_clipboard_get_object (gimp))
+    gtk_widget_set_sensitive (private->from_clipboard_button, TRUE);
+  else
+    gtk_widget_set_sensitive (private->from_clipboard_button, FALSE);
+
+  /* propagate the event further */
+  return FALSE;
 }
