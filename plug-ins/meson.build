@@ -57,6 +57,12 @@ if webp_found
   }
 endif
 
+if have_image_scanner
+  complex_plugins_list += {
+    'name': 'image-scanner',
+  }
+endif
+
 if get_option('webkit-unmaintained')
   complex_plugins_list += {
     'name': 'help-browser',
