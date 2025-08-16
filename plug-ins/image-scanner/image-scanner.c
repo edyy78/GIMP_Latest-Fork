@@ -440,29 +440,33 @@ void
 mode_combo_callback (GtkWidget *widget,
                       gpointer   data)
 {
-  if (init) return;
-  mode_index = gtk_combo_box_get_active (GTK_COMBO_BOX (rescombo2));
   GtkTreeIter iter;
   const gchar item[256];
-  gtk_tree_model_get(GTK_TREE_MODEL (res_store2), &iter, mode_index, &item, -1);
+
+  if (init) return;
+  mode_index = gtk_combo_box_get_active (GTK_COMBO_BOX (rescombo2));
+
   use_color = TRUE;
-  if (strncasecmp(item, "color", 5) != 0)
-    {
-      use_color = FALSE;
-    }
+  if (strncasecmp(sources[source_index], "color", 5) != 0)
+  {
+    use_color = FALSE;
+  }
 }
 
 void
 source_combo_callback (GtkWidget *widget,
                       gpointer   data)
 {
+  GtkTreeIter       iter;
+  GtkTreeModel     *model;
+  GtkTreeSelection *selection;
+  const gchar       item[256];
+
   if (init) return;
   source_index = gtk_combo_box_get_active (GTK_COMBO_BOX (rescombo3));
-  GtkTreeIter iter;
-  const gchar item[256];
-  gtk_tree_model_get(GTK_TREE_MODEL (res_store3), &iter, source_index, &item, -1);
+
   use_flatbed = TRUE;
-  if (strncasecmp(item, "flatbed", 7) != 0)
+  if (strncasecmp(sources[source_index], "flatbed", 7) != 0)
   {
     use_flatbed = FALSE;
   }
