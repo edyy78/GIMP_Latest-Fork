@@ -44,14 +44,12 @@
 #include <gtk-3.0/gtk/gtkcombobox.h>
 #include <gtk-3.0/gtk/gtklabel.h>
 #include <gtk-3.0/gtk/gtkprogressbar.h>
-#include <gtk-3.0/gtk/gtkradiobutton.h>
 #include <gtk-3.0/gtk/gtkrange.h>
 #include <gtk-3.0/gtk/gtkscale.h>
 #include <gtk-3.0/gtk/gtkspinner.h>
 #include <gtk-3.0/gtk/gtktreemodel.h>
 #include <gtk-3.0/gtk/gtktypes.h>
 #include <gtk-3.0/gtk/gtkwidget.h>
-#include <sys/wait.h>
 
 GType imagescanner_get_type (void) G_GNUC_CONST;
 
@@ -484,12 +482,20 @@ source_combo_callback (GtkWidget *widget,
 
   use_flatbed = TRUE;
   page_bottom = page_bottom_temp;
-  if (strncasecmp (sources[source_index], "flatbed", 7) != 0)
+  if (strncasecmp (sources[source_index], "flatbed", 7) != 0 &&
+      strncasecmp (sources[source_index], "fb", 2) != 0)
     {
       use_flatbed = FALSE;
+    }
 
+  use_adf = FALSE;
+  if (strncasecmp (sources[source_index], "ADF", 3) == 0 ||
+      strncasecmp (sources[source_index], "ADF Duplex", 10) == 0)
+    {
       /* Mod to allow ADF to scan legal document sizes */
       page_bottom = legal_h;
+
+      use_adf = TRUE;
     }
 
   /* check if current bottom value is still valid else drop it down some */

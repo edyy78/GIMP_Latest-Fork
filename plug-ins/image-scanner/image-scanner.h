@@ -100,12 +100,20 @@ typedef struct
 #define PLUG_IN_ROLE    "gimp-image-scanner-dialog"
 #define PLUG_IN_PROC    "plug-in-image-scanner"
 
+const gdouble letter_w = 215.9; // Letter size in mm
+const gdouble letter_h = 279.4; // Letter size in mm
 
-const gdouble letter_w = 215.9; // Letter size
-const gdouble letter_h = 279.4; // Letter size
+const gdouble legal_w = 215.9; // Legal size in mm
+const gdouble legal_h = 355.6; // Legal size in mm
 
-const gdouble legal_w = 215.9; // Legal size
-const gdouble legal_h = 355.6; // Legal size
+const gdouble A4_w    = 210.0; // A4 size in mm
+const gdouble A4_h    = 297.0; // A4 size in mm
+
+const gdouble B5_w    = 176.0; // B5 size in mm
+const gdouble B5_h    = 250.0; // B5 size in mm
+
+const gdouble P4_w    = 215.0; // P4 size in mm
+const gdouble P4_h    = 280.0; // P4 size in mm
 
 GimpProcedureConfig *globalConfig;
 SANE_Device        **device_list;
@@ -160,6 +168,7 @@ gdouble  right_current = letter_w;
 gdouble  bottom_current = letter_h;
 gboolean use_color = TRUE;
 gboolean use_flatbed = TRUE;
+gboolean use_adf = FALSE;
 
 static void
 image_scanner_scan_callback (GtkWidget *dialog);

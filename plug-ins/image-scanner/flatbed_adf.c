@@ -44,7 +44,6 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-
 #include <libgimp/gimp.h>
 #include <libgimp/gimpui.h>
 
@@ -608,7 +607,8 @@ scan_docs (SANE_Handle device, gint start, gint end, gint no_overwrite,
           if (res == 0)
             {
               status = SANE_STATUS_INVAL;
-              fprintf (stderr, _("Filename %s already exists; will not overwrite\n"), fname);
+              fprintf (stderr, _("Filename %s already exists;"
+                                 " will not overwrite\n"), fname);
             }
         }
 
@@ -751,7 +751,7 @@ flatbed_start_scan(const gchar *device_name)
     }
 
   maxdocs = 1;
-  if (!use_flatbed)
+  if (use_adf)
     {
       maxdocs = 1000;
     }
@@ -781,14 +781,16 @@ flatbed_start_scan(const gchar *device_name)
 
           sprintf (page, "Page %d", loop + 1);
 
-          if (input_type == 1 /* IMAGE_SCANNER_NEW_IMAGE */ || loop == 0)
+          if (input_type == 1 /* IMAGE_SCANNER_NEW_IMAGE */ ||
+              loop == 0 ||
+              use_flatbed)
             {
               scanimage = gimp_file_load (GIMP_RUN_NONINTERACTIVE, tmpfile);
               gimp_display_new (scanimage);
               GimpLayer **layers = gimp_image_get_layers (scanimage);
               gimp_item_set_name (GIMP_ITEM (layers[0]), page);
             }
-          else
+          else if (use_adf)
             {
               layer = gimp_file_load_layer (GIMP_RUN_NONINTERACTIVE, scanimage, tmpfile);
               gimp_item_set_name (GIMP_ITEM (layer), page);

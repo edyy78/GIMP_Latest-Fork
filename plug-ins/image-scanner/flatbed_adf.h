@@ -83,3 +83,4 @@ extern gint input_type;
 
 extern gboolean use_color;
 extern gboolean use_flatbed;
+extern gboolean use_adf;
