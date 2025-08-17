@@ -20,8 +20,8 @@
  */
 
 static SANE_Status
-scan_it_raw (SANE_Handle device, const char *fname, SANE_Bool raw, const char *script,
-             SANE_Bool use_pipe);
+scan_it_raw (SANE_Handle device, const char *fname, SANE_Bool raw,
+             const char *script, SANE_Bool use_pipe);
 
 void
 flatbed_start_scan(const char *device);
