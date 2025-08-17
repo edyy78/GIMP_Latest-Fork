@@ -100,8 +100,15 @@ typedef struct
 #define PLUG_IN_ROLE    "gimp-image-scanner-dialog"
 #define PLUG_IN_PROC    "plug-in-image-scanner"
 
+
+const gdouble letter_w = 215.9; // Letter size
+const gdouble letter_h = 279.4; // Letter size
+
+const gdouble legal_w = 215.9; // Legal size
+const gdouble legal_h = 355.6; // Legal size
+
 GimpProcedureConfig *globalConfig;
-SANE_Device       ** device_list;
+SANE_Device        **device_list;
 GtkListStore         *res_store1;
 GtkListStore         *res_store2;
 GtkListStore         *res_store3;
@@ -121,45 +128,35 @@ GtkWidget            *rescombo3;
 GtkWidget            *progressbar;
 GtkWidget            *message;
 
-gint devices = 0;
-gchar *current_device_name;
-gint resolutions[1024];
-gint res_count = 0;
-gchar modes[10][1024];
-gint modes_count = 0;
-gchar sources[10][1024];
-gint source_count = 0;
-gint input_type = IMAGE_SCANNER_CURRENT_LAYER;
-gint resolution_index = 0;
-gint mode_index = 0;
-gint source_index = 0;
-gint units_measurement = IMAGE_SCANNER_IN_UNIT;
+gint     devices = 0;
+gchar   *current_device_name;
+gint     resolutions[1024];
+gint     res_count = 0;
+gchar    modes[10][1024];
+gint     modes_count = 0;
+gchar    sources[10][1024];
+gint     source_count = 0;
+gint     input_type = IMAGE_SCANNER_CURRENT_LAYER;
+gint     resolution_index = 0;
+gint     mode_index = 0;
+gint     source_index = 0;
+gint     units_measurement = IMAGE_SCANNER_IN_UNIT;
 gboolean init = TRUE;
-
-gint res_opt = 0;
-gint mode_opt = 0;
-gint source_opt = 0;
-gint page_left_opt = 0;
-gint page_top_opt = 0;
-gint page_right_opt = 0;
-gint page_bottom_opt = 0;
-
-gdouble page_left = 215.9; // Letter size
-gdouble page_top = 279.4; // Letter size
-gdouble page_right = 215.9; // Letter size
-gdouble page_bottom = 279.4; // Letter size
-
-const gdouble letter_w = 215.9; // Letter size
-const gdouble letter_h = 279.4; // Letter size
-
-const gdouble legal_w = 215.9; // Legal size
-const gdouble legal_h = 355.6; // Legal size
-
-gdouble left_current = 0;
-gdouble top_current = 0;
-gdouble right_current = letter_w;
-gdouble bottom_current = letter_h;
-
+gint     res_opt = 0;
+gint     mode_opt = 0;
+gint     source_opt = 0;
+gint     page_left_opt = 0;
+gint     page_top_opt = 0;
+gint     page_right_opt = 0;
+gint     page_bottom_opt = 0;
+gdouble  page_left = 215.9; // Letter size
+gdouble  page_top = 279.4; // Letter size
+gdouble  page_right = 215.9; // Letter size
+gdouble  page_bottom = 279.4; // Letter size
+gdouble  left_current = 0;
+gdouble  top_current = 0;
+gdouble  right_current = letter_w;
+gdouble  bottom_current = letter_h;
 gboolean use_color = TRUE;
 gboolean use_flatbed = TRUE;
 
@@ -167,12 +164,9 @@ static void
 image_scanner_scan_callback (GtkWidget *dialog);
 
 static GtkWidget *
-image_scanner_create_page_grid (GtkWidget         *notebook,
-                                const gchar       *tab_name);
+image_scanner_create_page_grid (GtkWidget   *notebook,
+                                const gchar *tab_name);
 extern void
 flatbed_start_scan(const char *device);
-
-extern void
-flatbed_end_scan();
 
 #endif /* __IMAGE_SCANNER_H__ */
