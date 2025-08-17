@@ -75,7 +75,7 @@ image_scanner_query_sane_for_devices ()
   status = sane_get_devices ((const SANE_Device ***)&device_list, SANE_FALSE);
   if (status != SANE_STATUS_GOOD)
     {
-      g_print (_ ("sane_get_devices() failed: %s\n"), sane_strstatus (status));
+      g_print (_("sane_get_devices() failed: %s\n"), sane_strstatus (status));
     }
   else
     {
@@ -84,7 +84,7 @@ image_scanner_query_sane_for_devices ()
       for (int ii = 0; device_list[ii]; ++ii)
         {
 #ifdef DEBUGLOG
-          g_print (_ ("device `%s' is a %s scanner from %s of type %s\n"),
+          g_print (_("device `%s' is a %s scanner from %s of type %s\n"),
                    device_list[ii]->name,
                    device_list[ii]->model,
                    device_list[ii]->vendor,
@@ -105,7 +105,8 @@ image_scanner_query_sane_for_devices ()
   sane_exit();
 }
 
-void image_scanner_fetch_attribs (const gchar * device_name)
+static void
+image_scanner_fetch_attribs (const gchar * device_name)
 {
   const SANE_Option_Descriptor * opt0;
   SANE_Status status;
@@ -146,7 +147,7 @@ void image_scanner_fetch_attribs (const gchar * device_name)
       opt = sane_get_option_descriptor (devhandle, i);
       if (opt == NULL)
         {
-          g_print (_ ("Could not get option descriptor for option %d\n"), i);
+          g_print (_("Could not get option descriptor for option %d\n"), i);
         }
 
       if (! SANE_OPTION_IS_SETTABLE (opt->cap))
@@ -282,19 +283,6 @@ image_scanner_scan_callback (GtkWidget *dialog)
   gimp_progress_end (); // clear progress bar message
 }
 
-static void
-image_scanner_devices_callback (GtkWidget *dialog)
-{
-  gtk_label_set_text (GTK_LABEL (message), _("Searching for scanner devices."));
-  gtk_widget_show_now (message);
-  gimp_progress_init (_("Searching for scanner devices."));
-
-  image_scanner_query_sane_for_devices ();
-
-  gtk_label_set_text (GTK_LABEL (message), "");
-  gimp_progress_end (); // clear message
-}
-
 
 static GtkWidget *
 image_scanner_create_page_grid (GtkWidget   *notebook,
@@ -359,12 +347,12 @@ activate_scanner_callback (GtkTreeSelection *selection,
       gtk_tree_model_get (model, &iter, 0, &current_device_name, -1);
       image_scanner_fetch_attribs (current_device_name);
 #ifdef DEBUGLOG
-      g_print (_ ("Selected Device: %s\n"), current_device_name);
+      g_print (_("Selected Device: %s\n"), current_device_name);
 #endif
     }
 }
 
-void
+static void
 gimp_radio_button_update_wrapper (GtkWidget *widget,
                                   gpointer   data)
 {
@@ -374,7 +362,20 @@ gimp_radio_button_update_wrapper (GtkWidget *widget,
                 NULL);
 }
 
-void
+static void
+image_scanner_devices_callback (GtkWidget *dialog)
+{
+  gtk_label_set_text (GTK_LABEL (message), _("Searching for scanner devices."));
+  gtk_widget_show_now (message);
+  gimp_progress_init (_("Searching for scanner devices."));
+
+  image_scanner_query_sane_for_devices ();
+
+  gtk_label_set_text (GTK_LABEL (message), "");
+  gimp_progress_end (); // clear message
+}
+
+static void
 unitscombo_callback (GtkWidget *widget,
                       gpointer   data)
 {
@@ -445,7 +446,7 @@ unitscombo_callback (GtkWidget *widget,
     }
 }
 
-void
+static void
 resolution_combo_callback (GtkWidget *widget,
                       gpointer   data)
 {
@@ -455,7 +456,7 @@ resolution_combo_callback (GtkWidget *widget,
   resolution_index = gtk_combo_box_get_active (GTK_COMBO_BOX (rescombo1));
 }
 
-void
+static void
 mode_combo_callback (GtkWidget *widget,
                       gpointer   data)
 {
@@ -471,7 +472,7 @@ mode_combo_callback (GtkWidget *widget,
     }
 }
 
-void
+static void
 source_combo_callback (GtkWidget *widget,
                       gpointer   data)
 {
@@ -487,7 +488,7 @@ source_combo_callback (GtkWidget *widget,
     }
 }
 
-void
+static void
 crop_left_scaler_callback (GtkWidget *widget,
                            GtkWidget *label)
 {
@@ -511,7 +512,7 @@ crop_left_scaler_callback (GtkWidget *widget,
   gtk_label_set_label (GTK_LABEL (label), str);
 }
 
-void
+static void
 crop_right_scaler_callback (GtkWidget *widget,
                             GtkWidget *label)
 {
@@ -537,7 +538,7 @@ crop_right_scaler_callback (GtkWidget *widget,
   gtk_label_set_label (GTK_LABEL (label), str);
 }
 
-void
+static void
 crop_top_scaler_callback (GtkWidget *widget,
                           GtkWidget *label)
 {
@@ -563,7 +564,7 @@ crop_top_scaler_callback (GtkWidget *widget,
   gtk_label_set_label (GTK_LABEL (label), str);
 }
 
-void
+static void
 crop_bottom_scaler_callback (GtkWidget *widget,
                              GtkWidget *label)
 {

@@ -20,11 +20,11 @@
  */
 
 static SANE_Status
-scan_it_raw (SANE_Handle device, const char *fname, SANE_Bool raw,
-             const char *script, SANE_Bool use_pipe);
+scan_it_raw (SANE_Handle device, const gchar *fname, SANE_Bool raw,
+             const gchar *script, SANE_Bool use_pipe);
 
 void
-flatbed_start_scan(const char *device);
+flatbed_start_scan(const gchar *device);
 
 #define BASE_OPTSTRING	"d:hLvVNTo:s:e:S:pr"
 #define STRIP_HEIGHT	256	/* # lines we increment image height */

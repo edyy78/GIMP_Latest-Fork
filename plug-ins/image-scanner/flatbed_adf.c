@@ -53,7 +53,7 @@
 #include "flatbed_adf.h"
 
 static void
-write_pnm_header_to_file (FILE *fp, SANE_Frame format, int width, int height, int depth)
+write_pnm_header_to_file (FILE *fp, SANE_Frame format, gint width, gint height, gint depth)
 {
   switch (format)
     {
@@ -192,9 +192,9 @@ get_resolution (SANE_Device *device)
   return res;
 }
 
-static int
+static gint
 exec_script (SANE_Handle device, const gchar *script, const gchar* fname,
-             SANE_Bool use_pipe, SANE_Parameters *parm, int *fd)
+             SANE_Bool use_pipe, SANE_Parameters *parm, gint *fd)
 {
   static gchar   cmd[PATH_MAX * 2];
   static gchar   env[7][PATH_MAX * 2];
@@ -572,7 +572,7 @@ scan_it_raw (SANE_Handle device, const gchar *fname, SANE_Bool raw,
     pid = exec_script (device, script, fname, use_pipe, &parm, NULL);
 
   if (script) {
-    int exit_status = 0;
+    gint exit_status = 0;
     waitpid (pid, &exit_status, 0);
     if (exit_status && verbose)
       fprintf (stderr, _("WARNING: child exited with %d\n"), exit_status);
@@ -587,14 +587,15 @@ cleanup:
 }
 
 static SANE_Int
-scan_docs (SANE_Handle device, int start, int end, int no_overwrite, SANE_Bool raw,
-           const gchar *outfmt, const gchar *script, SANE_Bool use_pipe)
+scan_docs (SANE_Handle device, gint start, gint end, gint no_overwrite,
+           SANE_Bool raw, const gchar *outfmt, const gchar *script,
+           SANE_Bool use_pipe)
 {
   SANE_Status status = SANE_STATUS_GOOD;
   SANE_Int scannedPages = 0;
   SANE_Char fname[PATH_MAX];
   struct stat statbuf;
-  int res;
+  gint res;
 
   while (end < 0 || start <= end)
     {
