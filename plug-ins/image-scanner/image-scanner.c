@@ -243,6 +243,7 @@ image_scanner_fetch_attribs (const gchar * device_name)
         {
           page_bottom_opt = i;
           page_bottom     = SANE_UNFIX (opt->constraint.range->max);
+          page_bottom_temp = page_bottom;
           gtk_range_set_range (GTK_RANGE (crop_bottom_scaler), 0.0, page_bottom);
           gtk_range_set_value (GTK_RANGE (crop_bottom_scaler), letter_h);
         }
@@ -482,10 +483,23 @@ source_combo_callback (GtkWidget *widget,
   source_index = gtk_combo_box_get_active (GTK_COMBO_BOX (rescombo3));
 
   use_flatbed = TRUE;
+  page_bottom = page_bottom_temp;
   if (strncasecmp (sources[source_index], "flatbed", 7) != 0)
     {
       use_flatbed = FALSE;
+
+      /* Mod to allow ADF to scan legal document sizes */
+      page_bottom = legal_h;
     }
+
+  /* check if current bottom value is still valid else drop it down some */
+  if (bottom_current > page_bottom)
+    {
+      bottom_current = letter_h;
+    }
+
+  gtk_range_set_range (GTK_RANGE (crop_bottom_scaler), 0.0, page_bottom);
+  gtk_range_set_value (GTK_RANGE (crop_bottom_scaler), letter_h);
 }
 
 static void

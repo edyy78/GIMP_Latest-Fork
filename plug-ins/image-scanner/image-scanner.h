@@ -153,6 +153,7 @@ gdouble  page_left = 215.9; // Letter size
 gdouble  page_top = 279.4; // Letter size
 gdouble  page_right = 215.9; // Letter size
 gdouble  page_bottom = 279.4; // Letter size
+gdouble  page_bottom_temp = 279.4; // Letter size
 gdouble  left_current = 0;
 gdouble  top_current = 0;
 gdouble  right_current = letter_w;
