@@ -38,9 +38,12 @@
 #include "core/gimp.h"
 #include "core/gimpcontainer.h"
 #include "core/gimpchannel.h"
+#include "core/gimpdashpattern.h"
+#include "core/gimpdata.h"
 #include "core/gimpdrawable.h"
 #include "core/gimpdrawable-filters.h"
 #include "core/gimpdrawablefilter.h"
+#include "core/gimpfilloptions.h"
 #include "core/gimpgrid.h"
 #include "core/gimpguide.h"
 #include "core/gimpimage.h"
@@ -58,6 +61,7 @@
 #include "core/gimpparasitelist.h"
 #include "core/gimpprogress.h"
 #include "core/gimpsamplepoint.h"
+#include "core/gimpstrokeoptions.h"
 #include "core/gimpsymmetry.h"
 
 #include "operations/layer-modes/gimp-layer-modes.h"
@@ -67,6 +71,8 @@
 #include "path/gimppath.h"
 #include "path/gimpstroke.h"
 #include "path/gimppath-compat.h"
+#include "path/gimpvectorlayer.h"
+#include "path/gimpvectorlayeroptions.h"
 
 #include "text/gimptextlayer.h"
 #include "text/gimptextlayer-xcf.h"
@@ -142,6 +148,15 @@ static gboolean xcf_save_channel       (XcfInfo           *info,
 static gboolean xcf_save_effect        (XcfInfo           *info,
                                         GimpImage         *image,
                                         GimpFilter        *filter,
+                                        GError           **error);
+static gboolean xcf_save_color         (XcfInfo           *info,
+                                        GeglColor         *color,
+                                        GError           **error);
+static gboolean xcf_save_fill_options  (XcfInfo           *info,
+                                        GimpFillOptions   *fill_options,
+                                        GError           **error);
+static gboolean xcf_save_stroke_options (XcfInfo          *info,
+                                        GimpStrokeOptions *stroke_options,
                                         GError           **error);
 static gboolean xcf_save_path          (XcfInfo           *info,
                                         GimpImage         *image,
@@ -719,6 +734,10 @@ xcf_save_layer_props (XcfInfo    *info,
         xcf_check_error (xcf_save_prop (info,
                                         image, PROP_TEXT_LAYER_FLAGS, error,
                                         flags), ;);
+    }
+  else if (GIMP_IS_VECTOR_LAYER (layer))
+    {
+      xcf_check_error (xcf_save_prop (info, image, PROP_VECTOR_LAYER, error, layer), ;);
     }
 
   if (gimp_viewable_get_children (GIMP_VIEWABLE (layer)))
@@ -1664,6 +1683,47 @@ xcf_save_prop (XcfInfo    *info,
       }
       break;
 
+    case PROP_VECTOR_LAYER:
+      {
+        GimpVectorLayer        *vector_layer;
+        GimpVectorLayerOptions *options;
+        guint32                 uint_val;
+        goffset                 base;
+        goffset                 pos;
+
+        vector_layer = va_arg (args, GimpVectorLayer *);
+        options      = vector_layer->options;
+
+        xcf_write_prop_type_check_error (info, prop_type, va_end (args));
+
+        size = 0;
+        pos = info->cp;
+        xcf_write_int32_check_error (info, &size, 1, va_end (args));
+        base = info->cp;
+
+        uint_val = (guint32) vector_layer->modified;
+        xcf_write_int32_check_error (info, (guint32 *) &uint_val, 1, va_end (args));
+
+        uint_val = gimp_item_get_tattoo (GIMP_ITEM (options->path));
+        xcf_write_int32_check_error (info, (guint32 *) &uint_val, 1, va_end (args));
+
+        uint_val = (guint32) options->enable_fill;
+        xcf_write_int32_check_error (info, (guint32 *) &uint_val, 1, va_end (args));
+
+        uint_val = (guint32) options->enable_stroke;
+        xcf_write_int32_check_error (info, (guint32 *) &uint_val, 1, va_end (args));
+
+        xcf_check_error (xcf_save_fill_options (info, options->fill_options, error), va_end (args));
+        xcf_check_error (xcf_save_stroke_options (info, options->stroke_options, error), va_end (args));
+
+        size = info->cp - base;
+        /* go back to the saved position and write the length */
+        xcf_check_error (xcf_seek_pos (info, pos, error), va_end (args));
+        xcf_write_int32_check_error (info, &size, 1, va_end (args));
+        xcf_check_error (xcf_seek_pos (info, base + size, error), va_end (args));
+      }
+      break;
+
     case PROP_ITEM_PATH:
       {
         GList *path = va_arg (args, GList *);
@@ -1828,63 +1888,7 @@ xcf_save_prop (XcfInfo    *info,
             case FILTER_PROP_COLOR:
               {
                 GeglColor *color = g_value_get_object (&filter_value);
-
-                if (color)
-                  {
-                    const gchar   *encoding;
-                    const Babl    *format = gegl_color_get_format (color);
-                    const Babl    *space;
-                    GBytes        *bytes;
-                    gconstpointer  data;
-                    gsize          data_length;
-                    int            profile_length = 0;
-
-                    if (babl_format_is_palette (format))
-                      {
-                        guint8     pixel[40];
-                        GeglColor *palette_color;
-
-                        /* As a special case, we don't want to serialize
-                         * palette colors, because they are just too much
-                         * dependent on external data and cannot be
-                         * deserialized back safely. So we convert them first.
-                         */
-                         palette_color = gegl_color_duplicate (color);
-
-                         format = babl_format_with_space ("R'G'B'A u8", format);
-                         gegl_color_get_pixel (palette_color, format, pixel);
-                         gegl_color_set_pixel (color, format, pixel);
-
-                         g_object_unref (palette_color);
-                      }
-
-                    encoding = babl_format_get_encoding (format);
-                    xcf_write_string_check_error (info, (gchar **) &encoding, 1, va_end (args));
-
-                    bytes = gegl_color_get_bytes (color, format);
-                    data  = (guint8 *) g_bytes_get_data (bytes, &data_length);
-
-                    xcf_write_int32_check_error (info, (guint32 *) &data_length, 1, ;);
-                    xcf_write_int8_check_error (info, (const guint8 *) data, data_length, ;);
-                    g_bytes_unref (bytes);
-
-                    space = babl_format_get_space (format);
-                    if (space != babl_space ("sRGB"))
-                      {
-                        guint8 *profile_data;
-
-                        profile_data = (guint8 *) babl_space_get_icc (babl_format_get_space (format),
-                                                                      &profile_length);
-                        xcf_write_int32_check_error (info, (guint32 *) &profile_length, 1, ;);
-
-                        if (profile_data)
-                          xcf_write_int8_check_error (info, profile_data, profile_length, ;);
-                      }
-                    else
-                      {
-                        xcf_write_int32_check_error (info, (guint32 *) &profile_length, 1, ;);
-                      }
-                  }
+                xcf_check_error (xcf_save_color (info, color, error), va_end (args));
               }
               break;
 
@@ -2190,6 +2194,197 @@ xcf_save_effect (XcfInfo     *info,
   effect_mask = GIMP_CHANNEL (gimp_drawable_filter_get_mask (filter_drawable));
   xcf_check_error (xcf_save_channel (info, image, effect_mask,
                                      error), ;);
+
+  return TRUE;
+}
+
+static gboolean
+xcf_save_color (XcfInfo    *info,
+                GeglColor  *color,
+                GError    **error)
+{
+  GError *tmp_error = NULL;
+
+  if (color)
+    {
+      const gchar   *encoding;
+      const Babl    *format = gegl_color_get_format (color);
+      const Babl    *space;
+      GBytes        *bytes;
+      gconstpointer  data;
+      gsize          data_length;
+      int            profile_length = 0;
+
+      if (babl_format_is_palette (format))
+        {
+          guint8     pixel[40];
+          GeglColor *palette_color;
+
+          /* As a special case, we don't want to serialize
+           * palette colors, because they are just too much
+           * dependent on external data and cannot be
+           * deserialized back safely. So we convert them first.
+           */
+          palette_color = gegl_color_duplicate (color);
+
+          format = babl_format_with_space ("R'G'B'A u8", format);
+          gegl_color_get_pixel (palette_color, format, pixel);
+          gegl_color_set_pixel (color, format, pixel);
+
+          g_object_unref (palette_color);
+        }
+
+      encoding = babl_format_get_encoding (format);
+      xcf_write_string_check_error (info, (gchar **) &encoding, 1, ;);
+
+      bytes = gegl_color_get_bytes (color, format);
+      data  = (guint8 *) g_bytes_get_data (bytes, &data_length);
+
+      xcf_write_int32_check_error (info, (guint32 *) &data_length, 1, ;);
+      xcf_write_int8_check_error (info, (const guint8 *) data, data_length, ;);
+      g_bytes_unref (bytes);
+
+      space = babl_format_get_space (format);
+      if (space != babl_space ("sRGB"))
+        {
+          guint8 *profile_data;
+
+          profile_data = (guint8 *) babl_space_get_icc (babl_format_get_space (format),
+                                                        &profile_length);
+          xcf_write_int32_check_error (info, (guint32 *) &profile_length, 1, ;);
+
+          if (profile_data)
+            xcf_write_int8_check_error (info, profile_data, profile_length, ;);
+        }
+      else
+        {
+          xcf_write_int32_check_error (info, (guint32 *) &profile_length, 1, ;);
+        }
+    }
+  else
+    {
+      guint32 uint_val = 0;
+
+      xcf_write_int32_check_error (info, &uint_val, 1, ;);
+    }
+
+  return TRUE;
+}
+
+static gboolean
+xcf_save_data_id (XcfInfo   *info,
+                  GimpData  *data,
+                  GError   **error)
+{
+  /* XXX Fonts may want to be special-cased because there may be more
+   * than just the standard GimpData ID which would make reasonable
+   * heuristic to retrieve a font. See gimp_font_serialize().
+   *
+   * TODO: in future updates of XCF, embedding the full data itself
+   * rather than just point to it may be a worthy option too.
+   */
+  gchar    *name;
+  gchar    *collection_id;
+  gboolean  is_internal;
+  guint32   uint_val;
+  GError   *tmp_error = NULL;
+
+  if (data)
+    {
+      gimp_data_get_identifiers  (data, &name, &collection_id, &is_internal);
+
+      xcf_write_string_check_error (info, (gchar **) &name, 1, ;);
+      xcf_write_string_check_error (info, (gchar **) &collection_id, 1, ;);
+      uint_val = is_internal;
+      xcf_write_int32_check_error (info, (guint32 *) &uint_val, 1, ;);
+
+      g_free (name);
+      g_free (collection_id);
+    }
+  else
+    {
+      guint32 uint_val = 0;
+
+      xcf_write_int32_check_error (info, &uint_val, 1, ;);
+    }
+
+  return TRUE;
+}
+
+static gboolean
+xcf_save_fill_options (XcfInfo          *info,
+                       GimpFillOptions  *options,
+                       GError          **error)
+{
+  GeglColor   *color;
+  GimpPattern *pattern;
+  guint32      uint_val;
+  GError      *tmp_error = NULL;
+
+  uint_val = (guint32) gimp_fill_options_get_custom_style (options);
+  xcf_write_int32_check_error (info, (guint32 *) &uint_val, 1, ;);
+
+  uint_val = (guint32) gimp_fill_options_get_antialias (options);
+  xcf_write_int32_check_error (info, (guint32 *) &uint_val, 1, ;);
+
+  color = gimp_context_get_foreground (GIMP_CONTEXT (options));
+  xcf_check_error (xcf_save_color (info, color, error), ;);
+
+  pattern = gimp_context_get_pattern (GIMP_CONTEXT (options));
+  xcf_check_error (xcf_save_data_id (info, GIMP_DATA (pattern), error), ;);
+
+  return TRUE;
+}
+
+static gboolean
+xcf_save_stroke_options (XcfInfo            *info,
+                         GimpStrokeOptions  *options,
+                         GError            **error)
+{
+  GeglColor   *color;
+  GimpPattern *pattern;
+  guint32      uint_val;
+  gfloat       float_val;
+  GError      *tmp_error = NULL;
+  GArray      *dash_info;
+  gdouble     *dashes;
+  gsize        n_dashes  = 0;
+
+  uint_val = (guint32) gimp_fill_options_get_custom_style (GIMP_FILL_OPTIONS (options));
+  xcf_write_int32_check_error (info, (guint32 *) &uint_val, 1, ;);
+
+  uint_val = (guint32) gimp_fill_options_get_antialias (GIMP_FILL_OPTIONS (options));
+  xcf_write_int32_check_error (info, (guint32 *) &uint_val, 1, ;);
+
+  color = gimp_context_get_foreground (GIMP_CONTEXT (options));
+  xcf_check_error (xcf_save_color (info, color, error), ;);
+
+  pattern = gimp_context_get_pattern (GIMP_CONTEXT (options));
+  xcf_check_error (xcf_save_data_id (info, GIMP_DATA (pattern), error), ;);
+
+  float_val = (gfloat) gimp_stroke_options_get_width (options);
+  xcf_write_float_check_error (info, (gfloat *) &float_val, 1, ;);
+
+  uint_val = (guint32) gimp_stroke_options_get_cap_style (options);
+  xcf_write_int32_check_error (info, (guint32 *) &uint_val, 1, ;);
+
+  uint_val = (guint32) gimp_stroke_options_get_join_style (options);
+  xcf_write_int32_check_error (info, (guint32 *) &uint_val, 1, ;);
+
+  float_val = (gfloat) gimp_stroke_options_get_miter_limit (options);
+  xcf_write_float_check_error (info, (gfloat *) &float_val, 1, ;);
+
+  dash_info = gimp_stroke_options_get_dash_info (options);
+  dashes = gimp_dash_pattern_to_double_array (dash_info, &n_dashes);
+  uint_val = (guint32) n_dashes;
+  xcf_write_int32_check_error (info, (guint32 *) &uint_val, 1, ;);
+
+  for (gint i = 0; i < n_dashes; i++)
+    {
+      float_val = (gfloat) dashes[i];
+      xcf_write_float_check_error (info, (gfloat *) &float_val, 1, ;);
+    }
+  g_free (dashes);
 
   return TRUE;
 }
