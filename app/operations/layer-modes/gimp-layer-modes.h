@@ -44,6 +44,7 @@ const gchar              * gimp_layer_mode_get_operation_name         (GimpLayer
 GeglOperation            * gimp_layer_mode_get_operation              (GimpLayerMode           mode);
 
 GimpLayerModeFunc          gimp_layer_mode_get_function               (GimpLayerMode           mode);
+GimpLayerModeCLFunc        gimp_layer_mode_get_cl_function            (GimpLayerMode           mode);
 GimpLayerModeBlendFunc     gimp_layer_mode_get_blend_function         (GimpLayerMode           mode);
 
 GimpLayerModeContext       gimp_layer_mode_get_context                (GimpLayerMode           mode);

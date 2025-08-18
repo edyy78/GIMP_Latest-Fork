@@ -22,6 +22,7 @@
 #include <gegl-types.h>
 
 #include "gegl/gimp-gegl-types.h"
+#include "opencl/gegl-cl.h"
 
 #include "operations-enums.h"
 
@@ -63,6 +64,16 @@ typedef gboolean (* GimpLayerModeFunc)      (GeglOperation          *operation,
                                              glong                   samples,
                                              const GeglRectangle    *roi,
                                              gint                    level);
+
+typedef gboolean (* GimpLayerModeCLFunc)    (GeglOperation          *operation,
+                                             cl_mem                  in_tex,
+                                             cl_mem                  aux_tex,
+                                             cl_mem                  mask_tex,
+                                             cl_mem                  out_tex,
+                                             size_t                  global_worksize,
+                                             const GeglRectangle    *roi,
+                                             gint                    level);
+
 
 typedef  void    (* GimpLayerModeBlendFunc) (GeglOperation          *operation,
                                              const gfloat           *in,
