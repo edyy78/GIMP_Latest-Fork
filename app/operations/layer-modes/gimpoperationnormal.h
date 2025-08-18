@@ -84,3 +84,12 @@ gboolean   gimp_operation_normal_process_sse4 (GeglOperation       *op,
                                                gint                 level);
 
 #endif /* COMPILE_SSE4_1_INTRINISICS */
+
+gboolean   gimp_operation_normal_cl_process   (GeglOperation *operation,
+                                               cl_mem in_tex,
+                                               cl_mem layer_tex,
+                                               cl_mem mask_tex,
+                                               cl_mem out_tex,
+                                               size_t global_worksize,
+                                               const GeglRectangle *roi,
+                                               gint level);

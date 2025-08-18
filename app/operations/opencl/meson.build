@@ -1,6 +1,7 @@
 cltostring = files('cltostring.py')
 
 opencl_sources = [
+  'layer-mode-normal.cl',
   'set-alpha.cl',
 ]
 
