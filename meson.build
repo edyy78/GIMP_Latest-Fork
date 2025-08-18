@@ -2108,13 +2108,13 @@ final_message = [
 '''  MNG:                 @0@'''.format(libmng.found()),
 '''  OpenEXR:             @0@'''.format(openexr.found()),
 '''  WebP:                @0@'''.format(webp_found),
-'''  Image Scanner:       @0@'''.format(have_image_scanner),
 '''  HEIC:                import: @0@ - export: @1@'''
                                 .format(can_import_heic, can_export_heic),
 '''  AVIF:                import: @0@ - export: @1@'''
                                 .format(can_import_avif, can_export_avif),
 '''  PDF (export):        @0@'''.format(cairopdf.found()),
 '''  Print:               @0@'''.format(have_print),
+'''  Image Scanner:       @0@'''.format(have_image_scanner),
 '''  Javascript plug-ins: @0@'''.format(have_javascript),
 '''  Vala plug-ins:       @0@'''.format(have_vala),
 '''  TWAIN (Win32):       @0@'''.format(platform_windows),
