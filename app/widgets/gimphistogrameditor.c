@@ -60,6 +60,7 @@ enum
   LABEL_COUNT,
   LABEL_PERCENTILE,
   LABEL_N_COLORS,
+  LABEL_N_COLORS_W_ALPHA,
   N_LABELS
 };
 
@@ -138,6 +139,7 @@ gimp_histogram_editor_init (GimpHistogramEditor *editor)
 {
   GimpHistogramView *view;
   GtkWidget         *hbox;
+  GtkWidget         *vbox;
   GtkWidget         *label;
   GtkWidget         *menu;
   GtkWidget         *grid;
@@ -235,11 +237,15 @@ gimp_histogram_editor_init (GimpHistogramEditor *editor)
       gtk_widget_show (label);
     }
 
+  vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
+  gtk_box_pack_start (GTK_BOX (editor), vbox, FALSE, FALSE, 0);
+  gtk_widget_show (vbox);
+
   hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 4);
-  gtk_box_pack_start (GTK_BOX (editor), hbox, FALSE, FALSE, 0);
+  gtk_box_pack_start (GTK_BOX (vbox), hbox, FALSE, FALSE, 0);
   gtk_widget_show (hbox);
 
-  editor->toggle = gtk_check_button_new_with_label (_("Compute unique colors:"));
+  editor->toggle = gtk_check_button_new_with_label (_("Unique colors (w/o alpha):"));
   gimp_widget_set_identifier (editor->toggle, "toggle-compute-unique-colors");
   gimp_label_set_attributes (GTK_LABEL (gtk_bin_get_child (GTK_BIN (editor->toggle))),
                              PANGO_ATTR_SCALE, PANGO_SCALE_SMALL,
@@ -253,6 +259,34 @@ gimp_histogram_editor_init (GimpHistogramEditor *editor)
                             editor);
 
   editor->labels[6] = label = g_object_new (GTK_TYPE_LABEL,
+                                            "xalign",      0.0,
+                                            "yalign",      0.5,
+                                            "width-chars", 9,
+                                            NULL);
+  gimp_label_set_attributes (GTK_LABEL (label),
+                             PANGO_ATTR_SCALE, PANGO_SCALE_SMALL,
+                             -1);
+  gtk_box_pack_start (GTK_BOX (hbox), label, FALSE, FALSE, 0);
+  gtk_widget_show (label);
+
+  hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 4);
+  gtk_box_pack_start (GTK_BOX (vbox), hbox, FALSE, FALSE, 0);
+  gtk_widget_show (hbox);
+
+  editor->toggle_with_alpha = gtk_check_button_new_with_label (_("Unique colors (w/ alpha):"));
+  gimp_widget_set_identifier (editor->toggle_with_alpha, "toggle-compute-unique-colors-w-alpha");
+  gimp_label_set_attributes (GTK_LABEL (gtk_bin_get_child (GTK_BIN (editor->toggle_with_alpha))),
+                             PANGO_ATTR_SCALE, PANGO_SCALE_SMALL,
+                             -1);
+  gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (editor->toggle_with_alpha), FALSE);
+  gtk_box_pack_start (GTK_BOX (hbox), editor->toggle_with_alpha, FALSE, FALSE, 0);
+  gtk_widget_show (editor->toggle_with_alpha);
+
+  g_signal_connect_swapped (editor->toggle_with_alpha, "toggled",
+                            G_CALLBACK (gimp_histogram_editor_info_update),
+                            editor);
+
+  editor->labels[7] = label = g_object_new (GTK_TYPE_LABEL,
                                             "xalign",      0.0,
                                             "yalign",      0.5,
                                             "width-chars", 9,
@@ -812,7 +846,8 @@ gimp_histogram_editor_info_update (GimpHistogramEditor *editor)
       if (gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (editor->toggle)))
         {
           g_snprintf (text, sizeof (text), "%d",
-                      gimp_histogram_unique_colors (editor->drawable));
+                      gimp_histogram_unique_colors (editor->drawable,
+                                                    FALSE));
           gtk_label_set_text (GTK_LABEL (editor->labels[LABEL_N_COLORS]), text);
         }
       else
@@ -820,6 +855,22 @@ gimp_histogram_editor_info_update (GimpHistogramEditor *editor)
           gchar *markup = g_strdup_printf ("<i>%s</i>", _("n/a"));
 
           gtk_label_set_markup (GTK_LABEL (editor->labels[LABEL_N_COLORS]),
+                                markup);
+          g_free (markup);
+        }
+
+      if (gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (editor->toggle_with_alpha)))
+        {
+          g_snprintf (text, sizeof (text), "%d",
+                      gimp_histogram_unique_colors (editor->drawable,
+                                                    TRUE));
+          gtk_label_set_text (GTK_LABEL (editor->labels[LABEL_N_COLORS_W_ALPHA]), text);
+        }
+      else
+        {
+          gchar *markup = g_strdup_printf ("<i>%s</i>", _("n/a"));
+
+          gtk_label_set_markup (GTK_LABEL (editor->labels[LABEL_N_COLORS_W_ALPHA]),
                                 markup);
           g_free (markup);
         }
