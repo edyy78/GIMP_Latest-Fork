@@ -962,7 +962,8 @@ void
 gimp_procedure_add_menu_path (GimpProcedure *procedure,
                               const gchar   *menu_path)
 {
-  GimpProcedurePrivate *priv;
+  GimpProcedurePrivate *priv            = NULL;
+  gchar                *menu_path_clean = NULL;
 
   g_return_if_fail (GIMP_IS_PROCEDURE (procedure));
   g_return_if_fail (menu_path != NULL);
@@ -971,11 +972,15 @@ gimp_procedure_add_menu_path (GimpProcedure *procedure,
 
   g_return_if_fail (priv->menu_label != NULL);
 
-  priv->menu_paths = g_list_append (priv->menu_paths, g_strdup (menu_path));
+  menu_path_clean = g_strdup (menu_path);
+  if (g_str_has_suffix (menu_path_clean, "/"))
+    menu_path_clean[strlen (menu_path_clean) - 1] = '\0';
+
+  priv->menu_paths = g_list_append (priv->menu_paths, menu_path_clean);
 
   if (priv->installed)
     _gimp_pdb_add_proc_menu_path (gimp_procedure_get_name (procedure),
-                                  menu_path);
+                                  menu_path_clean);
 }
 
 /**
