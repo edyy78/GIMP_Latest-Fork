@@ -41,6 +41,8 @@
 
 #include "gimp-intl.h"
 
+static void gimp_export_dialog_constructed (GObject *object);
+
 
 G_DEFINE_TYPE (GimpExportDialog, gimp_export_dialog,
                GIMP_TYPE_FILE_DIALOG)
@@ -51,6 +53,9 @@ G_DEFINE_TYPE (GimpExportDialog, gimp_export_dialog,
 static void
 gimp_export_dialog_class_init (GimpExportDialogClass *klass)
 {
+  GObjectClass *object_class = G_OBJECT_CLASS (klass);
+
+  object_class->constructed = gimp_export_dialog_constructed;
 }
 
 static void
@@ -58,6 +63,18 @@ gimp_export_dialog_init (GimpExportDialog *dialog)
 {
 }
 
+static void
+gimp_export_dialog_constructed (GObject *object)
+{
+  GimpExportDialog *dialog = GIMP_EXPORT_DIALOG (object);
+
+  /* GimpExportDialog's constructed() is doing a few initialization
+   * common to all file dialogs.
+   */
+  G_OBJECT_CLASS (parent_class)->constructed (object);
+
+  gtk_window_set_modal (GTK_WINDOW (dialog), TRUE);
+}
 
 /*  public functions  */
 
