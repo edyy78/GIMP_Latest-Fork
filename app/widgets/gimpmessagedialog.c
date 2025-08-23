@@ -96,6 +96,8 @@ gimp_message_dialog_new (const gchar    *title,
         }
     }
 
+  gtk_window_set_modal (GTK_WINDOW (dialog), TRUE);
+
   va_start (args, help_id);
 
   gimp_dialog_add_buttons_valist (GIMP_DIALOG (dialog), args);
