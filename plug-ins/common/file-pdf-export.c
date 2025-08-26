@@ -1061,9 +1061,9 @@ gui_single (GimpProcedure       *procedure,
 /* JPEG Compression                                   */
 /******************************************************/
 static void
-cairo_jpeg_free(void *ptr)
+cairo_jpeg_free (void *ptr)
 {
-  g_free(ptr);
+  g_free (ptr);
 }
 
 static void
@@ -1108,7 +1108,7 @@ jpeg_compress (GimpDrawable     *drawable,
   src_buffer = gimp_drawable_get_buffer (drawable);
   space = gimp_drawable_get_format (drawable);
 
-  memset (&cinfo, 0, sizeof(cinfo));
+  memset (&cinfo, 0, sizeof (cinfo));
   cinfo.err = jpeg_std_error (&jerr.pub);
   jerr.pub.error_exit = my_error_exit;
 
@@ -1128,7 +1128,7 @@ error_handler:
         g_free (data);
 
       if (*surface)
-        cairo_surface_destroy(*surface);
+        cairo_surface_destroy (*surface);
 
       return FALSE;
     }
