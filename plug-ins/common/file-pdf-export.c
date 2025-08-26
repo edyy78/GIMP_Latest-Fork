@@ -1084,32 +1084,32 @@ jpeg_compress (GimpDrawable     *drawable,
                cairo_surface_t **surface,
                GError          **error)
 {
-  static struct jpeg_compress_struct  cinfo;
-  static struct my_jpeg_error_mgr     jerr;
+  static struct jpeg_compress_struct cinfo;
+  static struct my_jpeg_error_mgr    jerr;
 
-  unsigned char               *jpeg_buffer = NULL;
-  unsigned long                jpeg_buffer_size = 0;
-  gint                         final_quality;
-  gint                         rowstride = 0, yend = 0;
-  guchar                      *data = NULL;
-  guchar                      *src = NULL;
-  GimpImageType                drawable_type;
-  const gchar                 *encoding = "";
-  GeglBuffer                  *src_buffer;
-  const Babl                  *format;
-  const Babl                  *space;
-  cairo_status_t               status;
-  gint                         image_width;
-  gint                         image_height;
+  GeglBuffer     *src_buffer       = NULL;
+  GimpImageType   drawable_type;
+  cairo_status_t  status;
+  const Babl     *format           = NULL;
+  const Babl     *space            = NULL;
+  const gchar    *encoding         = "";
+  gint            final_quality    = 0;
+  gint            image_height     = 0;
+  gint            image_width      = 0;
+  gint            rowstride        = 0;
+  gint            yend             = 0;
+  guchar         *data             = NULL;
+  guchar         *src              = NULL;
+  unsigned char  *jpeg_buffer      = NULL;
+  unsigned long   jpeg_buffer_size = 0;
 
   final_quality = (gint) (quality * 100.0 + 0.5);
-
   drawable_type = gimp_drawable_type (drawable);
-  src_buffer = gimp_drawable_get_buffer (drawable);
-  space = gimp_drawable_get_format (drawable);
+  src_buffer    = gimp_drawable_get_buffer (drawable);
+  space         = gimp_drawable_get_format (drawable);
 
   memset (&cinfo, 0, sizeof (cinfo));
-  cinfo.err = jpeg_std_error (&jerr.pub);
+  cinfo.err           = jpeg_std_error (&jerr.pub);
   jerr.pub.error_exit = my_error_exit;
 
   if (setjmp (jerr.setjmp_buffer))
@@ -1136,10 +1136,9 @@ error_handler:
   jpeg_create_compress (&cinfo);
 
   jpeg_buffer_size = 0x1 << 23; /* 8 megabytes */
-  jpeg_buffer = g_malloc (sizeof(unsigned char) * jpeg_buffer_size);
+  jpeg_buffer = g_malloc0 (sizeof(unsigned char) * jpeg_buffer_size);
   if (!jpeg_buffer)
     goto error_handler;
-  memset (jpeg_buffer, 0, jpeg_buffer_size);
   jpeg_mem_dest (&cinfo, &jpeg_buffer, &jpeg_buffer_size);
 
   switch (drawable_type)
@@ -1184,7 +1183,7 @@ error_handler:
    */
   /* JSAMPLEs per row in image_buffer */
   rowstride = cinfo.input_components * cinfo.image_width;
-  data = g_new (guchar, rowstride * gimp_tile_height ());
+  data      = g_new (guchar, rowstride * gimp_tile_height ());
 
   /* fault if cinfo.next_scanline isn't initially a multiple of
    * gimp_tile_height */
@@ -1224,14 +1223,15 @@ error_handler:
   /* resize jpeg_buffer to actual compressed size */
   jpeg_buffer = g_realloc (jpeg_buffer, jpeg_buffer_size);
 
-  *surface = cairo_image_surface_create_for_data (NULL, CAIRO_FORMAT_RGB24, image_width, image_height, cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, cinfo.image_width));
-  status = cairo_surface_status (*surface);
+  *surface    = cairo_image_surface_create_for_data (NULL, CAIRO_FORMAT_RGB24,
+                                                  image_width, image_height,
+                                                  cairo_format_stride_for_width(
+                                                  CAIRO_FORMAT_RGB24, cinfo.image_width));
+  status      = cairo_surface_status (*surface);
   if (status != CAIRO_STATUS_SUCCESS)
     {
-      g_set_error (error,
-                   GIMP_PLUGIN_PDF_EXPORT_ERROR,
-                   GIMP_PLUGIN_PDF_EXPORT_ERROR_FAILED,
-                   "Cairo error: %s",
+      g_set_error (error, GIMP_PLUGIN_PDF_EXPORT_ERROR,
+                   GIMP_PLUGIN_PDF_EXPORT_ERROR_FAILED, "Cairo error: %s",
                    cairo_status_to_string (status));
       goto error_handler;
     }
@@ -2049,22 +2049,22 @@ draw_layer (GimpLayer           **layers,
             gint                  layer_level,
             GError              **error)
 {
-  GimpLayer *layer;
-  gdouble    opacity;
-  gboolean   vectorize;
+  GimpLayer *layer           = NULL;
+  gboolean   compress        = TRUE;
+  gboolean   convert_text;
   gboolean   ignore_hidden;
   gboolean   layers_as_pages = FALSE;
   gboolean   reverse_order   = FALSE;
   gboolean   root_layers_only;
-  gboolean   convert_text;
-  gboolean   compress = TRUE;
-  gdouble    jpeg_quality = 0.9;
+  gboolean   vectorize;
+  gdouble    jpeg_quality     = 0.9;
+  gdouble    opacity;
 
   g_object_get (config,
-                "vectorize",           &vectorize,
-                "ignore-hidden",       &ignore_hidden,
-                "jpeg-compress",       &compress,
-                "jpeg-quality",        &jpeg_quality,
+                "vectorize",     &vectorize,
+                "ignore-hidden", &ignore_hidden,
+                "jpeg-compress", &compress,
+                "jpeg-quality",  &jpeg_quality,
                 NULL);
 
   if (single_image)
