@@ -122,10 +122,6 @@ GtkListStore         *res_store2;
 GtkListStore         *res_store3;
 GtkListStore         *list_store;
 GtkWidget            *list_view;
-GtkWidget            *crop_left_scaler_label;
-GtkWidget            *crop_top_scaler_label;
-GtkWidget            *crop_right_scaler_label;
-GtkWidget            *crop_bottom_scaler_label;
 GtkWidget            *crop_left_scaler;
 GtkWidget            *crop_top_scaler;
 GtkWidget            *crop_right_scaler;
@@ -135,6 +131,10 @@ GtkWidget            *rescombo2;
 GtkWidget            *rescombo3;
 GtkWidget            *progressbar;
 GtkWidget            *message;
+GtkWidget            *crop_left_scaler;
+GtkWidget            *crop_right_scaler;
+GtkWidget            *crop_top_scaler;
+GtkWidget            *crop_bottom_scaler;
 
 gint     devices = 0;
 gchar   *current_device_name;
@@ -149,7 +149,7 @@ gint     resolution_index = 0;
 gint     mode_index = 0;
 gint     source_index = 0;
 gint     units_measurement = IMAGE_SCANNER_IN_UNIT;
-gboolean init = TRUE;
+gint     last_units_measurement = IMAGE_SCANNER_IN_UNIT;
 gint     res_opt = 0;
 gint     mode_opt = 0;
 gint     source_opt = 0;
@@ -169,6 +169,7 @@ gdouble  bottom_current = letter_h;
 gboolean use_color = TRUE;
 gboolean use_flatbed = TRUE;
 gboolean use_adf = FALSE;
+gboolean init = TRUE;
 
 static void
 image_scanner_scan_callback (GtkWidget *dialog);

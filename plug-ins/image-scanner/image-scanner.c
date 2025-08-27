@@ -157,8 +157,8 @@ image_scanner_fetch_attribs (const gchar * device_name)
         {
           res_opt                    = i;
           SANE_Word const *values    = opt->constraint.word_list;
-          const int        res_count = values[0];
-          int              i;
+          const gint       res_count = values[0];
+          gint             i;
           gtk_list_store_clear (res_store1);
 
           GtkTreeIter iter;
@@ -177,13 +177,12 @@ image_scanner_fetch_attribs (const gchar * device_name)
         {
           mode_opt = i;
           gtk_list_store_clear (res_store2);
-          GtkTreeIter              iter;
+          GtkTreeIter iter;
           SANE_String_Const const *strings = opt->constraint.string_list;
-          gint                     i       = 0;
+          gint i = 0;
           while (*strings)
             {
               sprintf (modes[i], "%s\0", *strings);
-              // strcpy(modes[i], *strings);
               gtk_list_store_append (res_store2, &iter);
               gtk_list_store_set (res_store2, &iter, 0, modes[i], -1);
               strings++;
@@ -197,13 +196,12 @@ image_scanner_fetch_attribs (const gchar * device_name)
         {
           source_opt = i;
           gtk_list_store_clear (res_store3);
-          GtkTreeIter              iter;
+          GtkTreeIter iter;
           SANE_String_Const const *strings = opt->constraint.string_list;
-          gint                     i       = 0;
+          gint i = 0;
           while (*strings)
             {
               sprintf (sources[i], "%s\0", *strings);
-              // strcpy(sources[i], *strings);
               gtk_list_store_append (res_store3, &iter);
               gtk_list_store_set (res_store3, &iter, 0, sources[i], -1);
               strings++;
@@ -216,34 +214,84 @@ image_scanner_fetch_attribs (const gchar * device_name)
       if (strcmp ("tl-x", opt->name) == 0)
         {
           page_left_opt = i;
-          page_left     = SANE_UNFIX (opt->constraint.range->max);
-          gtk_range_set_range (GTK_RANGE (crop_left_scaler), 0.0, page_left);
-          gtk_range_set_value (GTK_RANGE (crop_left_scaler), 0.0);
+          page_left = SANE_UNFIX (opt->constraint.range->max);
+          if (units_measurement == IMAGE_SCANNER_CM_UNIT)
+            {
+              page_left /= 10;
+            }
+          if (units_measurement == IMAGE_SCANNER_IN_UNIT)
+            {
+              page_left /= 25.4;
+            }
+          gtk_spin_button_set_range (GTK_SPIN_BUTTON (crop_left_scaler), 0.0, page_left);
+          gtk_spin_button_set_value (GTK_SPIN_BUTTON (crop_left_scaler), 0.0);
         }
 
       if (strcmp ("tl-y", opt->name) == 0)
         {
           page_top_opt = i;
-          page_top     = SANE_UNFIX (opt->constraint.range->max);
-          gtk_range_set_range (GTK_RANGE (crop_top_scaler), 0.0, page_top);
-          gtk_range_set_value (GTK_RANGE (crop_top_scaler), 0.0);
+          page_top = SANE_UNFIX (opt->constraint.range->max);
+          if (units_measurement == IMAGE_SCANNER_CM_UNIT)
+            {
+              page_top /= 10;
+            }
+          if (units_measurement == IMAGE_SCANNER_IN_UNIT)
+            {
+              page_top /= 25.4;
+            }
+          gtk_spin_button_set_range (GTK_SPIN_BUTTON (crop_top_scaler), 0.0, page_top);
+          gtk_spin_button_set_value (GTK_SPIN_BUTTON (crop_top_scaler), 0.0);
         }
 
       if (strcmp ("br-x", opt->name) == 0)
         {
           page_right_opt = i;
-          page_right     = SANE_UNFIX (opt->constraint.range->max);
-          gtk_range_set_range (GTK_RANGE (crop_right_scaler), 0.0, page_right);
-          gtk_range_set_value (GTK_RANGE (crop_right_scaler), page_right);
+          page_right = SANE_UNFIX (opt->constraint.range->max);
+          gdouble value1 = letter_w;
+          if (strncasecmp (sources[source_index], "ADF", 3) == 0 ||
+              strncasecmp (sources[source_index], "ADF Duplex", 10) == 0)
+            {
+              value1 = legal_w;
+            }
+          if (units_measurement == IMAGE_SCANNER_CM_UNIT)
+            {
+              page_right /= 10;
+              value1 /= 10;
+            }
+          if (units_measurement == IMAGE_SCANNER_IN_UNIT)
+            {
+              page_right /= 25.4;
+              value1 /= 25.4;
+            }
+          gtk_spin_button_set_range (GTK_SPIN_BUTTON (crop_right_scaler), 0.0, page_right);
+          gtk_spin_button_set_value (GTK_SPIN_BUTTON (crop_right_scaler), value1);
         }
 
       if (strcmp ("br-y", opt->name) == 0)
         {
           page_bottom_opt = i;
-          page_bottom     = SANE_UNFIX (opt->constraint.range->max);
+          page_bottom = SANE_UNFIX (opt->constraint.range->max);
           page_bottom_temp = page_bottom;
-          gtk_range_set_range (GTK_RANGE (crop_bottom_scaler), 0.0, page_bottom);
-          gtk_range_set_value (GTK_RANGE (crop_bottom_scaler), letter_h);
+
+          g_print ("b:%f\n", page_bottom);
+          gdouble value2 = letter_h;
+          if (strncasecmp (sources[source_index], "ADF", 3) == 0 ||
+              strncasecmp (sources[source_index], "ADF Duplex", 10) == 0)
+            {
+              value2 = legal_h;
+            }
+          if (units_measurement == IMAGE_SCANNER_CM_UNIT)
+            {
+              page_bottom /= 10;
+              value2 /= 10;
+            }
+          if (units_measurement == IMAGE_SCANNER_IN_UNIT)
+            {
+              page_bottom /= 25.4;
+              value2 /= 25.4;
+            }
+          gtk_spin_button_set_range (GTK_SPIN_BUTTON (crop_bottom_scaler), 0.0, page_bottom);
+          gtk_spin_button_set_value (GTK_SPIN_BUTTON (crop_bottom_scaler), value2);
         }
     }
 
@@ -285,7 +333,7 @@ image_scanner_scan_callback (GtkWidget *dialog)
 
 static GtkWidget *
 image_scanner_create_page_grid (GtkWidget   *notebook,
-                                  const gchar *tab_name)
+                                const gchar *tab_name)
 {
   GtkWidget *scrolled_win;
   GtkWidget *viewport;
@@ -334,7 +382,7 @@ image_scanner_create_page_grid (GtkWidget   *notebook,
 
 static void
 activate_scanner_callback (GtkTreeSelection *selection,
-                     gpointer   data)
+                           gpointer          data)
 {
   GtkTreeIter iter;
   GtkTreeModel *model;
@@ -376,7 +424,7 @@ image_scanner_devices_callback (GtkWidget *dialog)
 
 static void
 unitscombo_callback (GtkWidget *widget,
-                      gpointer   data)
+                     gpointer   data)
 {
   const gchar str[256];
   gint temp = units_measurement;
@@ -386,68 +434,113 @@ unitscombo_callback (GtkWidget *widget,
                 units_measurement,
                 NULL);
 
-  left_current = gtk_range_get_value (GTK_RANGE (crop_left_scaler));
-  right_current = gtk_range_get_value (GTK_RANGE (crop_right_scaler));
-  top_current = gtk_range_get_value (GTK_RANGE (crop_top_scaler));
-  bottom_current = gtk_range_get_value (GTK_RANGE (crop_bottom_scaler));
+  left_current = gtk_spin_button_get_value (GTK_SPIN_BUTTON (crop_left_scaler));
+  right_current = gtk_spin_button_get_value (GTK_SPIN_BUTTON (crop_right_scaler));
+  top_current = gtk_spin_button_get_value (GTK_SPIN_BUTTON (crop_top_scaler));
+  bottom_current = gtk_spin_button_get_value (GTK_SPIN_BUTTON (crop_bottom_scaler));
+
+  gint digits = 1;
+  gdouble max_width = page_right;
+  gdouble max_height = page_bottom;
 
   if (units_measurement == IMAGE_SCANNER_MM_UNIT)
     {
-      sprintf (str, "%.2f", left_current);
-      gtk_label_set_label (GTK_LABEL (crop_left_scaler_label), str);
+      digits = 1;
+      if (last_units_measurement == IMAGE_SCANNER_CM_UNIT)
+        {
+          left_current *= 10.0;
+          right_current *= 10.0;
+          top_current *= 10.0;
+          bottom_current *= 10.0;
+          max_width *= 10.0;
+          max_height *= 10.0;
+        }
 
-      sprintf (str, "%.2f", right_current);
-      gtk_label_set_label (GTK_LABEL (crop_right_scaler_label), str);
-
-      sprintf (str, "%.2f", top_current);
-      gtk_label_set_label (GTK_LABEL (crop_top_scaler_label), str);
-
-      sprintf (str, "%.2f", bottom_current);
-      gtk_label_set_label (GTK_LABEL (crop_bottom_scaler_label), str);
+      if (last_units_measurement == IMAGE_SCANNER_IN_UNIT)
+        {
+          left_current *= 25.4;
+          right_current *= 25.4;
+          top_current *= 25.4;
+          bottom_current *= 25.4;
+          max_width *= 25.4;
+          max_height *= 25.4;
+        }
     }
 
   if (units_measurement == IMAGE_SCANNER_CM_UNIT)
     {
-      left_current /= 10;
-      sprintf (str, "%.2f", left_current);
-      gtk_label_set_label (GTK_LABEL (crop_left_scaler_label), str);
+      digits = 2;
+      if (last_units_measurement == IMAGE_SCANNER_MM_UNIT)
+        {
+          left_current /= 10.0;
+          right_current /= 10.0;
+          top_current /= 10.0;
+          bottom_current /= 10.0;
+          max_width /= 10.0;
+          max_height /= 10.0;
+        }
 
-      right_current /= 10;
-      sprintf (str, "%.2f", right_current);
-      gtk_label_set_label (GTK_LABEL (crop_right_scaler_label), str);
-
-      top_current /= 10;
-      sprintf (str, "%.2f", top_current);
-      gtk_label_set_label (GTK_LABEL (crop_top_scaler_label), str);
-
-      bottom_current /= 10;
-      sprintf (str, "%.2f", bottom_current);
-      gtk_label_set_label (GTK_LABEL (crop_bottom_scaler_label), str);
+      if (last_units_measurement == IMAGE_SCANNER_IN_UNIT)
+        {
+          left_current *= 2.54;
+          right_current *= 2.54;
+          top_current *= 2.54;
+          bottom_current *= 2.54;
+          max_width *= 2.54;
+          max_height *= 2.54;
+        }
     }
 
   if (units_measurement == IMAGE_SCANNER_IN_UNIT)
     {
-      left_current /= 25.4;
-      sprintf (str, "%.2f", left_current);
-      gtk_label_set_label (GTK_LABEL (crop_left_scaler_label), str);
+      digits = 2;
+      if (last_units_measurement == IMAGE_SCANNER_MM_UNIT)
+        {
+          left_current /= 25.4;
+          right_current /= 25.4;
+          top_current /= 25.4;
+          bottom_current /= 25.4;
+          max_width /= 25.4;
+          max_height /= 25.4;
+        }
 
-      right_current /= 25.4;
-      sprintf (str, "%.2f", right_current);
-      gtk_label_set_label (GTK_LABEL (crop_right_scaler_label), str);
-
-      top_current /= 25.4;
-      sprintf (str, "%.2f", top_current);
-      gtk_label_set_label (GTK_LABEL (crop_top_scaler_label), str);
-
-      bottom_current /= 25.4;
-      sprintf (str, "%.2f", bottom_current);
-      gtk_label_set_label (GTK_LABEL (crop_bottom_scaler_label), str);
+      if (last_units_measurement == IMAGE_SCANNER_CM_UNIT)
+        {
+          left_current /= 2.54;
+          right_current /= 2.54;
+          top_current /= 2.54;
+          bottom_current /= 2.54;
+          max_width /= 2.54;
+          max_height /= 2.54;
+        }
     }
+
+  gtk_spin_button_set_digits (GTK_SPIN_BUTTON (crop_left_scaler), digits);
+  gtk_spin_button_set_digits (GTK_SPIN_BUTTON (crop_right_scaler), digits);
+  gtk_spin_button_set_digits (GTK_SPIN_BUTTON (crop_top_scaler), digits);
+  gtk_spin_button_set_digits (GTK_SPIN_BUTTON (crop_bottom_scaler), digits);
+
+  gtk_spin_button_set_range (GTK_SPIN_BUTTON (crop_left_scaler), 0.0, max_width);
+  gtk_spin_button_set_range (GTK_SPIN_BUTTON (crop_right_scaler), 0.0, max_width);
+  gtk_spin_button_set_range (GTK_SPIN_BUTTON (crop_top_scaler), 0.0, max_height);
+  gtk_spin_button_set_range (GTK_SPIN_BUTTON (crop_bottom_scaler), 0.0, max_height);
+
+  gtk_spin_button_set_value (GTK_SPIN_BUTTON (crop_left_scaler), left_current);
+  gtk_spin_button_set_value (GTK_SPIN_BUTTON (crop_right_scaler), right_current);
+  gtk_spin_button_set_value (GTK_SPIN_BUTTON (crop_top_scaler), top_current);
+  gtk_spin_button_set_value (GTK_SPIN_BUTTON (crop_bottom_scaler), bottom_current);
+
+  page_left = max_width;
+  page_right = max_width;
+  page_top = max_height;
+  page_bottom = max_height;
+
+  last_units_measurement = units_measurement;
 }
 
 static void
 resolution_combo_callback (GtkWidget *widget,
-                      gpointer   data)
+                           gpointer   data)
 {
   if (init)
     return;
@@ -457,7 +550,7 @@ resolution_combo_callback (GtkWidget *widget,
 
 static void
 mode_combo_callback (GtkWidget *widget,
-                      gpointer   data)
+                     gpointer   data)
 {
   if (init)
     return;
@@ -473,7 +566,7 @@ mode_combo_callback (GtkWidget *widget,
 
 static void
 source_combo_callback (GtkWidget *widget,
-                      gpointer   data)
+                       gpointer   data)
 {
   if (init)
     return;
@@ -482,6 +575,14 @@ source_combo_callback (GtkWidget *widget,
 
   use_flatbed = TRUE;
   page_bottom = page_bottom_temp;
+  if (units_measurement == IMAGE_SCANNER_CM_UNIT)
+    {
+      page_bottom /= 10;
+    }
+  if (units_measurement == IMAGE_SCANNER_CM_UNIT)
+    {
+      page_bottom /= 25.4;
+    }
   if (strncasecmp (sources[source_index], "flatbed", 7) != 0 &&
       strncasecmp (sources[source_index], "fb", 2) != 0)
     {
@@ -494,6 +595,14 @@ source_combo_callback (GtkWidget *widget,
     {
       /* Mod to allow ADF to scan legal document sizes */
       page_bottom = legal_h;
+      if (units_measurement == IMAGE_SCANNER_CM_UNIT)
+        {
+          page_bottom /= 10;
+        }
+      if (units_measurement == IMAGE_SCANNER_CM_UNIT)
+        {
+          page_bottom /= 25.4;
+        }
 
       use_adf = TRUE;
     }
@@ -502,112 +611,40 @@ source_combo_callback (GtkWidget *widget,
   if (bottom_current > page_bottom)
     {
       bottom_current = letter_h;
+      if (units_measurement == IMAGE_SCANNER_CM_UNIT)
+        {
+          bottom_current /= 10;
+        }
+      if (units_measurement == IMAGE_SCANNER_CM_UNIT)
+        {
+          bottom_current /= 25.4;
+        }
     }
 
-  gtk_range_set_range (GTK_RANGE (crop_bottom_scaler), 0.0, page_bottom);
-  gtk_range_set_value (GTK_RANGE (crop_bottom_scaler), letter_h);
-}
-
-static void
-crop_left_scaler_callback (GtkWidget *widget,
-                           GtkWidget *label)
-{
-  const gchar str[256];
-  left_current = gtk_range_get_value (GTK_RANGE (widget));
-  if (units_measurement == IMAGE_SCANNER_CM_UNIT)
-  {
-    left_current /= 10;
-    sprintf (str, "%.2f", left_current);
-  }
-  else if (units_measurement == IMAGE_SCANNER_IN_UNIT)
-  {
-    left_current /= 25.4;
-    sprintf (str, "%.2f", left_current);
-  }
-  else
-  {
-    sprintf (str, "%.1f", left_current);
-  }
-
-  gtk_label_set_label (GTK_LABEL (label), str);
-}
-
-static void
-crop_right_scaler_callback (GtkWidget *widget,
-                            GtkWidget *label)
-{
-  const gchar str[256];
-
-  right_current = gtk_range_get_value (GTK_RANGE (widget));
-
+  gint digits = 1;
   if (units_measurement == IMAGE_SCANNER_CM_UNIT)
     {
-      right_current /= 10;
-      sprintf (str, "%.2f", right_current);
+      digits = 2;
     }
-  else if (units_measurement == IMAGE_SCANNER_IN_UNIT)
-    {
-      right_current /= 25.4;
-      sprintf (str, "%.2f", right_current);
-    }
-  else
-    {
-      sprintf (str, "%.1f", right_current);
-    }
-
-  gtk_label_set_label (GTK_LABEL (label), str);
-}
-
-static void
-crop_top_scaler_callback (GtkWidget *widget,
-                          GtkWidget *label)
-{
-  const gchar str[256];
-
-  top_current = gtk_range_get_value (GTK_RANGE (widget));
-
-  if (units_measurement == IMAGE_SCANNER_CM_UNIT)
-  {
-    top_current /= 10;
-    sprintf (str, "%.2f", top_current);
-  }
-  else if (units_measurement == IMAGE_SCANNER_IN_UNIT)
-  {
-    top_current /= 25.4;
-    sprintf (str, "%.2f", top_current);
-  }
-  else
-  {
-    sprintf (str, "%.1f", top_current);
-  }
-
-  gtk_label_set_label (GTK_LABEL (label), str);
-}
-
-static void
-crop_bottom_scaler_callback (GtkWidget *widget,
-                             GtkWidget *label)
-{
-  const gchar str[256];
-
-  bottom_current = gtk_range_get_value (GTK_RANGE (widget));
-
   if (units_measurement == IMAGE_SCANNER_CM_UNIT)
     {
-      bottom_current /= 10;
-      sprintf (str, "%.2f", bottom_current);
-    }
-  else if (units_measurement == IMAGE_SCANNER_IN_UNIT)
-    {
-      bottom_current /= 25.4;
-      sprintf (str, "%.2f", bottom_current);
-    }
-  else
-    {
-      sprintf (str, "%.1f", bottom_current);
+      digits = 2;
     }
 
-  gtk_label_set_label (GTK_LABEL (label), str);
+  gtk_spin_button_set_digits (GTK_SPIN_BUTTON (crop_left_scaler), digits);
+  gtk_spin_button_set_digits (GTK_SPIN_BUTTON (crop_right_scaler), digits);
+  gtk_spin_button_set_digits (GTK_SPIN_BUTTON (crop_top_scaler), digits);
+  gtk_spin_button_set_digits (GTK_SPIN_BUTTON (crop_bottom_scaler), digits);
+
+  gtk_spin_button_set_range (GTK_SPIN_BUTTON (crop_left_scaler), 0.0, page_right);
+  gtk_spin_button_set_range (GTK_SPIN_BUTTON (crop_right_scaler), 0.0, page_right);
+  gtk_spin_button_set_range (GTK_SPIN_BUTTON (crop_top_scaler), 0.0, page_bottom);
+  gtk_spin_button_set_range (GTK_SPIN_BUTTON (crop_bottom_scaler), 0.0, page_bottom);
+
+  gtk_spin_button_set_value (GTK_SPIN_BUTTON (crop_left_scaler), left_current);
+  gtk_spin_button_set_value (GTK_SPIN_BUTTON (crop_right_scaler), right_current);
+  gtk_spin_button_set_value (GTK_SPIN_BUTTON (crop_top_scaler), top_current);
+  gtk_spin_button_set_value (GTK_SPIN_BUTTON (crop_bottom_scaler), bottom_current);
 }
 
 static gboolean
@@ -667,6 +704,8 @@ image_scanner_dialog (GimpProcedure        *procedure,
                 "mode-index",        &mode_index,
                 "source-index",      &source_index,
                 NULL);
+
+  last_units_measurement = units_measurement;
 
   dialog = gimp_dialog_new (_("Image Scanner (SANE)"),
                           PLUG_IN_ROLE,
@@ -836,101 +875,50 @@ image_scanner_dialog (GimpProcedure        *procedure,
   hbox1 = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 3);
   crop_left_label = gtk_label_new (_("Page crop left"));
   gtk_container_add (GTK_CONTAINER (hbox1), crop_left_label);
-
-  hbox1a = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 3);
-  crop_left_scaler_label = gtk_label_new ("0.0");
-  gtk_widget_set_size_request(crop_left_scaler_label, 40, 10);
-  gtk_box_pack_end (GTK_BOX (hbox1a), crop_left_scaler_label, FALSE, FALSE, 3);
-
-  crop_left_scaler = gtk_scale_new_with_range (GTK_ORIENTATION_HORIZONTAL, 0.0,
-                                               page_left, 1.0);
-  gtk_scale_set_digits(GTK_SCALE (crop_left_scaler), digits);
-  gtk_scale_set_has_origin(GTK_SCALE (crop_left_scaler), TRUE);
-  gtk_scale_set_draw_value(GTK_SCALE (crop_left_scaler), FALSE);
-  gtk_scale_set_value_pos(GTK_SCALE (crop_left_scaler), GTK_POS_RIGHT);
-  gtk_widget_set_size_request(crop_left_scaler, 300, 10);
-  gtk_box_pack_end (GTK_BOX (hbox1a), crop_left_scaler, FALSE, FALSE, 3);
-  gtk_box_pack_end (GTK_BOX (hbox1), hbox1a, FALSE, FALSE, 40);
+  GtkAdjustment *adjustment_left = gtk_adjustment_new (0.0, 0.0, page_left, 1.0, 1.0, 0.0);
+  crop_left_scaler = gimp_spin_scale_new (adjustment_left, "", digits);
+  gtk_widget_set_size_request(crop_left_scaler, 360, 16);
+  gtk_box_pack_end (GTK_BOX (hbox1), crop_left_scaler, FALSE, FALSE, 20);
   gtk_container_add (GTK_CONTAINER (standardbox2), hbox1);
-  g_signal_connect (crop_left_scaler,
-                    "value-changed",
-                    G_CALLBACK (crop_left_scaler_callback),
-                    crop_left_scaler_label);
+  gtk_widget_show (crop_left_scaler);
+  gtk_widget_show (hbox1);
 
   // =============
   hbox2 = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 3);
   crop_top_label = gtk_label_new (_("Page crop top"));
   gtk_container_add (GTK_CONTAINER (hbox2), crop_top_label);
-
-  hbox2a = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 3);
-  crop_top_scaler_label = gtk_label_new ("0.0");
-  gtk_widget_set_size_request(crop_top_scaler_label, 40, 10);
-  gtk_box_pack_end (GTK_BOX (hbox2a), crop_top_scaler_label, FALSE, FALSE, 3);
-
-  crop_top_scaler = gtk_scale_new_with_range (GTK_ORIENTATION_HORIZONTAL, 0.0,
-                                              page_top, 1.0);
-  gtk_scale_set_digits(GTK_SCALE (crop_top_scaler), digits);
-  gtk_scale_set_has_origin(GTK_SCALE (crop_top_scaler), TRUE);
-  gtk_scale_set_draw_value(GTK_SCALE (crop_top_scaler), FALSE);
-  gtk_scale_set_value_pos(GTK_SCALE (crop_top_scaler), GTK_POS_RIGHT);
-  gtk_widget_set_size_request(crop_top_scaler, 300, 10);
-  gtk_box_pack_end (GTK_BOX (hbox2a), crop_top_scaler, FALSE, FALSE, 3);
-  gtk_box_pack_end (GTK_BOX (hbox2), hbox2a, FALSE, FALSE, 40);
+  GtkAdjustment *adjustment_top = gtk_adjustment_new (0.0, 0.0, page_top, 1.0, 1.0, 0.0);
+  crop_top_scaler = gimp_spin_scale_new (adjustment_top, "", digits);
+  gtk_widget_set_size_request(crop_top_scaler, 360, 16);
+  gtk_box_pack_end (GTK_BOX (hbox2), crop_top_scaler, FALSE, FALSE, 20);
   gtk_container_add (GTK_CONTAINER (standardbox2), hbox2);
-  g_signal_connect (crop_top_scaler,
-                    "value-changed",
-                    G_CALLBACK(crop_top_scaler_callback),
-                    crop_top_scaler_label);
+  gtk_widget_show (crop_top_scaler);
+  gtk_widget_show (hbox2);
 
   // =============
   hbox3 = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 3);
   crop_right_label = gtk_label_new (_("Page crop right"));
   gtk_container_add (GTK_CONTAINER (hbox3), crop_right_label);
 
-  hbox3a = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 3);
-  crop_right_scaler_label = gtk_label_new ("0.0");
-  gtk_widget_set_size_request(crop_right_scaler_label, 40, 10);
-  gtk_box_pack_end (GTK_BOX (hbox3a), crop_right_scaler_label, FALSE, FALSE, 3);
-
-  crop_right_scaler = gtk_scale_new_with_range (GTK_ORIENTATION_HORIZONTAL, 0.0,
-                                                page_right, 1.0);
-  gtk_scale_set_digits(GTK_SCALE (crop_right_scaler), digits);
-  gtk_scale_set_has_origin(GTK_SCALE (crop_right_scaler), TRUE);
-  gtk_scale_set_draw_value(GTK_SCALE (crop_right_scaler), FALSE);
-  gtk_scale_set_value_pos(GTK_SCALE (crop_right_scaler), GTK_POS_RIGHT);
-  gtk_widget_set_size_request(crop_right_scaler, 300, 10);
-  gtk_box_pack_end (GTK_BOX (hbox3a), crop_right_scaler, FALSE, FALSE, 3);
-  gtk_box_pack_end (GTK_BOX (hbox3), hbox3a, FALSE, FALSE, 40);
+  GtkAdjustment *adjustment_right = gtk_adjustment_new (0.0, 0.0, page_right, 1.0, 1.0, 0.0);
+  crop_right_scaler = gimp_spin_scale_new (adjustment_right, "", digits);
+  gtk_widget_set_size_request(crop_right_scaler, 360, 16);
+  gtk_box_pack_end (GTK_BOX (hbox3), crop_right_scaler, FALSE, FALSE, 20);
   gtk_container_add (GTK_CONTAINER (standardbox2), hbox3);
-  g_signal_connect (crop_right_scaler,
-                    "value-changed",
-                    G_CALLBACK(crop_right_scaler_callback),
-                    crop_right_scaler_label);
+  gtk_widget_show (crop_right_scaler);
+  gtk_widget_show (hbox3);
 
   // =============
   hbox4 = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 3);
   crop_bottom_label = gtk_label_new (_("Page crop bottom"));
   gtk_container_add (GTK_CONTAINER (hbox4), crop_bottom_label);
-
-  hbox4a = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 3);
-  crop_bottom_scaler_label = gtk_label_new ("0.0");
-  gtk_widget_set_size_request(crop_bottom_scaler_label, 40, 10);
-  gtk_box_pack_end (GTK_BOX (hbox4a), crop_bottom_scaler_label, FALSE, FALSE, 3);
-
-  crop_bottom_scaler = gtk_scale_new_with_range (GTK_ORIENTATION_HORIZONTAL, 0.0,
-                                                 page_bottom, 1.0);
-  gtk_scale_set_digits(GTK_SCALE (crop_bottom_scaler), digits);
-  gtk_scale_set_has_origin(GTK_SCALE (crop_bottom_scaler), TRUE);
-  gtk_scale_set_draw_value(GTK_SCALE (crop_bottom_scaler), FALSE);
-  gtk_scale_set_value_pos(GTK_SCALE (crop_bottom_scaler), GTK_POS_RIGHT);
-  gtk_widget_set_size_request(crop_bottom_scaler, 300, 10);
-  gtk_box_pack_end (GTK_BOX (hbox4a), crop_bottom_scaler, FALSE, FALSE, 3);
-  gtk_box_pack_end (GTK_BOX (hbox4), hbox4a, FALSE, FALSE, 40);
+  GtkAdjustment *adjustment_bottom = gtk_adjustment_new (0.0, 0.0, page_bottom, 1.0, 1.0, 0.0);
+  crop_bottom_scaler = gimp_spin_scale_new (adjustment_bottom, "", digits);
+  gtk_widget_set_size_request(crop_bottom_scaler, 360, 16);
+  gtk_box_pack_end (GTK_BOX (hbox4), crop_bottom_scaler, FALSE, FALSE, 20);
   gtk_container_add (GTK_CONTAINER (standardbox2), hbox4);
-  g_signal_connect (crop_bottom_scaler,
-                    "value-changed",
-                    G_CALLBACK(crop_bottom_scaler_callback),
-                    crop_bottom_scaler_label);
+  gtk_widget_show (crop_bottom_scaler);
+  gtk_widget_show (hbox4);
 
   // =============
   hbox5 = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 3);
@@ -953,27 +941,19 @@ image_scanner_dialog (GimpProcedure        *procedure,
   gtk_container_add (GTK_CONTAINER (grid3), standardbox2);
   gtk_widget_show (standardbox2);
   gtk_widget_show (hbox1);
-  gtk_widget_show (hbox1a);
   gtk_widget_show (hbox2);
-  gtk_widget_show (hbox2a);
   gtk_widget_show (hbox3);
-  gtk_widget_show (hbox3a);
   gtk_widget_show (hbox4);
-  gtk_widget_show (hbox4a);
   gtk_widget_show (hbox5);
 
   gtk_widget_show (crop_left_label);
   gtk_widget_show (crop_left_scaler);
-  gtk_widget_show (crop_left_scaler_label);
   gtk_widget_show (crop_right_label);
   gtk_widget_show (crop_right_scaler);
-  gtk_widget_show (crop_right_scaler_label);
   gtk_widget_show (crop_top_label);
   gtk_widget_show (crop_top_scaler);
-  gtk_widget_show (crop_top_scaler_label);
   gtk_widget_show (crop_bottom_label);
   gtk_widget_show (crop_bottom_scaler);
-  gtk_widget_show (crop_bottom_scaler_label);
 
   gtk_widget_show (unitslabel1);
   gtk_widget_show (unitscombo1);

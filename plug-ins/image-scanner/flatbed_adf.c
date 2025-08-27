@@ -697,16 +697,16 @@ flatbed_start_scan(const gchar *device_name)
     }
 
   /* set page crops */
-  gdouble mult = 1.0;
+  gdouble factor = 1.0;
   if (units_measurement == 1 /* IMAGE_SCANNER_CM_UNIT */)
     {
-      mult = 10.0;
+      factor = 10.0;
     }
   if (units_measurement == 2 /* IMAGE_SCANNER_IN_UNIT */)
     {
-      mult = 25.4;
+      factor = 25.4;
     }
-  gdouble value = left_current * mult;
+  gdouble value = left_current * factor;
   SANE_Word fixed = SANE_FIX(value);
   opt = sane_get_option_descriptor (devhandle, page_left_opt);
   status = sane_control_option (devhandle, page_left_opt, SANE_ACTION_SET_VALUE,
@@ -717,7 +717,7 @@ flatbed_start_scan(const gchar *device_name)
       gimp_message (_("Cannot set page crop left\n"));
     }
 
-  value = right_current * mult;
+  value = right_current * factor;
   fixed = SANE_FIX(value);
   opt = sane_get_option_descriptor (devhandle, page_right_opt);
   status = sane_control_option (devhandle, page_right_opt, SANE_ACTION_SET_VALUE,
@@ -728,7 +728,7 @@ flatbed_start_scan(const gchar *device_name)
       gimp_message (_("Cannot set page crop right\n"));
     }
 
-  value = top_current * mult;
+  value = top_current * factor;
   fixed = SANE_FIX(value);
   opt = sane_get_option_descriptor (devhandle, page_top_opt);
   status = sane_control_option (devhandle, page_top_opt, SANE_ACTION_SET_VALUE,
@@ -739,7 +739,7 @@ flatbed_start_scan(const gchar *device_name)
       gimp_message (_("Cannot set page crop top\n"));
     }
 
-  value = bottom_current * mult;
+  value = bottom_current * factor;
   fixed = SANE_FIX(value);
   opt = sane_get_option_descriptor (devhandle, page_bottom_opt);
   status = sane_control_option (devhandle, page_bottom_opt, SANE_ACTION_SET_VALUE,
