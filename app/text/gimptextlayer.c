@@ -70,6 +70,13 @@ enum
 struct _GimpTextLayerPrivate
 {
   GimpTextDirection base_dir;
+
+  /* on-canvas editor position */
+  gboolean          style_overlay_positioned;
+  gdouble           style_overlay_x;
+  gdouble           style_overlay_y;
+  gdouble           style_overlay_offset_x;
+  gdouble           style_overlay_offset_y;
 };
 
 static void       gimp_text_layer_finalize       (GObject           *object);
@@ -609,6 +616,93 @@ gimp_item_is_text_layer (GimpItem *item)
   return (GIMP_IS_TEXT_LAYER (item)    &&
           GIMP_TEXT_LAYER (item)->text &&
           GIMP_TEXT_LAYER (item)->modified == FALSE);
+}
+
+
+void
+gimp_text_layer_set_style_overlay_position (GimpTextLayer *layer,
+                                            gboolean       positioned,
+                                            gdouble        x,
+                                            gdouble        y)
+{
+  GimpTextLayerPrivate *priv;
+
+  g_return_if_fail (GIMP_IS_TEXT_LAYER (layer));
+
+  priv = layer->private;
+
+  priv->style_overlay_positioned = positioned;
+
+  /* We want to set "style_overlay_x" and "style_overlay_y" only
+   * when "positioned" is TRUE. Otherwhise, we only want to set
+   * "style_overlay_positioned" to FALSE */
+  if (positioned)
+    {
+      priv->style_overlay_x = x;
+      priv->style_overlay_y = y;
+    }
+}
+
+gboolean
+gimp_text_layer_get_style_overlay_position (GimpTextLayer *layer,
+                                            gdouble       *x,
+                                            gdouble       *y)
+{
+  GimpTextLayerPrivate *priv;
+
+  g_return_val_if_fail (GIMP_IS_TEXT_LAYER (layer), FALSE);
+
+  priv = layer->private;
+
+  if (! priv->style_overlay_positioned)
+    return FALSE;
+
+  *x = priv->style_overlay_x;
+  *y = priv->style_overlay_y;
+
+  return TRUE;
+}
+
+gboolean
+gimp_text_layer_is_style_overlay_positioned (GimpTextLayer *layer)
+{
+  GimpTextLayerPrivate *priv;
+
+  g_return_val_if_fail (GIMP_IS_TEXT_LAYER (layer), FALSE);
+
+  priv = layer->private;
+
+  return priv->style_overlay_positioned;
+}
+
+void
+gimp_text_layer_set_style_overlay_offset (GimpTextLayer *layer,
+                                          gdouble        offset_x,
+                                          gdouble        offset_y)
+{
+  GimpTextLayerPrivate *priv;
+
+  g_return_if_fail (GIMP_IS_TEXT_LAYER (layer));
+
+  priv = layer->private;
+
+  priv->style_overlay_offset_x = offset_x;
+  priv->style_overlay_offset_y = offset_y;
+}
+
+void
+gimp_text_layer_get_style_overlay_offset (GimpTextLayer *layer,
+                                          gdouble       *offset_x,
+                                          gdouble       *offset_y)
+{
+  GimpTextLayerPrivate *priv;
+
+  g_return_if_fail (GIMP_IS_TEXT_LAYER (layer));
+
+  priv = layer->private;
+
+  *offset_x = priv->style_overlay_offset_x;
+  *offset_y = priv->style_overlay_offset_y;
 }
 
 

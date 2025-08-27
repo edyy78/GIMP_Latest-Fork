@@ -36,7 +36,10 @@
 
 #include "display/gimpdisplay.h"
 
+#include "text/gimptextlayer.h"
+
 #include "tools/gimptexttool.h"
+#include "tools/gimptexttool-editor.h"
 
 #include "dialogs/dialogs.h"
 
@@ -205,6 +208,17 @@ text_tool_direction_cmd_callback (GimpAction *action,
                 "base-direction", direction,
                 NULL);
 }
+
+void
+text_tool_restore_on_canvas_editor_position_cmd_callback (GimpAction *action,
+                                                          GVariant   *value,
+                                                          gpointer    data)
+{
+  GimpTextTool *text_tool = GIMP_TEXT_TOOL (data);
+
+  gimp_text_tool_restore_on_canvas_editor_position (text_tool);
+}
+
 
 
 /*  private functions  */

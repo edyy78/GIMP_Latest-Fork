@@ -72,3 +72,23 @@ void        gimp_text_layer_set         (GimpTextLayer *layer,
                                          ...) G_GNUC_NULL_TERMINATED;
 
 gboolean    gimp_item_is_text_layer     (GimpItem      *item);
+
+void        gimp_text_layer_set_style_overlay_position
+                                        (GimpTextLayer *layer,
+                                         gboolean       positioned,
+                                         gdouble        x,
+                                         gdouble        y);
+gboolean    gimp_text_layer_get_style_overlay_position
+                                        (GimpTextLayer *layer,
+                                         gdouble       *x,
+                                         gdouble       *y);
+gboolean    gimp_text_layer_is_style_overlay_positioned
+                                        (GimpTextLayer *layer);
+void        gimp_text_layer_set_style_overlay_offset
+                                        (GimpTextLayer *layer,
+                                         gdouble        offset_x,
+                                         gdouble        offset_y);
+void        gimp_text_layer_get_style_overlay_offset
+                                        (GimpTextLayer *layer,
+                                         gdouble       *offset_x,
+                                         gdouble       *offset_y);
