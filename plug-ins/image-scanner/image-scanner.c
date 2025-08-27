@@ -599,7 +599,7 @@ source_combo_callback (GtkWidget *widget,
         {
           page_bottom /= 10;
         }
-      if (units_measurement == IMAGE_SCANNER_CM_UNIT)
+      if (units_measurement == IMAGE_SCANNER_IN_UNIT)
         {
           page_bottom /= 25.4;
         }
@@ -611,11 +611,17 @@ source_combo_callback (GtkWidget *widget,
   if (bottom_current > page_bottom)
     {
       bottom_current = letter_h;
+      if (strncasecmp (sources[source_index], "ADF", 3) == 0 ||
+          strncasecmp (sources[source_index], "ADF Duplex", 10) == 0)
+        {
+          bottom_current = legal_h;
+        }
+
       if (units_measurement == IMAGE_SCANNER_CM_UNIT)
         {
           bottom_current /= 10;
         }
-      if (units_measurement == IMAGE_SCANNER_CM_UNIT)
+      if (units_measurement == IMAGE_SCANNER_IN_UNIT)
         {
           bottom_current /= 25.4;
         }
@@ -626,7 +632,7 @@ source_combo_callback (GtkWidget *widget,
     {
       digits = 2;
     }
-  if (units_measurement == IMAGE_SCANNER_CM_UNIT)
+  if (units_measurement == IMAGE_SCANNER_IN_UNIT)
     {
       digits = 2;
     }
