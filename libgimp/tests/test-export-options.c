@@ -26,6 +26,9 @@ gimp_c_test_run (GimpProcedure        *procedure,
   GimpExportOptions  *options;
   GimpExportReturn    delete;
   gboolean            identical_buffers;
+  GimpLayer          *layer_with_mask;
+  GimpLayerMask      *layer_mask;
+  GimpLayerMask      *mask;
 
   new_image = gimp_image_new (NEW_IMAGE_WIDTH, NEW_IMAGE_HEIGHT, GIMP_RGB);
   text_layer = gimp_text_layer_new (new_image, "hello world", gimp_context_get_font (),
@@ -34,6 +37,16 @@ gimp_c_test_run (GimpProcedure        *procedure,
   text_layer = gimp_text_layer_new (new_image, "annyeong uju", gimp_context_get_font (),
                                     20, gimp_unit_point ());
   gimp_image_insert_layer (new_image, GIMP_LAYER (text_layer), NULL, 0);
+
+
+  layer_with_mask = gimp_layer_new (new_image, "Layer with mask",
+                                    NEW_IMAGE_WIDTH, NEW_IMAGE_HEIGHT,
+                                    GIMP_RGBA_IMAGE, 100.0, GIMP_LAYER_MODE_NORMAL);
+  gimp_image_insert_layer (new_image, layer_with_mask, NULL, 0);
+
+  layer_mask = gimp_layer_create_mask (layer_with_mask, GIMP_ADD_MASK_WHITE);
+  gimp_layer_add_mask (layer_with_mask, layer_mask);
+
 
   options = g_object_new (GIMP_TYPE_EXPORT_OPTIONS,
                           "capabilities", GIMP_EXPORT_CAN_HANDLE_RGB | GIMP_EXPORT_CAN_HANDLE_ALPHA,
@@ -46,7 +59,13 @@ gimp_c_test_run (GimpProcedure        *procedure,
 
   GIMP_TEST_START("Verify start state (2)");
   layers = gimp_image_get_layers (new_image);
-  GIMP_TEST_END(gimp_core_object_array_get_length ((GObject **) layers) == 2);
+  GIMP_TEST_END(gimp_core_object_array_get_length ((GObject **) layers) == 3);
+  g_free (layers);
+
+  GIMP_TEST_START("Verify start state (3)");
+  layers = gimp_image_get_layers (new_image);
+  mask = gimp_layer_get_mask (layers[0]);
+  GIMP_TEST_END(mask != NULL);
   g_free (layers);
 
   original_image = new_image;
@@ -57,12 +76,14 @@ gimp_c_test_run (GimpProcedure        *procedure,
   GIMP_TEST_END(delete == GIMP_EXPORT_EXPORT && gimp_core_object_array_get_length ((GObject **) images) == 2 && new_image != original_image);
   g_free (images);
 
-  GIMP_TEST_START("The new image has a single layer");
+  GIMP_TEST_START("The new image has a single layer and no mask");
   layers = gimp_image_get_layers (new_image);
-  GIMP_TEST_END(gimp_core_object_array_get_length ((GObject **) layers) == 1);
+  mask = gimp_layer_get_mask (layers[0]);
+  GIMP_TEST_END(gimp_core_object_array_get_length ((GObject **) layers) == 1 && mask == NULL);
 
   export_layer = layers[0];
   g_free (layers);
+  g_free (mask);
 
   layer = gimp_image_merge_visible_layers (original_image, GIMP_CLIP_TO_IMAGE);
 
