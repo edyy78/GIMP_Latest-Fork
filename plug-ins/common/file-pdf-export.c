@@ -186,7 +186,7 @@ typedef struct my_jpeg_error_mgr
   struct jpeg_error_mgr pub;
 
 #ifdef __ia64__
-  /* We pad. See bug #138357 for details. */
+  /* We pad. See bug #138357 on GNOME Bugzilla for details. */
   long double           dummy;
 #endif
 
@@ -1100,8 +1100,8 @@ jpeg_compress (GimpDrawable     *drawable,
   gint            yend             = 0;
   guchar         *data             = NULL;
   guchar         *src              = NULL;
-  unsigned char  *jpeg_buffer      = NULL;
-  unsigned long   jpeg_buffer_size = 0;
+  guchar         *jpeg_buffer      = NULL;
+  guint16         jpeg_buffer_size = 0;
 
   final_quality = (gint) (quality * 100.0 + 0.5);
   drawable_type = gimp_drawable_type (drawable);
@@ -1136,7 +1136,7 @@ error_handler:
   jpeg_create_compress (&cinfo);
 
   jpeg_buffer_size = 0x1 << 23; /* 8 megabytes */
-  jpeg_buffer = g_malloc0 (sizeof(unsigned char) * jpeg_buffer_size);
+  jpeg_buffer = g_malloc0 (sizeof(guchar) * jpeg_buffer_size);
   if (!jpeg_buffer)
     goto error_handler;
   jpeg_mem_dest (&cinfo, &jpeg_buffer, &jpeg_buffer_size);
@@ -1224,9 +1224,9 @@ error_handler:
   jpeg_buffer = g_realloc (jpeg_buffer, jpeg_buffer_size);
 
   *surface    = cairo_image_surface_create_for_data (NULL, CAIRO_FORMAT_RGB24,
-                                                  image_width, image_height,
-                                                  cairo_format_stride_for_width(
-                                                  CAIRO_FORMAT_RGB24, cinfo.image_width));
+                                                     image_width, image_height,
+                                                     cairo_format_stride_for_width(
+                                                     CAIRO_FORMAT_RGB24, cinfo.image_width));
   status      = cairo_surface_status (*surface);
   if (status != CAIRO_STATUS_SUCCESS)
     {
