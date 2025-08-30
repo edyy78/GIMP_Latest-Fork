@@ -662,13 +662,9 @@ image_scanner_dialog (GimpProcedure        *procedure,
   GtkWidget         *dialog;
   GtkWidget         *standardbox2;
   GtkWidget         *hbox1;
-  GtkWidget         *hbox1a;
   GtkWidget         *hbox2;
-  GtkWidget         *hbox2a;
   GtkWidget         *hbox3;
-  GtkWidget         *hbox3a;
   GtkWidget         *hbox4;
-  GtkWidget         *hbox4a;
   GtkWidget         *hbox5;
   GtkWidget         *crop_left_label;
   GtkWidget         *crop_right_label;
@@ -694,8 +690,11 @@ image_scanner_dialog (GimpProcedure        *procedure,
   GtkWidget         *reslabel1;
   GtkWidget         *resbox2;
   GtkWidget         *reslabel2;
-  GtkWidget         *resbox3;
-  GtkWidget         *reslabel3;
+  GtkWidget         *resbox3, *reslabel3;
+  GtkAdjustment     *adjustment_left;
+  GtkAdjustment     *adjustment_right;
+  GtkAdjustment     *adjustment_top;
+  GtkAdjustment     *adjustment_bottom;
   GtkTreeIter        iter;
   GtkCellRenderer   *rescell1;
   GtkCellRenderer   *rescell2;
@@ -881,7 +880,7 @@ image_scanner_dialog (GimpProcedure        *procedure,
   hbox1 = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 3);
   crop_left_label = gtk_label_new (_("Page crop left"));
   gtk_container_add (GTK_CONTAINER (hbox1), crop_left_label);
-  GtkAdjustment *adjustment_left = gtk_adjustment_new (0.0, 0.0, page_left, 1.0, 1.0, 0.0);
+  adjustment_left = gtk_adjustment_new (0.0, 0.0, page_left, 0.0, 0.0, 0.0);
   crop_left_scaler = gimp_spin_scale_new (adjustment_left, "", digits);
   gtk_widget_set_size_request(crop_left_scaler, 360, 16);
   gtk_box_pack_end (GTK_BOX (hbox1), crop_left_scaler, FALSE, FALSE, 20);
@@ -893,7 +892,7 @@ image_scanner_dialog (GimpProcedure        *procedure,
   hbox2 = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 3);
   crop_top_label = gtk_label_new (_("Page crop top"));
   gtk_container_add (GTK_CONTAINER (hbox2), crop_top_label);
-  GtkAdjustment *adjustment_top = gtk_adjustment_new (0.0, 0.0, page_top, 1.0, 1.0, 0.0);
+  adjustment_top = gtk_adjustment_new (0.0, 0.0, page_top, 0.0, 0.0, 0.0);
   crop_top_scaler = gimp_spin_scale_new (adjustment_top, "", digits);
   gtk_widget_set_size_request(crop_top_scaler, 360, 16);
   gtk_box_pack_end (GTK_BOX (hbox2), crop_top_scaler, FALSE, FALSE, 20);
@@ -905,8 +904,7 @@ image_scanner_dialog (GimpProcedure        *procedure,
   hbox3 = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 3);
   crop_right_label = gtk_label_new (_("Page crop right"));
   gtk_container_add (GTK_CONTAINER (hbox3), crop_right_label);
-
-  GtkAdjustment *adjustment_right = gtk_adjustment_new (0.0, 0.0, page_right, 1.0, 1.0, 0.0);
+  adjustment_right = gtk_adjustment_new (0.0, 0.0, page_right, 0.0, 0.0, 0.0);
   crop_right_scaler = gimp_spin_scale_new (adjustment_right, "", digits);
   gtk_widget_set_size_request(crop_right_scaler, 360, 16);
   gtk_box_pack_end (GTK_BOX (hbox3), crop_right_scaler, FALSE, FALSE, 20);
@@ -918,7 +916,7 @@ image_scanner_dialog (GimpProcedure        *procedure,
   hbox4 = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 3);
   crop_bottom_label = gtk_label_new (_("Page crop bottom"));
   gtk_container_add (GTK_CONTAINER (hbox4), crop_bottom_label);
-  GtkAdjustment *adjustment_bottom = gtk_adjustment_new (0.0, 0.0, page_bottom, 1.0, 1.0, 0.0);
+  adjustment_bottom = gtk_adjustment_new (0.0, 0.0, page_bottom, 0.0, 0.0, 0.0);
   crop_bottom_scaler = gimp_spin_scale_new (adjustment_bottom, "", digits);
   gtk_widget_set_size_request(crop_bottom_scaler, 360, 16);
   gtk_box_pack_end (GTK_BOX (hbox4), crop_bottom_scaler, FALSE, FALSE, 20);
@@ -991,25 +989,6 @@ image_scanner_dialog (GimpProcedure        *procedure,
   gtk_label_set_justify (GTK_LABEL (message), GTK_JUSTIFY_LEFT);
   gtk_box_pack_start (GTK_BOX (image_scanner_hbox), message, FALSE, FALSE, 6);
   gtk_widget_show (message);
-
-  #if  0
-  spinner = gtk_spinner_new ();
-  gtk_widget_set_size_request (spinner, 30, 30);
-  gtk_box_pack_start (GTK_BOX (image_scanner_hbox), spinner, FALSE, FALSE, 0);
-  gtk_widget_show (spinner);
-  gtk_spinner_start (GTK_SPINNER (spinner));
-  #endif
-
-  #if 0
-  progressbar = gtk_progress_bar_new();
-  gtk_widget_set_size_request (progressbar, 300, 30);
-  gtk_box_pack_start (GTK_BOX (image_scanner_hbox), progressbar, FALSE, TRUE, 0);
-  gtk_widget_show (progressbar);
-  gtk_progress_bar_set_show_text (GTK_PROGRESS_BAR (progressbar), TRUE);
-  gtk_progress_bar_set_text (GTK_PROGRESS_BAR (progressbar), "TEST");
-  gtk_progress_bar_set_pulse_step (GTK_PROGRESS_BAR(progressbar), 0.5);
-  gtk_progress_bar_pulse (GTK_PROGRESS_BAR (progressbar));
-  #endif
 
   scanbutton = gimp_button_new ();
   gtk_widget_set_size_request (scanbutton, 110, 30);
