@@ -68,12 +68,12 @@ struct _GimpFillOptionsPrivate
   gboolean        feather;
   gdouble         feather_radius;
 
-  GimpViewType  pattern_view_type;
-  GimpViewSize  pattern_view_size;
+  GimpViewType    pattern_view_type;
+  GimpViewSize    pattern_view_size;
 
   gboolean        update_color_history;
 
-  const gchar  *undo_desc;
+  const gchar    *undo_desc;
 };
 
 #define GET_PRIVATE(options) \
