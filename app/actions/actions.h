@@ -21,43 +21,44 @@
 extern GimpActionFactory *global_action_factory;
 
 
-void               actions_init            (Gimp                 *gimp);
-void               actions_exit            (Gimp                 *gimp);
+void               actions_init             (Gimp                 *gimp);
+void               actions_exit             (Gimp                 *gimp);
 
-Gimp             * action_data_get_gimp    (gpointer              data);
-GimpContext      * action_data_get_context (gpointer              data);
-GimpImage        * action_data_get_image   (gpointer              data);
-GimpDisplay      * action_data_get_display (gpointer              data);
-GimpDisplayShell * action_data_get_shell   (gpointer              data);
-GtkWidget        * action_data_get_widget  (gpointer              data);
-gint               action_data_sel_count   (gpointer              data);
+Gimp             * action_data_get_gimp     (gpointer              data);
+GimpContext      * action_data_get_context  (gpointer              data);
+GimpImage        * action_data_get_image    (gpointer              data);
+GimpDisplay      * action_data_get_display  (gpointer              data);
+GimpDisplayShell * action_data_get_shell    (gpointer              data);
+GtkWidget        * action_data_get_widget   (gpointer              data);
+gint               action_data_sel_count    (gpointer              data);
 
-gdouble            action_select_value     (GimpActionSelectType  select_type,
-                                            gdouble               value,
-                                            gdouble               min,
-                                            gdouble               max,
-                                            gdouble               def,
-                                            gdouble               small_inc,
-                                            gdouble               inc,
-                                            gdouble               skip_inc,
-                                            gdouble               delta_factor,
-                                            gboolean              wrap);
-void               action_select_property  (GimpActionSelectType  select_type,
-                                            GimpDisplay          *display,
-                                            GObject              *object,
-                                            const gchar          *property_name,
-                                            gdouble               small_inc,
-                                            gdouble               inc,
-                                            gdouble               skip_inc,
-                                            gdouble               delta_factor,
-                                            gboolean              wrap);
-GimpObject       * action_select_object    (GimpActionSelectType  select_type,
-                                            GimpContainer        *container,
-                                            GimpObject           *current);
-void               action_message          (GimpDisplay          *display,
-                                            GObject              *object,
-                                            const gchar          *format,
-                                            ...) G_GNUC_PRINTF(3,4);
+gdouble            action_select_value      (GimpActionSelectType  select_type,
+                                             gdouble               value,
+                                             gdouble               min,
+                                             gdouble               max,
+                                             gdouble               def,
+                                             gdouble               small_inc,
+                                             gdouble               inc,
+                                             gdouble               skip_inc,
+                                             gdouble               delta_factor,
+                                             gboolean              wrap);
+void               action_select_property   (GimpActionSelectType  select_type,
+                                             GimpDisplay          *display,
+                                             GObject              *object,
+                                             const gchar          *property_name,
+                                             gdouble               small_inc,
+                                             gdouble               inc,
+                                             gdouble               skip_inc,
+                                             gdouble               delta_factor,
+                                             gboolean              wrap);
+GimpObject       * action_select_object     (GimpActionSelectType  select_type,
+                                             GimpContainer        *container,
+                                             GimpObject           *current);
+void               action_message           (GimpDisplay          *display,
+                                             GObject              *object,
+                                             const gchar          *format,
+                                             ...) G_GNUC_PRINTF(3,4);
+guint              action_get_numrow_keyval (guint                 index);
 
 
 #define return_if_no_gimp(gimp,data) \

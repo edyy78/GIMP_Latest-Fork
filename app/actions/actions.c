@@ -855,3 +855,49 @@ action_message (GimpDisplay *display,
                                    icon_name, format, args);
   va_end (args);
 }
+
+guint
+action_get_numrow_keyval (guint index)
+{
+  GdkKeymap    *keymap        = gdk_keymap_get_for_display (gdk_display_get_default ());
+  guint         keyval        = GDK_KEY_1 + index;
+  GdkKeymapKey *keys          = NULL;
+  gint          n_keys        = 0;
+  guint         return_keyval = keyval;
+
+  if (gdk_keymap_get_entries_for_keyval (keymap, keyval, &keys, &n_keys))
+    {
+      for (guint i = 0; i < n_keys; i++)
+        {
+          if (keys[i].level == 0 && keys[i].group == 0)
+            {
+              return_keyval = keyval;
+              break;
+            }
+          else if (keys[i].level == 1 && keys[i].group == 0)
+            {
+              GdkKeymapKey *keycode_entries     = NULL;
+              guint        *keyvals_for_keycode = NULL;
+              gint          n_keycode_entries   = 0;
+
+              if (gdk_keymap_get_entries_for_keycode (keymap, keys[i].keycode,
+                                                      &keycode_entries, &keyvals_for_keycode,
+                                                      &n_keycode_entries))
+                {
+                  for (guint j = 0; j < n_keycode_entries; j++)
+                    {
+                      if (keycode_entries[j].level == 0 && keycode_entries[j].group == 0)
+                        {
+                          return_keyval = keyvals_for_keycode[j];
+                          break;
+                        }
+                    }
+                  g_free (keycode_entries);
+                  g_free (keyvals_for_keycode);
+                }
+            }
+        }
+      g_free (keys);
+    }
+  return return_keyval;
+}
