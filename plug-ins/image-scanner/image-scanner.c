@@ -939,7 +939,7 @@ image_scanner_dialog (GimpProcedure        *procedure,
                     "changed",
                     G_CALLBACK (unitscombo_callback),
                     unitscombo1);
-  gtk_box_pack_start (GTK_BOX (hbox5), unitscombo1, FALSE, FALSE, 30);
+  gtk_box_pack_start (GTK_BOX (hbox5), unitscombo1, FALSE, FALSE, 50);
   gtk_container_add (GTK_CONTAINER (standardbox2), hbox5);
 
   gtk_container_add (GTK_CONTAINER (grid3), standardbox2);
