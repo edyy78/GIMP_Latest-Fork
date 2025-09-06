@@ -43,8 +43,27 @@ static const GimpToggleActionEntry brush_editor_toggle_actions[] =
     NC_("brush-editor-action", "Edit Active Brush"), NULL, { NULL }, NULL,
     data_editor_edit_active_cmd_callback,
     FALSE,
-    GIMP_HELP_BRUSH_EDITOR_EDIT_ACTIVE }
+    GIMP_HELP_BRUSH_EDITOR_EDIT_ACTIVE },
+    
+    { "brush-editor-toggle-panel", GIMP_ICON_TOGGLE_PANEL,
+    NC_("brush-editor-action", "Toggle Brush Editor Panel"), NULL, { NULL }, NULL,
+    brush_editor_toggle_panel_cmd_callback,
+    FALSE,
+    GIMP_HELP_BRUSH_EDITOR_TOGGLE_PANEL }
+    
 };
+
+// Function to handle the toggle action for the brush editor panel
+void brush_editor_toggle_panel_cmd_callback(gboolean is_checked) {
+    // Implement the logic to toggle the visibility of the brush editor panel
+    if (is_checked) {
+        // Show the brush editor panel
+        g_print("Showing Brush Editor Panel\n");
+    } else {
+        // Hide the brush editor panel
+        g_print("Hiding Brush Editor Panel\n");
+    }
+}
 
 
 void
