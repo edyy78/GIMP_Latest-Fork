@@ -1101,7 +1101,7 @@ jpeg_compress (GimpDrawable     *drawable,
   guchar         *data             = NULL;
   guchar         *src              = NULL;
   guchar         *jpeg_buffer      = NULL;
-  guint16         jpeg_buffer_size = 0;
+  guint64         jpeg_buffer_size = 0;
 
   final_quality = (gint) (quality * 100.0 + 0.5);
   drawable_type = gimp_drawable_type (drawable);
@@ -1236,7 +1236,9 @@ error_handler:
       goto error_handler;
     }
 
-  status = cairo_surface_set_mime_data (*surface, CAIRO_MIME_TYPE_JPEG, jpeg_buffer, jpeg_buffer_size, cairo_jpeg_free, jpeg_buffer);
+  status = cairo_surface_set_mime_data (*surface, CAIRO_MIME_TYPE_JPEG,
+                                        jpeg_buffer, jpeg_buffer_size,
+                                        cairo_jpeg_free, jpeg_buffer);
   if (status != CAIRO_STATUS_SUCCESS)
     {
       g_set_error (error,
