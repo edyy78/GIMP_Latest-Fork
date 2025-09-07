@@ -95,7 +95,10 @@ gimp_message_dialog_new (const gchar    *title,
                                  gtk_widget_get_screen (parent));
         }
     }
+  gtk_grab_add (GTK_WIDGET (dialog));
 
+  g_signal_connect_object (dialog, "destroy",
+                           G_CALLBACK (gtk_grab_remove), NULL, 0);
   va_start (args, help_id);
 
   gimp_dialog_add_buttons_valist (GIMP_DIALOG (dialog), args);
