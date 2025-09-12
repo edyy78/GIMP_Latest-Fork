@@ -50,6 +50,9 @@ void           gimp_color_set_alpha                 (GeglColor      *color,
 gboolean       gimp_color_is_perceptually_identical (GeglColor      *color1,
                                                      GeglColor      *color2);
 
+gboolean       gimp_color_is_identical              (GeglColor      *color1,
+                                                     GeglColor      *color2);
+
 GeglColor    * gimp_color_parse_css                 (const gchar    *css);
 GeglColor    * gimp_color_parse_hex                 (const gchar    *hex);
 GeglColor    * gimp_color_parse_name                (const gchar    *name);

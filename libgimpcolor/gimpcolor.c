@@ -151,6 +151,38 @@ gimp_color_is_perceptually_identical (GeglColor *color1,
 }
 
 /**
+ * gimp_color_is_identical:
+ * @color1: a [class@Gegl.Color]
+ * @color2: a [class@Gegl.Color]
+ *
+ * Determine whether @color1 and @color2 are exactly the same, by comparing
+ * their RGBA components. If the RGBA values are the same, then the colors are
+ * considered identical, otherwise not.
+ *
+ * Returns: whether the 2 colors are exactly the same.
+ *
+ * Since: 3.2
+ **/
+gboolean
+gimp_color_is_identical (GeglColor *color1,
+                         GeglColor *color2)
+{
+  gdouble r1, g1, b1, a1;
+  gdouble r2, g2, b2, a2;
+
+  g_return_val_if_fail (GEGL_IS_COLOR (color1), FALSE);
+  g_return_val_if_fail (GEGL_IS_COLOR (color2), FALSE);
+
+  gegl_color_get_rgba (color1, &r1, &g1, &b1, &a1);
+  gegl_color_get_rgba (color2, &r2, &g2, &b2, &a2);
+
+  return (r1 == r2 &&
+          g1 == g2 &&
+          b1 == b2 &&
+          a1 == a2);
+}
+
+/**
  * gimp_color_is_out_of_self_gamut:
  * @color: a [class@Gegl.Color]
  *

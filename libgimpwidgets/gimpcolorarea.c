@@ -528,7 +528,7 @@ gimp_color_area_set_color (GimpColorArea *area,
   g_return_if_fail (GIMP_IS_COLOR_AREA (area));
   g_return_if_fail (GEGL_IS_COLOR (color));
 
-  if (! gimp_color_is_perceptually_identical (area->color, color))
+  if (! gimp_color_is_identical (area->color, color))
     {
       area->needs_render = TRUE;
       gtk_widget_queue_draw (GTK_WIDGET (area));
