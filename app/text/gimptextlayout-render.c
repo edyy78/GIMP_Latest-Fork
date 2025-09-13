@@ -47,8 +47,11 @@ gimp_text_layout_render (GimpTextLayout    *layout,
   gimp_text_layout_get_offsets (layout, &x, &y);
   cairo_translate (cr, x, y);
 
-  gimp_text_layout_get_transform (layout, &trafo);
-  cairo_transform (cr, &trafo);
+  /*TODO matrix transformation should be applied here
+   * but since it causes some problems and is not doing anything
+   * (it's for the future when we will implement text transformations)
+   * disabling it fixes some text layout problems (see bug #1028)
+   */
 
   if (base_dir == GIMP_TEXT_DIRECTION_TTB_RTL ||
       base_dir == GIMP_TEXT_DIRECTION_TTB_RTL_UPRIGHT)
