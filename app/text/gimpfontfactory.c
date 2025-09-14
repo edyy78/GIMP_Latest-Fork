@@ -30,6 +30,10 @@
 #include <pango/pangofc-fontmap.h>
 #include <gegl.h>
 
+#ifdef PLATFORM_OSX
+#import <Foundation/Foundation.h>
+#endif /* PLATFORM_OSX */
+
 #include "libgimpbase/gimpbase.h"
 #include "libgimpconfig/gimpconfig.h"
 
@@ -93,6 +97,12 @@ static void       gimp_font_factory_recursive_add_fontdir
 static int        gimp_font_factory_load_names      (GimpFontFactory *container);
 static void       gimp_font_factory_load_aliases    (GimpContainer   *container,
                                                      PangoContext    *context);
+
+#ifdef PLATFORM_OSX
+static void       gimp_font_factory_load_asset_fonts
+                                                    (FcConfig        *config,
+                                                     GError         **error);
+#endif
 
 G_DEFINE_TYPE_WITH_PRIVATE (GimpFontFactory, gimp_font_factory,
                             GIMP_TYPE_DATA_FACTORY)
@@ -450,6 +460,10 @@ gimp_font_factory_add_directories (GimpFontFactory *factory,
       gimp_font_factory_recursive_add_fontdir (config, list->data, error);
     }
 
+#ifdef PLATFORM_OSX
+  gimp_font_factory_load_asset_fonts (config, error);
+#endif
+
   if (error && *error)
     {
       gchar *font_list = g_strdup ((*error)->message);
@@ -513,7 +527,18 @@ gimp_font_factory_recursive_add_fontdir (FcConfig  *config,
                */
               path = tmp;
 #endif
-
+#ifdef PLATFORM_OSX
+              if (path &&
+                  (g_str_has_suffix (path, ".plist") ||
+                   g_str_has_suffix (path, ".xml")))
+                {
+                  /* Ignore .plist and .xml files, they are not fonts */
+                  g_free (path);
+                  g_object_unref (child);
+                  g_object_unref (info);
+                  continue;
+                }
+#endif
               if (! path ||
                   FcFalse == FcConfigAppFontAddFile (config, (const FcChar8 *) path))
                 {
@@ -1158,3 +1183,34 @@ gimp_font_factory_load_names (GimpFontFactory *factory)
 
   return n_loaded_fonts;
 }
+
+#ifdef PLATFORM_OSX
+static void
+gimp_font_factory_load_asset_fonts (FcConfig *config,
+                                    GError  **error)
+{
+  /*
+   * On macOS, some system fonts (such as PingFang and others shipped with the OS)
+   * are not exposed by CoreText. Instead, Apple stores them inside asset bundles under:
+   *  /System/Library/AssetsV2/com_apple_MobileAsset_Font7/
+   *
+   * Each font resides in a different .asset/AssetData/ subdirectory. Since GIMP
+   * relies on fontconfig to have the actual font files available, we explicitly scan
+   * this directory tree and add all .ttc/.ttf files we can find.
+   *
+   * XXX Warning: This is a workaround. Apple may change the internal storage
+   * location or format of these asset fonts in future macOS releases. However,
+   * as of macOS 14/15 this is the only reliable way to make hidden system fonts
+   * (like PingFang.ttc) available to fontconfig and therefore to GIMP.
+   * We may want to move the font loading to CoreText in future GIMP versions.
+   *
+   * Cf: https://gitlab.gnome.org/GNOME/gimp/-/issues/12267
+   */
+  GFile *assets_root =
+    g_file_new_for_path ("/System/Library/AssetsV2/com_apple_MobileAsset_Font7");
+
+  gimp_font_factory_recursive_add_fontdir (config, assets_root, error);
+
+  g_object_unref (assets_root);
+}
+#endif
