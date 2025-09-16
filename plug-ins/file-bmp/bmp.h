@@ -46,6 +46,13 @@
 #define BI_OS2_HUFFMAN (100 + BI_BITFIELDS)
 #define BI_OS2_RLE24   (100 + BI_JPEG)
 
+/* bV4CSType values */
+#define V4CS_CALIBRATED_RGB      0x00000000 /* = use gamma and endpoint values */
+#define V4CS_sRGB                0x73524742 /* 'sRGB' */
+#define V4CS_WINDOWS_COLOR_SPACE 0x57696e20 /* 'Win ' */
+#define V4CS_PROFILE_LINKED      0x4c494e4b /* 'LINK' */
+#define V4CS_PROFILE_EMBEDDED    0x4d424544 /* 'MBED' */
+
 typedef struct
 {
   gchar    zzMagic[2];  /* 00 "BM" */
@@ -87,6 +94,29 @@ typedef struct
   gfloat  max_value;
   gint    nbits;
 } BitmapChannel;
+
+enum BmpInfoVer
+{
+  /* The only bmp info headers that clearly have a version number attributed
+   * to them are BITMAPV4HEADER and BITMAPV5HEADER.
+   * BITMAPINFOHEADER is sometimes referred to as v1 and sometimes as v3. MS
+   * themselves never seemed to give it a version number, but according to
+   * Adobe, the 52- and 56-byte extensions were versioned v2 and v3 by MS.
+   * The association of the number 3 with the BITMAPINFOHEADER might stem from
+   * the fact that it was originally kown as the Windows 3 bitmap.
+   * Anyway, v1 seems to make sense, so let's call it that for our purposes.
+   */
+
+  BMPINFO_NONE,     /* not specified */
+  BMPINFO_CORE,     /* BITMAPCOREHEADER, aka OS21XBITMAPHEADER */
+  BMPINFO_OS22X,    /* OS22XBITMAPHEADER (actually named BITMAPINFOHEADER2 in OS/2) */
+  BMPINFO_V1,       /* BITMAPINFOHEADER (Windows 3.x, updated by Win95 / NT 4.0) */
+  BMPINFO_V2_ADOBE, /* BITMAPINFOHEADER + RGB masks */
+  BMPINFO_V3_ADOBE, /* BITMAPINFOHEADER + RGBA masks */
+  BMPINFO_V4,       /* BITMAPV4HEADER   (Windows 95 / NT 4.0) */
+  BMPINFO_V5,       /* BITMAPV5HEADER   (Windows 98 / NT 5.0) */
+  BMPINFO_FUTURE    /* future, yet unknown, headers */
+};
 
 
 #endif /* __BMP_H__ */
