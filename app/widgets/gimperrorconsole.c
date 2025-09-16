@@ -28,6 +28,7 @@
 
 #include "libgimpbase/gimpbase.h"
 #include "libgimpwidgets/gimpwidgets.h"
+#include "errorlog/error_log.h"
 
 #include "widgets-types.h"
 
@@ -93,7 +94,13 @@ gimp_error_console_init (GimpErrorConsole *console)
 {
   GtkWidget *scrolled_window;
 
-  console->text_buffer = GTK_TEXT_BUFFER (gimp_text_buffer_new ());
+  G_DEBUG_HERE ();
+
+  /* Model created at gimp startup, lifetime is session. */
+  console->text_buffer = GTK_TEXT_BUFFER (error_log_get());
+
+  /*
+  The view does not futz with the model.
 
   gtk_text_buffer_create_tag (console->text_buffer, "title",
                               "scale",  PANGO_SCALE_LARGE,
@@ -101,6 +108,7 @@ gimp_error_console_init (GimpErrorConsole *console)
                               NULL);
   gtk_text_buffer_create_tag (console->text_buffer, "message",
                               NULL);
+  */
 
   scrolled_window = gtk_scrolled_window_new (NULL, NULL);
   gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scrolled_window),
@@ -109,8 +117,13 @@ gimp_error_console_init (GimpErrorConsole *console)
   gtk_box_pack_start (GTK_BOX (console), scrolled_window, TRUE, TRUE, 0);
   gtk_widget_show (scrolled_window);
 
+  G_DEBUG_HERE ();
   console->text_view = gtk_text_view_new_with_buffer (console->text_buffer);
-  g_object_unref (console->text_buffer);
+
+  /* The buffer is persistent and shared.
+   * Don't unref it i.e. prevent destroy when view is destroyed.
+   */
+  // g_object_unref (console->text_buffer);
 
   gtk_text_view_set_editable (GTK_TEXT_VIEW (console->text_view), FALSE);
   gtk_text_view_set_wrap_mode (GTK_TEXT_VIEW (console->text_view),

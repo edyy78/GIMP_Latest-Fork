@@ -4,6 +4,7 @@ subdir('actions')
 subdir('core')
 subdir('dialogs')
 subdir('display')
+subdir('errorlog')
 subdir('file')
 subdir('file-data')
 subdir('gegl')
@@ -94,6 +95,7 @@ gimpconsole_deps = [
 
 console_libapps = [
     libappcore,
+    libapperrorlog,
     libappfile,
     libappfiledata,
     libappgegl,
