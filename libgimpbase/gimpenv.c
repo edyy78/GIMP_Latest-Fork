@@ -322,11 +322,33 @@ gimp_directory (void)
 
 #else /* UNIX */
 
-      /* g_get_user_config_dir () always returns a path as a non-null
-       * and non-empty string
-       */
-      gimp_dir = g_build_filename (g_get_user_config_dir (),
-                                   GIMPDIR, GIMP_USER_VERSION, NULL);
+      gchar *host_xdg_config_home = g_getenv ("HOST_XDG_CONFIG_HOME");
+      gchar *flatpak_check        = g_getenv ("container");
+
+      if (flatpak_check != NULL)
+        if (g_strcmp0 (flatpak_check, "flatpak") == 0)
+          {
+            {                       /* Linux flatpak version */
+              if (host_xdg_config_home == NULL)
+                gimp_dir =  g_build_filename (g_get_home_dir (),
+                                              ".config",
+                                              GIMPDIR, GIMP_USER_VERSION,
+                                              NULL);
+              else
+                gimp_dir =  g_build_filename (host_xdg_config_home,
+                                              GIMPDIR, GIMP_USER_VERSION,
+                                              NULL);
+            }
+          }
+
+      if (gimp_dir == NULL)
+        {
+          /* g_get_user_config_dir () always returns a path as a non-null
+           * and non-empty string
+           */
+          gimp_dir = g_build_filename (g_get_user_config_dir (),
+                                       GIMPDIR, GIMP_USER_VERSION, NULL);
+        }
 
 #endif /* PLATFORM_OSX */
     }
