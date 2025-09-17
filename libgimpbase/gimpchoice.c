@@ -189,9 +189,9 @@ gimp_choice_add (GimpChoice  *choice,
                  const gchar *help)
 {
   GimpChoiceDesc *desc;
-  GList          *duplicate;
 
   g_return_if_fail (label != NULL);
+  g_return_if_fail (g_list_find_custom (choice->keys, nick, (GCompareFunc) g_strcmp0) == NULL);
 
   desc            = g_new0 (GimpChoiceDesc, 1);
   desc->id        = id;
@@ -199,14 +199,6 @@ gimp_choice_add (GimpChoice  *choice,
   desc->help      = help != NULL ? g_strdup (help) : NULL;
   desc->sensitive = TRUE;
   g_hash_table_insert (choice->choices, g_strdup (nick), desc);
-
-  duplicate = g_list_find_custom (choice->keys, nick, (GCompareFunc) g_strcmp0);
-  if (duplicate != NULL)
-    {
-      choice->keys = g_list_remove_link (choice->keys, duplicate);
-      gimp_choice_desc_free (duplicate->data);
-      g_list_free (duplicate);
-    }
   choice->keys = g_list_append (choice->keys, g_strdup (nick));
 }
 
