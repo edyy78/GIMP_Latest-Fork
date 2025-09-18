@@ -23,6 +23,7 @@ scripts = [
   'guides-from-selection.scm',
   'guides-new-percent.scm',
   'guides-new.scm',
+  'guides-rules.scm',
   'guides-remove-all.scm',
   'lava.scm',
   'line-nova.scm',
