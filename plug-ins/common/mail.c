@@ -28,8 +28,11 @@
  *
  */
 
+#define _GNU_SOURCE
+
 #include "config.h"
 
+#include <fcntl.h>
 #include <string.h>
 
 #ifdef SENDMAIL
@@ -42,8 +45,14 @@
 #include <libgimp/gimp.h>
 #include <libgimp/gimpui.h>
 
-#include "libgimp/stdplugins-intl.h"
+#ifdef GDK_WINDOWING_X11
+#include <gdk/gdkx.h>
+#endif
+#ifdef GDK_WINDOWING_WAYLAND
+#include <gdk/gdkwayland.h>
+#endif
 
+#include "libgimp/stdplugins-intl.h"
 
 #define BUFFER_SIZE 256
 
@@ -65,6 +74,17 @@ struct _MailClass
   GimpPlugInClass parent_class;
 };
 
+#ifndef SENDMAIL /* org.freedesktop.portal.Email | xdg-email */
+struct mail_data
+{
+  gchar *handle_token;
+  gchar *parent_window;
+  gchar *sender;
+  gchar *response_handle;
+  guint  response_signal_id;
+  guint  response_result;
+};
+#endif
 
 #define MAIL_TYPE  (mail_get_type ())
 #define MAIL(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), MAIL_TYPE, Mail))
@@ -92,7 +112,20 @@ static gboolean           send_dialog             (GimpProcedure    *procedure,
 static gboolean           valid_file              (GFile            *file);
 static gchar            * find_extension          (const gchar      *filename);
 
-#ifdef SENDMAIL
+#ifndef SENDMAIL /* org.freedesktop.portal.Email | xdg-email */
+static void               compose_email_handle_response (GDBusConnection  *connection,
+                                                         const gchar      *sender_name,
+                                                         const gchar      *object_path,
+                                                         const gchar      *interface_name,
+                                                         const gchar      *signal_name,
+                                                         GVariant         *parameters,
+                                                         gpointer          user_data);
+static void               compose_email_finish          (GObject          *source_object,
+                                                         GAsyncResult     *res,
+                                                         gpointer          user_data);
+static gboolean           is_mail_portal_available      (void);
+static gboolean           get_parent_window_handle      (gchar           **parent_window);
+#else /* SENDMAIL */
 static gchar            * sendmail_content_type   (const gchar      *filename);
 static void               sendmail_create_headers (FILE             *mailpipe,
                                                    GObject          *config);
@@ -110,7 +143,10 @@ GIMP_MAIN (MAIL_TYPE)
 DEFINE_STD_SET_I18N
 
 
-#ifdef SENDMAIL
+#ifndef SENDMAIL /* org.freedesktop.portal.Email | xdg-email */
+static GDBusProxy *proxy = NULL;
+static GMainLoop  *loop  = NULL;
+#else /* SENDMAIL */
 static gchar *mesg_body = NULL;
 #endif
 
@@ -133,10 +169,11 @@ mail_init (Mail *mail)
 static GList *
 mail_init_procedures (GimpPlugIn *plug_in)
 {
-  GList *list = NULL;
-  gchar *email_bin;
+  GList    *list      = NULL;
+  gchar    *email_bin = NULL;
+  gboolean  available = FALSE;
 
-  /* Check if xdg-email or sendmail is installed.
+  /* Check if sendmail is installed.
    * TODO: allow setting the location of the executable in preferences.
    */
 #ifdef SENDMAIL
@@ -157,9 +194,16 @@ mail_init_procedures (GimpPlugIn *plug_in)
     }
 #else
   email_bin = g_find_program_in_path ("xdg-email");
+  if (is_mail_portal_available ())
+    available = TRUE;
 #endif
 
-  if (email_bin)
+  if (email_bin) {
+    g_free (email_bin);
+    available = TRUE;
+  }
+
+  if (available)
     list = g_list_append (list, g_strdup (PLUG_IN_PROC));
 
   return list;
@@ -192,7 +236,7 @@ mail_create_procedure (GimpPlugIn  *plug_in,
 #ifdef SENDMAIL
                                         _("Sendmail is used to send emails "
                                           "and must be properly configured."),
-#else /* xdg-email */
+#else /* org.freedesktop.portal.Email | xdg-email */
                                         _("The preferred email composer is "
                                           "used to send emails and must be "
                                           "properly configured."),
@@ -282,27 +326,29 @@ send_image (GObject       *config,
             GimpDrawable **drawables,
             gint32         run_mode)
 {
-  GimpPDBStatusType  status  = GIMP_PDB_SUCCESS;
+  GimpPDBStatusType  status      = GIMP_PDB_SUCCESS;
   gchar             *ext;
   GFile             *tmpfile;
   gchar             *tmpname;
-#ifndef SENDMAIL /* xdg-email */
+#ifndef SENDMAIL /* org.freedesktop.portal.Email | xdg-email */
   gchar             *mailcmd[9];
-  gchar             *filepath = NULL;
-  GFile             *tmp_dir  = NULL;
-  GFileEnumerator   *enumerator;
-  gint               i;
+  gchar             *filepath    = NULL;
+  GFile             *tmp_dir     = NULL;
+  GFileEnumerator   *enumerator  = NULL;
+  GUnixFDList       *fd_list     = NULL;
+  struct mail_data   mail_data   = {0};
+  gint               fd          = -1;
 #else /* SENDMAIL */
   gchar             *mailcmd[3];
   GPid               mailpid;
-  FILE              *mailpipe = NULL;
+  FILE              *mailpipe    = NULL;
 #endif
-  GError            *error    = NULL;
-  gchar             *filename = NULL;
-  gchar             *receipt  = NULL;
-  gchar             *from     = NULL;
-  gchar             *subject  = NULL;
-  gchar             *comment  = NULL;
+  GError            *error       = NULL;
+  gchar             *filename    = NULL;
+  gchar             *receipt     = NULL;
+  gchar             *from        = NULL;
+  gchar             *subject     = NULL;
+  gchar             *comment     = NULL;
 
   mailcmd[0] = NULL;
   g_object_get (config,
@@ -328,8 +374,8 @@ send_image (GObject       *config,
       goto error;
     }
 
-#ifndef SENDMAIL /* xdg-email */
-  /* From xdg-email doc:
+#ifndef SENDMAIL /* org.freedesktop.portal.Email | xdg-email */
+  /* From xdg-email doc; relevant for org.freedesktop.portal.Email as well:
    * "Some e-mail applications require the file to remain present
    * after xdg-email returns."
    * As a consequence, the file cannot be removed at the end of the
@@ -399,35 +445,110 @@ send_image (GObject       *config,
       g_object_unref (target);
     }
 
-  mailcmd[0] = g_strdup ("xdg-email");
-  mailcmd[1] = "--attach";
-  mailcmd[2] = filepath;
-  i = 3;
-  if (subject != NULL && strlen (subject) > 0)
+  if (is_mail_portal_available () && get_parent_window_handle (&mail_data.parent_window))
     {
-      mailcmd[i++] = "--subject";
-      mailcmd[i++] = subject;
-    }
-  if (comment != NULL && strlen (comment) > 0)
-    {
-      mailcmd[i++] = "--body";
-      mailcmd[i++] = comment;
-    }
-  if (receipt != NULL && strlen (receipt) > 0)
-    {
-      mailcmd[i++] = receipt;
-    }
-  mailcmd[i] = NULL;
+      GVariantBuilder compose_email_opts;
+      GVariantBuilder attach_fds;
+      gint            fd_in;
 
-  if (! g_spawn_async (NULL, mailcmd, NULL,
-                       G_SPAWN_SEARCH_PATH,
-                       NULL, NULL, NULL, &error))
-    {
-      g_message ("%s", error->message);
-      g_error_free (error);
-      goto error;
-    }
+      mail_data.handle_token = g_strdup_printf ("gimp%d", g_random_int_range (0, G_MAXINT));
+      mail_data.sender = g_strdelimit (g_strdup (g_dbus_connection_get_unique_name (g_dbus_proxy_get_connection (proxy)) + 1),
+                                       ".", '_');
 
+      mail_data.response_handle = g_strdup_printf ("/org/freedesktop/portal/desktop/request/%s/%s",
+                                                   mail_data.sender, mail_data.handle_token);
+      mail_data.response_signal_id = g_dbus_connection_signal_subscribe (g_dbus_proxy_get_connection (proxy),
+                                                                         NULL,
+                                                                         "org.freedesktop.portal.Request",
+                                                                         "Response",
+                                                                         mail_data.response_handle,
+                                                                         NULL,
+                                                                         G_DBUS_SIGNAL_FLAGS_NO_MATCH_RULE,
+                                                                         compose_email_handle_response,
+                                                                         &mail_data,
+                                                                         NULL);
+
+      g_variant_builder_init (&compose_email_opts, G_VARIANT_TYPE ("a{sv}"));
+      g_variant_builder_add (&compose_email_opts, "{sv}", "handle_token",
+                             g_variant_new_string (mail_data.handle_token));
+      if (receipt != NULL && strlen (receipt) > 0)
+        g_variant_builder_add (&compose_email_opts, "{sv}", "address",
+                               g_variant_new_string (receipt));
+      if (subject != NULL && strlen (subject) > 0)
+        g_variant_builder_add (&compose_email_opts, "{sv}", "subject",
+                               g_variant_new_string (subject));
+      if (comment != NULL && strlen (comment) > 0)
+        g_variant_builder_add (&compose_email_opts, "{sv}", "body",
+                               g_variant_new_string (comment));
+
+      fd_list = g_unix_fd_list_new ();
+      g_variant_builder_init (&attach_fds, G_VARIANT_TYPE ("ah"));
+
+      fd = g_open (filepath, O_PATH | O_CLOEXEC);
+      if (fd == -1)
+        {
+          g_warning ("Failed to open %s: %s", tmpname, g_strerror (errno));
+          goto error;
+        }
+
+      fd_in = g_unix_fd_list_append (fd_list, fd, &error);
+      if (fd_in == -1)
+        {
+          g_warning ("%s", error->message);
+          g_error_free (error);
+          goto error;
+        }
+
+      g_variant_builder_add (&attach_fds, "h", fd_in);
+      g_variant_builder_add (&compose_email_opts, "{sv}", "attachment_fds",
+                             g_variant_builder_end (&attach_fds));
+
+      loop = g_main_loop_new (NULL, TRUE);
+
+      g_dbus_proxy_call_with_unix_fd_list (proxy,
+                                           "ComposeEmail",
+                                           g_variant_new ("(sa{sv})", mail_data.parent_window, &compose_email_opts),
+                                           G_DBUS_CALL_FLAGS_NONE,
+                                           G_MAXINT,
+                                           fd_list  ,
+                                           NULL,
+                                           compose_email_finish,
+                                           &mail_data);
+
+      g_main_loop_run (loop);
+    }
+  else
+    {
+      gint i = 0;
+
+      mailcmd[i++] = g_strdup ("xdg-email");
+      mailcmd[i++] = "--attach";
+      mailcmd[i++] = filepath;
+      if (subject != NULL && strlen (subject) > 0)
+        {
+          mailcmd[i++] = "--subject";
+          mailcmd[i++] = subject;
+        }
+      if (comment != NULL && strlen (comment) > 0)
+        {
+          mailcmd[i++] = "--body";
+          mailcmd[i++] = comment;
+        }
+      if (receipt != NULL && strlen (receipt) > 0)
+        {
+          mailcmd[i++] = receipt;
+        }
+      mailcmd[i] = NULL;
+
+      if (! g_spawn_async (NULL, mailcmd, NULL,
+                           G_SPAWN_SEARCH_PATH,
+                           NULL, NULL, NULL, &error))
+       {
+         g_message ("%s", error->message);
+         g_error_free (error);
+         goto error;
+       }
+    }
 #else /* SENDMAIL */
   /* construct the "sendmail user@location" line */
   if (strlen (SENDMAIL) == 0)
@@ -477,13 +598,16 @@ cleanup:
       g_spawn_close_pid (mailpid);
     }
 
-  /* delete the tmpfile that was generated */
-  g_unlink (tmpname);
-#else
-  if (tmp_dir)
-    g_object_unref (tmp_dir);
-  if (filepath)
-    g_free (filepath);
+#else /* org.freedesktop.portal.Email | xdg-email */
+  g_clear_object (&fd_list);
+  g_free (mail_data.handle_token);
+  g_free (mail_data.sender);
+  g_free (mail_data.response_handle);
+  if (fd != -1)
+    g_close (fd, NULL);
+  if (mail_data.response_signal_id != 0)
+    g_dbus_connection_signal_unsubscribe (g_dbus_proxy_get_connection (proxy),
+                                          mail_data.response_signal_id);
 #endif
 
   g_free (filename);
@@ -493,9 +617,10 @@ cleanup:
   g_free (comment);
 
   g_free (mailcmd[0]);
+  /* delete the tmpfile that was generated */
+  g_unlink (tmpname);
   g_free (tmpname);
   g_object_unref (tmpfile);
-
   return status;
 }
 
@@ -696,7 +821,156 @@ find_extension (const gchar *filename)
   return ext;
 }
 
-#ifdef SENDMAIL
+#ifndef SENDMAIL /* org.freedesktop.portal.Email | xdg-email */
+static void
+compose_email_handle_response (GDBusConnection *connection,
+                               const gchar     *sender_name,
+                               const gchar     *object_path,
+                               const gchar     *interface_name,
+                               const gchar     *signal_name,
+                               GVariant        *parameters,
+                               gpointer         user_data)
+{
+  GVariant         *results = NULL;
+  struct mail_data *data    = (struct mail_data *) user_data;
+
+  g_variant_get (parameters, "(ua{sv})",
+                 &data->response_result,
+                 &results);
+
+  g_dbus_connection_signal_unsubscribe (g_dbus_proxy_get_connection (proxy),
+                                        data->response_signal_id);
+  data->response_signal_id = 0;
+
+  g_main_loop_quit (loop);
+}
+
+static void
+compose_email_finish (GObject      *source_object,
+                      GAsyncResult *res,
+                      gpointer      user_data)
+{
+  GError           *error           = NULL;
+  GVariant         *results         = NULL;
+  gchar            *response_handle = NULL;
+  struct mail_data *data            = (struct mail_data *) user_data;
+
+  results = g_dbus_proxy_call_with_unix_fd_list_finish (proxy,
+                                                        NULL,
+                                                        res,
+                                                        &error);
+
+  if (error != NULL)
+    {
+      g_warning ("There was a problem while calling the email portal: %s", error->message);
+      g_free (error);
+      return;
+    }
+
+  g_variant_get (results, "(&o)", &response_handle);
+
+  if (g_strcmp0 (response_handle, data->response_handle) == 0)
+    {
+      g_free (response_handle);
+      return;
+    }
+
+  g_dbus_connection_signal_unsubscribe (g_dbus_proxy_get_connection (proxy),
+                                        data->response_signal_id);
+
+  g_free (data->response_handle);
+  data->response_handle = response_handle;
+
+  data->response_signal_id = g_dbus_connection_signal_subscribe (g_dbus_proxy_get_connection (proxy),
+                                                                 NULL,
+                                                                 "org.freedesktop.portal.Request",
+                                                                 "Response",
+                                                                 response_handle,
+                                                                 NULL,
+                                                                 G_DBUS_SIGNAL_FLAGS_NO_MATCH_RULE,
+                                                                 compose_email_handle_response,
+                                                                 data,
+                                                                 NULL);
+}
+
+static gboolean
+is_mail_portal_available (void)
+{
+  g_autoptr (GVariant) prop = NULL;
+  guint32              version;
+
+  proxy = g_dbus_proxy_new_for_bus_sync (G_BUS_TYPE_SESSION, G_DBUS_PROXY_FLAGS_NONE,
+                                         NULL, "org.freedesktop.portal.Desktop",
+                                         "/org/freedesktop/portal/desktop",
+                                         "org.freedesktop.portal.Email", NULL, NULL);
+
+  prop = g_dbus_proxy_get_cached_property (proxy, "version");
+  g_variant_get (prop, "u", &version);
+  if (version < 4)
+    {
+      g_info ("Email portal version too old (%d, need 4)", version);
+      return FALSE;
+    }
+
+  return TRUE;
+}
+
+static gboolean
+get_parent_window_handle (gchar **parent_window)
+{
+#if defined(GDK_WINDOWING_X11) || defined(GDK_WINDOWING_WAYLAND)
+  GBytes *handle;
+
+  handle = gimp_progress_get_window_handle ();
+#endif
+
+#ifdef GDK_WINDOWING_X11
+  if (GDK_IS_X11_DISPLAY (gdk_display_get_default ()))
+    {
+      GdkWindow *window      = NULL;
+      guint32   *handle_data = NULL;
+      guint32    window_id;
+      gsize      handle_size;
+
+      handle_data = (guint32 *) g_bytes_get_data (handle, &handle_size);
+      g_return_val_if_fail (handle_size == sizeof (guint32), FALSE);
+      window_id = *handle_data;
+
+      window = gdk_x11_window_foreign_new_for_display (gdk_display_get_default (), window_id);
+      if (window)
+        {
+          gint id;
+
+          id            = GDK_WINDOW_XID (window);
+          *parent_window = g_strdup_printf ("x11:0x%x", id);
+        }
+    }
+#endif
+
+#ifdef GDK_WINDOWING_WAYLAND
+  if (GDK_IS_WAYLAND_DISPLAY (gdk_display_get_default ()))
+    {
+      char  *handle_data;
+      gchar *handle_str;
+      gsize  handle_size;
+
+      handle_data   = (char *) g_bytes_get_data (handle, &handle_size);
+      /* Even though this should be the case by design, this ensures the
+       * string is NULL-terminated to avoid out-of allocated memory access.
+       */
+      handle_str    = g_strndup (handle_data, handle_size);
+      *parent_window = g_strdup_printf ("wayland:%s", handle_str);
+      g_free (handle_str);
+    }
+#endif
+
+#if defined(GDK_WINDOWING_X11) || defined(GDK_WINDOWING_WAYLAND)
+  g_bytes_unref (handle);
+#endif
+
+  return TRUE;
+}
+#else /* SENDMAIL */
 static gchar *
 sendmail_content_type (const gchar *filename)
 {
