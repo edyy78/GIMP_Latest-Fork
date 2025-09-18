@@ -115,6 +115,7 @@ enum
   PROP_IMPORT_ADD_ALPHA,
   PROP_IMPORT_RAW_PLUG_IN,
   PROP_EXPORT_FILE_TYPE,
+  PROP_EXPORT_FILE_TYPE_ALWAYS,
   PROP_EXPORT_COLOR_PROFILE,
   PROP_EXPORT_COMMENT,
   PROP_EXPORT_THUMBNAIL,
@@ -752,6 +753,13 @@ gimp_core_config_class_init (GimpCoreConfigClass *klass)
                          GIMP_EXPORT_FILE_PNG,
                          GIMP_PARAM_STATIC_STRINGS);
 
+  GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_EXPORT_FILE_TYPE_ALWAYS,
+                            "export-file-type-always",
+                            "Always offer default export file type",
+                            EXPORT_FILE_TYPE_ALWAYS_BLURB,
+                            FALSE,
+                            GIMP_PARAM_STATIC_STRINGS);
+
   GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_EXPORT_COLOR_PROFILE,
                             "export-color-profile",
                             "Export Color Profile",
@@ -1184,6 +1192,9 @@ gimp_core_config_set_property (GObject      *object,
     case PROP_EXPORT_FILE_TYPE:
       core_config->export_file_type = g_value_get_enum (value);
       break;
+    case PROP_EXPORT_FILE_TYPE_ALWAYS:
+      core_config->export_file_type_always = g_value_get_boolean (value);
+      break;
     case PROP_EXPORT_COLOR_PROFILE:
       core_config->export_color_profile = g_value_get_boolean (value);
       break;
@@ -1454,6 +1465,9 @@ gimp_core_config_get_property (GObject    *object,
       break;
     case PROP_EXPORT_FILE_TYPE:
       g_value_set_enum (value, core_config->export_file_type);
+      break;
+    case PROP_EXPORT_FILE_TYPE_ALWAYS:
+      g_value_set_boolean (value, core_config->export_file_type_always);
       break;
     case PROP_EXPORT_COLOR_PROFILE:
       g_value_set_boolean (value, core_config->export_color_profile);
