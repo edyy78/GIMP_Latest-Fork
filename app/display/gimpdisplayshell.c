@@ -920,6 +920,7 @@ gimp_display_shell_finalize (GObject *object)
   g_clear_object (&shell->no_image_options);
   g_clear_pointer (&shell->title,  g_free);
   g_clear_pointer (&shell->status, g_free);
+  g_clear_weak_pointer (&shell->picked_layer);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -947,12 +948,10 @@ gimp_display_shell_set_property (GObject      *object,
       gimp_display_shell_set_unit (shell, g_value_get_object (value));
       break;
     case PROP_TITLE:
-      g_free (shell->title);
-      shell->title = g_value_dup_string (value);
+      g_set_str (&shell->title, g_value_get_string (value));
       break;
     case PROP_STATUS:
-      g_free (shell->status);
-      shell->status = g_value_dup_string (value);
+      g_set_str (&shell->status, g_value_get_string (value));
       break;
     case PROP_SHOW_ALL:
       gimp_display_shell_set_show_all (shell, g_value_get_boolean (value));
@@ -1826,7 +1825,7 @@ gimp_display_shell_snap_coords (GimpDisplayShell *shell,
 
   snap_to_canvas = gimp_display_shell_get_snap_to_canvas (shell);
 
-  if (gimp_display_shell_get_snap_to_vectors (shell) &&
+  if (gimp_display_shell_get_snap_to_path (shell) &&
       gimp_image_get_selected_paths (image))
     {
       snap_to_path = TRUE;

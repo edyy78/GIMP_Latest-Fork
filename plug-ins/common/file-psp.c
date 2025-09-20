@@ -1090,6 +1090,7 @@ read_creator_block (FILE      *f,
   guint16       keyword;
   guint32       length;
   gchar        *string;
+  gchar        *string2;
   gchar        *title = NULL, *artist = NULL, *copyright = NULL, *description = NULL;
   guint32       dword;
   guint32       __attribute__((unused))cdate = 0;
@@ -1136,6 +1137,19 @@ read_creator_block (FILE      *f,
             }
           /* PSP does not zero terminate strings */
           string[length] = '\0';
+          string2 = string;
+          /* Strings are in ASCII format according to PSP8 specs. */
+          string = g_convert (string2, -1, "utf-8", "iso8859-1", NULL, NULL, NULL);
+          if (string)
+            g_free (string2);
+          else
+            string = string2;
+          if (! g_utf8_validate (string, -1, NULL))
+            {
+              g_printerr ("Invalid creator keyword ignored.\n");
+              break;
+            }
+
           switch (keyword)
             {
             case PSP_CRTR_FLD_TITLE:
@@ -1422,7 +1436,7 @@ blend_mode_name (PSPBlendModes mode)
   };
   static gchar *err_name = NULL;
 
-  if (mode >= 0 && mode <= PSP_BLEND_TRUE_LIGHTNESS)
+  if (mode <= PSP_BLEND_TRUE_LIGHTNESS)
     return blend_mode_names[mode];
   else if (mode == PSP_BLEND_ADJUST)
     return blend_mode_names[PSP_BLEND_TRUE_LIGHTNESS+1];
@@ -1449,7 +1463,7 @@ layer_type_name (PSPLayerTypePSP6 type)
   };
   static gchar *err_name = NULL;
 
-  if (type >= 0 && type <= keGLTArtMedia)
+  if (type <= keGLTArtMedia)
     return layer_type_names[type];
 
   g_free (err_name);

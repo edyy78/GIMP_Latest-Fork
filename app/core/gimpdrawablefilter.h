@@ -68,7 +68,20 @@ GimpDrawable *
 GeglNode * gimp_drawable_filter_get_operation  (GimpDrawableFilter      *filter);
 GimpDrawableFilterMask *
            gimp_drawable_filter_get_mask       (GimpDrawableFilter      *filter);
+
+void       gimp_drawable_filter_set_temporary  (GimpDrawableFilter      *filter,
+                                                gboolean                 temporary);
+gboolean   gimp_drawable_filter_get_temporary  (GimpDrawableFilter      *filter);
+
+void       gimp_drawable_filter_set_opacity    (GimpDrawableFilter      *filter,
+                                                gdouble                  opacity);
 gdouble    gimp_drawable_filter_get_opacity    (GimpDrawableFilter      *filter);
+
+void       gimp_drawable_filter_set_mode       (GimpDrawableFilter      *filter,
+                                                GimpLayerMode            paint_mode,
+                                                GimpLayerColorSpace      blend_space,
+                                                GimpLayerColorSpace      composite_space,
+                                                GimpLayerCompositeMode   composite_mode);
 GimpLayerMode
            gimp_drawable_filter_get_paint_mode (GimpDrawableFilter      *filter);
 GimpLayerColorSpace
@@ -80,17 +93,20 @@ GimpLayerColorSpace
 GimpLayerCompositeMode
            gimp_drawable_filter_get_composite_mode
                                                (GimpDrawableFilter      *filter);
-gboolean   gimp_drawable_filter_get_clip       (GimpDrawableFilter      *filter);
-GimpFilterRegion
-           gimp_drawable_filter_get_region     (GimpDrawableFilter      *filter);
 
 void       gimp_drawable_filter_set_clip       (GimpDrawableFilter      *filter,
                                                 gboolean                 clip);
+gboolean   gimp_drawable_filter_get_clip       (GimpDrawableFilter      *filter);
+
 void       gimp_drawable_filter_set_region     (GimpDrawableFilter      *filter,
                                                 GimpFilterRegion         region);
+GimpFilterRegion
+           gimp_drawable_filter_get_region     (GimpDrawableFilter      *filter);
+
 void       gimp_drawable_filter_set_crop       (GimpDrawableFilter      *filter,
                                                 const GeglRectangle     *rect,
                                                 gboolean                 update);
+
 void       gimp_drawable_filter_set_preview    (GimpDrawableFilter      *filter,
                                                 gboolean                 enabled);
 void       gimp_drawable_filter_set_preview_split
@@ -108,15 +124,9 @@ gboolean   gimp_drawable_filter_update         (GimpDrawableFilter      *filter,
                                                 GimpLayerColorSpace      composite_space,
                                                 GimpLayerCompositeMode   composite_mode,
                                                 const gchar            **auxinputnames,
-                                                const GimpDrawable     **auxinputs,
+                                                GimpDrawable           **auxinputs,
                                                 GError                 **error);
-void       gimp_drawable_filter_set_opacity    (GimpDrawableFilter      *filter,
-                                                gdouble                  opacity);
-void       gimp_drawable_filter_set_mode       (GimpDrawableFilter      *filter,
-                                                GimpLayerMode            paint_mode,
-                                                GimpLayerColorSpace      blend_space,
-                                                GimpLayerColorSpace      composite_space,
-                                                GimpLayerCompositeMode   composite_mode);
+gboolean   gimp_drawable_filter_get_add_alpha  (GimpDrawableFilter      *filter);
 void       gimp_drawable_filter_set_add_alpha  (GimpDrawableFilter      *filter,
                                                 gboolean                 add_alpha);
 

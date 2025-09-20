@@ -35,6 +35,7 @@
 #include "widgets-types.h"
 
 #include "config/gimpcoreconfig.h"
+#include "config/gimpguiconfig.h"
 
 #include "gegl/gimp-gegl-loops.h"
 
@@ -63,8 +64,10 @@ enum
 
 struct _GimpViewRendererPrivate
 {
+  GimpViewBorderType  border_type;
+  GeglColor          *border_color;
+
   cairo_pattern_t    *pattern;
-  cairo_surface_t    *icon_surface;
   gchar              *bg_icon_name;
 
   GimpColorConfig    *color_config;
@@ -114,6 +117,10 @@ static cairo_pattern_t *
                  gimp_view_renderer_create_background (GimpViewRenderer   *renderer,
                                                        GtkWidget          *widget);
 
+static void      gimp_view_renderer_redraw            (GimpGuiConfig      *config,
+                                                       const GParamSpec   *pspec,
+                                                       GimpViewRenderer   *renderer);
+
 
 G_DEFINE_TYPE_WITH_PRIVATE (GimpViewRenderer, gimp_view_renderer, G_TYPE_OBJECT)
 
@@ -138,17 +145,20 @@ gimp_view_renderer_class_init (GimpViewRendererClass *klass)
   object_class->dispose  = gimp_view_renderer_dispose;
   object_class->finalize = gimp_view_renderer_finalize;
 
-  klass->update          = NULL;
-  klass->set_context     = gimp_view_renderer_real_set_context;
-  klass->invalidate      = gimp_view_renderer_real_invalidate;
-  klass->draw            = gimp_view_renderer_real_draw;
-  klass->render          = gimp_view_renderer_real_render;
+  klass->default_bg      = GIMP_VIEW_BG_STYLE;
+  klass->follow_theme_bg = GIMP_VIEW_BG_STYLE;
 
   klass->frame           = NULL;
   klass->frame_left      = 0;
   klass->frame_right     = 0;
   klass->frame_top       = 0;
   klass->frame_bottom    = 0;
+
+  klass->update          = NULL;
+  klass->set_context     = gimp_view_renderer_real_set_context;
+  klass->invalidate      = gimp_view_renderer_real_invalidate;
+  klass->draw            = gimp_view_renderer_real_draw;
+  klass->render          = gimp_view_renderer_real_render;
 }
 
 static void
@@ -156,15 +166,11 @@ gimp_view_renderer_init (GimpViewRenderer *renderer)
 {
   renderer->priv = gimp_view_renderer_get_instance_private (renderer);
 
-  renderer->viewable = NULL;
+  renderer->dot_for_dot = TRUE;
+  renderer->surface_bg  = GIMP_VIEW_BG_STYLE;
+  renderer->size        = -1;
 
-  renderer->dot_for_dot  = TRUE;
-
-  renderer->border_type  = GIMP_VIEW_BORDER_BLACK;
-  renderer->border_color = gegl_color_new ("black");
-
-  renderer->size         = -1;
-
+  renderer->priv->border_type  = GIMP_VIEW_BORDER_STYLE_FG;
   renderer->priv->needs_render = TRUE;
 }
 
@@ -173,12 +179,13 @@ gimp_view_renderer_dispose (GObject *object)
 {
   GimpViewRenderer *renderer = GIMP_VIEW_RENDERER (object);
 
-  g_clear_object (&renderer->border_color);
   if (renderer->viewable)
     gimp_view_renderer_set_viewable (renderer, NULL);
 
   if (renderer->context)
     gimp_view_renderer_set_context (renderer, NULL);
+
+  g_clear_object (&renderer->priv->border_color);
 
   if (renderer->priv->color_config)
     gimp_view_renderer_set_color_config (renderer, NULL);
@@ -193,10 +200,10 @@ gimp_view_renderer_finalize (GObject *object)
 {
   GimpViewRenderer *renderer = GIMP_VIEW_RENDERER (object);
 
-  g_clear_pointer (&renderer->priv->pattern, cairo_pattern_destroy);
   g_clear_pointer (&renderer->surface, cairo_surface_destroy);
-  g_clear_pointer (&renderer->priv->icon_surface, cairo_surface_destroy);
+  g_clear_pointer (&renderer->priv->pattern, cairo_pattern_destroy);
   g_clear_pointer (&renderer->priv->bg_icon_name, g_free);
+  g_clear_object  (&renderer->priv->border_color);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -285,8 +292,34 @@ gimp_view_renderer_set_context (GimpViewRenderer *renderer,
 
   if (context != renderer->context)
     {
-      GIMP_VIEW_RENDERER_GET_CLASS (renderer)->set_context (renderer,
-                                                            context);
+      if (renderer->context)
+        {
+          g_signal_handlers_disconnect_by_func (renderer->context->gimp->config,
+                                                G_CALLBACK (gimp_view_renderer_redraw),
+                                                renderer);
+        }
+
+      GIMP_VIEW_RENDERER_GET_CLASS (renderer)->set_context (renderer, context);
+
+      if (renderer->context)
+        {
+          GimpViewRendererClass *klass  = GIMP_VIEW_RENDERER_GET_CLASS (renderer);
+          GimpCoreConfig        *config = renderer->context->gimp->config;
+
+          g_signal_connect_object (config,
+                                   "notify::viewables-follow-theme",
+                                   G_CALLBACK (gimp_view_renderer_redraw),
+                                   renderer, 0);
+          g_signal_connect_object (config,
+                                   "notify::theme-color-scheme",
+                                   G_CALLBACK (gimp_view_renderer_redraw),
+                                   renderer, 0);
+
+          if (GIMP_GUI_CONFIG (config)->viewables_follow_theme)
+            renderer->surface_bg = klass->follow_theme_bg;
+          else
+            renderer->surface_bg = klass->default_bg;
+        }
 
       if (renderer->viewable)
         gimp_view_renderer_invalidate (renderer);
@@ -317,7 +350,6 @@ gimp_view_renderer_set_viewable (GimpViewRenderer *renderer,
     return;
 
   g_clear_pointer (&renderer->surface, cairo_surface_destroy);
-  g_clear_pointer (&renderer->priv->icon_surface, cairo_surface_destroy);
 
   gimp_view_renderer_free_color_transform (renderer);
 
@@ -441,7 +473,7 @@ gimp_view_renderer_set_size_full (GimpViewRenderer *renderer,
 
 void
 gimp_view_renderer_set_dot_for_dot (GimpViewRenderer *renderer,
-                                    gboolean             dot_for_dot)
+                                    gboolean          dot_for_dot)
 {
   g_return_if_fail (GIMP_IS_VIEW_RENDERER (renderer));
 
@@ -465,7 +497,7 @@ gimp_view_renderer_set_border_type (GimpViewRenderer   *renderer,
 
   g_return_if_fail (GIMP_IS_VIEW_RENDERER (renderer));
 
-  renderer->border_type = border_type;
+  renderer->priv->border_type = border_type;
 
   switch (border_type)
     {
@@ -482,27 +514,26 @@ gimp_view_renderer_set_border_type (GimpViewRenderer   *renderer,
     case GIMP_VIEW_BORDER_RED:
       border_color = gegl_color_new ("red");
       break;
+    case GIMP_VIEW_BORDER_STYLE_FG:
+      /* get later when we have a widget */
+      break;
+    case GIMP_VIEW_BORDER_STYLE_BG:
+      border_color = gegl_color_new ("transparent");
+      break;
     }
 
-  gimp_view_renderer_set_border_color (renderer, border_color);
-  if (border_color)
-    g_object_unref (border_color);
+  g_set_object (&renderer->priv->border_color, border_color);
+
+  gimp_view_renderer_update_idle (renderer);
 }
 
-void
-gimp_view_renderer_set_border_color (GimpViewRenderer *renderer,
-                                     GeglColor        *color)
+GimpViewBorderType
+gimp_view_renderer_get_border_type (GimpViewRenderer *renderer)
 {
-  g_return_if_fail (GIMP_IS_VIEW_RENDERER (renderer));
-  g_return_if_fail (color != NULL);
+  g_return_val_if_fail (GIMP_IS_VIEW_RENDERER (renderer),
+                        GIMP_VIEW_BORDER_STYLE_FG);
 
-  if (! gimp_color_is_perceptually_identical (renderer->border_color, color))
-    {
-      g_clear_object (&renderer->border_color);
-      renderer->border_color = gegl_color_duplicate (color);
-
-      gimp_view_renderer_update_idle (renderer);
-    }
+  return renderer->priv->border_type;
 }
 
 void
@@ -647,7 +678,8 @@ gimp_view_renderer_draw (GimpViewRenderer *renderer,
 
       gimp_view_renderer_render_icon (renderer,
                                       widget,
-                                      viewable_class->default_icon_name);
+                                      viewable_class->default_icon_name,
+                                      gtk_widget_get_scale_factor (widget));
       renderer->priv->needs_render = FALSE;
 
       g_type_class_unref (viewable_class);
@@ -659,14 +691,21 @@ gimp_view_renderer_draw (GimpViewRenderer *renderer,
 
   if (renderer->border_width > 0)
     {
-      gint    width  = renderer->width  + renderer->border_width;
-      gint    height = renderer->height + renderer->border_width;
-      gdouble x, y;
+      GeglColor *color;
+      gint       width  = renderer->width  + renderer->border_width;
+      gint       height = renderer->height + renderer->border_width;
+      gdouble    x, y;
+
+      if (renderer->priv->border_color)
+        color = g_object_ref (renderer->priv->border_color);
+      else
+        color = gimp_get_style_color (widget, GTK_STYLE_PROPERTY_COLOR);
 
       cairo_set_line_width (cr, renderer->border_width);
       cairo_set_line_join (cr, CAIRO_LINE_JOIN_ROUND);
-      gimp_cairo_set_source_color (cr, renderer->border_color, NULL, FALSE,
-                                   widget);
+      gimp_cairo_set_source_color (cr, color, NULL, FALSE, widget);
+
+      g_object_unref (color);
 
       x = (available_width  - width)  / 2.0;
       y = (available_height - height) / 2.0;
@@ -730,70 +769,79 @@ gimp_view_renderer_real_draw (GimpViewRenderer *renderer,
       renderer->priv->needs_render = FALSE;
     }
 
-  if (renderer->priv->icon_surface)
+  if (renderer->priv->bg_icon_name)
     {
-      gint  scale_factor = gtk_widget_get_scale_factor (widget);
-      gint  width;
-      gint  height;
-      gint  x, y;
-
-      width  = cairo_image_surface_get_width  (renderer->priv->icon_surface);
-      height = cairo_image_surface_get_height (renderer->priv->icon_surface);
-
-      width  /= scale_factor;
-      height /= scale_factor;
-
-      if (renderer->priv->bg_icon_name)
+      if (! renderer->priv->pattern)
         {
+          renderer->priv->pattern =
+            gimp_view_renderer_create_background (renderer, widget);
+        }
+
+      cairo_set_source (cr, renderer->priv->pattern);
+      cairo_paint (cr);
+    }
+  else
+    {
+      gint width    = renderer->width;
+      gint height   = renderer->height;
+      gint offset_x = (available_width  - width)  / 2;
+      gint offset_y = (available_height - height) / 2;
+
+      cairo_translate (cr, offset_x, offset_y);
+      cairo_rectangle (cr, 0, 0, width, height);
+
+      switch (renderer->surface_bg)
+        {
+        case GIMP_VIEW_BG_CHECKS:
           if (! renderer->priv->pattern)
             {
+              const GeglColor *rgb1 = gimp_render_check_color1 ();
+              const GeglColor *rgb2 = gimp_render_check_color2 ();
+
               renderer->priv->pattern =
-                gimp_view_renderer_create_background (renderer, widget);
+                gimp_cairo_checkerboard_create (cr, GIMP_CHECK_SIZE_SM,
+                                                rgb1, rgb2);
             }
 
           cairo_set_source (cr, renderer->priv->pattern);
-          cairo_paint (cr);
+          cairo_fill (cr);
+          break;
+
+        case GIMP_VIEW_BG_WHITE:
+          cairo_set_source_rgb (cr, 1.0, 1.0, 1.0);
+          cairo_fill (cr);
+          break;
+
+        case GIMP_VIEW_BG_STYLE:
+          break;
         }
+
+      cairo_translate (cr, -offset_x, -offset_y);
+    }
+
+  if (renderer->surface)
+    {
+      gdouble scale_x;
+      gdouble scale_y;
+      gint    width;
+      gint    height;
+      gint    x, y;
+
+      width  = cairo_image_surface_get_width  (renderer->surface);
+      height = cairo_image_surface_get_height (renderer->surface);
+
+      cairo_surface_get_device_scale (renderer->surface, &scale_x, &scale_y);
+
+      width  /= scale_x;
+      height /= scale_y;
 
       x = (available_width  - width)  / 2;
       y = (available_height - height) / 2;
 
-      cairo_set_source_surface (cr, renderer->priv->icon_surface, x, y);
       cairo_rectangle (cr, x, y, width, height);
+
+      cairo_set_source_surface (cr, renderer->surface, x, y);
       cairo_fill (cr);
-    }
-  else if (renderer->surface)
-    {
-      cairo_content_t content  = cairo_surface_get_content (renderer->surface);
-      gint            width    = renderer->width;
-      gint            height   = renderer->height;
-      gint            offset_x = (available_width  - width)  / 2;
-      gint            offset_y = (available_height - height) / 2;
-
-      cairo_translate (cr, offset_x, offset_y);
-
-      cairo_rectangle (cr, 0, 0, width, height);
-
-      if (content == CAIRO_CONTENT_COLOR_ALPHA)
-        {
-          if (! renderer->priv->pattern)
-            {
-              const GeglColor *rgb1;
-              const GeglColor *rgb2;
-
-              rgb1 = gimp_render_check_color1 ();
-              rgb2 = gimp_render_check_color2 ();
-              renderer->priv->pattern = gimp_cairo_checkerboard_create (cr, GIMP_CHECK_SIZE_SM, rgb1, rgb2);
-            }
-
-          cairo_set_source (cr, renderer->priv->pattern);
-          cairo_fill_preserve (cr);
-        }
-
-      cairo_set_source_surface (cr, renderer->surface, 0, 0);
-      cairo_fill (cr);
-
-      cairo_translate (cr, - offset_x, - offset_y);
     }
 }
 
@@ -804,30 +852,53 @@ gimp_view_renderer_real_render (GimpViewRenderer *renderer,
   GdkPixbuf   *pixbuf;
   GimpTempBuf *temp_buf;
   const gchar *icon_name;
+  GeglColor   *fg_color     = NULL;
+  GimpViewBG   inside_bg    = GIMP_VIEW_BG_CHECKS;
+  GimpViewBG   outside_bg   = GIMP_VIEW_BG_WHITE;
   gint         scale_factor = gtk_widget_get_scale_factor (widget);
+
+  if (renderer->context &&
+      GIMP_GUI_CONFIG (renderer->context->gimp->config)->viewables_follow_theme)
+    {
+      fg_color = gimp_get_style_color (widget, GTK_STYLE_PROPERTY_COLOR);
+
+      inside_bg  = GIMP_VIEW_BG_STYLE;
+      outside_bg = GIMP_VIEW_BG_STYLE;
+    }
 
   pixbuf = gimp_viewable_get_pixbuf (renderer->viewable,
                                      renderer->context,
                                      renderer->width  * scale_factor,
-                                     renderer->height * scale_factor);
+                                     renderer->height * scale_factor,
+                                     fg_color);
   if (pixbuf)
     {
-      gimp_view_renderer_render_pixbuf (renderer, widget, pixbuf);
+      gimp_view_renderer_render_pixbuf (renderer, widget,
+                                        pixbuf, scale_factor);
+      g_clear_object (&fg_color);
       return;
     }
 
   temp_buf = gimp_viewable_get_preview (renderer->viewable,
                                         renderer->context,
                                         renderer->width,
-                                        renderer->height);
+                                        renderer->height,
+                                        fg_color);
   if (temp_buf)
     {
-      gimp_view_renderer_render_temp_buf_simple (renderer, widget, temp_buf);
+      gimp_view_renderer_render_temp_buf_simple (renderer, widget,
+                                                 temp_buf,
+                                                 inside_bg,
+                                                 outside_bg);
+      g_clear_object (&fg_color);
       return;
     }
 
   icon_name = gimp_viewable_get_icon_name (renderer->viewable);
-  gimp_view_renderer_render_icon (renderer, widget, icon_name);
+  gimp_view_renderer_render_icon (renderer, widget,
+                                  icon_name, scale_factor);
+
+  g_clear_object (&fg_color);
 }
 
 static void
@@ -862,7 +933,9 @@ gimp_view_renderer_config_notify (GObject          *config,
 void
 gimp_view_renderer_render_temp_buf_simple (GimpViewRenderer *renderer,
                                            GtkWidget        *widget,
-                                           GimpTempBuf      *temp_buf)
+                                           GimpTempBuf      *temp_buf,
+                                           GimpViewBG        inside_bg,
+                                           GimpViewBG        outside_bg)
 {
   gint temp_buf_x = 0;
   gint temp_buf_y = 0;
@@ -884,8 +957,8 @@ gimp_view_renderer_render_temp_buf_simple (GimpViewRenderer *renderer,
   gimp_view_renderer_render_temp_buf (renderer, widget, temp_buf,
                                       temp_buf_x, temp_buf_y,
                                       -1,
-                                      GIMP_VIEW_BG_CHECKS,
-                                      GIMP_VIEW_BG_WHITE);
+                                      inside_bg,
+                                      outside_bg);
 }
 
 void
@@ -898,12 +971,11 @@ gimp_view_renderer_render_temp_buf (GimpViewRenderer *renderer,
                                     GimpViewBG        inside_bg,
                                     GimpViewBG        outside_bg)
 {
-  g_clear_pointer (&renderer->priv->icon_surface, cairo_surface_destroy);
+  g_clear_pointer (&renderer->surface, cairo_surface_destroy);
 
-  if (! renderer->surface)
-    renderer->surface = cairo_image_surface_create (CAIRO_FORMAT_RGB24,
-                                                    renderer->width,
-                                                    renderer->height);
+  renderer->surface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32,
+                                                  renderer->width,
+                                                  renderer->height);
 
   gimp_view_render_temp_buf_to_surface (renderer,
                                         widget,
@@ -922,11 +994,11 @@ gimp_view_renderer_render_temp_buf (GimpViewRenderer *renderer,
 void
 gimp_view_renderer_render_pixbuf (GimpViewRenderer *renderer,
                                   GtkWidget        *widget,
-                                  GdkPixbuf        *pixbuf)
+                                  GdkPixbuf        *pixbuf,
+                                  gint              pixbuf_scale)
 {
   GimpColorTransform *transform;
   const Babl         *format;
-  gint                scale_factor;
 
   g_clear_pointer (&renderer->surface, cairo_surface_destroy);
 
@@ -971,21 +1043,19 @@ gimp_view_renderer_render_pixbuf (GimpViewRenderer *renderer,
       g_object_ref (pixbuf);
     }
 
-  scale_factor = gtk_widget_get_scale_factor (widget);
-
-  g_clear_pointer (&renderer->priv->icon_surface, cairo_surface_destroy);
-  renderer->priv->icon_surface =
-    gdk_cairo_surface_create_from_pixbuf (pixbuf, scale_factor, NULL);
+  renderer->surface = gdk_cairo_surface_create_from_pixbuf (pixbuf,
+                                                            pixbuf_scale,
+                                                            NULL);
   g_object_unref (pixbuf);
 }
 
 void
 gimp_view_renderer_render_icon (GimpViewRenderer *renderer,
                                 GtkWidget        *widget,
-                                const gchar      *icon_name)
+                                const gchar      *icon_name,
+                                gint              icon_scale)
 {
   GdkPixbuf *pixbuf;
-  gint       scale_factor;
   gint       width;
   gint       height;
 
@@ -993,40 +1063,37 @@ gimp_view_renderer_render_icon (GimpViewRenderer *renderer,
   g_return_if_fail (GTK_IS_WIDGET (widget));
   g_return_if_fail (icon_name != NULL);
 
-  g_clear_pointer (&renderer->priv->icon_surface, cairo_surface_destroy);
   g_clear_pointer (&renderer->surface, cairo_surface_destroy);
-
-  scale_factor = gtk_widget_get_scale_factor (widget);
 
   pixbuf = gimp_widget_load_icon (widget, icon_name,
                                   MIN (renderer->width, renderer->height));
   width  = gdk_pixbuf_get_width (pixbuf);
   height = gdk_pixbuf_get_height (pixbuf);
 
-  if (width  > renderer->width  * scale_factor ||
-      height > renderer->height * scale_factor)
+  if (width  > renderer->width  * icon_scale ||
+      height > renderer->height * icon_scale)
     {
       GdkPixbuf *scaled_pixbuf;
 
       gimp_viewable_calc_preview_size (width, height,
-                                       renderer->width  * scale_factor,
-                                       renderer->height * scale_factor,
+                                       renderer->width  * icon_scale,
+                                       renderer->height * icon_scale,
                                        TRUE, 1.0, 1.0,
                                        &width, &height,
                                        NULL);
 
       scaled_pixbuf = gdk_pixbuf_scale_simple (pixbuf,
-                                               width  * scale_factor,
-                                               height * scale_factor,
+                                               width  * icon_scale,
+                                               height * icon_scale,
                                                GDK_INTERP_BILINEAR);
 
       g_object_unref (pixbuf);
       pixbuf = scaled_pixbuf;
     }
 
-  g_clear_pointer (&renderer->priv->icon_surface, cairo_surface_destroy);
-  renderer->priv->icon_surface =
-    gdk_cairo_surface_create_from_pixbuf (pixbuf, scale_factor, NULL);
+  renderer->surface = gdk_cairo_surface_create_from_pixbuf (pixbuf,
+                                                            icon_scale,
+                                                            NULL);
   g_object_unref (pixbuf);
 }
 
@@ -1110,6 +1177,7 @@ gimp_view_renderer_free_color_transform (GimpViewRenderer *renderer)
   gimp_view_renderer_invalidate (renderer);
 }
 
+
 /*  private functions  */
 
 static void
@@ -1153,17 +1221,21 @@ gimp_view_render_temp_buf_to_surface (GimpViewRenderer *renderer,
 
   cr = cairo_create (surface);
 
+  cairo_set_operator (cr, CAIRO_OPERATOR_CLEAR);
+  cairo_paint (cr);
+  cairo_set_operator (cr, CAIRO_OPERATOR_OVER);
+
   if (outside_bg == GIMP_VIEW_BG_CHECKS ||
       inside_bg  == GIMP_VIEW_BG_CHECKS)
     {
       if (! renderer->priv->pattern)
         {
-          const GeglColor *rgb1;
-          const GeglColor *rgb2;
+          const GeglColor *rgb1 = gimp_render_check_color1 ();
+          const GeglColor *rgb2 = gimp_render_check_color2 ();
 
-          rgb1 = gimp_render_check_color1 ();
-          rgb2 = gimp_render_check_color2 ();
-          renderer->priv->pattern = gimp_cairo_checkerboard_create (cr, GIMP_CHECK_SIZE_SM, rgb1, rgb2);
+          renderer->priv->pattern =
+            gimp_cairo_checkerboard_create (cr, GIMP_CHECK_SIZE_SM,
+                                            rgb1, rgb2);
         }
     }
 
@@ -1171,14 +1243,17 @@ gimp_view_render_temp_buf_to_surface (GimpViewRenderer *renderer,
     {
     case GIMP_VIEW_BG_CHECKS:
       cairo_set_source (cr, renderer->priv->pattern);
+      cairo_paint (cr);
       break;
 
     case GIMP_VIEW_BG_WHITE:
       cairo_set_source_rgb (cr, 1.0, 1.0, 1.0);
+      cairo_paint (cr);
+      break;
+
+    case GIMP_VIEW_BG_STYLE:
       break;
     }
-
-  cairo_paint (cr);
 
   if (! gimp_rectangle_intersect (0, 0,
                                   surface_width, surface_height,
@@ -1191,8 +1266,9 @@ gimp_view_render_temp_buf_to_surface (GimpViewRenderer *renderer,
       return;
     }
 
-  if (inside_bg != outside_bg &&
-      babl_format_has_alpha (temp_buf_format) && channel == -1)
+  if (inside_bg != outside_bg                 &&
+      babl_format_has_alpha (temp_buf_format) &&
+      channel == -1)
     {
       cairo_rectangle (cr, x, y, width, height);
 
@@ -1200,28 +1276,31 @@ gimp_view_render_temp_buf_to_surface (GimpViewRenderer *renderer,
         {
         case GIMP_VIEW_BG_CHECKS:
           cairo_set_source (cr, renderer->priv->pattern);
+          cairo_fill (cr);
           break;
 
         case GIMP_VIEW_BG_WHITE:
           cairo_set_source_rgb (cr, 1.0, 1.0, 1.0);
+          cairo_fill (cr);
+          break;
+
+        case GIMP_VIEW_BG_STYLE:
           break;
         }
-
-      cairo_fill (cr);
     }
 
-  if (babl_format_has_alpha (temp_buf_format) && channel == -1)
+  if (channel == -1)
     {
       GimpColorTransform *transform;
       GeglBuffer         *src_buffer;
       GeglBuffer         *dest_buffer;
-      cairo_surface_t    *alpha_surface;
+      cairo_surface_t    *tmp_surface;
 
-      alpha_surface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32,
-                                                  width, height);
+      tmp_surface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32,
+                                                width, height);
 
       src_buffer  = gimp_temp_buf_create_buffer (temp_buf);
-      dest_buffer = gimp_cairo_surface_create_buffer (alpha_surface, NULL);
+      dest_buffer = gimp_cairo_surface_create_buffer (tmp_surface, NULL);
 
       transform =
         gimp_view_renderer_get_color_transform (renderer, widget,
@@ -1252,56 +1331,14 @@ gimp_view_render_temp_buf_to_surface (GimpViewRenderer *renderer,
       g_object_unref (src_buffer);
       g_object_unref (dest_buffer);
 
-      cairo_surface_mark_dirty (alpha_surface);
+      cairo_surface_mark_dirty (tmp_surface);
 
       cairo_translate (cr, x, y);
       cairo_rectangle (cr, 0, 0, width, height);
-      cairo_set_source_surface (cr, alpha_surface, 0, 0);
+      cairo_set_source_surface (cr, tmp_surface, 0, 0);
       cairo_fill (cr);
 
-      cairo_surface_destroy (alpha_surface);
-    }
-  else if (channel == -1)
-    {
-      GimpColorTransform *transform;
-      GeglBuffer         *src_buffer;
-      GeglBuffer         *dest_buffer;
-
-      cairo_surface_flush (surface);
-
-      src_buffer  = gimp_temp_buf_create_buffer (temp_buf);
-      dest_buffer = gimp_cairo_surface_create_buffer (surface, NULL);
-
-      transform =
-        gimp_view_renderer_get_color_transform (renderer, widget,
-                                                gegl_buffer_get_format (src_buffer),
-                                                gegl_buffer_get_format (dest_buffer));
-
-      if (transform)
-        {
-          gimp_color_transform_process_buffer (transform,
-                                               src_buffer,
-                                               GEGL_RECTANGLE (x - temp_buf_x,
-                                                               y - temp_buf_y,
-                                                               width, height),
-                                               dest_buffer,
-                                               GEGL_RECTANGLE (x, y, 0, 0));
-        }
-      else
-        {
-          gimp_gegl_buffer_copy (src_buffer,
-                                 GEGL_RECTANGLE (x - temp_buf_x,
-                                                 y - temp_buf_y,
-                                                 width, height),
-                                 GEGL_ABYSS_NONE,
-                                 dest_buffer,
-                                 GEGL_RECTANGLE (x, y, 0, 0));
-        }
-
-      g_object_unref (src_buffer);
-      g_object_unref (dest_buffer);
-
-      cairo_surface_mark_dirty (surface);
+      cairo_surface_destroy (tmp_surface);
     }
   else
     {
@@ -1327,31 +1364,26 @@ gimp_view_render_temp_buf_to_surface (GimpViewRenderer *renderer,
       dest += y * dest_stride + x * 4;
 
       fish = babl_fish (temp_buf_format,
-                        babl_format ("cairo-RGB24"));
+                        babl_format ("R~G~B~ u8"));
 
-      for (i = y; i < (y + height); i++)
+      for (i = 0; i < height; i++)
         {
-          const guchar *s = src;
-          guchar       *d = dest;
+          guchar        line[width * 3];
+          const guchar *s = line;
+          guint32      *d = (guint32*) dest;
           gint          j;
 
-          for (j = x; j < (x + width); j++, d += 4, s += bytes)
+          babl_process (fish, src, line, width);
+
+          for (j = 0; j < width; j++)
             {
-              if (bytes > 2)
-                {
-                  guchar pixel[4] = { s[channel], s[channel], s[channel], 255 };
+              *d = s[channel] | s[channel] << 8 | s[channel] << 16;
 
-                  babl_process (fish, pixel, d, 1);
-                }
-              else
-                {
-                  guchar pixel[2] = { s[channel], 255 };
-
-                  babl_process (fish, pixel, d, 1);
-                }
+              s += 3;
+              d += 1;
             }
 
-          src += rowstride;
+          src  += rowstride;
           dest += dest_stride;
         }
 
@@ -1388,4 +1420,20 @@ gimp_view_renderer_create_background (GimpViewRenderer *renderer,
     }
 
   return pattern;
+}
+
+static void
+gimp_view_renderer_redraw (GimpGuiConfig    *config,
+                           const GParamSpec *pspec,
+                           GimpViewRenderer *renderer)
+{
+  GimpViewRendererClass *klass = GIMP_VIEW_RENDERER_GET_CLASS (renderer);
+
+  if (config->viewables_follow_theme)
+    renderer->surface_bg = klass->follow_theme_bg;
+  else
+    renderer->surface_bg = klass->default_bg;
+
+  gimp_view_renderer_invalidate (renderer);
+  gimp_view_renderer_update (renderer);
 }

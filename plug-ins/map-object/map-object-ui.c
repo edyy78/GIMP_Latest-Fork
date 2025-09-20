@@ -24,9 +24,8 @@ static GtkWidget   *appwin            = NULL;
 static GtkNotebook *options_note_book = NULL;
 
 static GtkWidget *pointlightwid;
+static GtkWidget *viewpointlightwid;
 static GtkWidget *dirlightwid;
-
-static GtkAdjustment *xadj, *yadj, *zadj;
 
 static GtkWidget *sphere_page    = NULL;
 static GtkWidget *box_page       = NULL;
@@ -37,19 +36,17 @@ static guint light_hit           = FALSE;
 
 
 static gint preview_events             (GtkWidget           *area,
-                                        GdkEvent            *event);
+                                        GdkEvent            *event,
+                                        gpointer             data);
 
-static void update_light_pos_entries   (void);
+static void update_light_pos_entries   (GimpProcedureConfig *config);
 
 static void update_preview             (GimpProcedureConfig *config);
-static void double_adjustment_update   (GtkAdjustment       *adjustment,
-                                        gpointer             data);
 
 static void toggle_update              (GtkWidget           *widget,
                                         gpointer             data);
 
-static void lightmenu_callback         (GtkWidget           *widget,
-                                        gpointer             data);
+static void lightmenu_callback         (GimpProcedureConfig *config);
 
 static void preview_callback           (GtkWidget           *widget,
                                         gpointer             data);
@@ -71,46 +68,18 @@ update_preview (GimpProcedureConfig *config)
 }
 
 static void
-double_adjustment_update (GtkAdjustment *adjustment,
-                          gpointer       data)
+update_light_pos_entries (GimpProcedureConfig *config)
 {
-  gimp_double_adjustment_update (adjustment, data);
+  g_object_set (config,
+                "light-position-x", mapvals.lightsource.position.x,
+                "light-position-y", mapvals.lightsource.position.y,
+                "light-position-z", mapvals.lightsource.position.z,
+                NULL);
 
   if (mapvals.livepreview)
     compute_preview_image ();
 
   gtk_widget_queue_draw (previewarea);
-}
-
-static void
-update_light_pos_entries (void)
-{
-  g_signal_handlers_block_by_func (xadj,
-                                   double_adjustment_update,
-                                   &mapvals.lightsource.position.x);
-  gtk_adjustment_set_value (xadj,
-                            mapvals.lightsource.position.x);
-  g_signal_handlers_unblock_by_func (xadj,
-                                     double_adjustment_update,
-                                     &mapvals.lightsource.position.x);
-
-  g_signal_handlers_block_by_func (yadj,
-                                   double_adjustment_update,
-                                   &mapvals.lightsource.position.y);
-  gtk_adjustment_set_value (yadj,
-                            mapvals.lightsource.position.y);
-  g_signal_handlers_unblock_by_func (yadj,
-                                     double_adjustment_update,
-                                     &mapvals.lightsource.position.y);
-
-  g_signal_handlers_block_by_func (zadj,
-                                   double_adjustment_update,
-                                   &mapvals.lightsource.position.z);
-  gtk_adjustment_set_value (zadj,
-                            mapvals.lightsource.position.z);
-  g_signal_handlers_unblock_by_func (zadj,
-                                     double_adjustment_update,
-                                     &mapvals.lightsource.position.z);
 }
 
 /**********************/
@@ -132,11 +101,9 @@ toggle_update (GtkWidget *widget,
 /*****************************************/
 
 static void
-lightmenu_callback (GtkWidget *widget,
-                    gpointer   data)
+lightmenu_callback (GimpProcedureConfig *config)
 {
-  int light_type;
-  GimpProcedureConfig *config = (GimpProcedureConfig *) data;
+  gint light_type;
 
   light_type = gimp_procedure_config_get_choice_id (config, "light-type");
 
@@ -144,16 +111,19 @@ lightmenu_callback (GtkWidget *widget,
     {
       gtk_widget_set_visible (dirlightwid, FALSE);
       gtk_widget_set_visible (pointlightwid, TRUE);
+      gtk_widget_set_visible (viewpointlightwid, TRUE);
     }
   else if (light_type == DIRECTIONAL_LIGHT)
     {
       gtk_widget_set_visible (dirlightwid, TRUE);
       gtk_widget_set_visible (pointlightwid, FALSE);
+      gtk_widget_set_visible (viewpointlightwid, FALSE);
     }
   else
     {
       gtk_widget_set_visible (dirlightwid, FALSE);
       gtk_widget_set_visible (pointlightwid, FALSE);
+      gtk_widget_set_visible (viewpointlightwid, FALSE);
     }
 
   if (mapvals.livepreview)
@@ -228,9 +198,11 @@ zoomed_callback (GimpZoomModel *model)
 
 static gint
 preview_events (GtkWidget *area,
-                GdkEvent  *event)
+                GdkEvent  *event,
+                gpointer   data)
 {
   HVect __attribute__((unused))pos;
+  GimpProcedureConfig *config = GIMP_PROCEDURE_CONFIG (data);
 /*  HMatrix RotMat;
   gdouble a,b,c; */
 
@@ -284,7 +256,7 @@ preview_events (GtkWidget *area,
 
                 mapvals.livepreview = FALSE;
                 update_light (event->motion.x, event->motion.y);
-                update_light_pos_entries ();
+                update_light_pos_entries (config);
                 mapvals.livepreview = live;
 
                 gtk_widget_queue_draw (previewarea);
@@ -335,9 +307,9 @@ main_dialog (GimpProcedure       *procedure,
   GtkWidget     *button;
   GtkWidget     *toggle;
   GtkWidget     *scale;
+  GtkWidget     *spin;
   GimpZoomModel *model;
   GtkWidget     *map_combo;
-  GtkWidget     *combo;
   gboolean       run = FALSE;
 
   gimp_ui_init (PLUG_IN_BINARY);
@@ -370,7 +342,7 @@ main_dialog (GimpProcedure       *procedure,
 
   g_signal_connect (previewarea, "event",
                     G_CALLBACK (preview_events),
-                    previewarea);
+                    config);
 
   g_signal_connect (previewarea, "draw",
                     G_CALLBACK (preview_draw),
@@ -492,9 +464,7 @@ main_dialog (GimpProcedure       *procedure,
                                   "light-type",
                                   "light-color",
                                   NULL);
-  combo = gimp_procedure_dialog_get_widget (GIMP_PROCEDURE_DIALOG (appwin),
-                                            "light-type", G_TYPE_NONE);
-  g_signal_connect (combo, "value-changed",
+  g_signal_connect (config, "notify::light-type",
                     G_CALLBACK (lightmenu_callback),
                     config);
   gimp_procedure_dialog_fill_frame (GIMP_PROCEDURE_DIALOG (appwin),
@@ -520,6 +490,20 @@ main_dialog (GimpProcedure       *procedure,
   gimp_procedure_dialog_get_label (GIMP_PROCEDURE_DIALOG (appwin),
                                    "position-label", _("Position"),
                                    FALSE, FALSE);
+
+  spin = gimp_procedure_dialog_get_widget (GIMP_PROCEDURE_DIALOG (appwin),
+                                           "light-position-x",
+                                           GIMP_TYPE_LABEL_SPIN);
+  gimp_label_spin_set_increments (GIMP_LABEL_SPIN (spin), 0.1, 0.1);
+  spin = gimp_procedure_dialog_get_widget (GIMP_PROCEDURE_DIALOG (appwin),
+                                           "light-position-y",
+                                           GIMP_TYPE_LABEL_SPIN);
+  gimp_label_spin_set_increments (GIMP_LABEL_SPIN (spin), 0.1, 0.1);
+  spin = gimp_procedure_dialog_get_widget (GIMP_PROCEDURE_DIALOG (appwin),
+                                           "light-position-z",
+                                           GIMP_TYPE_LABEL_SPIN);
+  gimp_label_spin_set_increments (GIMP_LABEL_SPIN (spin), 0.1, 0.1);
+
   gimp_procedure_dialog_fill_box (GIMP_PROCEDURE_DIALOG (appwin),
                                   "position-box",
                                   "light-position-x",
@@ -557,7 +541,6 @@ main_dialog (GimpProcedure       *procedure,
   g_signal_connect (config, "notify::light-position-z",
                     G_CALLBACK (update_preview),
                     config);
-  lightmenu_callback (combo, config);
 
   /* Viewpoint Tab */
   gimp_procedure_dialog_get_label (GIMP_PROCEDURE_DIALOG (appwin),
@@ -571,10 +554,10 @@ main_dialog (GimpProcedure       *procedure,
                                          NULL);
   gtk_orientable_set_orientation (GTK_ORIENTABLE (hbox),
                                   GTK_ORIENTATION_HORIZONTAL);
-  pointlightwid = gimp_procedure_dialog_fill_frame (GIMP_PROCEDURE_DIALOG (appwin),
-                                                    "viewpoint-position-frame",
-                                                    "viewpoint-position-label", FALSE,
-                                                    "viewpoint-position-box");
+  viewpointlightwid = gimp_procedure_dialog_fill_frame (GIMP_PROCEDURE_DIALOG (appwin),
+                                                        "viewpoint-position-frame",
+                                                        "viewpoint-position-label", FALSE,
+                                                        "viewpoint-position-box");
 
   gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (appwin),
                                         "first-axis-x", 1.0);
@@ -656,6 +639,7 @@ main_dialog (GimpProcedure       *procedure,
   g_signal_connect (config, "notify::second-axis-z",
                     G_CALLBACK (update_preview),
                     config);
+  lightmenu_callback (config);
 
   /* Material Tab */
   gimp_procedure_dialog_get_label (GIMP_PROCEDURE_DIALOG (appwin),

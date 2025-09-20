@@ -179,7 +179,7 @@ gimp_viewable_button_scroll_event (GtkWidget      *widget,
   gint                index;
 
   object = gimp_context_get_by_type (button->context,
-                                     gimp_container_get_children_type (button->container));
+                                     gimp_container_get_child_type (button->container));
 
   index = gimp_container_get_child_index (button->container, object);
 
@@ -212,7 +212,7 @@ gimp_viewable_button_scroll_event (GtkWidget      *widget,
 
           if (object)
             gimp_context_set_by_type (button->context,
-                                      gimp_container_get_children_type (button->container),
+                                      gimp_container_get_child_type (button->container),
                                       object);
         }
     }
@@ -310,7 +310,7 @@ gimp_viewable_button_new (GimpContainer     *container,
       button->dialog_tooltip    = g_strdup (dialog_tooltip);
     }
 
-  prop_name = gimp_context_type_to_prop_name (gimp_container_get_children_type (container));
+  prop_name = gimp_context_type_to_prop_name (gimp_container_get_child_type (container));
 
   button->view = gimp_prop_view_new (G_OBJECT (context), prop_name,
                                      context, button->button_view_size);
@@ -351,7 +351,7 @@ gimp_viewable_button_get_view_size (GimpViewableButton *button)
 
 void
 gimp_viewable_button_set_view_size (GimpViewableButton *button,
-                                    gint                view_size)
+                                    GimpViewSize        view_size)
 {
   g_return_if_fail (GIMP_IS_VIEWABLE_BUTTON (button));
 

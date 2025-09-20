@@ -81,46 +81,42 @@ gimp_path_tree_view_class_init (GimpPathTreeViewClass *klass)
 {
   GObjectClass               *object_class = G_OBJECT_CLASS (klass);
   GimpContainerTreeViewClass *view_class   = GIMP_CONTAINER_TREE_VIEW_CLASS (klass);
-  GimpItemTreeViewClass      *iv_class     = GIMP_ITEM_TREE_VIEW_CLASS (klass);
+  GimpItemTreeViewClass      *pv_vlass     = GIMP_ITEM_TREE_VIEW_CLASS (klass);
 
-  object_class->constructed = gimp_path_tree_view_constructed;
+  object_class->constructed    = gimp_path_tree_view_constructed;
 
-  view_class->drop_svg      = gimp_path_tree_view_drop_svg;
+  view_class->drop_svg         = gimp_path_tree_view_drop_svg;
 
-  iv_class->move_cursor_up_action    = "paths-select-previous";
-  iv_class->move_cursor_down_action  = "paths-select-next";
-  iv_class->move_cursor_start_action = "paths-select-top";
-  iv_class->move_cursor_end_action   = "paths-select-bottom";
+  pv_vlass->item_type          = GIMP_TYPE_PATH;
+  pv_vlass->signal_name        = "selected-paths-changed";
 
-  iv_class->item_type       = GIMP_TYPE_PATH;
-  iv_class->signal_name     = "selected-paths-changed";
+  pv_vlass->new_item           = gimp_path_tree_view_item_new;
 
-  iv_class->get_container   = gimp_image_get_paths;
-  iv_class->get_selected_items = (GimpGetItemsFunc) gimp_image_get_selected_paths;
-  iv_class->set_selected_items = (GimpSetItemsFunc) gimp_image_set_selected_paths;
-  iv_class->add_item        = (GimpAddItemFunc) gimp_image_add_path;
-  iv_class->remove_item     = (GimpRemoveItemFunc) gimp_image_remove_path;
-  iv_class->new_item        = gimp_path_tree_view_item_new;
+  pv_vlass->action_group        = "paths";
+  pv_vlass->activate_action     = "paths-edit";
+  pv_vlass->new_action          = "paths-new";
+  pv_vlass->new_default_action  = "paths-new-last-values";
+  pv_vlass->raise_action        = "paths-raise";
+  pv_vlass->raise_top_action    = "paths-raise-to-top";
+  pv_vlass->lower_action        = "paths-lower";
+  pv_vlass->lower_bottom_action = "paths-lower-to-bottom";
+  pv_vlass->duplicate_action    = "paths-duplicate";
+  pv_vlass->delete_action       = "paths-delete";
 
-  iv_class->action_group              = "paths";
-  iv_class->activate_action           = "paths-edit";
-  iv_class->new_action                = "paths-new";
-  iv_class->new_default_action        = "paths-new-last-values";
-  iv_class->raise_action              = "paths-raise";
-  iv_class->raise_top_action          = "paths-raise-to-top";
-  iv_class->lower_action              = "paths-lower";
-  iv_class->lower_bottom_action       = "paths-lower-to-bottom";
-  iv_class->duplicate_action          = "paths-duplicate";
-  iv_class->delete_action             = "paths-delete";
-  iv_class->lock_content_icon_name    = GIMP_ICON_LOCK_PATH;
-  iv_class->lock_content_tooltip      = _("Lock path");
-  iv_class->lock_content_help_id      = GIMP_HELP_PATH_LOCK_STROKES;
-  iv_class->lock_position_icon_name   = GIMP_ICON_LOCK_POSITION;
-  iv_class->lock_position_tooltip     = _("Lock path position");
-  iv_class->lock_position_help_id     = GIMP_HELP_PATH_LOCK_POSITION;
-  iv_class->lock_visibility_icon_name = GIMP_ICON_LOCK_VISIBILITY;
-  iv_class->lock_visibility_tooltip   = _("Lock path visibility");
-  iv_class->lock_position_help_id     = GIMP_HELP_PATH_LOCK_VISIBILITY;
+  pv_vlass->move_cursor_up_action    = "paths-select-previous";
+  pv_vlass->move_cursor_down_action  = "paths-select-next";
+  pv_vlass->move_cursor_start_action = "paths-select-top";
+  pv_vlass->move_cursor_end_action   = "paths-select-bottom";
+
+  pv_vlass->lock_content_icon_name    = GIMP_ICON_LOCK_PATH;
+  pv_vlass->lock_content_tooltip      = _("Lock path");
+  pv_vlass->lock_content_help_id      = GIMP_HELP_PATH_LOCK_STROKES;
+  pv_vlass->lock_position_icon_name   = GIMP_ICON_LOCK_POSITION;
+  pv_vlass->lock_position_tooltip     = _("Lock path position");
+  pv_vlass->lock_position_help_id     = GIMP_HELP_PATH_LOCK_POSITION;
+  pv_vlass->lock_visibility_icon_name = GIMP_ICON_LOCK_VISIBILITY;
+  pv_vlass->lock_visibility_tooltip   = _("Lock path visibility");
+  pv_vlass->lock_position_help_id     = GIMP_HELP_PATH_LOCK_VISIBILITY;
 }
 
 static void
@@ -152,7 +148,7 @@ gimp_path_tree_view_constructed (GObject *object)
   modify_mask = gtk_widget_get_modifier_mask (GTK_WIDGET (object),
                                               GDK_MODIFIER_INTENT_MODIFY_SELECTION);
 
-  view->toselection_button =
+  view->to_selection_button =
     gimp_editor_add_action_button (editor, "paths",
                                    "paths-selection-replace",
                                    "paths-selection-add",
@@ -163,19 +159,19 @@ gimp_path_tree_view_constructed (GObject *object)
                                    extend_mask | modify_mask,
                                    NULL);
   gimp_container_view_enable_dnd (GIMP_CONTAINER_VIEW (editor),
-                                  GTK_BUTTON (view->toselection_button),
+                                  GTK_BUTTON (view->to_selection_button),
                                   GIMP_TYPE_PATH);
   gtk_box_reorder_child (gimp_editor_get_button_box (editor),
-                         view->toselection_button, 4);
+                         view->to_selection_button, 4);
 
-  view->tovectors_button =
+  view->to_path_button =
     gimp_editor_add_action_button (editor, "paths",
                                    "paths-selection-to-path",
                                    "paths-selection-to-path-advanced",
                                    GDK_SHIFT_MASK,
                                    NULL);
   gtk_box_reorder_child (gimp_editor_get_button_box (editor),
-                         view->tovectors_button, 5);
+                         view->to_path_button, 5);
 
   view->stroke_button =
     gimp_editor_add_action_button (editor, "paths",
@@ -273,7 +269,7 @@ gimp_path_tree_view_drag_svg (GtkWidget *widget,
   GList            *items;
   gchar            *svg_data = NULL;
 
-  items = GIMP_ITEM_TREE_VIEW_GET_CLASS (view)->get_selected_items (image);
+  items = gimp_image_get_selected_paths (image);
 
   *svg_data_len = 0;
 

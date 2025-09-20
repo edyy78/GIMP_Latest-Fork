@@ -103,10 +103,7 @@ static void   gimp_bucket_fill_options_get_property      (GObject               
                                                           guint                  property_id,
                                                           GValue                *value,
                                                           GParamSpec            *pspec);
-static gboolean
-             gimp_bucket_fill_options_select_stroke_tool (GimpContainerView     *view,
-                                                          GList                 *items,
-                                                          GList                 *paths,
+static void  gimp_bucket_fill_options_select_stroke_tool (GimpContainerView     *view,
                                                           GimpBucketFillOptions *options);
 static void  gimp_bucket_fill_options_tool_cell_renderer (GtkCellLayout         *layout,
                                                           GtkCellRenderer       *cell,
@@ -365,8 +362,7 @@ gimp_bucket_fill_options_set_property (GObject      *object,
       options->line_art_stroke = g_value_get_boolean (value);
       break;
     case PROP_LINE_ART_STROKE_TOOL:
-      g_clear_pointer (&options->line_art_stroke_tool, g_free);
-      options->line_art_stroke_tool = g_value_dup_string (value);
+      g_set_str (&options->line_art_stroke_tool, g_value_get_string (value));
 
       if (options->stroke_options)
         {
@@ -482,24 +478,15 @@ gimp_bucket_fill_options_get_property (GObject    *object,
     }
 }
 
-static gboolean
+static void
 gimp_bucket_fill_options_select_stroke_tool (GimpContainerView     *view,
-                                             GList                 *items,
-                                             GList                 *paths,
                                              GimpBucketFillOptions *options)
 {
-  GList *iter;
+  GimpViewable *item = gimp_container_view_get_1_selected (view);
 
-  for (iter = items; iter; iter = iter->next)
-    {
-      g_object_set (options,
-                    "line-art-stroke-tool",
-                    iter->data ? gimp_object_get_name (iter->data) : NULL,
-                    NULL);
-      break;
-    }
-
-  return TRUE;
+  g_object_set (options,
+                "line-art-stroke-tool", item,
+                NULL);
 }
 
 static void
@@ -852,7 +839,7 @@ gimp_bucket_fill_options_gui (GimpToolOptions *tool_options)
                                       GIMP_CONTAINER_COMBO_BOX (widget)->viewable_renderer,
                                       gimp_bucket_fill_options_tool_cell_renderer,
                                       options, NULL);
-  g_signal_connect (widget, "select-items",
+  g_signal_connect (widget, "selection-changed",
                     G_CALLBACK (gimp_bucket_fill_options_select_stroke_tool),
                     options);
 

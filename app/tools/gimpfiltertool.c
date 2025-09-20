@@ -56,6 +56,7 @@
 #include "core/gimpimage-pick-color.h"
 #include "core/gimpimage-undo-push.h"
 #include "core/gimplayer.h"
+#include "core/gimplayermask.h"
 #include "core/gimplist.h"
 #include "core/gimppickable.h"
 #include "core/gimpprogress.h"
@@ -405,8 +406,10 @@ gimp_filter_tool_initialize (GimpTool     *tool,
                                            "preview", NULL);
 
       /* Only show merge filter option if we're not editing an NDE filter or
-       * applying to a layer group */
-      if ((GIMP_IS_LAYER (drawable) && ! GIMP_IS_GROUP_LAYER (drawable)) &&
+       * applying to a layer group or layer mask */
+      if (((GIMP_IS_LAYER (drawable) || GIMP_IS_CHANNEL (drawable)) &&
+          ! GIMP_IS_GROUP_LAYER (drawable)                          &&
+          ! GIMP_IS_LAYER_MASK (drawable))                          &&
           ! filter_tool->existing_filter)
         {
           gchar *operation_name = NULL;
@@ -551,8 +554,9 @@ gimp_filter_tool_control (GimpTool       *tool,
         drawable = gimp_drawable_filter_get_drawable (filter_tool->filter);
 
       /* TODO: Expand non-destructive editing to other drawables
-       * besides layers */
-      if (! GIMP_IS_LAYER (drawable) ||
+       * besides layers and channels */
+      if ((! GIMP_IS_LAYER (drawable) && ! GIMP_IS_CHANNEL (drawable)) ||
+          GIMP_IS_LAYER_MASK (drawable)                                ||
           (! filter_tool->existing_filter && options->merge_filter))
         non_destructive = FALSE;
 
@@ -924,9 +928,7 @@ gimp_filter_tool_options_notify (GimpTool         *tool,
             gimp_container_reorder (filters, GIMP_OBJECT (filter_tool->filter),
                                     0);
 
-          gimp_item_set_visible (GIMP_ITEM (drawable), FALSE, FALSE);
-          gimp_image_flush (gimp_item_get_image (GIMP_ITEM (drawable)));
-          gimp_item_set_visible (GIMP_ITEM (drawable), TRUE, FALSE);
+          gimp_drawable_update (drawable, 0, 0, -1, -1);
           gimp_image_flush (gimp_item_get_image (GIMP_ITEM (drawable)));
         }
 
@@ -1199,9 +1201,7 @@ gimp_filter_tool_halt (GimpFilterTool *filter_tool)
 
       gimp_filter_set_active (GIMP_FILTER (filter_tool->existing_filter), TRUE);
 
-      gimp_item_set_visible (GIMP_ITEM (drawable), FALSE, FALSE);
-      gimp_image_flush (gimp_item_get_image (GIMP_ITEM (drawable)));
-      gimp_item_set_visible (GIMP_ITEM (drawable), TRUE, FALSE);
+      gimp_drawable_update (drawable, 0, 0, -1, -1);
       gimp_image_flush (gimp_item_get_image (GIMP_ITEM (drawable)));
 
       /* Restore buttons in layer tree view */
@@ -1255,7 +1255,7 @@ gimp_filter_tool_commit (GimpFilterTool *filter_tool,
         gimp_drawable_filter_get_drawable (filter_tool->existing_filter);
       image = gimp_item_get_image (GIMP_ITEM (drawable));
 
-      gimp_image_undo_push_filter_modified (image, _("Edited filter"),
+      gimp_image_undo_push_filter_modified (image, _("Edit filter"),
                                             drawable,
                                             filter_tool->existing_filter);
       /* If the filter was changed, we need to update the original filter's
@@ -1358,13 +1358,11 @@ gimp_filter_tool_commit (GimpFilterTool *filter_tool,
 
       gimp_filter_tool_remove_guide (filter_tool);
 
-      /* TODO: Review when we can apply NDE filters to channels/layer masks */
-      if (GIMP_IS_LAYER (drawable))
-        {
-          gimp_item_set_visible (GIMP_ITEM (drawable), FALSE, FALSE);
-          gimp_image_flush (gimp_display_get_image (tool->display));
-          gimp_item_set_visible (GIMP_ITEM (drawable), TRUE, FALSE);
-        }
+      /* TODO: Review when we can apply NDE filters to layer masks */
+      if (GIMP_IS_LAYER (drawable) ||
+          (GIMP_IS_CHANNEL (drawable) && ! GIMP_IS_LAYER_MASK (drawable)))
+        gimp_drawable_update (drawable, 0, 0, -1, -1);
+
       gimp_image_flush (gimp_display_get_image (tool->display));
 
       if (filter_tool->config && filter_tool->has_settings)
@@ -1383,10 +1381,8 @@ gimp_filter_tool_commit (GimpFilterTool *filter_tool,
 
       gimp_filter_set_active (GIMP_FILTER (filter_tool->existing_filter), TRUE);
 
-      gimp_item_set_visible (GIMP_ITEM (drawable), FALSE, FALSE);
-      gimp_image_flush (gimp_item_get_image (GIMP_ITEM (drawable)));
-      gimp_item_set_visible (GIMP_ITEM (drawable), TRUE, FALSE);
-      gimp_image_flush (gimp_item_get_image (GIMP_ITEM (drawable)));
+      gimp_drawable_update (drawable, 0, 0, -1, -1);
+      gimp_image_flush (gimp_display_get_image (tool->display));
     }
 
   filter_tool->existing_filter = NULL;
@@ -1503,6 +1499,7 @@ gimp_filter_tool_create_filter (GimpFilterTool *filter_tool)
   GimpDrawable      *drawable = NULL;
   GimpContainer     *filters;
   gint               count;
+  gboolean           merge_filter;
 
   if (filter_tool->filter)
     {
@@ -1553,14 +1550,15 @@ gimp_filter_tool_create_filter (GimpFilterTool *filter_tool)
 
   /* TODO: Once we can serialize GimpDrawable, remove so that filters with
    * aux nodes can be non-destructive */
+  merge_filter = options->merge_filter;
   if (gegl_node_has_pad (filter_tool->operation, "aux"))
-    options->merge_filter = TRUE;
+    merge_filter = TRUE;
 
   g_object_set (filter_tool->filter,
-                "to-be-merged", options->merge_filter,
+                "to-be-merged", merge_filter,
                 NULL);
 
-  if (options->merge_filter)
+  if (merge_filter)
     {
       filters = gimp_drawable_get_filters (drawable);
       count   = gimp_container_get_n_children (filters);
@@ -1569,10 +1567,9 @@ gimp_filter_tool_create_filter (GimpFilterTool *filter_tool)
         {
           gimp_container_reorder (filters, GIMP_OBJECT (filter_tool->filter),
                                   count - 1);
-          gimp_item_set_visible (GIMP_ITEM (drawable), FALSE, FALSE);
-          gimp_image_flush (gimp_item_get_image (GIMP_ITEM (drawable)));
-          gimp_item_set_visible (GIMP_ITEM (drawable), TRUE, FALSE);
-          gimp_image_flush (gimp_item_get_image (GIMP_ITEM (drawable)));
+
+          gimp_drawable_update (drawable, 0, 0, -1, -1);
+          gimp_image_flush (gimp_display_get_image (tool->display));
         }
     }
 }
@@ -2185,7 +2182,7 @@ gimp_filter_tool_set_config (GimpFilterTool *filter_tool,
       GimpDrawableFilterMask *mask;
       GimpDrawable           *existing_drawable;
       gint                    index;
-      const gchar            *name = _("Editing filter...");
+      gchar                  *name;
 
       /* Get drawable from existing filter, as we might have a different
        * drawable selected in the layer tree */
@@ -2210,11 +2207,16 @@ gimp_filter_tool_set_config (GimpFilterTool *filter_tool,
                                     index);
         }
 
+      gimp_drawable_filter_set_temporary (filter_tool->filter, TRUE);
+
+      name = g_strdup_printf (_("Editing '%s'..."),
+                              gimp_object_get_name (filter_tool->existing_filter));
       g_object_set (filter_tool->filter,
-                    "name",      name,
-                    "mask",      mask,
-                    "temporary", TRUE,
+                    "name", name,
+                    "mask", mask,
                     NULL);
+
+      g_free (name);
     }
 }
 

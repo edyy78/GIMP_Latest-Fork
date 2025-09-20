@@ -66,6 +66,7 @@ static void   gimp_tree_proxy_container_remove    (GimpContainer *container,
                                                    GimpTreeProxy *tree_proxy);
 static void   gimp_tree_proxy_container_reorder   (GimpContainer *container,
                                                    GimpObject    *object,
+                                                   gint           old_index,
                                                    gint           new_index,
                                                    GimpTreeProxy *tree_proxy);
 static void   gimp_tree_proxy_container_freeze    (GimpContainer *container,
@@ -213,6 +214,7 @@ gimp_tree_proxy_container_remove (GimpContainer *container,
 static void
 gimp_tree_proxy_container_reorder (GimpContainer *container,
                                    GimpObject    *object,
+                                   gint           old_index,
                                    gint           new_index,
                                    GimpTreeProxy *tree_proxy)
 {
@@ -505,11 +507,11 @@ gimp_tree_proxy_find_object (GimpContainer *container,
 /*  public functions  */
 
 GimpContainer *
-gimp_tree_proxy_new (GType children_type)
+gimp_tree_proxy_new (GType child_type)
 {
   GTypeClass *children_class;
 
-  children_class = g_type_class_ref (children_type);
+  children_class = g_type_class_ref (child_type);
 
   g_return_val_if_fail (G_TYPE_CHECK_CLASS_TYPE (children_class,
                                                  GIMP_TYPE_VIEWABLE),
@@ -518,9 +520,9 @@ gimp_tree_proxy_new (GType children_type)
   g_type_class_unref (children_class);
 
   return g_object_new (GIMP_TYPE_TREE_PROXY,
-                       "children-type", children_type,
-                       "policy",        GIMP_CONTAINER_POLICY_WEAK,
-                       "append",        TRUE,
+                       "child-type", child_type,
+                       "policy",     GIMP_CONTAINER_POLICY_WEAK,
+                       "append",     TRUE,
                        NULL);
 }
 
@@ -532,7 +534,7 @@ gimp_tree_proxy_new_for_container (GimpContainer *container)
   g_return_val_if_fail (GIMP_IS_CONTAINER (container), NULL);
 
   tree_proxy = GIMP_TREE_PROXY (
-    gimp_tree_proxy_new (gimp_container_get_children_type (container)));
+    gimp_tree_proxy_new (gimp_container_get_child_type (container)));
 
   gimp_tree_proxy_set_container (tree_proxy, container);
 
@@ -551,12 +553,12 @@ gimp_tree_proxy_set_container (GimpTreeProxy *tree_proxy,
       GTypeClass *children_class;
 
       children_class = g_type_class_ref (
-        gimp_container_get_children_type (container));
+        gimp_container_get_child_type (container));
 
       g_return_if_fail (
         G_TYPE_CHECK_CLASS_TYPE (
           children_class,
-          gimp_container_get_children_type (GIMP_CONTAINER (tree_proxy))));
+          gimp_container_get_child_type (GIMP_CONTAINER (tree_proxy))));
 
       g_type_class_unref (children_class);
     }

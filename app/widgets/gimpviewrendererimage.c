@@ -38,7 +38,8 @@ static void   gimp_view_renderer_image_render (GimpViewRenderer *renderer,
                                                GtkWidget        *widget);
 
 
-G_DEFINE_TYPE (GimpViewRendererImage, gimp_view_renderer_image,
+G_DEFINE_TYPE (GimpViewRendererImage,
+               gimp_view_renderer_image,
                GIMP_TYPE_VIEW_RENDERER)
 
 #define parent_class gimp_view_renderer_image_parent_class
@@ -118,7 +119,7 @@ gimp_view_renderer_image_render (GimpViewRenderer *renderer,
 
           temp_buf = gimp_viewable_get_new_preview (renderer->viewable,
                                                     renderer->context,
-                                                    width, height);
+                                                    width, height, NULL);
 
           if (temp_buf)
             {
@@ -132,7 +133,7 @@ gimp_view_renderer_image_render (GimpViewRenderer *renderer,
           render_buf = gimp_viewable_get_new_preview (renderer->viewable,
                                                       renderer->context,
                                                       view_width,
-                                                      view_height);
+                                                      view_height, NULL);
         }
 
       if (render_buf)
@@ -187,5 +188,7 @@ gimp_view_renderer_image_render (GimpViewRenderer *renderer,
       break;
     }
 
-  gimp_view_renderer_render_icon (renderer, widget, icon_name);
+  gimp_view_renderer_render_icon (renderer, widget,
+                                  icon_name,
+                                  gtk_widget_get_scale_factor (widget));
 }

@@ -55,6 +55,7 @@
 #include "widgets/gimpaction-history.h"
 #include "widgets/gimpclipboard.h"
 #include "widgets/gimpcolorselectorpalette.h"
+#include "widgets/gimpcontrollermanager.h"
 #include "widgets/gimpcontrollers.h"
 #include "widgets/gimpdevices.h"
 #include "widgets/gimpdialogfactory.h"
@@ -547,11 +548,12 @@ static void
 gui_restore_after_callback (Gimp               *gimp,
                             GimpInitStatusFunc  status_callback)
 {
-  GimpGuiConfig *gui_config = GIMP_GUI_CONFIG (gimp->config);
-  GimpUIManager *image_ui_manager;
-  GimpDisplay   *display;
+  GimpGuiConfig         *gui_config = GIMP_GUI_CONFIG (gimp->config);
+  GimpControllerManager *controller_manager;
+  GimpUIManager         *image_ui_manager;
+  GimpDisplay           *display;
 #ifdef G_OS_WIN32
-  STARTUPINFO    StartupInfo;
+  STARTUPINFO            StartupInfo;
 
   GetStartupInfo (&StartupInfo);
 #endif
@@ -566,17 +568,6 @@ gui_restore_after_callback (Gimp               *gimp,
    */
   status_callback (NULL, _("Documents"), 0.9);
   gimp_recent_list_load (gimp);
-
-  /*  enable this to always have icons everywhere  */
-  if (g_getenv ("GIMP_ICONS_LIKE_A_BOSS"))
-    {
-      GdkScreen *screen = gdk_screen_get_default ();
-
-      g_object_set (G_OBJECT (gtk_settings_get_for_screen (screen)),
-                    "gtk-button-images", TRUE,
-                    "gtk-menu-images",   TRUE,
-                    NULL);
-    }
 
   ui_configurer = g_object_new (GIMP_TYPE_UI_CONFIGURER,
                                 "gimp", gimp,
@@ -604,7 +595,8 @@ gui_restore_after_callback (Gimp               *gimp,
                     gimp);
 
   gimp_devices_restore (gimp);
-  gimp_controllers_restore (gimp, image_ui_manager);
+  controller_manager = gimp_get_controller_manager (gimp);
+  gimp_controller_manager_restore (controller_manager, image_ui_manager);
   modifiers_restore (gimp);
 
   if (status_callback == splash_update)
@@ -700,7 +692,12 @@ gui_exit_callback (Gimp     *gimp,
     gimp_devices_save (gimp, FALSE);
 
   if (TRUE /* gui_config->save_controllers */)
-    gimp_controllers_save (gimp);
+    {
+      GimpControllerManager *controller_manager;
+
+      controller_manager = gimp_get_controller_manager (gimp);
+      gimp_controller_manager_save (controller_manager);
+    }
 
   modifiers_save (gimp, FALSE);
 

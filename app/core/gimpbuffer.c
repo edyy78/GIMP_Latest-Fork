@@ -35,6 +35,8 @@
 #include "gimpimage.h"
 #include "gimptempbuf.h"
 
+#include "gimp-intl.h"
+
 
 static void          gimp_color_managed_iface_init (GimpColorManagedInterface *iface);
 
@@ -61,11 +63,13 @@ static gboolean      gimp_buffer_get_popup_size    (GimpViewable      *viewable,
 static GimpTempBuf * gimp_buffer_get_new_preview   (GimpViewable      *viewable,
                                                     GimpContext       *context,
                                                     gint               width,
-                                                    gint               height);
+                                                    gint               height,
+                                                    GeglColor         *fg_color);
 static GdkPixbuf   * gimp_buffer_get_new_pixbuf    (GimpViewable      *viewable,
                                                     GimpContext       *context,
                                                     gint               width,
-                                                    gint               height);
+                                                    gint               height,
+                                                    GeglColor         *fg_color);
 static gchar       * gimp_buffer_get_description   (GimpViewable      *viewable,
                                                     gchar            **tooltip);
 
@@ -97,6 +101,7 @@ gimp_buffer_class_init (GimpBufferClass *klass)
   gimp_object_class->get_memsize    = gimp_buffer_get_memsize;
 
   viewable_class->default_icon_name = "edit-paste";
+  viewable_class->default_name      = _("Buffer");
   viewable_class->name_editable     = TRUE;
   viewable_class->get_size          = gimp_buffer_get_size;
   viewable_class->get_preview_size  = gimp_buffer_get_preview_size;
@@ -224,7 +229,8 @@ static GimpTempBuf *
 gimp_buffer_get_new_preview (GimpViewable *viewable,
                              GimpContext  *context,
                              gint          width,
-                             gint          height)
+                             gint          height,
+                             GeglColor    *fg_color G_GNUC_UNUSED)
 {
   GimpBuffer  *buffer = GIMP_BUFFER (viewable);
   const Babl  *format = gimp_buffer_get_format (buffer);
@@ -258,7 +264,8 @@ static GdkPixbuf *
 gimp_buffer_get_new_pixbuf (GimpViewable *viewable,
                             GimpContext  *context,
                             gint          width,
-                            gint          height)
+                            gint          height,
+                            GeglColor    *fg_color G_GNUC_UNUSED)
 {
   GimpBuffer *buffer = GIMP_BUFFER (viewable);
   GdkPixbuf  *pixbuf;

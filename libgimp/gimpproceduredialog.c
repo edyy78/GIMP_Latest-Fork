@@ -638,7 +638,7 @@ gimp_procedure_dialog_set_ok_label (GimpProcedureDialog *dialog,
  * - %G_TYPE_PARAM_BOOLEAN:
  *     * %GTK_TYPE_CHECK_BUTTON (default)
  *     * %GTK_TYPE_SWITCH
- * - %G_TYPE_PARAM_INT or %G_TYPE_PARAM_DOUBLE:
+ * - %G_TYPE_PARAM_INT, %G_TYPE_PARAM_UINT, or %G_TYPE_PARAM_DOUBLE:
  *     * %GIMP_TYPE_LABEL_SPIN (default): a spin button with a label.
  *     * %GIMP_TYPE_SCALE_ENTRY: a scale entry with label.
  *     * %GIMP_TYPE_SPIN_SCALE: a spin scale with label embedded.
@@ -647,8 +647,8 @@ gimp_procedure_dialog_set_ok_label (GimpProcedureDialog *dialog,
  *     * %GIMP_TYPE_LABEL_ENTRY (default): an entry with a label.
  *     * %GTK_TYPE_ENTRY: an entry with no label.
  *     * %GTK_TYPE_TEXT_VIEW: a text view with no label.
- * - %GIMP_TYPE_CHOICE:
- *     * %GTK_TYPE_COMBO_BOX (default): a combo box displaying every
+ * - %GIMP_TYPE_CHOICE (default will depend on the number of choices):
+ *     * %GTK_TYPE_COMBO_BOX: a combo box displaying every
  *       choice.
  *     * %GIMP_TYPE_INT_RADIO_FRAME: a frame with radio buttons.
  * - %GEGL_TYPE_COLOR:
@@ -720,7 +720,8 @@ gimp_procedure_dialog_get_widget (GimpProcedureDialog *dialog,
                                        g_param_spec_get_nick (pspec),
                                        &label, NULL);
     }
-  else if (G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_INT ||
+  else if (G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_INT  ||
+           G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_UINT ||
            G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_DOUBLE)
     {
       gdouble minimum;
@@ -735,6 +736,13 @@ gimp_procedure_dialog_get_widget (GimpProcedureDialog *dialog,
 
           minimum = (gdouble) pspecint->minimum;
           maximum = (gdouble) pspecint->maximum;
+        }
+      else if (G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_UINT)
+        {
+          GParamSpecUInt *pspecuint = (GParamSpecUInt *) pspec;
+
+          minimum = (gdouble) pspecuint->minimum;
+          maximum = (gdouble) pspecuint->maximum;
         }
       else /* G_TYPE_PARAM_DOUBLE */
         {
@@ -849,14 +857,28 @@ gimp_procedure_dialog_get_widget (GimpProcedureDialog *dialog,
     }
   else if (G_PARAM_SPEC_TYPE (pspec) == GIMP_TYPE_PARAM_CHOICE)
     {
-      if (widget_type == G_TYPE_NONE || widget_type == GTK_TYPE_COMBO_BOX)
+      GType real_widget_type = widget_type;
+
+      if (real_widget_type == G_TYPE_NONE)
+        {
+          GimpChoice *choice = gimp_param_spec_choice_get_choice (pspec);
+          gint        n_choices;
+
+          n_choices = g_list_length (gimp_choice_list_nicks (choice));
+          if (n_choices > 3)
+            real_widget_type = GTK_TYPE_COMBO_BOX;
+          else
+            real_widget_type = GIMP_TYPE_INT_RADIO_FRAME;
+        }
+
+      if (real_widget_type == GTK_TYPE_COMBO_BOX)
         {
           widget = gimp_prop_choice_combo_box_new (G_OBJECT (priv->config), property);
           gtk_widget_set_vexpand (widget, FALSE);
           gtk_widget_set_hexpand (widget, TRUE);
           widget = gimp_label_string_widget_new (g_param_spec_get_nick (pspec), widget);
         }
-      else if (widget_type == GIMP_TYPE_INT_RADIO_FRAME)
+      else if (real_widget_type == GIMP_TYPE_INT_RADIO_FRAME)
         {
           widget = gimp_prop_choice_radio_frame_new (G_OBJECT (priv->config), property);
           gtk_widget_set_vexpand (widget, FALSE);
@@ -1302,8 +1324,9 @@ gimp_procedure_dialog_get_spin_scale (GimpProcedureDialog *dialog,
       return NULL;
     }
 
-  g_return_val_if_fail (G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_DOUBLE ||
-                        (G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_INT   &&
+  g_return_val_if_fail (G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_DOUBLE  ||
+                        ((G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_UINT  ||
+                          G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_INT)  &&
                          factor == 1.0), NULL);
 
   /* First check if it already exists. */
@@ -1318,6 +1341,13 @@ gimp_procedure_dialog_get_spin_scale (GimpProcedureDialog *dialog,
 
       minimum = (gdouble) pspecint->minimum;
       maximum = (gdouble) pspecint->maximum;
+    }
+  else if (G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_UINT)
+    {
+      GParamSpecUInt *pspecuint = (GParamSpecUInt *) pspec;
+
+      minimum = (gdouble) pspecuint->minimum;
+      maximum = (gdouble) pspecuint->maximum;
     }
   else /* G_TYPE_PARAM_DOUBLE */
     {
@@ -1385,7 +1415,8 @@ gimp_procedure_dialog_get_scale_entry (GimpProcedureDialog *dialog,
       return NULL;
     }
 
-  g_return_val_if_fail (G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_INT ||
+  g_return_val_if_fail (G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_INT  ||
+                        G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_UINT ||
                         G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_DOUBLE, NULL);
 
   /* First check if it already exists. */
@@ -1475,7 +1506,8 @@ gimp_procedure_dialog_get_size_entry (GimpProcedureDialog       *dialog,
       return NULL;
     }
 
-  g_return_val_if_fail (G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_INT ||
+  g_return_val_if_fail (G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_INT  ||
+                        G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_UINT ||
                         G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_DOUBLE, NULL);
   g_return_val_if_fail (G_PARAM_SPEC_TYPE (pspec_unit) == GIMP_TYPE_PARAM_UNIT, NULL);
 

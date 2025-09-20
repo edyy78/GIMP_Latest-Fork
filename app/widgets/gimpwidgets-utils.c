@@ -866,36 +866,36 @@ gimp_get_monitor_resolution (GdkMonitor *monitor,
   *yres = ROUND (y);
 }
 
-gboolean
+GeglColor *
 gimp_get_style_color (GtkWidget   *widget,
-                      const gchar *property_name,
-                      GdkRGBA     *color)
+                      const gchar *color_name)
 {
-  GdkRGBA *c = NULL;
+  GtkStyleContext *style;
+  GdkRGBA         *gdk_rgba = NULL;
+  GeglColor       *color    = NULL;
 
-  g_return_val_if_fail (GTK_IS_WIDGET (widget), FALSE);
-  g_return_val_if_fail (property_name != NULL, FALSE);
-  g_return_val_if_fail (color != NULL, FALSE);
+  g_return_val_if_fail (GTK_IS_WIDGET (widget), NULL);
+  g_return_val_if_fail (color_name != NULL, NULL);
 
-  gtk_widget_style_get (widget,
-                        property_name, &c,
-                        NULL);
+  style = gtk_widget_get_style_context (widget);
+  gtk_style_context_get (style, gtk_style_context_get_state (style),
+                         color_name, &gdk_rgba,
+                         NULL);
 
-  if (c)
+  if (gdk_rgba)
     {
-      *color = *c;
-      gdk_rgba_free (c);
+      color = gegl_color_new (NULL);
+      gegl_color_set_rgba_with_space (color,
+                                      gdk_rgba->red,
+                                      gdk_rgba->green,
+                                      gdk_rgba->blue,
+                                      1.0,
+                                      NULL);
 
-      return TRUE;
+      gdk_rgba_free (gdk_rgba);
     }
 
-  /* return ugly magenta to indicate that something is wrong */
-  color->red   = 1.0;
-  color->green = 1.0;
-  color->blue  = 0.0;
-  color->alpha = 1.0;
-
-  return FALSE;
+  return color;
 }
 
 void
@@ -922,6 +922,8 @@ gimp_window_set_hint (GtkWindow      *window,
 }
 
 /* similar to what we have in libgimp/gimpui.c */
+/* TODO: Restore when we use it on Windows */
+#ifndef G_OS_WIN32
 static GdkWindow *
 gimp_get_foreign_window (gpointer window)
 {
@@ -938,6 +940,7 @@ gimp_get_foreign_window (gpointer window)
 
   return NULL;
 }
+#endif
 
 void
 gimp_window_set_transient_for (GtkWindow    *window,
@@ -1508,6 +1511,14 @@ gimp_widget_blink_timeout (GtkWidget *widget)
                                   param_spec->name,
                                   g_type_name (param_spec->owner_type));
                     }
+                }
+              else if (GTK_IS_BUTTON (widget) && step->settings_value)
+                {
+                  /* For any "value" set for a button, we assume it
+                   * means that we want it clicked as part of the demo
+                   * script.
+                   */
+                  gtk_button_clicked (GTK_BUTTON (widget));
                 }
             }
           else if (GIMP_IS_TOOL_BUTTON (widget))
@@ -2584,7 +2595,9 @@ gimp_window_set_transient_cb (GtkWidget   *window,
                               GdkEventAny *event G_GNUC_UNUSED,
                               GBytes      *handle)
 {
+#ifndef G_OS_WIN32
   gboolean transient_set = FALSE;
+#endif
 
   g_return_if_fail (handle != NULL);
 

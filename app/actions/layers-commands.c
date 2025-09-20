@@ -39,8 +39,6 @@
 #include "core/gimpcontainer.h"
 #include "core/gimpcontext.h"
 #include "core/gimpdrawable-fill.h"
-#include "core/gimpdrawable-filters.h"
-#include "core/gimpdrawablefilter.h"
 #include "core/gimpgrouplayer.h"
 #include "core/gimpimage.h"
 #include "core/gimpimage-merge.h"
@@ -447,6 +445,7 @@ layers_new_last_vals_cmd_callback (GimpAction *action,
                                ngettext ("New layer",
                                          "New layers",
                                          n_layers > 0 ? n_layers : 1));
+
   for (iter = layers; iter || run_once ; iter = iter ? iter->next : NULL)
     {
       GimpLayer *parent;
@@ -492,11 +491,13 @@ layers_new_last_vals_cmd_callback (GimpAction *action,
       gimp_image_add_layer (image, layer, parent, position, TRUE);
       new_layers = g_list_prepend (new_layers, layer);
     }
+
   gimp_image_set_selected_layers (image, new_layers);
-  gimp_image_undo_group_end (image);
 
   g_list_free (layers);
   g_list_free (new_layers);
+
+  gimp_image_undo_group_end (image);
   gimp_image_flush (image);
 }
 
@@ -550,6 +551,7 @@ layers_new_group_cmd_callback (GimpAction *action,
   layers     = g_list_copy (layers);
   n_layers   = g_list_length (layers);
   run_once   = (n_layers == 0);
+
   gimp_image_undo_group_start (image,
                                GIMP_UNDO_GROUP_LAYER_ADD,
                                ngettext ("New layer group",
@@ -588,11 +590,13 @@ layers_new_group_cmd_callback (GimpAction *action,
     }
 
   gimp_image_set_selected_layers (image, new_layers);
-  gimp_image_undo_group_end (image);
-  gimp_image_flush (image);
 
   g_list_free (layers);
   g_list_free (new_layers);
+
+  gimp_image_undo_group_end (image);
+  gimp_image_flush (image);
+
 }
 
 void
@@ -665,7 +669,6 @@ layers_raise_cmd_callback (GimpAction *action,
         }
       else
         {
-          gimp_image_flush (image);
           g_list_free (raised_layers);
           return;
         }
@@ -680,11 +683,10 @@ layers_raise_cmd_callback (GimpAction *action,
   raised_layers = g_list_reverse (raised_layers);
   for (iter = raised_layers; iter; iter = iter->next)
     gimp_image_raise_item (image, iter->data, NULL);
-
-  gimp_image_flush (image);
-  gimp_image_undo_group_end (image);
-
   g_list_free (raised_layers);
+
+  gimp_image_undo_group_end (image);
+  gimp_image_flush (image);
 }
 
 void
@@ -716,10 +718,10 @@ layers_raise_to_top_cmd_callback (GimpAction *action,
   for (iter = raised_layers; iter; iter = iter->next)
     gimp_image_raise_item_to_top (image, iter->data);
 
-  gimp_image_flush (image);
-  gimp_image_undo_group_end (image);
-
   g_list_free (raised_layers);
+
+  gimp_image_undo_group_end (image);
+  gimp_image_flush (image);
 }
 
 void
@@ -746,7 +748,6 @@ layers_lower_cmd_callback (GimpAction *action,
         }
       else
         {
-          gimp_image_flush (image);
           g_list_free (lowered_layers);
           return;
         }
@@ -761,10 +762,10 @@ layers_lower_cmd_callback (GimpAction *action,
   for (iter = lowered_layers; iter; iter = iter->next)
     gimp_image_lower_item (image, iter->data, NULL);
 
-  gimp_image_flush (image);
-  gimp_image_undo_group_end (image);
-
   g_list_free (lowered_layers);
+
+  gimp_image_undo_group_end (image);
+  gimp_image_flush (image);
 }
 
 void
@@ -798,10 +799,10 @@ layers_lower_to_bottom_cmd_callback (GimpAction *action,
   for (iter = lowered_layers; iter; iter = iter->next)
     gimp_image_lower_item_to_bottom (image, iter->data);
 
-  gimp_image_flush (image);
-  gimp_image_undo_group_end (image);
-
   g_list_free (lowered_layers);
+
+  gimp_image_undo_group_end (image);
+  gimp_image_flush (image);
 }
 
 void
@@ -821,8 +822,7 @@ layers_duplicate_cmd_callback (GimpAction *action,
                                _("Duplicate layers"));
   for (iter = layers; iter; iter = iter->next)
     {
-      GimpLayer     *new_layer;
-      GimpContainer *filters;
+      GimpLayer *new_layer;
 
       new_layer = GIMP_LAYER (gimp_item_duplicate (GIMP_ITEM (iter->data),
                                                    G_TYPE_FROM_INSTANCE (iter->data)));
@@ -837,39 +837,6 @@ layers_duplicate_cmd_callback (GimpAction *action,
                             TRUE);
       gimp_drawable_enable_resize_undo (GIMP_DRAWABLE (new_layer));
       new_layers = g_list_prepend (new_layers, new_layer);
-
-      /* Import any attached layer effects */
-      filters = gimp_drawable_get_filters (GIMP_DRAWABLE (iter->data));
-      if (gimp_container_get_n_children (filters) > 0)
-        {
-          GList         *filter_list;
-          GimpContainer *filters;
-
-          filters = gimp_drawable_get_filters (GIMP_DRAWABLE (iter->data));
-
-          for (filter_list = GIMP_LIST (filters)->queue->tail; filter_list;
-               filter_list = g_list_previous (filter_list))
-            {
-              if (GIMP_IS_DRAWABLE_FILTER (filter_list->data))
-                {
-                  GimpDrawableFilter *old_filter = filter_list->data;
-                  GimpDrawableFilter *filter;
-
-                  filter =
-                    gimp_drawable_filter_duplicate (GIMP_DRAWABLE (new_layer),
-                                                    old_filter);
-
-                  if (filter != NULL)
-                    {
-                      gimp_drawable_filter_apply (filter, NULL);
-                      gimp_drawable_filter_commit (filter, TRUE, NULL, FALSE);
-
-                      gimp_drawable_filter_layer_mask_freeze (filter);
-                      g_object_unref (filter);
-                    }
-                }
-            }
-        }
     }
 
   gimp_image_set_selected_layers (image, new_layers);
@@ -922,6 +889,7 @@ layers_merge_down_cmd_callback (GimpAction *action,
       g_clear_error (&error);
       return;
     }
+
   gimp_image_set_selected_layers (image, layers);
   g_list_free (layers);
 
@@ -1013,6 +981,7 @@ layers_merge_group_cmd_callback (GimpAction *action,
     gimp_image_undo_group_end (image);
 
   g_list_free (merge_layers);
+
   gimp_image_flush (image);
 }
 
@@ -1072,6 +1041,7 @@ layers_delete_cmd_callback (GimpAction *action,
     gimp_image_undo_group_end (image);
 
   g_list_free (removed_layers);
+
   gimp_image_flush (image);
 }
 
@@ -1094,18 +1064,20 @@ layers_text_discard_cmd_callback (GimpAction *action,
 }
 
 void
-layers_text_to_vectors_cmd_callback (GimpAction *action,
-                                     GVariant   *value,
-                                     gpointer    data)
+layers_text_to_path_cmd_callback (GimpAction *action,
+                                  GVariant   *value,
+                                  gpointer    data)
 {
   GimpImage *image;
   GList     *layers;
   GList     *iter;
+  gboolean   path_added = FALSE;
   return_if_no_layers (image, layers, data);
 
   /* TODO: have the proper undo group. */
   gimp_image_undo_group_start (image, GIMP_UNDO_GROUP_PATHS_IMPORT,
                                _("Add Paths"));
+
   for (iter = layers; iter; iter = iter->next)
     {
       GimpLayer *layer = iter->data;
@@ -1122,16 +1094,20 @@ layers_text_to_vectors_cmd_callback (GimpAction *action,
 
           gimp_image_add_path (image, path,
                                GIMP_IMAGE_ACTIVE_PARENT, -1, TRUE);
-          gimp_image_flush (image);
+          path_added = TRUE;
         }
     }
+
   gimp_image_undo_group_end (image);
+
+  if (path_added)
+    gimp_image_flush (image);
 }
 
 void
-layers_text_along_vectors_cmd_callback (GimpAction *action,
-                                        GVariant   *value,
-                                        gpointer    data)
+layers_text_along_path_cmd_callback (GimpAction *action,
+                                     GVariant   *value,
+                                     gpointer    data)
 {
   GimpImage   *image;
   GList       *layers;
@@ -1260,6 +1236,7 @@ layers_resize_to_image_cmd_callback (GimpAction *action,
   if (g_list_length (layers) > 1)
     gimp_image_undo_group_start (image, GIMP_UNDO_GROUP_ITEM_RESIZE,
                                  _("Layers to Image Size"));
+
   for (iter = layers; iter; iter = iter->next)
     gimp_layer_resize_to_image (iter->data,
                                 action_data_get_context (data),
@@ -1445,8 +1422,9 @@ layers_crop_to_content_cmd_callback (GimpAction *action,
           break;
         }
     }
-  gimp_image_flush (image);
+
   gimp_image_undo_group_end (image);
+  gimp_image_flush (image);
 }
 
 void
@@ -1574,7 +1552,6 @@ layers_mask_add_last_vals_cmd_callback (GimpAction *action,
     }
 
   gimp_image_undo_group_end (image);
-
   gimp_image_flush (image);
 }
 
@@ -1601,6 +1578,7 @@ layers_mask_apply_cmd_callback (GimpAction *action,
             ! gimp_item_is_content_locked (GIMP_ITEM (iter->data), NULL))))
         break;
     }
+
   if (iter == NULL)
     /* No layers or none have applicable masks. */
     return;
@@ -1675,43 +1653,47 @@ layers_mask_show_cmd_callback (GimpAction *action,
   GimpImage *image;
   GList     *layers;
   GList     *iter;
-  gboolean   active     = g_variant_get_boolean (value);
-  gboolean   have_masks = FALSE;
+  gboolean   active  = g_variant_get_boolean (value);
+  gint       n_masks = 0;
   return_if_no_layers (image, layers, data);
 
   for (iter = layers; iter; iter = iter->next)
     {
       if (gimp_layer_get_mask (iter->data))
         {
-          have_masks = TRUE;
-          /* A bit of tricky to handle multiple and diverse layers with
-           * a toggle action (with only binary state).
-           * In non-active state, we will consider sets of both shown
-           * and hidden masks as ok and exits. This allows us to switch
-           * the action "active" state without actually changing
-           * individual masks state without explicit user request.
-           */
-          if (! active && ! gimp_layer_get_show_mask (iter->data))
-            return;
+          if (active && gimp_layer_get_show_mask (iter->data))
+            {
+              /* if switching "show mask" on, and any selected layer's
+               * mask is already visible, bail out because that's
+               * exactly the logic we use in the ui for multile
+               * visible layer masks.
+               */
+              return;
+            }
+
+          if (gimp_layer_get_show_mask (iter->data) != active)
+            n_masks++;
         }
     }
-  if (! have_masks)
+
+  if (n_masks == 0)
     return;
 
-  gimp_image_undo_group_start (image,
-                               GIMP_UNDO_GROUP_LAYER_ADD,
-                               _("Show Layer Masks"));
+  if (n_masks > 1)
+    gimp_image_undo_group_start (image,
+                                 GIMP_UNDO_GROUP_LAYER_ADD,
+                                 _("Show Layer Masks"));
 
   for (iter = layers; iter; iter = iter->next)
     {
       if (gimp_layer_get_mask (iter->data))
-        {
-          gimp_layer_set_show_mask (iter->data, active, TRUE);
-        }
+        gimp_layer_set_show_mask (iter->data, active, TRUE);
     }
 
+  if (n_masks > 1)
+    gimp_image_undo_group_end (image);
+
   gimp_image_flush (image);
-  gimp_image_undo_group_end (image);
 }
 
 void
@@ -1722,43 +1704,47 @@ layers_mask_disable_cmd_callback (GimpAction *action,
   GimpImage *image;
   GList     *layers;
   GList     *iter;
-  gboolean   active = g_variant_get_boolean (value);
-  gboolean   have_masks = FALSE;
+  gboolean   active  = g_variant_get_boolean (value);
+  gint       n_masks = 0;
   return_if_no_layers (image, layers, data);
 
   for (iter = layers; iter; iter = iter->next)
     {
       if (gimp_layer_get_mask (iter->data))
         {
-          have_masks = TRUE;
-          /* A bit of tricky to handle multiple and diverse layers with
-           * a toggle action (with only binary state).
-           * In non-active state, we will consider sets of both enabled
-           * and disabled masks as ok and exits. This allows us to
-           * switch the action "active" state without actually changing
-           * individual masks state without explicit user request.
-           */
-          if (! active && gimp_layer_get_apply_mask (iter->data))
-            return;
+          if (active && ! gimp_layer_get_apply_mask (iter->data))
+            {
+              /* if switching "disable mask" on, and any selected
+               * layer's mask is already disabled, bail out because
+               * that's exactly the logic we use in the ui for multile
+               * disabled layer masks.
+               */
+              return;
+            }
+
+          if ((! gimp_layer_get_apply_mask (iter->data)) != active)
+            n_masks++;
         }
     }
-  if (! have_masks)
+
+  if (n_masks == 0)
     return;
 
-  gimp_image_undo_group_start (image,
-                               GIMP_UNDO_GROUP_LAYER_ADD,
-                               _("Disable Layer Masks"));
+  if (n_masks > 1)
+    gimp_image_undo_group_start (image,
+                                 GIMP_UNDO_GROUP_LAYER_ADD,
+                                 _("Disable Layer Masks"));
 
   for (iter = layers; iter; iter = iter->next)
     {
       if (gimp_layer_get_mask (iter->data))
-        {
-          gimp_layer_set_apply_mask (iter->data, ! active, TRUE);
-        }
+        gimp_layer_set_apply_mask (iter->data, ! active, TRUE);
     }
 
+  if (n_masks > 1)
+    gimp_image_undo_group_end (image);
+
   gimp_image_flush (image);
-  gimp_image_undo_group_end (image);
 }
 
 void
@@ -1801,10 +1787,12 @@ layers_mask_to_selection_cmd_callback (GimpAction *action,
                                   C_("undo-type", "Intersect Masks with Selection"));
           break;
         }
+
       gimp_channel_combine_items (gimp_image_get_mask (image),
                                   masks, operation);
-      gimp_image_flush (image);
       g_list_free (masks);
+
+      gimp_image_flush (image);
     }
 }
 
@@ -1883,8 +1871,10 @@ layers_alpha_to_selection_cmd_callback (GimpAction *action,
                               C_("undo-type", "Intersect Alpha with Selection"));
       break;
     }
+
   gimp_channel_combine_items (gimp_image_get_mask (image),
                               layers, operation);
+
   gimp_image_flush (image);
 
   if (gimp_channel_is_empty (gimp_image_get_mask (image)))
@@ -2044,6 +2034,7 @@ layers_blend_space_cmd_callback (GimpAction *action,
         gimp_image_undo_group_end (image);
 
       g_list_free (update_layers);
+
       gimp_image_flush (image);
     }
 }
@@ -2097,6 +2088,7 @@ layers_composite_space_cmd_callback (GimpAction *action,
         gimp_image_undo_group_end (image);
 
       g_list_free (update_layers);
+
       gimp_image_flush (image);
     }
 }
@@ -2150,6 +2142,7 @@ layers_composite_mode_cmd_callback (GimpAction *action,
         gimp_image_undo_group_end (image);
 
       g_list_free (update_layers);
+
       gimp_image_flush (image);
     }
 }
@@ -2226,6 +2219,7 @@ layers_lock_alpha_cmd_callback (GimpAction *action,
   gimp_image_undo_group_start (image,
                                GIMP_UNDO_GROUP_LAYER_LOCK_ALPHA,
                                lock_alpha ? _("Lock alpha channels") : _("Unlock alpha channels"));
+
   for (iter = layers; iter; iter = iter->next)
     {
       if (gimp_layer_can_lock_alpha (iter->data))
@@ -2234,6 +2228,7 @@ layers_lock_alpha_cmd_callback (GimpAction *action,
             gimp_layer_set_lock_alpha (iter->data, lock_alpha, TRUE);
         }
     }
+
   gimp_image_undo_group_end (image);
   gimp_image_flush (image);
 }
@@ -2474,7 +2469,6 @@ layers_edit_attributes_callback (GtkWidget              *dialog,
         gimp_layer_set_lock_alpha (layer, layer_lock_alpha, TRUE);
 
       gimp_image_undo_group_end (image);
-
       gimp_image_flush (image);
     }
 
@@ -2510,6 +2504,7 @@ layers_add_mask_callback (GtkWidget       *dialog,
   gimp_image_undo_group_start (image,
                                GIMP_UNDO_GROUP_LAYER_ADD,
                                _("Add Layer Masks"));
+
   for (iter = layers; iter; iter = iter->next)
     {
       mask = gimp_layer_create_mask (iter->data,
@@ -2532,6 +2527,7 @@ layers_add_mask_callback (GtkWidget       *dialog,
 
   gimp_image_undo_group_end (image);
   gimp_image_flush (image);
+
   gtk_widget_destroy (dialog);
 }
 

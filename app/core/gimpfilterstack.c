@@ -40,6 +40,7 @@ static void   gimp_filter_stack_remove           (GimpContainer   *container,
                                                   GimpObject      *object);
 static void   gimp_filter_stack_reorder          (GimpContainer   *container,
                                                   GimpObject      *object,
+                                                  gint             old_index,
                                                   gint             new_index);
 
 static void   gimp_filter_stack_add_node         (GimpFilterStack *stack,
@@ -83,7 +84,7 @@ gimp_filter_stack_constructed (GObject *object)
 
   G_OBJECT_CLASS (parent_class)->constructed (object);
 
-  gimp_assert (g_type_is_a (gimp_container_get_children_type (container),
+  gimp_assert (g_type_is_a (gimp_container_get_child_type (container),
                             GIMP_TYPE_FILTER));
 
   gimp_container_add_handler (container, "active-changed",
@@ -147,6 +148,7 @@ gimp_filter_stack_remove (GimpContainer *container,
 static void
 gimp_filter_stack_reorder (GimpContainer *container,
                            GimpObject    *object,
+                           gint           old_index,
                            gint           new_index)
 {
   GimpFilterStack *stack  = GIMP_FILTER_STACK (container);
@@ -155,7 +157,8 @@ gimp_filter_stack_reorder (GimpContainer *container,
   if (stack->graph && gimp_filter_get_active (filter))
     gimp_filter_stack_remove_node (stack, filter);
 
-  GIMP_CONTAINER_CLASS (parent_class)->reorder (container, object, new_index);
+  GIMP_CONTAINER_CLASS (parent_class)->reorder (container, object,
+                                                old_index, new_index);
 
   if (gimp_filter_get_active (filter))
     {
@@ -175,9 +178,9 @@ gimp_filter_stack_new (GType filter_type)
   g_return_val_if_fail (g_type_is_a (filter_type, GIMP_TYPE_FILTER), NULL);
 
   return g_object_new (GIMP_TYPE_FILTER_STACK,
-                       "name",          g_type_name (filter_type),
-                       "children-type", filter_type,
-                       "policy",        GIMP_CONTAINER_POLICY_STRONG,
+                       "name",       g_type_name (filter_type),
+                       "child-type", filter_type,
+                       "policy",     GIMP_CONTAINER_POLICY_STRONG,
                        NULL);
 }
 

@@ -47,6 +47,7 @@ static void   gimp_drawable_stack_remove           (GimpContainer     *container
                                                     GimpObject        *object);
 static void   gimp_drawable_stack_reorder          (GimpContainer     *container,
                                                     GimpObject        *object,
+                                                    gint               old_index,
                                                     gint               new_index);
 
 static void   gimp_drawable_stack_drawable_update  (GimpItem          *item,
@@ -104,7 +105,7 @@ gimp_drawable_stack_constructed (GObject *object)
 
   G_OBJECT_CLASS (parent_class)->constructed (object);
 
-  gimp_assert (g_type_is_a (gimp_container_get_children_type (container),
+  gimp_assert (g_type_is_a (gimp_container_get_child_type (container),
                             GIMP_TYPE_DRAWABLE));
 
   gimp_container_add_handler (container, "update",
@@ -142,11 +143,13 @@ gimp_drawable_stack_remove (GimpContainer *container,
 static void
 gimp_drawable_stack_reorder (GimpContainer *container,
                              GimpObject    *object,
+                             gint           old_index,
                              gint           new_index)
 {
   GimpDrawableStack *stack  = GIMP_DRAWABLE_STACK (container);
 
-  GIMP_CONTAINER_CLASS (parent_class)->reorder (container, object, new_index);
+  GIMP_CONTAINER_CLASS (parent_class)->reorder (container, object,
+                                                old_index, new_index);
 
   if (gimp_filter_get_active (GIMP_FILTER (object)))
     gimp_drawable_stack_drawable_active (GIMP_ITEM (object), stack);
@@ -161,9 +164,9 @@ gimp_drawable_stack_new (GType drawable_type)
   g_return_val_if_fail (g_type_is_a (drawable_type, GIMP_TYPE_DRAWABLE), NULL);
 
   return g_object_new (GIMP_TYPE_DRAWABLE_STACK,
-                       "name",          g_type_name (drawable_type),
-                       "children-type", drawable_type,
-                       "policy",        GIMP_CONTAINER_POLICY_STRONG,
+                       "name",       g_type_name (drawable_type),
+                       "child-type", drawable_type,
+                       "policy",     GIMP_CONTAINER_POLICY_STRONG,
                        NULL);
 }
 

@@ -351,12 +351,9 @@ gimp_check_updates_process (const gchar    *source,
   parser = json_parser_new ();
   if (! json_parser_load_from_data (parser, file_contents, file_length, &error))
     {
-      gchar *uri = g_file_get_uri (G_FILE (source));
-
       g_printerr ("%s: parsing of %s failed: %s\n", G_STRFUNC,
-                  uri, error->message);
+                  source, error->message);
 
-      g_free (uri);
       g_free (file_contents);
       g_clear_object (&parser);
       g_clear_error (&error);
@@ -600,7 +597,8 @@ gimp_get_version_url (void)
 #if defined(GIMP_RELEASE) && ! defined(GIMP_RC_VERSION)
   return "https://www.gimp.org/gimp_versions.json";
 #else
-  if (g_getenv ("GIMP_DEV_VERSIONS_JSON"))
+  if (g_getenv ("GIMP_DEV_VERSIONS_JSON") &&
+      g_strcmp0 (g_getenv ("GIMP_DEV_VERSIONS_JSON"), "") != 0)
     return g_getenv ("GIMP_DEV_VERSIONS_JSON");
   else
     return "https://testing.gimp.org/gimp_versions.json";

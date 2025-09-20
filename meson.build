@@ -89,25 +89,19 @@ conf.set_quoted('GIMP_VERSION', gimp_version)
 
 # GIMP_UNSTABLE tells if we are on an unstable or stable development branch.
 stable = (gimp_app_version_minor % 2 == 0)
-gimp_unstable = stable ? false : 1
-if gimp_unstable != false
-  conf.set('GIMP_UNSTABLE', gimp_unstable)
-endif
+conf.set('GIMP_UNSTABLE', stable ? false : 1)
 
 # GIMP_RELEASE tells if this is a release or in-between release (git) code.
 release = (gimp_app_version_micro % 2 == 0)
 conf.set('GIMP_RELEASE', release ? 1 : false)
 
 # GIMP_RC_VERSION can only be set on release candidates.
-gimp_rc_version = release and gimp_app_version_rc > 0 ? gimp_app_version_rc : false
-if gimp_rc_version != false
-  conf.set('GIMP_RC_VERSION', gimp_rc_version)
-endif
+conf.set('GIMP_RC_VERSION', release and gimp_app_version_rc > 0 ? gimp_app_version_rc : false)
 # GIMP_IS_GIT can only be set during development of a RC.
 conf.set('GIMP_IS_RC_GIT', gimp_rc_git ? 1 : false)
 
 # Mutex version
-if gimp_unstable != false
+if not stable
   conf.set_quoted('GIMP_MUTEX_VERSION', gimp_app_version)
 else
   conf.set_quoted('GIMP_MUTEX_VERSION', gimp_app_version_major.to_string())
@@ -328,19 +322,32 @@ endif
 
 
 if platform_windows and cc.get_id() == 'clang'
-  # Optimize DWARF symbols to Dr. Mingw
-  # https://github.com/jrfonseca/drmingw/issues/42
-  compiler_args += '-gdwarf-aranges'
   # Workaround to get colored output
   # https://github.com/msys2/MINGW-packages/issues/2988
   compiler_args += '-fansi-escape-codes'
 endif
 
-# Generate native .pdb (CodeView) debug symbols (for DIA or DbgHelp debuggers and LLDB)
-pdb_support = cc.has_argument('-gcodeview') and cc.has_link_argument('-Wl,--pdb=')
-if platform_windows and pdb_support and cc.get_id() == 'clang'
-  compiler_args += '-gcodeview'
-  linker_args += '-Wl,--pdb='
+
+# DEBUG SYMBOLS
+debugging_format = 'disabled'
+if get_option('buildtype') == 'debug' or get_option('buildtype') == 'debugoptimized'
+  if not platform_windows
+    # DWARF symbols for GCC and LLDB on Unix
+    debugging_format = 'native'
+  elif platform_windows and get_option('win-debugging') == 'native' and cc.has_argument('-gcodeview') and cc.has_link_argument('-Wl,--pdb=') and cc.get_id() == 'clang'
+    # CodeView symbols for DIA or DbgHelp debuggers and LLDB on Windows
+    debugging_format = 'native'
+    compiler_args += '-gcodeview'
+    linker_args += '-Wl,--pdb='
+  else
+    # DWARF symbols for GCC and LLDB on Windows (fallback)
+    debugging_format = 'DWARF'
+    if cc.get_id() == 'clang'
+      # Optimize DWARF symbols to Dr. Mingw
+      # https://github.com/jrfonseca/drmingw/issues/42
+      compiler_args += '-gdwarf-aranges'
+    endif
+  endif
 endif
 
 
@@ -434,15 +441,32 @@ gio_specific      = dependency(gio_specific_name)
 
 glib_minver       = '2.70.0'
 glib              = dependency('glib-2.0',           version: '>='+glib_minver)
-gi                = dependency('gobject-introspection-1.0')
+glib_version_split = glib_minver.split('.')
+glib_major = glib_version_split[0].to_int()
+glib_minor = glib_version_split[1].to_int()
+glib_min_macro = 'GLIB_VERSION_@0@_@1@'.format(glib_major, glib_minor)
+add_project_arguments('-DGLIB_VERSION_MIN_REQUIRED=' + glib_min_macro, language: 'c')
+# XXX: ideally the MIN_REQUIRED and MAX_ALLOWED should be the same
+# version but we have a bunch of GLIB_CHECK_VERSION() conditional code
+# (higher being 2.76.0). So we use this max version to avoid useless
+# warnings. We should clean up all conditional code once we bump the
+# minimum requirement.
+add_project_arguments('-DGLIB_VERSION_MAX_ALLOWED=GLIB_VERSION_2_76', language: 'c')
 
-conf.set('G_DISABLE_DEPRECATED', glib.version().version_compare('>=2.57'))
+gi                = dependency('gobject-introspection-1.0')
 
 gobject           = dependency('gobject-2.0',        version: '>='+glib_minver)
 gmodule           = dependency('gmodule-no-export-2.0')
 
 gtk3_minver       = '3.24.0'
 gtk3              = dependency('gtk+-3.0',           version: '>='+gtk3_minver)
+gtk_version_split = gtk3_minver.split('.')
+gtk_major = gtk_version_split[0].to_int()
+gtk_minor = gtk_version_split[1].to_int()
+gtk_min_macro = 'GDK_VERSION_@0@_@1@'.format(gtk_major, gtk_minor)
+add_project_arguments('-DGDK_VERSION_MIN_REQUIRED=' + gtk_min_macro, language: 'c')
+add_project_arguments('-DGDK_VERSION_MAX_ALLOWED=' + gtk_min_macro, language: 'c')
+
 harfbuzz_minver   = '2.8.2'
 harfbuzz          = dependency('harfbuzz',           version: '>='+harfbuzz_minver)
 json_glib_minver  = '1.2.6'
@@ -586,16 +610,10 @@ if not pango_check
 endif
 
 ################################################################################
-# Optional Dependencies
-
-libsocket         = cc.find_library('socket', required: false)
-conf.set('HAVE_LIBSOCKET', libsocket.found())
-
-################################################################################
 # Check for extension support
 
-appstream_glib_minver = '0.7.7'
-appstream_glib = dependency('appstream-glib', version: '>='+appstream_glib_minver)
+appstream_minver = '0.16.1'
+appstream = dependency('appstream', version: '>='+appstream_minver)
 
 libarchive = dependency('libarchive')
 
@@ -748,44 +766,12 @@ have_doc_shooter= x11_target
 ################################################################################
 # Plugins (optional dependencies)
 
-# The list of MIME types that are supported by plug-ins
-MIMEtypes = [
-  'image/bmp',
-  'image/g3fax',
-  'image/gif',
-  'image/svg+xml',
-  'image/x-compressed-xcf',
-  'image/x-fits',
-  'image/x-gimp-gbr',
-  'image/x-gimp-gih',
-  'image/x-gimp-pat',
-  'image/x-pcx',
-  'image/x-portable-anymap',
-  'image/x-portable-bitmap',
-  'image/x-portable-graymap',
-  'image/x-portable-pixmap',
-  'image/x-psd',
-  'image/x-sgi',
-  'image/x-sun-raster',
-  'image/x-tga',
-  'image/x-xbitmap',
-  'image/x-xcf',
-  'image/x-xwindowdump',
-]
-
-
-
 libtiff_minver = '4.0.0'
 libtiff = dependency('libtiff-4', version: '>=' + libtiff_minver)
-MIMEtypes += 'image/tiff'
-
 
 libjpeg = dependency('libjpeg')
-MIMEtypes += 'image/jpeg'
-
 
 zlib = dependency('zlib')
-MIMEtypes += 'image/x-psp'
 
 # Compiler-provided headers can't be found in crossroads environment
 if not meson.is_cross_build()
@@ -799,15 +785,12 @@ liblzma = dependency('liblzma', version: '>='+liblzma_minver)
 
 
 ghostscript = cc.find_library('gs', required: get_option('ghostscript'))
-if ghostscript.found()
-  MIMEtypes += 'application/postscript'
-else
+if not ghostscript.found()
   ghostscript = disabler()
 endif
 
 libpng_minver = '1.6.25'
 libpng = dependency('libpng', version: '>='+libpng_minver)
-MIMEtypes += [ 'image/png', 'image/x-icon']
 
 libmng = dependency('libmng', required: get_option('mng'))
 
@@ -827,14 +810,8 @@ endif
 libaa = cc.find_library('aa', required: get_option('aa'))
 
 libxpm = dependency('xpm', required: get_option('xpm'))
-if libxpm.found()
-  MIMEtypes += 'image/x-xpixmap'
-endif
 
 have_qoi = cc.has_header('qoi.h')
-if have_qoi
-  MIMEtypes += 'image/qoi'
-endif
 
 libiff = dependency('libiff', required: get_option('ilbm'))
 libilbm = dependency('libilbm', required: get_option('ilbm'))
@@ -843,17 +820,11 @@ if libiff.found() and libilbm.found()
 else
   have_ilbm = cc.has_header('libilbm/ilbm.h', required: get_option('ilbm'))
 endif
-if have_ilbm
-  MIMEtypes += 'image/x-ilbm'
-endif
 
 openexr_minver = '1.6.1'
 openexr = dependency('OpenEXR', version: '>='+openexr_minver,
   required: get_option('openexr')
 )
-if openexr.found()
-  MIMEtypes += 'image/x-exr'
-endif
 
 webp_minver = '0.6.0'
 webp_libs = [
@@ -865,13 +836,6 @@ webp_found = true
 foreach lib : webp_libs
   webp_found = webp_found and  lib.found()
 endforeach
-
-if webp_found
-  MIMEtypes += [
-    'image/x-webp',
-    'image/webp'
-  ]
-endif
 
 libheif_minver = '1.15.1'
 libheif = dependency('libheif', version: '>='+libheif_minver,
@@ -966,17 +930,6 @@ if have_heif
   if not can_import_heic and not can_import_avif
     have_heif = false
   endif
-
-  if have_heif
-    # Listing support for both HEIC and AVIF if we build with HEIF support,
-    # because codecs can be added at any time later and we won't be able to edit
-    # the desktop file once it's installed. See discussion in #9080.
-    MIMEtypes += [
-      'image/heif',
-      'image/heic',
-      'image/avif'
-    ]
-  endif
 endif
 
 have_vala = add_languages('vala', required: get_option('vala'), native: false)
@@ -1020,24 +973,15 @@ cairopdf = dependency('cairo-pdf', version: '>='+cairopdf_minver,
   required: get_option('cairo-pdf')
 )
 
-# PDF import support is a granted feature.
-MIMEtypes += 'application/pdf'
-
 wmf_minver = '0.2.8'
 wmf = dependency('libwmf', version: '>='+wmf_minver,
   required: get_option('wmf')
 )
-if wmf.found()
-  MIMEtypes += 'image/x-wmf'
-endif
 
 openjpeg_minver = '2.1.0'
 openjpeg = dependency('libopenjp2', version: '>='+openjpeg_minver,
   required: get_option('jpeg2000')
 )
-if openjpeg.found()
-  MIMEtypes += [ 'image/jp2', 'image/jpeg2000', 'image/jpx', ]
-endif
 
 jpegxl_minver  = '0.7.0'
 libjxl         = dependency('libjxl',
@@ -1048,14 +992,8 @@ libjxl_threads = dependency('libjxl_threads',
                             version: '>='+jpegxl_minver,
                             required: get_option('jpeg-xl')
 )
-if libjxl.found() and libjxl_threads.found()
-  MIMEtypes += 'image/jxl'
-endif
 
 xmc = dependency('xcursor', required: get_option('xcursor'))
-if xmc.found()
-  MIMEtypes += 'image/x-xcursor'
-endif
 
 
 alsa = dependency('alsa', version: '>=1.0.0', required: get_option('alsa'))
@@ -1079,29 +1017,10 @@ conf.set('HAVE_LIBGUDEV', gudev.found())
 
 
 # DirectX DirectInput
-directx = no_dep
-directx_sdk_path = get_option('directx-sdk-dir')
-if directx_sdk_path != '' and platform_windows
-  if directx_sdk_path.contains(' ') or directx_sdk_path.contains('\\')
-    error('\n'.join([
-      'The DirectX SDK path should be given :',
-      '* without spaces (use MSys mounts)',
-      '* with plain (forward) slashes only,'
-    ]))
-  endif
-
-  directx = declare_dependency(
-    dependencies: cc.find_library('dxguid',
-                                  dirs: directx_sdk_path / 'Lib' / 'x86'),
-    include_directories: directx_sdk_path / 'Include',
-  )
-endif
+directx = platform_windows ? cc.find_library('dxguid') : no_dep
 conf.set('HAVE_DX_DINPUT', directx.found())
 
 cfitsio_dep = dependency('cfitsio', required: get_option('fits'))
-if cfitsio_dep.found()
-  MIMEtypes += 'image/fits'
-endif
 
 
 ################################################################################
@@ -1132,13 +1051,12 @@ else
   xdg_email = find_program(xdg_email_path, required: false)
   if xdg_email.found()
     xdg_email_path = xdg_email.full_path()
-  else
+    email_message = '@0@ (@1@)'.format(true, xdg_email_path)
+  elif not xdg_email.found() and not platform_windows
     mail_warning = 'Xdg-email not found, but required at runtime for email sending.'
     warning(mail_warning)
     warnings += mail_warning
   endif
-
-  email_message = '@0@ (@1@)'.format(true, xdg_email_path)
 endif
 
 
@@ -1181,8 +1099,6 @@ message('Found PyGObject: @0@'.format(pygobject_found))
 if not pygobject_found
   error('PyGObject is required.')
 endif
-
-MIMEtypes += 'image/openraster'
 
 ## Javascript
 
@@ -1327,25 +1243,6 @@ if xvfb_run.found() and dbus_run_session.found()
     is_default: true,
   )
 endif
-
-# Set bug report URL
-
-# Allowing third-party packagers to set their own bugtracker URL, in
-# order to filter first packaging bugs from core bugs.
-bug_report_url = get_option('bug-report-url')
-
-if bug_report_url == ''
-  message('''
-    NOTE: if you plan on packaging GIMP for distribution, it is recommended
-    to override the bug report URL with option:
-      -Dbug-report-url=https://example.com/
-    so that you can filter packaging bugs from core bugs before reporting upstream.
-  ''')
-
-  bug_report_url = project_url_issues
-endif
-conf.set_quoted('PACKAGE_BUGREPORT', project_url_issues)
-conf.set_quoted('BUG_REPORT_URL', bug_report_url)
 
 # Build identifiers #
 
@@ -1773,7 +1670,7 @@ install_conf = configuration_data()
 install_conf.set('GIMP_APP_VERSION', gimp_app_version)
 install_conf.set('GIMP_PKGCONFIG_VERSION', gimp_version)
 install_conf.set('GIMP_VERSION', gimp_version)
-install_conf.set('APPSTREAM_GLIB_REQUIRED_VERSION', appstream_glib_minver)
+install_conf.set('APPSTREAM_REQUIRED_VERSION',    appstream_minver)
 install_conf.set('ATK_REQUIRED_VERSION',          atk_minver)
 install_conf.set('BABL_REQUIRED_VERSION',         babl_minver)
 install_conf.set('CAIRO_PDF_REQUIRED_VERSION',    cairopdf_minver)
@@ -1836,6 +1733,19 @@ if is_git_repository
     endif
   endif
 endif
+
+
+# Set bug report URL
+
+# Allowing third-party packagers to set their own bugtracker URL, in
+# order to filter first packaging bugs from core bugs.
+bug_report_url = get_option('bug-report-url')
+
+if bug_report_url == ''
+  bug_report_url = project_url_issues
+endif
+conf.set_quoted('PACKAGE_BUGREPORT', project_url_issues)
+conf.set_quoted('BUG_REPORT_URL', bug_report_url)
 
 configure_file(
   output: 'config.h',
@@ -1936,9 +1846,8 @@ subdir('po-python')
 subdir('po-script-fu')
 subdir('po-tags')
 subdir('po-tips')
-# Data / Desktop / xml files
+# Data / xml files
 subdir('data')
-subdir('desktop')
 subdir('etc')
 subdir('menus')
 subdir('themes')
@@ -1963,6 +1872,9 @@ subdir('plug-ins')
 subdir('app')
 subdir('app-tools')
 
+# Desktop files
+subdir('desktop')
+
 ################################################################################
 # Make GIMP runnable without being installed for unit-testing or as a build
 # tool.
@@ -1980,7 +1892,7 @@ if meson.can_run_host_binaries() and have_gobject_introspection
   else
     gimp_real_exe = gimpmain_exe
   endif
-  gimp_exe_depends = [gimp_real_exe]
+  gimp_exe_depends = [gimp_real_exe, libgimp_gir, libgimpui_gir] + plugin_custom_targets
   gimp_run_env.set('GIMP_SELF_IN_BUILD', gimp_real_exe.full_path())
 
   menu_paths=meson.global_build_root() / 'menus:' + meson.global_source_root() / 'menus'
@@ -1994,7 +1906,7 @@ if meson.can_run_host_binaries() and have_gobject_introspection
 
   gimp_run_env.set('GIMP_TESTING_INTERPRETER_DIRS', meson.global_build_root() / 'plug-ins/python/')
   gimp_run_env.append('GIMP_TESTING_INTERPRETER_DIRS', meson.global_build_root() / 'extensions/')
-  gimp_run_env.set('GIMP_TESTING_ENVIRON_DIRS', meson.global_source_root() / 'data/environ/')
+  gimp_run_env.set('GIMP_TESTING_ENVIRON_DIRS', meson.global_build_root() / 'data/environ/')
 
   # Makes build errors output way less polluted, making easier to debug
   gimp_run_env.set('GIMP3_LOCALEDIR', meson.global_build_root() / 'po-plug-ins')
@@ -2075,7 +1987,7 @@ subdir('devel-docs')
 # Inno Windows installer
 if get_option('windows-installer')
   subdir('po-windows-installer')
-  subdir('build/windows/installer')
+  subdir('build/windows/installer/lang')
 endif
 
 pkgconfig.generate(libgimp,
@@ -2144,7 +2056,7 @@ pkgconfig.generate(libgimpui,
 # Install native debug data (.pdb) on Windows
 # Ideally meson should take care of it automatically.
 # See: https://github.com/mesonbuild/meson/issues/12977
-if platform_windows and pdb_support and cc.get_id() == 'clang'
+if platform_windows and debugging_format == 'native'
   install_win_debug_script = find_program('build/windows/2_bundle-gimp-uni_sym.py')
   meson.add_install_script(install_win_debug_script)
 endif
@@ -2194,6 +2106,7 @@ final_message = [
 '''  Default ICC directory (Linux): @0@'''.format(icc_directory),
 '''  32-bit DLL folder (Win32):     @0@'''.format(get_option('win32-32bits-dll-folder')),
 '''  Dashboard backtraces:          @0@'''.format(dashboard_backtrace),
+'''  Debug symbols format:          @0@'''.format(debugging_format),
 '''  Binary symlinks:               @0@'''.format(enable_default_bin),
 '''  OpenMP:                        @0@'''.format(have_openmp),
 '',
@@ -2246,6 +2159,15 @@ final_message = [
 ]
 
 message('\n'.join(final_message))
+
+if bug_report_url == project_url_issues
+  message('''
+    NOTE: if you plan on packaging GIMP for distribution, it is recommended
+    to override the bug report URL with option:
+      -Dbug-report-url=https://example.com/
+    so that you can filter packaging bugs from core bugs before reporting upstream.
+  ''')
+endif
 
 if warnings.length() > 0
   warning('Warnings occurred during configuration')

@@ -22,6 +22,14 @@
 #include <gegl.h>
 #include <gtk/gtk.h>
 
+#ifdef PLATFORM_OSX
+#include <Foundation/Foundation.h>
+#endif /* PLATFORM_OSX */
+#ifdef G_OS_WIN32
+#include <windows.h>
+#include <datetimeapi.h>
+#endif /* G_OS_WIN32 */
+
 #include "libgimpbase/gimpbase.h"
 #include "libgimpmath/gimpmath.h"
 #include "libgimpwidgets/gimpwidgets.h"
@@ -508,13 +516,96 @@ about_dialog_add_update (GimpAboutDialog *dialog,
       gchar *time;
 
       datetime = g_date_time_new_from_unix_local (config->check_update_timestamp);
+#if defined(PLATFORM_OSX)
+      NSAutoreleasePool *pool         = [[NSAutoreleasePool alloc] init];
+      NSDateFormatter   *formatter    = [[NSDateFormatter alloc] init];
+      NSDate            *current_date = [NSDate date];
+      NSString          *formatted_date;
+      NSString          *formatted_time;
+
+      formatter.locale = [NSLocale currentLocale];
+
+      formatter.dateStyle = NSDateFormatterShortStyle;
+      formatter.timeStyle = NSDateFormatterNoStyle;
+      formatted_date      = [formatter stringFromDate:current_date];
+
+      formatter.dateStyle = NSDateFormatterNoStyle;
+      formatter.timeStyle = NSDateFormatterMediumStyle;
+      formatted_time      = [formatter stringFromDate:current_date];
+
+      if (formatted_date)
+        date = g_strdup ([formatted_date UTF8String]);
+      else
+        date = g_date_time_format (datetime, "%x");
+
+      if (formatted_time)
+        time = g_strdup ([formatted_time UTF8String]);
+      else
+        time = g_date_time_format (datetime, "%X");
+
+      [formatter release];
+      [pool drain];
+#elif defined(G_OS_WIN32)
+      SYSTEMTIME st;
+      int        date_len, time_len;
+      wchar_t   *date_buf = NULL;
+      wchar_t   *time_buf = NULL;
+
+      GetLocalTime (&st);
+
+      date_len = GetDateFormatEx (LOCALE_NAME_USER_DEFAULT, 0, &st,
+                                  NULL, NULL, 0, NULL);
+      if (date_len > 0)
+       {
+          date_buf = g_malloc (date_len * sizeof (wchar_t));
+          if (! GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, &st, NULL, date_buf, date_len, NULL))
+            {
+              g_free (date_buf);
+              date_buf = NULL;
+            }
+        }
+
+      time_len = GetTimeFormatEx (LOCALE_NAME_USER_DEFAULT, 0, &st,
+                                  NULL, NULL, 0);
+      if (time_len > 0)
+        {
+            time_buf = g_malloc (time_len * sizeof (wchar_t));
+            if (! GetTimeFormatEx (LOCALE_NAME_USER_DEFAULT, 0, &st, NULL, time_buf, time_len))
+              {
+                g_free (time_buf);
+                time_buf = NULL;
+              }
+        }
+
+      if (date_buf)
+        date = g_utf16_to_utf8 ((gunichar2*) date_buf, -1, NULL, NULL, NULL);
+      else
+        date = g_date_time_format (datetime, "%x");
+
+      if (time_buf)
+        time = g_utf16_to_utf8 ((gunichar2*) time_buf, -1, NULL, NULL, NULL);
+      else
+        time = g_date_time_format (datetime, "%X");
+
+      g_free (date_buf);
+      g_free (time_buf);
+#else
       date = g_date_time_format (datetime, "%x");
       time = g_date_time_format (datetime, "%X");
-      /* Translators: first string is the date in the locale's date
-       * representation (e.g., 12/31/99), second is the time in the
-       * locale's time representation (e.g., 23:13:48).
-       */
-      subtext = g_strdup_printf (_("Last checked on %s at %s"), date, time);
+#endif
+      if (config->last_known_release != NULL)
+        /* Translators: first string is the date in the locale's date
+        * representation (e.g., 12/31/99), second is the time in the
+        * locale's time representation (e.g., 23:13:48).
+        */
+        subtext = g_strdup_printf (_("Last checked on %s at %s"), date, time);
+      else
+        /* Translators: first string is the date in the locale's date
+        * representation (e.g., 12/31/99), second is the time in the
+        * locale's time representation (e.g., 23:13:48).
+        */
+        subtext = g_strdup_printf (_("Up to date as of %s at %s"), date, time);
+
       g_date_time_unref (datetime);
       g_free (date);
       g_free (time);

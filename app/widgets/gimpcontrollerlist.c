@@ -38,17 +38,20 @@
 
 #include "gimpcontainertreeview.h"
 #include "gimpcontainerview.h"
+#include "gimpcontrollercategory.h"
 #include "gimpcontrollereditor.h"
 #include "gimpcontrollerlist.h"
 #include "gimpcontrollerinfo.h"
 #include "gimpcontrollerkeyboard.h"
+#include "gimpcontrollermanager.h"
 #include "gimpcontrollerwheel.h"
-#include "gimpcontrollers.h"
 #include "gimpdialogfactory.h"
 #include "gimphelp-ids.h"
 #include "gimpmessagebox.h"
 #include "gimpmessagedialog.h"
 #include "gimppropwidgets.h"
+#include "gimprow.h"
+#include "gimprow-utils.h"
 #include "gimpuimanager.h"
 #include "gimpwidgets-utils.h"
 
@@ -58,7 +61,8 @@
 enum
 {
   PROP_0,
-  PROP_GIMP
+  PROP_CONTROLLER_MANAGER,
+  N_PROPS
 };
 
 enum
@@ -81,21 +85,27 @@ static void gimp_controller_list_get_property    (GObject            *object,
                                                   GValue             *value,
                                                   GParamSpec         *pspec);
 
-static void gimp_controller_list_src_sel_changed (GtkTreeSelection   *sel,
-                                                  GimpControllerList *list);
-static void gimp_controller_list_row_activated   (GtkTreeView        *tv,
-                                                  GtkTreePath        *path,
-                                                  GtkTreeViewColumn  *column,
-                                                  GimpControllerList *list);
+static GimpControllerCategory *
+            gimp_controller_list_get_selected_category
+                                                 (GimpControllerList  *list);
+static void gimp_controller_list_category_row_selected
+                                                 (GtkListBox          *self,
+                                                  GtkListBoxRow       *row,
+                                                  gpointer             user_data);
+static void gimp_controller_list_category_row_activated
+                                                 (GtkListBox          *self,
+                                                  GtkListBoxRow       *row,
+                                                  gpointer             user_data);
 
-static gboolean gimp_controller_list_select_items(GimpContainerView  *view,
-                                                  GList              *viewables,
-                                                  GList              *paths,
-                                                  GimpControllerList *list);
-static void gimp_controller_list_activate_item   (GimpContainerView  *view,
-                                                  GimpViewable       *viewable,
-                                                  gpointer            insert_data,
-                                                  GimpControllerList *list);
+static GimpControllerInfo *
+            gimp_controller_list_get_selected_controller
+                                                 (GimpControllerList  *list);
+static void gimp_controller_list_row_selected    (GtkListBox          *self,
+                                                  GtkListBoxRow       *row,
+                                                  gpointer             user_data);
+static void gimp_controller_list_row_activated   (GtkListBox          *self,
+                                                  GtkListBoxRow       *row,
+                                                  gpointer             user_data);
 
 static void gimp_controller_list_add_clicked     (GtkWidget          *button,
                                                   GimpControllerList *list);
@@ -127,39 +137,39 @@ gimp_controller_list_class_init (GimpControllerListClass *klass)
   object_class->set_property = gimp_controller_list_set_property;
   object_class->get_property = gimp_controller_list_get_property;
 
-  g_object_class_install_property (object_class, PROP_GIMP,
-                                   g_param_spec_object ("gimp",
+  g_object_class_install_property (object_class, PROP_CONTROLLER_MANAGER,
+                                   g_param_spec_object ("controller-manager",
                                                         NULL, NULL,
-                                                        GIMP_TYPE_GIMP,
+                                                        GIMP_TYPE_CONTROLLER_MANAGER,
                                                         GIMP_PARAM_READWRITE |
                                                         G_PARAM_CONSTRUCT_ONLY));
 }
 
 static void
-gimp_controller_list_init (GimpControllerList *list)
+gimp_controller_list_init (GimpControllerList      *list)
 {
-  GtkWidget         *hbox;
-  GtkWidget         *sw;
-  GtkWidget         *tv;
-  GtkTreeViewColumn *column;
-  GtkCellRenderer   *cell;
-  GtkWidget         *vbox;
-  GtkWidget         *image;
-  GtkIconSize        icon_size;
-  gint               icon_width;
-  gint               icon_height;
-  GType             *controller_types;
-  guint              n_controller_types;
-  gint               i;
+  GtkWidget *hbox;
+  GtkWidget *sw;
+  GtkWidget *vbox;
+  GtkWidget *image;
+  GtkWidget *label;
 
   gtk_orientable_set_orientation (GTK_ORIENTABLE (list),
                                   GTK_ORIENTATION_VERTICAL);
 
-  list->gimp = NULL;
+  list->controller_manager = NULL;
 
   list->hbox = hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
   gtk_box_pack_start (GTK_BOX (list), hbox, TRUE, TRUE, 0);
   gtk_widget_show (hbox);
+
+  vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 6);
+  gtk_widget_show (vbox);
+  gtk_box_pack_start (GTK_BOX (list->hbox), vbox, TRUE, TRUE, 0);
+
+  label = gtk_label_new (_("Available Controllers"));
+  gtk_widget_show (label);
+  gtk_box_pack_start (GTK_BOX (vbox), label, FALSE, FALSE, 0);
 
   sw = gtk_scrolled_window_new (NULL, NULL);
   gtk_scrolled_window_set_shadow_type (GTK_SCROLLED_WINDOW (sw),
@@ -167,71 +177,21 @@ gimp_controller_list_init (GimpControllerList *list)
   gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (sw),
                                   GTK_POLICY_AUTOMATIC,
                                   GTK_POLICY_AUTOMATIC);
-  gtk_box_pack_start (GTK_BOX (hbox), sw, TRUE, TRUE, 0);
+  gtk_box_pack_start (GTK_BOX (vbox), sw, TRUE, TRUE, 0);
   gtk_widget_show (sw);
 
-  list->src = gtk_list_store_new (N_COLUMNS,
-                                  G_TYPE_STRING,
-                                  G_TYPE_STRING,
-                                  G_TYPE_GTYPE);
-  tv = gtk_tree_view_new_with_model (GTK_TREE_MODEL (list->src));
-  g_object_unref (list->src);
+  list->available_controllers = gtk_list_box_new ();
+  gtk_list_box_set_activate_on_single_click (GTK_LIST_BOX (list->available_controllers),
+                                             FALSE);
+  gtk_widget_show (list->available_controllers);
+  gtk_container_add (GTK_CONTAINER (sw), list->available_controllers);
 
-  gtk_tree_view_set_headers_clickable (GTK_TREE_VIEW (tv), FALSE);
-
-  column = gtk_tree_view_column_new ();
-  gtk_tree_view_column_set_title (column, _("Available Controllers"));
-  gtk_tree_view_append_column (GTK_TREE_VIEW (tv), column);
-
-  cell = gtk_cell_renderer_pixbuf_new ();
-  gtk_tree_view_column_pack_start (column, cell, FALSE);
-  gtk_tree_view_column_set_attributes (column, cell,
-                                       "icon-name", COLUMN_ICON,
-                                       NULL);
-
-  g_object_get (cell, "stock-size", &icon_size, NULL);
-
-  cell = gtk_cell_renderer_text_new ();
-  gtk_tree_view_column_pack_start (column, cell, TRUE);
-  gtk_tree_view_column_set_attributes (column, cell,
-                                       "text", COLUMN_NAME,
-                                       NULL);
-
-  gtk_container_add (GTK_CONTAINER (sw), tv);
-  gtk_widget_show (tv);
-
-  g_signal_connect_object (tv, "row-activated",
-                           G_CALLBACK (gimp_controller_list_row_activated),
+  g_signal_connect_object (list->available_controllers, "row-activated",
+                           G_CALLBACK (gimp_controller_list_category_row_activated),
                            G_OBJECT (list), 0);
-
-  list->src_sel = gtk_tree_view_get_selection (GTK_TREE_VIEW (tv));
-  gtk_tree_selection_set_mode (list->src_sel, GTK_SELECTION_BROWSE);
-
-  g_signal_connect_object (list->src_sel, "changed",
-                           G_CALLBACK (gimp_controller_list_src_sel_changed),
+  g_signal_connect_object (list->available_controllers, "row-selected",
+                           G_CALLBACK (gimp_controller_list_category_row_selected),
                            G_OBJECT (list), 0);
-
-  controller_types = g_type_children (GIMP_TYPE_CONTROLLER,
-                                      &n_controller_types);
-
-  for (i = 0; i < n_controller_types; i++)
-    {
-      GimpControllerClass *controller_class;
-      GtkTreeIter          iter;
-
-      controller_class = g_type_class_ref (controller_types[i]);
-
-      gtk_list_store_append (list->src, &iter);
-      gtk_list_store_set (list->src, &iter,
-                          COLUMN_ICON, controller_class->icon_name,
-                          COLUMN_NAME, controller_class->name,
-                          COLUMN_TYPE, controller_types[i],
-                          -1);
-
-      g_type_class_unref (controller_class);
-    }
-
-  g_free (controller_types);
 
   vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
   gtk_box_set_homogeneous (GTK_BOX (vbox), TRUE);
@@ -266,46 +226,54 @@ gimp_controller_list_init (GimpControllerList *list)
                     G_CALLBACK (gimp_controller_list_remove_clicked),
                     list);
 
-  gtk_icon_size_lookup (icon_size, &icon_width, &icon_height);
-  list->dest = gimp_container_tree_view_new (NULL, NULL, icon_height, 0);
-  gimp_container_tree_view_set_main_column_title (GIMP_CONTAINER_TREE_VIEW (list->dest),
-                                                  _("Active Controllers"));
-  gtk_tree_view_set_headers_visible (GIMP_CONTAINER_TREE_VIEW (list->dest)->view,
-                                     TRUE);
-  gtk_box_pack_start (GTK_BOX (list->hbox), list->dest, TRUE, TRUE, 0);
-  gtk_widget_show (list->dest);
+  vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 6);
+  gtk_widget_show (vbox);
+  gtk_box_pack_start (GTK_BOX (list->hbox), vbox, TRUE, TRUE, 0);
 
-  g_signal_connect_object (list->dest, "select-items",
-                           G_CALLBACK (gimp_controller_list_select_items),
+  label = gtk_label_new (_("Active Controllers"));
+  gtk_widget_show (label);
+  gtk_box_pack_start (GTK_BOX (vbox), label, FALSE, FALSE, 0);
+
+  list->active_controllers = gtk_list_box_new ();
+  gtk_list_box_set_activate_on_single_click (GTK_LIST_BOX (list->active_controllers),
+                                             FALSE);
+  gtk_box_pack_start (GTK_BOX (vbox), list->active_controllers, TRUE, TRUE, 0);
+  gtk_widget_show (list->active_controllers);
+
+  g_signal_connect_object (list->active_controllers, "row-selected",
+                           G_CALLBACK (gimp_controller_list_row_selected),
                            G_OBJECT (list), 0);
-  g_signal_connect_object (list->dest, "activate-item",
-                           G_CALLBACK (gimp_controller_list_activate_item),
+  g_signal_connect_object (list->active_controllers, "row-activated",
+                           G_CALLBACK (gimp_controller_list_row_activated),
                            G_OBJECT (list), 0);
 
-  list->edit_button =
-    gimp_editor_add_button (GIMP_EDITOR (list->dest),
-                            GIMP_ICON_DOCUMENT_PROPERTIES,
-                            _("Configure the selected controller"),
-                            NULL,
-                            G_CALLBACK (gimp_controller_list_edit_clicked),
-                            NULL,
-                            G_OBJECT (list));
-  list->up_button =
-    gimp_editor_add_button (GIMP_EDITOR (list->dest),
-                            GIMP_ICON_GO_UP,
-                            _("Move the selected controller up"),
-                            NULL,
-                            G_CALLBACK (gimp_controller_list_up_clicked),
-                            NULL,
-                            G_OBJECT (list));
-  list->down_button =
-    gimp_editor_add_button (GIMP_EDITOR (list->dest),
-                            GIMP_ICON_GO_DOWN,
-                            _("Move the selected controller down"),
-                            NULL,
-                            G_CALLBACK (gimp_controller_list_down_clicked),
-                            NULL,
-                            G_OBJECT (list));
+  hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
+  gtk_widget_show (hbox);
+  gtk_box_pack_start (GTK_BOX (vbox), hbox, FALSE, FALSE, 0);
+
+  list->edit_button = gtk_button_new_from_icon_name (GIMP_ICON_DOCUMENT_PROPERTIES, GTK_ICON_SIZE_BUTTON);
+  gimp_help_set_help_data (list->edit_button, _("Configure the selected controller"), NULL);
+  gtk_widget_show (list->edit_button);
+  gtk_box_pack_start (GTK_BOX (hbox), list->edit_button, TRUE, TRUE, 0);
+  g_signal_connect_object (list->edit_button, "clicked",
+                           G_CALLBACK (gimp_controller_list_edit_clicked),
+                           list, 0);
+
+  list->up_button = gtk_button_new_from_icon_name (GIMP_ICON_GO_UP, GTK_ICON_SIZE_BUTTON);
+  gimp_help_set_help_data (list->up_button, _("Move the selected controller up"), NULL);
+  gtk_widget_show (list->up_button);
+  gtk_box_pack_start (GTK_BOX (hbox), list->up_button, TRUE, TRUE, 0);
+  g_signal_connect_object (list->up_button, "clicked",
+                           G_CALLBACK (gimp_controller_list_up_clicked),
+                           list, 0);
+
+  list->down_button = gtk_button_new_from_icon_name (GIMP_ICON_GO_DOWN, GTK_ICON_SIZE_BUTTON);
+  gimp_help_set_help_data (list->down_button, _("Move the selected controller down"), NULL);
+  gtk_widget_show (list->down_button);
+  gtk_box_pack_start (GTK_BOX (hbox), list->down_button, TRUE, TRUE, 0);
+  g_signal_connect_object (list->down_button, "clicked",
+                           G_CALLBACK (gimp_controller_list_down_clicked),
+                           list, 0);
 
   gtk_widget_set_sensitive (list->edit_button, FALSE);
   gtk_widget_set_sensitive (list->up_button,   FALSE);
@@ -316,16 +284,22 @@ static void
 gimp_controller_list_constructed (GObject *object)
 {
   GimpControllerList *list = GIMP_CONTROLLER_LIST (object);
+  GListModel         *categories;
 
   G_OBJECT_CLASS (parent_class)->constructed (object);
 
-  gimp_assert (GIMP_IS_GIMP (list->gimp));
+  categories = gimp_controller_manager_get_categories (list->controller_manager);
+  gtk_list_box_bind_model (GTK_LIST_BOX (list->available_controllers),
+                           categories,
+                           gimp_row_create_for_context,
+                           gimp_get_user_context (gimp_controller_manager_get_gimp (list->controller_manager)),
+                           NULL);
 
-  gimp_container_view_set_container (GIMP_CONTAINER_VIEW (list->dest),
-                                     gimp_controllers_get_list (list->gimp));
-
-  gimp_container_view_set_context (GIMP_CONTAINER_VIEW (list->dest),
-                                   gimp_get_user_context (list->gimp));
+  gtk_list_box_bind_model (GTK_LIST_BOX (list->active_controllers),
+                           G_LIST_MODEL (list->controller_manager),
+                           gimp_row_create_for_context,
+                           gimp_get_user_context (gimp_controller_manager_get_gimp (list->controller_manager)),
+                           NULL);
 }
 
 static void
@@ -333,7 +307,7 @@ gimp_controller_list_finalize (GObject *object)
 {
   GimpControllerList *list = GIMP_CONTROLLER_LIST (object);
 
-  g_clear_object (&list->gimp);
+  g_clear_object (&list->controller_manager);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -348,8 +322,8 @@ gimp_controller_list_set_property (GObject      *object,
 
   switch (property_id)
     {
-    case PROP_GIMP:
-      list->gimp = g_value_dup_object (value);
+    case PROP_CONTROLLER_MANAGER:
+      list->controller_manager = g_value_dup_object (value);
       break;
 
     default:
@@ -368,8 +342,8 @@ gimp_controller_list_get_property (GObject    *object,
 
   switch (property_id)
     {
-    case PROP_GIMP:
-      g_value_set_object (value, list->gimp);
+    case PROP_CONTROLLER_MANAGER:
+      g_value_set_object (value, list->controller_manager);
       break;
 
     default:
@@ -382,44 +356,50 @@ gimp_controller_list_get_property (GObject    *object,
 /*  public functions  */
 
 GtkWidget *
-gimp_controller_list_new (Gimp *gimp)
+gimp_controller_list_new (GimpControllerManager *controller_manager)
 {
-  g_return_val_if_fail (GIMP_IS_GIMP (gimp), NULL);
+  g_return_val_if_fail (GIMP_IS_CONTROLLER_MANAGER (controller_manager), NULL);
 
   return g_object_new (GIMP_TYPE_CONTROLLER_LIST,
-                       "gimp", gimp,
+                       "controller-manager", controller_manager,
                        NULL);
 }
 
 
 /*  private functions  */
 
-static void
-gimp_controller_list_src_sel_changed (GtkTreeSelection   *sel,
-                                      GimpControllerList *list)
+static GimpControllerCategory *
+gimp_controller_list_get_selected_category (GimpControllerList *list)
 {
-  GtkTreeModel *model;
-  GtkTreeIter   iter;
-  gchar        *tip = NULL;
+  GtkListBoxRow *row;
 
-  if (gtk_tree_selection_get_selected (sel, &model, &iter))
+  row = gtk_list_box_get_selected_row (GTK_LIST_BOX (list->available_controllers));
+  if (row == NULL)
+    return NULL;
+
+  return GIMP_CONTROLLER_CATEGORY (gimp_row_get_viewable (GIMP_ROW (row)));
+}
+
+static void
+gimp_controller_list_category_row_selected (GtkListBox    *self,
+                                            GtkListBoxRow *row,
+                                            gpointer       user_data)
+{
+  GimpControllerList *list = GIMP_CONTROLLER_LIST (user_data);
+  gchar              *tip = NULL;
+
+  if (row != NULL)
     {
-      gchar *name;
+      GimpControllerCategory *category;
 
-      gtk_tree_model_get (model, &iter,
-                          COLUMN_NAME, &name,
-                          COLUMN_TYPE, &list->src_gtype,
-                          -1);
-
+      category = gimp_controller_list_get_selected_category (list);
       if (list->add_button)
         {
           tip =
             g_strdup_printf (_("Add '%s' to the list of active controllers"),
-                             name);
+                             gimp_object_get_name (category));
           gtk_widget_set_sensitive (list->add_button, TRUE);
         }
-
-      g_free (name);
     }
   else
     {
@@ -435,40 +415,50 @@ gimp_controller_list_src_sel_changed (GtkTreeSelection   *sel,
 }
 
 static void
-gimp_controller_list_row_activated (GtkTreeView        *tv,
-                                    GtkTreePath        *path,
-                                    GtkTreeViewColumn  *column,
-                                    GimpControllerList *list)
+gimp_controller_list_category_row_activated (GtkListBox    *self,
+                                             GtkListBoxRow *row,
+                                             gpointer       user_data)
 {
+  GimpControllerList *list = GIMP_CONTROLLER_LIST (user_data);
+
   if (gtk_widget_is_sensitive (list->add_button))
     gtk_button_clicked (GTK_BUTTON (list->add_button));
 }
 
-static gboolean
-gimp_controller_list_select_items (GimpContainerView  *view,
-                                   GList              *viewables,
-                                   GList              *paths,
-                                   GimpControllerList *list)
+static GimpControllerInfo *
+gimp_controller_list_get_selected_controller (GimpControllerList *list)
 {
-  gboolean selected;
+  GtkListBoxRow *row;
 
-  g_return_val_if_fail (g_list_length (viewables) < 2, FALSE);
+  row = gtk_list_box_get_selected_row (GTK_LIST_BOX (list->active_controllers));
+  if (row == NULL)
+    return NULL;
 
-  list->dest_info = viewables ? GIMP_CONTROLLER_INFO (viewables->data) : NULL;
+  return GIMP_CONTROLLER_INFO (gimp_row_get_viewable (GIMP_ROW (row)));
+}
 
-  selected = GIMP_IS_CONTROLLER_INFO (list->dest_info);
+static void
+gimp_controller_list_row_selected (GtkListBox    *self,
+                                   GtkListBoxRow *row,
+                                   gpointer       user_data)
+{
+  GimpControllerList *list = GIMP_CONTROLLER_LIST (user_data);
+  GimpControllerInfo *info;
+  gboolean            selected;
+
+  info = gimp_controller_list_get_selected_controller (list);
+  selected = (info != NULL);
 
   if (list->remove_button)
     {
-      GimpObject *object = GIMP_OBJECT (list->dest_info);
-      gchar      *tip    = NULL;
+      gchar *tip = NULL;
 
       gtk_widget_set_sensitive (list->remove_button, selected);
 
       if (selected)
         tip =
           g_strdup_printf (_("Remove '%s' from the list of active controllers"),
-                           gimp_object_get_name (object));
+                           gimp_object_get_name (GIMP_OBJECT (info)));
 
       gimp_help_set_help_data (list->remove_button, tip, NULL);
       g_free (tip);
@@ -477,16 +467,15 @@ gimp_controller_list_select_items (GimpContainerView  *view,
   gtk_widget_set_sensitive (list->edit_button, selected);
   gtk_widget_set_sensitive (list->up_button,   selected);
   gtk_widget_set_sensitive (list->down_button, selected);
-
-  return TRUE;
 }
 
 static void
-gimp_controller_list_activate_item (GimpContainerView  *view,
-                                    GimpViewable       *viewable,
-                                    gpointer            insert_data,
-                                    GimpControllerList *list)
+gimp_controller_list_row_activated (GtkListBox    *self,
+                                    GtkListBoxRow *row,
+                                    gpointer       user_data)
 {
+  GimpControllerList *list = GIMP_CONTROLLER_LIST (user_data);
+
   if (gtk_widget_is_sensitive (list->edit_button))
     gtk_button_clicked (GTK_BUTTON (list->edit_button));
 }
@@ -495,13 +484,23 @@ static void
 gimp_controller_list_add_clicked (GtkWidget          *button,
                                   GimpControllerList *list)
 {
-  GimpControllerInfo *info;
-  GimpContainer      *container;
+  GimpControllerInfo     *info;
+  Gimp                   *gimp;
+  GimpControllerCategory *category;
+  GType                   gtype;
+  gint                    position;
+  GtkListBoxRow          *row;
 
-  if (list->src_gtype == GIMP_TYPE_CONTROLLER_KEYBOARD &&
-      gimp_controllers_get_keyboard (list->gimp) != NULL)
+  gimp = gimp_controller_manager_get_gimp (list->controller_manager);
+
+  category = gimp_controller_list_get_selected_category (list);
+  g_return_if_fail (category != NULL);
+
+  gtype = gimp_controller_category_get_gtype (category);
+  if (gtype == GIMP_TYPE_CONTROLLER_KEYBOARD &&
+      gimp_controller_manager_get_keyboard (list->controller_manager) != NULL)
     {
-      gimp_message_literal (list->gimp,
+      gimp_message_literal (gimp,
                             G_OBJECT (button), GIMP_MESSAGE_WARNING,
                             _("There can only be one active keyboard "
                               "controller.\n\n"
@@ -509,10 +508,10 @@ gimp_controller_list_add_clicked (GtkWidget          *button,
                               "your list of active controllers."));
       return;
     }
-  else if (list->src_gtype == GIMP_TYPE_CONTROLLER_WHEEL &&
-           gimp_controllers_get_wheel (list->gimp) != NULL)
+  else if (gtype == GIMP_TYPE_CONTROLLER_WHEEL &&
+           gimp_controller_manager_get_wheel (list->controller_manager) != NULL)
     {
-      gimp_message_literal (list->gimp,
+      gimp_message_literal (gimp,
                             G_OBJECT (button), GIMP_MESSAGE_WARNING,
                             _("There can only be one active wheel "
                               "controller.\n\n"
@@ -521,13 +520,20 @@ gimp_controller_list_add_clicked (GtkWidget          *button,
       return;
     }
 
-  info = gimp_controller_info_new (list->src_gtype);
-  container = gimp_controllers_get_list (list->gimp);
-  gimp_container_add (container, GIMP_OBJECT (info));
+  info = gimp_controller_info_new (gtype);
+  gimp_container_add (GIMP_CONTAINER (list->controller_manager),
+                      GIMP_OBJECT (info));
   g_object_unref (info);
 
-  gimp_container_view_select_item (GIMP_CONTAINER_VIEW (list->dest),
-                                   GIMP_VIEWABLE (info));
+  /* Make sure it's selected for when we press "edit" */
+  position =
+    gimp_container_get_child_index (GIMP_CONTAINER (list->controller_manager),
+                                    GIMP_OBJECT (info));
+
+  row = gtk_list_box_get_row_at_index (GTK_LIST_BOX (list->active_controllers),
+                                       position);
+  gtk_list_box_select_row (GTK_LIST_BOX (list->active_controllers), row);
+
   gimp_controller_list_edit_clicked (list->edit_button, list);
 }
 
@@ -535,8 +541,9 @@ static void
 gimp_controller_list_remove_clicked (GtkWidget          *button,
                                      GimpControllerList *list)
 {
-  GtkWidget   *dialog;
-  const gchar *name;
+  GtkWidget          *dialog;
+  GimpControllerInfo *info;
+  const gchar        *name;
 
 #define RESPONSE_DISABLE 1
 
@@ -557,7 +564,8 @@ gimp_controller_list_remove_clicked (GtkWidget          *button,
                                            RESPONSE_DISABLE,
                                            -1);
 
-  name = gimp_object_get_name (list->dest_info);
+  info = gimp_controller_list_get_selected_controller (list);
+  name = gimp_object_get_name (info);
   gimp_message_box_set_primary_text (GIMP_MESSAGE_DIALOG (dialog)->box,
                                      _("Remove Controller '%s'?"), name);
 
@@ -572,23 +580,22 @@ gimp_controller_list_remove_clicked (GtkWidget          *button,
   switch (gimp_dialog_run (GIMP_DIALOG (dialog)))
     {
     case RESPONSE_DISABLE:
-      gimp_controller_info_set_enabled (list->dest_info, FALSE);
+      gimp_controller_info_set_enabled (info, FALSE);
       break;
 
     case GTK_RESPONSE_OK:
       {
         GtkWidget     *editor_dialog;
-        GimpContainer *container;
 
-        editor_dialog = g_object_get_data (G_OBJECT (list->dest_info),
+        editor_dialog = g_object_get_data (G_OBJECT (info),
                                            "gimp-controller-editor-dialog");
 
         if (editor_dialog)
           gtk_dialog_response (GTK_DIALOG (editor_dialog),
                                GTK_RESPONSE_DELETE_EVENT);
 
-        container = gimp_controllers_get_list (list->gimp);
-        gimp_container_remove (container, GIMP_OBJECT (list->dest_info));
+        gimp_container_remove (GIMP_CONTAINER (list->controller_manager),
+                               GIMP_OBJECT (info));
       }
       break;
 
@@ -603,10 +610,13 @@ static void
 gimp_controller_list_edit_clicked (GtkWidget          *button,
                                    GimpControllerList *list)
 {
-  GtkWidget *dialog;
-  GtkWidget *editor;
+  GimpControllerInfo *info;
+  GtkWidget          *dialog;
+  GtkWidget          *editor;
+  Gimp               *gimp;
 
-  dialog = g_object_get_data (G_OBJECT (list->dest_info),
+  info = gimp_controller_list_get_selected_controller (list);
+  dialog = g_object_get_data (G_OBJECT (info),
                               "gimp-controller-editor-dialog");
 
   if (dialog)
@@ -635,19 +645,20 @@ gimp_controller_list_edit_clicked (GtkWidget          *button,
                     G_CALLBACK (gtk_widget_destroy),
                     NULL);
 
-  editor = gimp_controller_editor_new (list->dest_info,
-                                       gimp_get_user_context (list->gimp));
+  gimp = gimp_controller_manager_get_gimp (list->controller_manager);
+  editor = gimp_controller_editor_new (info,
+                                       gimp_get_user_context (gimp));
   gtk_container_set_border_width (GTK_CONTAINER (editor), 12);
   gtk_box_pack_start (GTK_BOX (gtk_dialog_get_content_area (GTK_DIALOG (dialog))),
                       editor, TRUE, TRUE, 0);
   gtk_widget_show (editor);
 
-  g_object_set_data (G_OBJECT (list->dest_info), "gimp-controller-editor-dialog",
+  g_object_set_data (G_OBJECT (info), "gimp-controller-editor-dialog",
                      dialog);
 
   g_signal_connect_object (dialog, "destroy",
                            G_CALLBACK (gimp_controller_list_edit_destroy),
-                           G_OBJECT (list->dest_info), 0);
+                           G_OBJECT (info), 0);
 
   g_signal_connect_object (list, "destroy",
                            G_CALLBACK (gtk_widget_destroy),
@@ -672,32 +683,53 @@ static void
 gimp_controller_list_up_clicked (GtkWidget          *button,
                                  GimpControllerList *list)
 {
-  GimpContainer *container;
-  gint           index;
+  GimpControllerInfo *info;
+  GtkListBoxRow      *row;
+  gint                old_position;
 
-  container = gimp_controllers_get_list (list->gimp);
+  info = gimp_controller_list_get_selected_controller (list);
 
-  index = gimp_container_get_child_index (container,
-                                          GIMP_OBJECT (list->dest_info));
+  old_position =
+    gimp_container_get_child_index (GIMP_CONTAINER (list->controller_manager),
+                                    GIMP_OBJECT (info));
+  if (old_position == 0)
+    return;
 
-  if (index > 0)
-    gimp_container_reorder (container, GIMP_OBJECT (list->dest_info),
-                            index - 1);
+  gimp_container_reorder (GIMP_CONTAINER (list->controller_manager),
+                          GIMP_OBJECT (info),
+                          old_position - 1);
+
+  row = gtk_list_box_get_row_at_index (GTK_LIST_BOX (list->active_controllers),
+                                       old_position - 1);
+  gtk_list_box_select_row (GTK_LIST_BOX (list->active_controllers), row);
 }
 
 static void
 gimp_controller_list_down_clicked (GtkWidget          *button,
                                    GimpControllerList *list)
 {
-  GimpContainer *container;
-  gint           index;
+  GimpControllerInfo *info;
+  GtkListBoxRow      *row;
+  gint                old_position;
+  gint                n_controllers;
 
-  container = gimp_controllers_get_list (list->gimp);
+  info = gimp_controller_list_get_selected_controller (list);
 
-  index = gimp_container_get_child_index (container,
-                                          GIMP_OBJECT (list->dest_info));
+  old_position =
+    gimp_container_get_child_index (GIMP_CONTAINER (list->controller_manager),
+                                    GIMP_OBJECT (info));
 
-  if (index < gimp_container_get_n_children (container) - 1)
-    gimp_container_reorder (container, GIMP_OBJECT (list->dest_info),
-                            index + 1);
+  n_controllers =
+    gimp_container_get_n_children (GIMP_CONTAINER (list->controller_manager));
+
+  if (old_position == n_controllers - 1)
+    return;
+
+  gimp_container_reorder (GIMP_CONTAINER (list->controller_manager),
+                          GIMP_OBJECT (info),
+                          old_position + 1);
+
+  row = gtk_list_box_get_row_at_index (GTK_LIST_BOX (list->active_controllers),
+                                       old_position + 1);
+  gtk_list_box_select_row (GTK_LIST_BOX (list->active_controllers), row);
 }

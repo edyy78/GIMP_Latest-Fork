@@ -115,7 +115,7 @@ struct _GimpDrawableFilter
   GeglNode               *crop_after;
   GimpApplicator         *applicator;
 
-  gboolean                is_temporary;
+  gboolean                temporary;
   /* This is mirroring merge_filter option of GimpFilterOptions. */
   gboolean                to_be_merged;
 };
@@ -173,6 +173,7 @@ static void       gimp_drawable_filter_lock_alpha_changed    (GimpLayer         
 
 static void       gimp_drawable_filter_reorder               (GimpFilterStack    *stack,
                                                               GimpDrawableFilter *reordered_filter,
+                                                              gint                old_index,
                                                               gint                new_index,
                                                               GimpDrawableFilter *filter);
 
@@ -291,7 +292,7 @@ gimp_drawable_filter_set_property (GObject      *object,
       break;
 
     case PROP_TEMPORARY:
-      filter->is_temporary = g_value_get_boolean (value);
+      filter->temporary = g_value_get_boolean (value);
       break;
 
     case PROP_TO_BE_MERGED:
@@ -325,7 +326,7 @@ gimp_drawable_filter_get_property (GObject    *object,
       g_value_set_boolean (value, filter->has_custom_name);
       break;
     case PROP_TEMPORARY:
-      g_value_set_boolean (value, filter->is_temporary);
+      g_value_set_boolean (value, filter->temporary);
       break;
     case PROP_TO_BE_MERGED:
       g_value_set_boolean (value, filter->to_be_merged);
@@ -530,6 +531,8 @@ gimp_drawable_filter_duplicate (GimpDrawable       *drawable,
                                  prior_filter->composite_mode);
   gimp_drawable_filter_set_region (filter,
                                    prior_filter->region);
+  gimp_drawable_filter_set_add_alpha (filter,
+                                      prior_filter->add_alpha);
   gimp_filter_set_active (GIMP_FILTER (filter),
                           gimp_filter_get_active (GIMP_FILTER (prior_filter)));
   gimp_filter_set_is_last_node (GIMP_FILTER (filter),
@@ -590,12 +593,79 @@ gimp_drawable_filter_get_mask (GimpDrawableFilter  *filter)
   return filter->mask;
 }
 
+void
+gimp_drawable_filter_set_temporary (GimpDrawableFilter *filter,
+                                    gboolean            temporary)
+{
+  g_return_if_fail (GIMP_IS_DRAWABLE_FILTER (filter));
+
+  temporary = temporary ? TRUE : FALSE;
+
+  if (temporary != filter->temporary)
+    {
+      g_object_set (filter,
+                    "temporary", temporary,
+                    NULL);
+    }
+}
+
+gboolean
+gimp_drawable_filter_get_temporary (GimpDrawableFilter *filter)
+{
+  g_return_val_if_fail (GIMP_IS_DRAWABLE_FILTER (filter), FALSE);
+
+  return filter->temporary;
+}
+
+void
+gimp_drawable_filter_set_opacity (GimpDrawableFilter *filter,
+                                  gdouble             opacity)
+{
+  g_return_if_fail (GIMP_IS_DRAWABLE_FILTER (filter));
+
+  if (opacity != filter->opacity)
+    {
+      filter->opacity = opacity;
+
+      gimp_drawable_filter_sync_opacity (filter);
+
+      if (gimp_drawable_filter_is_active (filter))
+        gimp_drawable_filter_update_drawable (filter, NULL);
+    }
+}
+
 gdouble
 gimp_drawable_filter_get_opacity (GimpDrawableFilter *filter)
 {
   g_return_val_if_fail (GIMP_IS_DRAWABLE_FILTER (filter), 0.0f);
 
   return filter->opacity;
+}
+
+void
+gimp_drawable_filter_set_mode (GimpDrawableFilter     *filter,
+                               GimpLayerMode           paint_mode,
+                               GimpLayerColorSpace     blend_space,
+                               GimpLayerColorSpace     composite_space,
+                               GimpLayerCompositeMode  composite_mode)
+{
+  g_return_if_fail (GIMP_IS_DRAWABLE_FILTER (filter));
+
+  if (paint_mode      != filter->paint_mode      ||
+      blend_space     != filter->blend_space     ||
+      composite_space != filter->composite_space ||
+      composite_mode  != filter->composite_mode)
+    {
+      filter->paint_mode      = paint_mode;
+      filter->blend_space     = blend_space;
+      filter->composite_space = composite_space;
+      filter->composite_mode  = composite_mode;
+
+      gimp_drawable_filter_sync_mode (filter);
+
+      if (gimp_drawable_filter_is_active (filter))
+        gimp_drawable_filter_update_drawable (filter, NULL);
+    }
 }
 
 GimpLayerMode
@@ -630,22 +700,6 @@ gimp_drawable_filter_get_composite_mode (GimpDrawableFilter *filter)
   return filter->composite_mode;
 }
 
-gboolean
-gimp_drawable_filter_get_clip (GimpDrawableFilter *filter)
-{
-  g_return_val_if_fail (GIMP_IS_DRAWABLE_FILTER (filter), FALSE);
-
-  return filter->clip;
-}
-
-GimpFilterRegion
-gimp_drawable_filter_get_region (GimpDrawableFilter  *filter)
-{
-  g_return_val_if_fail (GIMP_IS_DRAWABLE_FILTER (filter), 0);
-
-  return filter->region;
-}
-
 void
 gimp_drawable_filter_set_clip (GimpDrawableFilter *filter,
                                gboolean            clip)
@@ -659,6 +713,14 @@ gimp_drawable_filter_set_clip (GimpDrawableFilter *filter,
       gimp_drawable_filter_sync_region (filter);
       gimp_drawable_filter_sync_clip (filter, TRUE);
     }
+}
+
+gboolean
+gimp_drawable_filter_get_clip (GimpDrawableFilter *filter)
+{
+  g_return_val_if_fail (GIMP_IS_DRAWABLE_FILTER (filter), FALSE);
+
+  return filter->clip;
 }
 
 void
@@ -676,6 +738,14 @@ gimp_drawable_filter_set_region (GimpDrawableFilter *filter,
       if (gimp_drawable_filter_is_active (filter))
         gimp_drawable_filter_update_drawable (filter, NULL);
     }
+}
+
+GimpFilterRegion
+gimp_drawable_filter_get_region (GimpDrawableFilter  *filter)
+{
+  g_return_val_if_fail (GIMP_IS_DRAWABLE_FILTER (filter), 0);
+
+  return filter->region;
 }
 
 void
@@ -803,7 +873,7 @@ gimp_drawable_filter_update (GimpDrawableFilter      *filter,
                              GimpLayerColorSpace      composite_space,
                              GimpLayerCompositeMode   composite_mode,
                              const gchar            **auxinputnames,
-                             const GimpDrawable     **auxinputs,
+                             GimpDrawable           **auxinputs,
                              GError                 **error)
 {
   GimpImage    *image;
@@ -1060,47 +1130,12 @@ gimp_drawable_filter_update (GimpDrawableFilter      *filter,
   return (*error != NULL);
 }
 
-void
-gimp_drawable_filter_set_opacity (GimpDrawableFilter *filter,
-                                  gdouble             opacity)
+gboolean
+gimp_drawable_filter_get_add_alpha (GimpDrawableFilter *filter)
 {
-  g_return_if_fail (GIMP_IS_DRAWABLE_FILTER (filter));
+  g_return_val_if_fail (GIMP_IS_DRAWABLE_FILTER (filter), FALSE);
 
-  if (opacity != filter->opacity)
-    {
-      filter->opacity = opacity;
-
-      gimp_drawable_filter_sync_opacity (filter);
-
-      if (gimp_drawable_filter_is_active (filter))
-        gimp_drawable_filter_update_drawable (filter, NULL);
-    }
-}
-
-void
-gimp_drawable_filter_set_mode (GimpDrawableFilter     *filter,
-                               GimpLayerMode           paint_mode,
-                               GimpLayerColorSpace     blend_space,
-                               GimpLayerColorSpace     composite_space,
-                               GimpLayerCompositeMode  composite_mode)
-{
-  g_return_if_fail (GIMP_IS_DRAWABLE_FILTER (filter));
-
-  if (paint_mode      != filter->paint_mode      ||
-      blend_space     != filter->blend_space     ||
-      composite_space != filter->composite_space ||
-      composite_mode  != filter->composite_mode)
-    {
-      filter->paint_mode      = paint_mode;
-      filter->blend_space     = blend_space;
-      filter->composite_space = composite_space;
-      filter->composite_mode  = composite_mode;
-
-      gimp_drawable_filter_sync_mode (filter);
-
-      if (gimp_drawable_filter_is_active (filter))
-        gimp_drawable_filter_update_drawable (filter, NULL);
-    }
+  return filter->add_alpha;
 }
 
 void
@@ -1981,6 +2016,7 @@ gimp_drawable_filter_lock_alpha_changed (GimpLayer          *layer,
 static void
 gimp_drawable_filter_reorder (GimpFilterStack    *stack,
                               GimpDrawableFilter *reordered_filter,
+                              gint                old_index,
                               gint                new_index,
                               GimpDrawableFilter *filter)
 {
@@ -1998,6 +2034,8 @@ gimp_drawable_filter_reorder (GimpFilterStack    *stack,
            * it's organized.
            */
           GIMP_IS_DRAWABLE_FILTER (GIMP_LIST (stack)->queue->head->data))
-        gimp_drawable_filter_sync_format (GIMP_LIST (stack)->queue->head->data);
+        {
+          gimp_drawable_filter_sync_format (GIMP_LIST (stack)->queue->head->data);
+        }
     }
 }

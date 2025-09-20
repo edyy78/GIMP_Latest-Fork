@@ -42,8 +42,8 @@ struct _GimpVectorTool
 {
   GimpDrawTool    parent_instance;
 
-  GimpPath       *vectors;        /* the current Path data           */
-  GimpVectorMode  saved_mode;     /* used by modifier_key()            */
+  GimpPath       *path;           /*  the current Path data   */
+  GimpPathMode    saved_mode;     /*  used by modifier_key()  */
 
   GimpToolWidget *widget;
   GimpToolWidget *grab_widget;
@@ -55,12 +55,13 @@ struct _GimpVectorToolClass
 };
 
 
-void    gimp_vector_tool_register    (GimpToolRegisterCallback  callback,
-                                      gpointer                  data);
+void    gimp_vector_tool_register (GimpToolRegisterCallback  callback,
+                                   gpointer                  data);
 
-GType   gimp_vector_tool_get_type    (void) G_GNUC_CONST;
+GType   gimp_vector_tool_get_type (void) G_GNUC_CONST;
 
-void    gimp_vector_tool_set_vectors (GimpVectorTool           *vector_tool,
-                                      GimpPath                 *vectors);
+void    gimp_vector_tool_set_path (GimpVectorTool           *vector_tool,
+                                   GimpPath                 *path);
+
 
 #endif  /*  __GIMP_VECTOR_TOOL_H__  */

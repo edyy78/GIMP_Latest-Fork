@@ -25,33 +25,16 @@
 #include "gimpcontainertreeview.h"
 
 
-typedef GimpContainer * (* GimpGetContainerFunc) (GimpImage *image);
-typedef GimpItem      * (* GimpGetItemFunc)      (GimpImage *image);
-typedef void            (* GimpSetItemFunc)      (GimpImage *image,
-                                                  GimpItem  *item);
-typedef GList         * (* GimpGetItemsFunc)     (GimpImage *image);
-typedef void            (* GimpSetItemsFunc)     (GimpImage *image,
-                                                  GList     *items);
-typedef void            (* GimpAddItemFunc)      (GimpImage *image,
-                                                  GimpItem  *item,
-                                                  GimpItem  *parent,
-                                                  gint       index,
-                                                  gboolean   push_undo);
-typedef void            (* GimpRemoveItemFunc)   (GimpImage *image,
-                                                  GimpItem  *item,
-                                                  gboolean   push_undo,
-                                                  GimpItem  *new_active);
-typedef GimpItem      * (* GimpNewItemFunc)      (GimpImage *image);
+typedef GimpItem * (* GimpNewItemFunc)  (GimpImage *image);
 
-
-typedef gboolean        (* GimpIsLockedFunc)     (GimpItem  *item);
-typedef gboolean        (* GimpCanLockFunc)      (GimpItem  *item);
-typedef void            (* GimpSetLockFunc)      (GimpItem  *item,
-                                                  gboolean   lock,
-                                                  gboolean   push_undo);
-typedef GimpUndo      * (*GimpUndoLockPush)      (GimpImage     *image,
-                                                  const gchar   *undo_desc,
-                                                  GimpItem      *item);
+typedef gboolean   (* GimpIsLockedFunc) (GimpItem  *item);
+typedef gboolean   (* GimpCanLockFunc)  (GimpItem  *item);
+typedef void       (* GimpSetLockFunc)  (GimpItem  *item,
+                                         gboolean   lock,
+                                         gboolean   push_undo);
+typedef GimpUndo * (*GimpUndoLockPush)  (GimpImage     *image,
+                                         const gchar   *undo_desc,
+                                         GimpItem      *item);
 
 
 #define GIMP_TYPE_ITEM_TREE_VIEW            (gimp_item_tree_view_get_type ())
@@ -64,12 +47,14 @@ typedef GimpUndo      * (*GimpUndoLockPush)      (GimpImage     *image,
 
 typedef struct _GimpItemTreeViewClass   GimpItemTreeViewClass;
 typedef struct _GimpItemTreeViewPrivate GimpItemTreeViewPrivate;
+typedef struct _GimpItemTreeViewSearch  GimpItemTreeViewSearch;
 
 struct _GimpItemTreeView
 {
   GimpContainerTreeView    parent_instance;
 
   GimpItemTreeViewPrivate *priv;
+  GimpItemTreeViewSearch  *search;
 };
 
 struct _GimpItemTreeViewClass
@@ -84,11 +69,6 @@ struct _GimpItemTreeViewClass
   const gchar          *signal_name;
 
   /*  virtual functions for manipulating the image's item tree  */
-  GimpGetContainerFunc  get_container;
-  GimpGetItemsFunc      get_selected_items;
-  GimpSetItemsFunc      set_selected_items;
-  GimpAddItemFunc       add_item;
-  GimpRemoveItemFunc    remove_item;
   GimpNewItemFunc       new_item;
 
   /*  action names  */
@@ -102,6 +82,13 @@ struct _GimpItemTreeViewClass
   const gchar          *lower_bottom_action;
   const gchar          *duplicate_action;
   const gchar          *delete_action;
+
+  const gchar          *move_cursor_up_action;
+  const gchar          *move_cursor_down_action;
+  const gchar          *move_cursor_up_flat_action;
+  const gchar          *move_cursor_down_flat_action;
+  const gchar          *move_cursor_start_action;
+  const gchar          *move_cursor_end_action;
 
   /*  lock content button appearance  */
   const gchar          *lock_content_icon_name;
@@ -117,15 +104,6 @@ struct _GimpItemTreeViewClass
   const gchar          *lock_visibility_icon_name;
   const gchar          *lock_visibility_tooltip;
   const gchar          *lock_visibility_help_id;
-
-  /* actions */
-
-  const gchar          *move_cursor_up_action;
-  const gchar          *move_cursor_down_action;
-  const gchar          *move_cursor_up_flat_action;
-  const gchar          *move_cursor_down_flat_action;
-  const gchar          *move_cursor_start_action;
-  const gchar          *move_cursor_end_action;
 };
 
 

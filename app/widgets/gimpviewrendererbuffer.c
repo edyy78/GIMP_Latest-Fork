@@ -84,7 +84,8 @@ gimp_view_renderer_buffer_render (GimpViewRenderer *renderer,
 
       temp_buf = gimp_viewable_get_new_preview (renderer->viewable,
                                                 renderer->context,
-                                                buffer_width, buffer_height);
+                                                buffer_width, buffer_height,
+                                                NULL);
 
       if (temp_buf)
         {
@@ -97,12 +98,16 @@ gimp_view_renderer_buffer_render (GimpViewRenderer *renderer,
     {
       render_buf = gimp_viewable_get_new_preview (renderer->viewable,
                                                   renderer->context,
-                                                  view_width, view_height);
+                                                  view_width, view_height,
+                                                  NULL);
     }
 
   if (render_buf)
     {
-      gimp_view_renderer_render_temp_buf_simple (renderer, widget, render_buf);
+      gimp_view_renderer_render_temp_buf_simple (renderer, widget,
+                                                 render_buf,
+                                                 GIMP_VIEW_BG_CHECKS,
+                                                 GIMP_VIEW_BG_WHITE);
 
       gimp_temp_buf_unref (render_buf);
     }
@@ -112,6 +117,8 @@ gimp_view_renderer_buffer_render (GimpViewRenderer *renderer,
 
       icon_name = gimp_viewable_get_icon_name (renderer->viewable);
 
-      gimp_view_renderer_render_icon (renderer, widget, icon_name);
+      gimp_view_renderer_render_icon (renderer, widget,
+                                      icon_name,
+                                      gtk_widget_get_scale_factor (widget));
     }
 }

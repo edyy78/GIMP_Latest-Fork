@@ -51,11 +51,9 @@ struct _GimpViewRenderer
   guint               dot_for_dot : 1;
   guint               is_popup    : 1;
 
-  GimpViewBorderType  border_type;
-  GeglColor          *border_color;
-
   /*< protected >*/
   cairo_surface_t    *surface;
+  GimpViewBG          surface_bg;
 
   gint                size;
 
@@ -66,6 +64,9 @@ struct _GimpViewRenderer
 struct _GimpViewRendererClass
 {
   GObjectClass   parent_class;
+
+  GimpViewBG     default_bg;
+  GimpViewBG     follow_theme_bg;
 
   GdkPixbuf     *frame;
   gint           frame_left;
@@ -117,10 +118,12 @@ void   gimp_view_renderer_set_size_full    (GimpViewRenderer   *renderer,
                                             gint                border_width);
 void   gimp_view_renderer_set_dot_for_dot  (GimpViewRenderer   *renderer,
                                             gboolean            dot_for_dot);
+
 void   gimp_view_renderer_set_border_type  (GimpViewRenderer   *renderer,
                                             GimpViewBorderType  border_type);
-void   gimp_view_renderer_set_border_color (GimpViewRenderer   *renderer,
-                                            GeglColor          *border_color);
+GimpViewBorderType
+       gimp_view_renderer_get_border_type  (GimpViewRenderer   *renderer);
+
 void   gimp_view_renderer_set_background   (GimpViewRenderer   *renderer,
                                             const gchar        *icon_name);
 void   gimp_view_renderer_set_color_config (GimpViewRenderer   *renderer,
@@ -143,7 +146,9 @@ void   gimp_view_renderer_draw             (GimpViewRenderer   *renderer,
 
 void   gimp_view_renderer_render_temp_buf_simple (GimpViewRenderer *renderer,
                                                   GtkWidget        *widget,
-                                                  GimpTempBuf      *temp_buf);
+                                                  GimpTempBuf      *temp_buf,
+                                                  GimpViewBG        inside_bg,
+                                                  GimpViewBG        outside_bg);
 void   gimp_view_renderer_render_temp_buf        (GimpViewRenderer *renderer,
                                                   GtkWidget        *widget,
                                                   GimpTempBuf      *temp_buf,
@@ -154,10 +159,12 @@ void   gimp_view_renderer_render_temp_buf        (GimpViewRenderer *renderer,
                                                   GimpViewBG        outside_bg);
 void   gimp_view_renderer_render_pixbuf          (GimpViewRenderer *renderer,
                                                   GtkWidget        *widget,
-                                                  GdkPixbuf        *pixbuf);
+                                                  GdkPixbuf        *pixbuf,
+                                                  gint              pixbuf_scale);
 void   gimp_view_renderer_render_icon            (GimpViewRenderer *renderer,
                                                   GtkWidget        *widget,
-                                                  const gchar      *icon_name);
+                                                  const gchar      *icon_name,
+                                                  gint              icon_scale);
 GimpColorTransform *
        gimp_view_renderer_get_color_transform    (GimpViewRenderer *renderer,
                                                   GtkWidget        *widget,

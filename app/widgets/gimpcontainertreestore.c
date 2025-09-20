@@ -35,6 +35,7 @@
 #include "gimpcellrendererviewable.h"
 #include "gimpcontainertreestore.h"
 #include "gimpcontainerview.h"
+#include "gimpcontainerview-cruft.h"
 #include "gimpviewrenderer.h"
 
 
@@ -630,8 +631,8 @@ gimp_container_tree_store_renderer_update (GimpViewRenderer       *renderer,
   GimpContainerTreeStorePrivate *private = GET_PRIVATE (store);
   GtkTreeIter                   *iter;
 
-  iter = gimp_container_view_lookup (private->container_view,
-                                     renderer->viewable);
+  iter = _gimp_container_view_lookup (private->container_view,
+                                      renderer->viewable);
 
   if (iter)
     {

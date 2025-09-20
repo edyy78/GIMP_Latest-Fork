@@ -13,8 +13,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: GIMP-master\n"
 "Report-Msgid-Bugs-To: https://gitlab.gnome.org/GNOME/gimp/issues\n"
-"POT-Creation-Date: 2025-03-10 15:15+0000\n"
-"PO-Revision-Date: 2025-03-17 18:55+0800\n"
+"POT-Creation-Date: 2025-07-06 18:46+0000\n"
+"PO-Revision-Date: 2025-07-07 08:00+0800\n"
 "Last-Translator: lumingzh <lumingzh@qq.com>\n"
 "Language-Team: Chinese (China) <i18n-zh@googlegroups.com>\n"
 "Language: zh_CN\n"
@@ -22,7 +22,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
-"X-Generator: Gtranslator 47.1\n"
+"X-Generator: Gtranslator 48.0\n"
 
 #: libgimp/gimpbrushchooser.c:134 libgimp/gimppatternchooser.c:129
 msgid "_Browse..."
@@ -229,20 +229,20 @@ msgstr "注释"
 msgid "Image comment"
 msgstr "图像注释"
 
-#: libgimp/gimpexportproceduredialog.c:150
+#: libgimp/gimpexportproceduredialog.c:155
 msgid "Metadata"
 msgstr "元数据"
 
-#: libgimp/gimpexportproceduredialog.c:159
+#: libgimp/gimpexportproceduredialog.c:164
 msgid "Edit Metadata"
 msgstr "编辑元数据"
 
-#: libgimp/gimpexportproceduredialog.c:159
+#: libgimp/gimpexportproceduredialog.c:164
 msgid "(edit)"
 msgstr "（编辑）"
 
 #. TRANSLATORS: %s will be a format name, e.g. "PNG" or "JPEG".
-#: libgimp/gimpexportproceduredialog.c:436
+#: libgimp/gimpexportproceduredialog.c:460
 #, c-format
 msgid "Export Image as %s"
 msgstr "导出图像为 %s"
@@ -431,9 +431,9 @@ msgstr "导出(_E)"
 
 #: libgimp/gimpproceduredialog.c:318 libgimp/gimpproceduredialog.c:617
 #: libgimpwidgets/gimpcolorbutton.c:553 libgimpwidgets/gimpfilechooser.c:713
-#: libgimpwidgets/gimpfileentry.c:466 libgimpwidgets/gimpquerybox.c:274
-#: libgimpwidgets/gimpquerybox.c:337 libgimpwidgets/gimpquerybox.c:403
-#: libgimpwidgets/gimpquerybox.c:479
+#: libgimpwidgets/gimpfileentry.c:466 libgimpwidgets/gimpquerybox.c:276
+#: libgimpwidgets/gimpquerybox.c:339 libgimpwidgets/gimpquerybox.c:405
+#: libgimpwidgets/gimpquerybox.c:481
 msgid "_OK"
 msgstr "确定(_O)"
 
@@ -445,8 +445,8 @@ msgstr "重置(_R)"
 #: libgimpwidgets/gimpcolorprofilechooserdialog.c:172
 #: libgimpwidgets/gimpcolorprofilechooserdialog.c:182
 #: libgimpwidgets/gimpfilechooser.c:714 libgimpwidgets/gimpfileentry.c:465
-#: libgimpwidgets/gimpquerybox.c:274 libgimpwidgets/gimpquerybox.c:337
-#: libgimpwidgets/gimpquerybox.c:403 libgimpwidgets/gimpquerybox.c:479
+#: libgimpwidgets/gimpquerybox.c:276 libgimpwidgets/gimpquerybox.c:339
+#: libgimpwidgets/gimpquerybox.c:405 libgimpwidgets/gimpquerybox.c:481
 msgid "_Cancel"
 msgstr "取消(_C)"
 
@@ -466,31 +466,31 @@ msgstr "保存设置(_S)"
 msgid "Store current settings for later reuse"
 msgstr "为之后重用保存当前设置"
 
-#: libgimp/gimpproceduredialog.c:869
+#: libgimp/gimpproceduredialog.c:892
 msgid "Brush Chooser"
 msgstr "笔刷选择器"
 
-#: libgimp/gimpproceduredialog.c:873
+#: libgimp/gimpproceduredialog.c:896
 msgid "Font Chooser"
 msgstr "字体选择器"
 
-#: libgimp/gimpproceduredialog.c:877
+#: libgimp/gimpproceduredialog.c:900
 msgid "Gradient Chooser"
 msgstr "渐变选择器"
 
-#: libgimp/gimpproceduredialog.c:881
+#: libgimp/gimpproceduredialog.c:904
 msgid "Palette Chooser"
 msgstr "色板选择器"
 
-#: libgimp/gimpproceduredialog.c:885
+#: libgimp/gimpproceduredialog.c:908
 msgid "Pattern Chooser"
 msgstr "图案选择器"
 
-#: libgimp/gimpproceduredialog.c:2647
+#: libgimp/gimpproceduredialog.c:2789
 msgid "Reset to _Initial Values"
 msgstr "重置为初始值(_I)"
 
-#: libgimp/gimpproceduredialog.c:2656
+#: libgimp/gimpproceduredialog.c:2798
 msgid "Reset to _Factory Defaults"
 msgstr "重置为出厂默认值(_F)"
 
@@ -898,23 +898,23 @@ msgstr "64 位浮点数"
 
 #: libgimpbase/gimpbaseenums.c:387
 msgctxt "convert-palette-type"
-msgid "Generate optimum palette"
-msgstr "生成最佳色板"
+msgid "_Generate optimum palette"
+msgstr "生成最佳色板(_G)"
 
 #: libgimpbase/gimpbaseenums.c:388
 msgctxt "convert-palette-type"
-msgid "Use web-optimized palette"
-msgstr "使用为网页优化的色板"
+msgid "Use _web-optimized palette"
+msgstr "使用为网页优化的色板(_W)"
 
 #: libgimpbase/gimpbaseenums.c:389
 msgctxt "convert-palette-type"
-msgid "Use black and white (1-bit) palette"
-msgstr "使用黑白（1 位）色板"
+msgid "Use _black and white (1-bit) palette"
+msgstr "使用黑白（1 位）色板(_B)"
 
 #: libgimpbase/gimpbaseenums.c:390
 msgctxt "convert-palette-type"
-msgid "Use custom palette"
-msgstr "使用自定义色板"
+msgid "Use custom _palette"
+msgstr "使用自定义色板(_P)"
 
 #: libgimpbase/gimpbaseenums.c:419
 msgctxt "convolve-type"
@@ -2116,19 +2116,19 @@ msgstr "解析 “%s” 第 %d 行时出错：%s"
 msgid "Module '%s' load error: %s"
 msgstr "模块“%s”加载错误：%s"
 
-#: libgimpmodule/gimpmoduledb.c:450
+#: libgimpmodule/gimpmoduledb.c:458
 msgid "Module error"
 msgstr "模块错误"
 
-#: libgimpmodule/gimpmoduledb.c:451
+#: libgimpmodule/gimpmoduledb.c:459
 msgid "Loaded"
 msgstr "已加载"
 
-#: libgimpmodule/gimpmoduledb.c:452
+#: libgimpmodule/gimpmoduledb.c:460
 msgid "Load failed"
 msgstr "加载失败"
 
-#: libgimpmodule/gimpmoduledb.c:453
+#: libgimpmodule/gimpmoduledb.c:461
 msgid "Not loaded"
 msgstr "未加载"
 
@@ -2251,7 +2251,7 @@ msgid "HSV"
 msgstr "HSV"
 
 #: libgimpwidgets/gimpcolorscales.c:708 libgimpwidgets/gimpcolorselect.c:2113
-#: modules/color-selector-cmyk.c:301 modules/color-selector-cmyk.c:385
+#: modules/color-selector-cmyk.c:321 modules/color-selector-cmyk.c:405
 #: modules/color-selector-water.c:258 modules/color-selector-wheel.c:191
 #, c-format
 msgid "Profile: %s"
@@ -2453,7 +2453,7 @@ msgstr "自定义方格颜色 1"
 msgid "Custom Checks Color 2"
 msgstr "自定义方格颜色 2"
 
-#: libgimpwidgets/gimppropwidgets.c:2474
+#: libgimpwidgets/gimppropwidgets.c:2552
 #, c-format
 msgid "This text input field is limited to %d character."
 msgid_plural "This text input field is limited to %d characters."
@@ -2644,51 +2644,55 @@ msgctxt "zoom-type"
 msgid "Zoom out"
 msgstr "缩小"
 
-#: modules/color-selector-cmyk.c:85
+#: modules/color-selector-cmyk.c:87
 msgid "CMYK color selector (using color profile)"
 msgstr "CMYK 颜色选择器（使用特性文件）"
 
-#: modules/color-selector-cmyk.c:119
+#: modules/color-selector-cmyk.c:121
 msgid "CMYK"
 msgstr "CMYK"
 
 #. Cyan
-#: modules/color-selector-cmyk.c:143
+#: modules/color-selector-cmyk.c:145
 msgid "_C"
 msgstr "_C"
 
 #. Magenta
-#: modules/color-selector-cmyk.c:145
+#: modules/color-selector-cmyk.c:147
 msgid "_M"
 msgstr "_M"
 
 #. Yellow
-#: modules/color-selector-cmyk.c:147
+#: modules/color-selector-cmyk.c:149
 msgid "_Y"
 msgstr "_Y"
 
 #. Key (Black)
-#: modules/color-selector-cmyk.c:149
+#: modules/color-selector-cmyk.c:151
 msgid "_K"
 msgstr "_K"
 
-#: modules/color-selector-cmyk.c:153
+#: modules/color-selector-cmyk.c:155
 msgid "Cyan"
 msgstr "青色"
 
-#: modules/color-selector-cmyk.c:154
+#: modules/color-selector-cmyk.c:156
 msgid "Magenta"
 msgstr "品红"
 
-#: modules/color-selector-cmyk.c:155
+#: modules/color-selector-cmyk.c:157
 msgid "Yellow"
 msgstr "黄色"
 
-#: modules/color-selector-cmyk.c:156
+#: modules/color-selector-cmyk.c:158
 msgid "Black"
 msgstr "黑色"
 
-#: modules/color-selector-cmyk.c:288 modules/color-selector-cmyk.c:367
+#: modules/color-selector-cmyk.c:265
+msgid "Total Ink Coverage"
+msgstr "总油墨覆盖"
+
+#: modules/color-selector-cmyk.c:308 modules/color-selector-cmyk.c:387
 msgid "Profile: (none)"
 msgstr "特性文件：（无）"
 

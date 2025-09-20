@@ -49,6 +49,19 @@
 
 #include "gimp-intl.h"
 
+
+void
+_gimp_drawable_filters_init (GimpDrawable *drawable)
+{
+  drawable->private->filter_stack = gimp_filter_stack_new (GIMP_TYPE_FILTER);
+}
+
+void
+_gimp_drawable_filters_finalize (GimpDrawable *drawable)
+{
+  g_clear_object (&drawable->private->filter_stack);
+}
+
 GimpContainer *
 gimp_drawable_get_filters (GimpDrawable *drawable)
 {
@@ -75,6 +88,58 @@ gimp_drawable_has_visible_filters (GimpDrawable *drawable)
     }
 
   return FALSE;
+}
+
+gboolean
+gimp_drawable_n_editable_filters (GimpDrawable *drawable,
+                                  gint         *n_editable,
+                                  gint         *first,
+                                  gint         *last)
+{
+  GList    *list;
+  gboolean  editing_blocked = FALSE;
+  gint      index           = 0;
+  gint      n               = 0;
+  gint      first_editable  = -1;
+  gint      last_editable   = -1;
+
+  g_return_val_if_fail (GIMP_IS_DRAWABLE (drawable), FALSE);
+
+  for (list = GIMP_LIST (drawable->private->filter_stack)->queue->head;
+       list;
+       list = g_list_next (list), index++)
+    {
+      GimpFilter *filter   = list->data;
+      gboolean    editable = FALSE;
+
+      if (GIMP_IS_DRAWABLE_FILTER (filter))
+        {
+          if (gimp_drawable_filter_get_temporary (GIMP_DRAWABLE_FILTER (filter)))
+            {
+              editing_blocked = TRUE;
+            }
+          else
+            {
+              editable = TRUE;
+            }
+        }
+
+      if (editable)
+        {
+          n++;
+
+          if (first_editable == -1)
+            first_editable = index;
+
+          last_editable = index;
+        }
+    }
+
+  if (n_editable) *n_editable = n;
+  if (first)      *first      = first_editable;
+  if (last)       *last       = last_editable;
+
+  return ! editing_blocked;
 }
 
 void
@@ -115,16 +180,105 @@ gimp_drawable_clear_filters (GimpDrawable *drawable)
   gimp_drawable_filters_changed (drawable);
 }
 
+gboolean
+gimp_drawable_has_filter (GimpDrawable *drawable,
+                          GimpFilter   *filter)
+{
+  gboolean filter_exists = FALSE;
+
+  g_return_val_if_fail (GIMP_IS_DRAWABLE (drawable), FALSE);
+  g_return_val_if_fail (GIMP_IS_FILTER (filter), FALSE);
+
+  filter_exists = gimp_container_have (drawable->private->filter_stack,
+                                       GIMP_OBJECT (filter));
+
+  return filter_exists;
+}
+
+gboolean
+gimp_drawable_raise_filter (GimpDrawable *drawable,
+                            GimpFilter   *filter)
+{
+  gint index;
+
+  g_return_val_if_fail (GIMP_IS_DRAWABLE (drawable), FALSE);
+  g_return_val_if_fail (GIMP_IS_DRAWABLE_FILTER (filter), FALSE);
+  g_return_val_if_fail (gimp_drawable_has_filter (drawable, filter), FALSE);
+
+  if (gimp_drawable_filter_get_mask (GIMP_DRAWABLE_FILTER (filter)) == NULL)
+    return FALSE;
+
+  index = gimp_container_get_child_index (drawable->private->filter_stack,
+                                          GIMP_OBJECT (filter));
+  index--;
+
+  if (index >= 0)
+    {
+      gimp_image_undo_push_filter_reorder (gimp_item_get_image (GIMP_ITEM (drawable)),
+                                           _("Reorder filter"),
+                                           drawable,
+                                           GIMP_DRAWABLE_FILTER (filter));
+
+      gimp_container_reorder (drawable->private->filter_stack,
+                              GIMP_OBJECT (filter), index);
+
+      gimp_drawable_update (drawable, 0, 0, -1, -1);
+
+      return TRUE;
+    }
+
+  return FALSE;
+}
+
+gboolean
+gimp_drawable_lower_filter (GimpDrawable *drawable,
+                            GimpFilter   *filter)
+{
+  gint index;
+
+  g_return_val_if_fail (GIMP_IS_DRAWABLE (drawable), FALSE);
+  g_return_val_if_fail (GIMP_IS_DRAWABLE_FILTER (filter), FALSE);
+  g_return_val_if_fail (gimp_drawable_has_filter (drawable, filter), FALSE);
+
+  if (gimp_drawable_filter_get_mask (GIMP_DRAWABLE_FILTER (filter)) == NULL)
+    return FALSE;
+
+  index = gimp_container_get_child_index (drawable->private->filter_stack,
+                                          GIMP_OBJECT (filter));
+  index++;
+
+  if (index < gimp_container_get_n_children (drawable->private->filter_stack))
+    {
+      /* Don't rearrange filters with floating selection */
+      if (! GIMP_IS_DRAWABLE_FILTER (gimp_container_get_child_by_index (drawable->private->filter_stack,
+                                                                        index)))
+        return FALSE;
+
+      gimp_image_undo_push_filter_reorder (gimp_item_get_image (GIMP_ITEM (drawable)),
+                                           _("Reorder filter"),
+                                           drawable,
+                                           GIMP_DRAWABLE_FILTER (filter));
+
+      gimp_container_reorder (drawable->private->filter_stack,
+                              GIMP_OBJECT (filter), index);
+
+      gimp_drawable_update (drawable, 0, 0, -1, -1);
+
+      return TRUE;
+    }
+
+  return FALSE;
+}
+
 void
 gimp_drawable_merge_filters (GimpDrawable *drawable)
 {
-  GList       *list;
   GimpImage   *image;
-  GimpChannel *selection = NULL;
-  GeglBuffer  *buffer    = NULL;
+  GimpChannel *selection;
+  GeglBuffer  *buffer;
+  GList       *list;
 
-  if (! GIMP_IS_DRAWABLE (drawable))
-    return;
+  g_return_if_fail (GIMP_IS_DRAWABLE (drawable));
 
   image = gimp_item_get_image (GIMP_ITEM (drawable));
 
@@ -145,7 +299,8 @@ gimp_drawable_merge_filters (GimpDrawable *drawable)
    */
   if (GIMP_LIST (drawable->private->filter_stack)->queue->head)
     {
-      GimpDrawableFilter *top_filter = NULL;
+      GimpDrawableFilter *filter    = NULL;
+      gboolean            add_alpha = FALSE;
 
       for (list = GIMP_LIST (drawable->private->filter_stack)->queue->tail;
            list;
@@ -153,34 +308,55 @@ gimp_drawable_merge_filters (GimpDrawable *drawable)
         {
           if (GIMP_IS_DRAWABLE_FILTER (list->data) &&
               gimp_filter_get_active (GIMP_FILTER (list->data)))
-            top_filter = list->data;
+            {
+              filter = list->data;
+
+              if (! add_alpha)
+                add_alpha = gimp_drawable_filter_get_add_alpha (filter);
+            }
         }
 
-      if (top_filter)
+      if (filter)
         {
           GimpApplicator *applicator;
           GeglNode       *graph;
           GeglNode       *output;
           GeglRectangle   output_rect;
 
+          if (GIMP_IS_LAYER (drawable) && add_alpha)
+            gimp_layer_add_alpha (GIMP_LAYER (drawable));
+
           graph       = gimp_filter_stack_get_graph (GIMP_FILTER_STACK (drawable->private->filter_stack));
           output      = gegl_node_get_output_proxy (graph, "output");
           output_rect = gegl_node_get_bounding_box (output);
           buffer      = gegl_buffer_new (&output_rect, gimp_drawable_get_format (drawable));
 
-          applicator  = gimp_filter_get_applicator (GIMP_FILTER (top_filter));
+          applicator  = gimp_filter_get_applicator (GIMP_FILTER (filter));
           gimp_applicator_set_dest_buffer (applicator, buffer);
           gimp_applicator_blit (applicator, gegl_buffer_get_extent (buffer));
           gimp_drawable_set_buffer (drawable, TRUE, NULL, buffer);
           g_clear_object (&buffer);
         }
 
-      while ((list = GIMP_LIST (drawable->private->filter_stack)->queue->tail))
+      /*  don't use a for() loop because we are deleting the list
+       *  under our feet
+       */
+      list = GIMP_LIST (drawable->private->filter_stack)->queue->head;
+      while (list)
         {
-          gimp_image_undo_push_filter_remove (gimp_item_get_image (GIMP_ITEM (drawable)),
-                                              _("Merge filter"), drawable, list->data);
+          filter = list->data;
 
-          gimp_drawable_remove_filter (drawable, GIMP_FILTER (list->data));
+          list = list->next;
+
+          if (GIMP_IS_DRAWABLE_FILTER (filter) &&
+              ! gimp_drawable_filter_get_temporary (filter))
+
+            {
+              gimp_image_undo_push_filter_remove (gimp_item_get_image (GIMP_ITEM (drawable)),
+                                                  _("Merge filter"),
+                                                  drawable, filter);
+              gimp_drawable_remove_filter (drawable, GIMP_FILTER (filter));
+            }
         }
     }
 
@@ -195,21 +371,6 @@ gimp_drawable_merge_filters (GimpDrawable *drawable)
   g_object_unref (selection);
 
   gimp_drawable_filters_changed (drawable);
-}
-
-gboolean
-gimp_drawable_has_filter (GimpDrawable *drawable,
-                          GimpFilter   *filter)
-{
-  gboolean filter_exists = FALSE;
-
-  g_return_val_if_fail (GIMP_IS_DRAWABLE (drawable), FALSE);
-  g_return_val_if_fail (GIMP_IS_FILTER (filter), FALSE);
-
-  filter_exists = gimp_container_have (drawable->private->filter_stack,
-                                       GIMP_OBJECT (filter));
-
-  return filter_exists;
 }
 
 gboolean

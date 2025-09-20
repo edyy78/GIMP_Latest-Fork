@@ -27,30 +27,23 @@
 
 #define GIMP_VIEWABLE_MAX_PREVIEW_SIZE 2048
 #define GIMP_VIEWABLE_MAX_POPUP_SIZE    256
-#define GIMP_VIEWABLE_MAX_BUTTON_SIZE    64
+#define GIMP_VIEWABLE_MAX_BUTTON_SIZE  GIMP_VIEW_SIZE_GIGANTIC
 #define GIMP_VIEWABLE_MAX_MENU_SIZE      48
 
 
-#define GIMP_TYPE_VIEWABLE            (gimp_viewable_get_type ())
-#define GIMP_VIEWABLE(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_VIEWABLE, GimpViewable))
-#define GIMP_VIEWABLE_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_VIEWABLE, GimpViewableClass))
-#define GIMP_IS_VIEWABLE(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_VIEWABLE))
-#define GIMP_IS_VIEWABLE_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_VIEWABLE))
-#define GIMP_VIEWABLE_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_VIEWABLE, GimpViewableClass))
+#define GIMP_TYPE_VIEWABLE (gimp_viewable_get_type ())
+G_DECLARE_DERIVABLE_TYPE (GimpViewable,
+                          gimp_viewable,
+                          GIMP, VIEWABLE,
+                          GimpObject)
 
-
-typedef struct _GimpViewableClass GimpViewableClass;
-
-struct _GimpViewable
-{
-  GimpObject  parent_instance;
-};
 
 struct _GimpViewableClass
 {
   GimpObjectClass  parent_class;
 
   const gchar     *default_icon_name;
+  const gchar     *default_name;
   const gchar     *name_changed_signal;
   gboolean         name_editable;
 
@@ -79,19 +72,23 @@ struct _GimpViewableClass
   GimpTempBuf   * (* get_preview)        (GimpViewable  *viewable,
                                           GimpContext   *context,
                                           gint           width,
-                                          gint           height);
+                                          gint           height,
+                                          GeglColor     *fg_color);
   GimpTempBuf   * (* get_new_preview)    (GimpViewable  *viewable,
                                           GimpContext   *context,
                                           gint           width,
-                                          gint           height);
+                                          gint           height,
+                                          GeglColor     *fg_color);
   GdkPixbuf     * (* get_pixbuf)         (GimpViewable  *viewable,
                                           GimpContext   *context,
                                           gint           width,
-                                          gint           height);
+                                          gint           height,
+                                          GeglColor     *fg_color);
   GdkPixbuf     * (* get_new_pixbuf)     (GimpViewable  *viewable,
                                           GimpContext   *context,
                                           gint           width,
-                                          gint           height);
+                                          gint           height,
+                                          GeglColor     *fg_color);
   gchar         * (* get_description)    (GimpViewable  *viewable,
                                           gchar        **tooltip);
 
@@ -125,6 +122,7 @@ void            gimp_viewable_calc_preview_size  (gint           aspect_width,
                                                   gint          *return_height,
                                                   gboolean      *scaling_up);
 
+gboolean        gimp_viewable_has_preview        (GimpViewable  *viewable);
 gboolean        gimp_viewable_get_size           (GimpViewable  *viewable,
                                                   gint          *width,
                                                   gint          *height);
@@ -144,11 +142,13 @@ gboolean        gimp_viewable_get_popup_size     (GimpViewable  *viewable,
 GimpTempBuf   * gimp_viewable_get_preview        (GimpViewable  *viewable,
                                                   GimpContext   *context,
                                                   gint           width,
-                                                  gint           height);
+                                                  gint           height,
+                                                  GeglColor     *fg_color);
 GimpTempBuf   * gimp_viewable_get_new_preview    (GimpViewable  *viewable,
                                                   GimpContext   *context,
                                                   gint           width,
-                                                  gint           height);
+                                                  gint           height,
+                                                  GeglColor     *fg_color);
 
 GimpTempBuf   * gimp_viewable_get_dummy_preview  (GimpViewable  *viewable,
                                                   gint           width,
@@ -158,11 +158,13 @@ GimpTempBuf   * gimp_viewable_get_dummy_preview  (GimpViewable  *viewable,
 GdkPixbuf     * gimp_viewable_get_pixbuf         (GimpViewable  *viewable,
                                                   GimpContext   *context,
                                                   gint           width,
-                                                  gint           height);
+                                                  gint           height,
+                                                  GeglColor     *fg_color);
 GdkPixbuf     * gimp_viewable_get_new_pixbuf     (GimpViewable  *viewable,
                                                   GimpContext   *context,
                                                   gint           width,
-                                                  gint           height);
+                                                  gint           height,
+                                                  GeglColor     *fg_color);
 
 GdkPixbuf     * gimp_viewable_get_dummy_pixbuf   (GimpViewable  *viewable,
                                                   gint           width,

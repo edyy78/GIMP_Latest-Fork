@@ -42,6 +42,8 @@
 #define SVG_DEFAULT_SIZE        500
 #define SVG_PREVIEW_SIZE        128
 
+#define EPSILON 1e-6
+
 
 typedef struct
 {
@@ -74,7 +76,6 @@ static GList          * svg_query_procedures (GimpPlugIn            *plug_in);
 static GimpProcedure  * svg_create_procedure (GimpPlugIn            *plug_in,
                                               const gchar           *name);
 
-static GimpUnit      * svg_rsvg_to_gimp_unit (RsvgUnit               unit);
 static gboolean        svg_extract           (GimpProcedure         *procedure,
                                               GimpRunMode            run_mode,
                                               GFile                 *file,
@@ -114,9 +115,14 @@ static GimpPDBStatusType   load_dialog       (GFile                 *file,
                                               GimpProcedureConfig   *config,
                                               GimpVectorLoadData     extracted_data,
                                               GError               **error);
+static gboolean       svg_extract_dimensions (RsvgHandle            *handle,
+                                              GimpVectorLoadData    *extracted_dimensions);
 
+#if LIBRSVG_CHECK_VERSION(2, 46, 0)
+static GimpUnit      * svg_rsvg_to_gimp_unit (RsvgUnit               unit);
 static void              svg_destroy_surface (guchar                *pixels,
                                               cairo_surface_t       *surface);
+#endif
 
 
 
@@ -189,39 +195,13 @@ svg_create_procedure (GimpPlugIn  *plug_in,
                                           _("_Paths"),
                                           _("Whether and how to import paths so that they can be used with the path tool"),
                                           gimp_choice_new_with_values ("no-import",     0, _("Don't import paths"),        NULL,
-                                                                       "import",        0, _("Import paths individually"), NULL,
-                                                                       "import-merged", 0, _("Merge imported paths"),      NULL,
+                                                                       "import",        1, _("Import paths individually"), NULL,
+                                                                       "import-merged", 2, _("Merge imported paths"),      NULL,
                                                                        NULL),
                                           "no-import", G_PARAM_READWRITE);
     }
 
   return procedure;
-}
-
-static GimpUnit *
-svg_rsvg_to_gimp_unit (RsvgUnit unit)
-{
-  switch (unit)
-    {
-    case RSVG_UNIT_PERCENT:
-      return gimp_unit_percent ();
-    case RSVG_UNIT_PX:
-      return gimp_unit_pixel ();
-    case RSVG_UNIT_IN:
-      return gimp_unit_inch ();
-    case RSVG_UNIT_MM:
-      return gimp_unit_mm ();
-    case RSVG_UNIT_PT:
-      return gimp_unit_point ();
-    case RSVG_UNIT_PC:
-      return gimp_unit_pica ();
-    case RSVG_UNIT_CM:
-    case RSVG_UNIT_EM:
-    case RSVG_UNIT_EX:
-      /*case RSVG_UNIT_CH:*/
-    default:
-      return NULL;
-    }
 }
 
 static gboolean
@@ -236,18 +216,7 @@ svg_extract (GimpProcedure        *procedure,
              gpointer              extract_data,
              GError              **error)
 {
-  RsvgHandle        *handle;
-#if LIBRSVG_CHECK_VERSION(2, 46, 0)
-  gboolean           out_has_width;
-  RsvgLength         out_width;
-  gboolean           out_has_height;
-  RsvgLength         out_height;
-  gboolean           out_has_viewbox;
-  RsvgRectangle      out_viewbox;
-#endif
-#if ! LIBRSVG_CHECK_VERSION(2, 52, 0)
-  RsvgDimensionData  dim;
-#endif
+  RsvgHandle *handle;
 
   g_return_val_if_fail (extracted_dimensions != NULL, FALSE);
   g_return_val_if_fail (data_for_run_destroy != NULL && *data_for_run_destroy == NULL, FALSE);
@@ -265,6 +234,8 @@ svg_extract (GimpProcedure        *procedure,
           GtkWidget *label;
           gchar     *text;
           gboolean   retry;
+
+          gimp_ui_init (PLUG_IN_BINARY);
 
           /* We need to ask explicitly before using the "unlimited" size
            * option (XML_PARSE_HUGE in libxml) because it is considered
@@ -341,14 +312,42 @@ svg_extract (GimpProcedure        *procedure,
         return FALSE;
     }
 
+  if (! svg_extract_dimensions (handle, extracted_dimensions))
+    {
+      g_object_unref (handle);
+      return FALSE;
+    }
+
+  *data_for_run = handle;
+  *data_for_run_destroy = g_object_unref;
+
+  return TRUE;
+}
+
+static gboolean
+svg_extract_dimensions (RsvgHandle         *handle,
+                        GimpVectorLoadData *extracted_dimensions)
+{
+#if LIBRSVG_CHECK_VERSION(2, 46, 0)
+  gboolean           out_has_width;
+  RsvgLength         out_width;
+  gboolean           out_has_height;
+  RsvgLength         out_height;
+  gboolean           out_has_viewbox;
+  RsvgRectangle      out_viewbox;
+#endif
+#if ! LIBRSVG_CHECK_VERSION(2, 52, 0)
+  RsvgDimensionData  dim;
+#endif
+
   /* SVG has no pixel density information */
   extracted_dimensions->exact_density = TRUE;
   extracted_dimensions->correct_ratio = TRUE;
 
 #if LIBRSVG_CHECK_VERSION(2, 46, 0)
   rsvg_handle_get_intrinsic_dimensions (handle,
-                                        &out_has_width, &out_width,
-                                        &out_has_height, &out_height,
+                                        &out_has_width,   &out_width,
+                                        &out_has_height,  &out_height,
                                         &out_has_viewbox, &out_viewbox);
 
   if (out_has_width && out_has_height)
@@ -466,9 +465,6 @@ svg_extract (GimpProcedure        *procedure,
   extracted_dimensions->exact_height  = FALSE;
   extracted_dimensions->correct_ratio = TRUE;
 #endif
-
-  *data_for_run = handle;
-  *data_for_run_destroy = g_object_unref;
 
   return TRUE;
 }
@@ -659,11 +655,17 @@ load_rsvg_pixbuf (RsvgHandle  *handle,
   GdkPixbuf  *pixbuf  = NULL;
 
 #if LIBRSVG_CHECK_VERSION(2, 46, 0)
-  cairo_surface_t *surface  = NULL;
-  cairo_t         *cr       = NULL;
-  RsvgRectangle    viewport = { 0, };
-  guchar          *src;
-  gint             y;
+  cairo_surface_t   *surface  = NULL;
+  cairo_t           *cr       = NULL;
+  RsvgRectangle      viewport = { 0, };
+  guchar            *src;
+  gint               y;
+  /* Aspect-ratio breaking is only implemented with newer librsvg API. */
+  GimpVectorLoadData dimensions;
+  gdouble            x_scale       = 1.0;
+  gdouble            y_scale       = 1.0;
+  gdouble            aspect_width  = width;
+  gdouble            aspect_height = height;
 #else
   SvgLoadVals      vals;
 #endif
@@ -672,11 +674,38 @@ load_rsvg_pixbuf (RsvgHandle  *handle,
 
   rsvg_handle_set_dpi (handle, resolution);
 #if LIBRSVG_CHECK_VERSION(2, 46, 0)
+  if (svg_extract_dimensions (handle, &dimensions))
+    {
+      if (fabs ((gdouble) dimensions.width / dimensions.height - (gdouble) width / height) < EPSILON)
+        {
+          rsvg_handle_set_dpi (handle, resolution);
+        }
+      else if ((gdouble) dimensions.width / dimensions.height > (gdouble) width / height)
+        {
+          aspect_height = (gdouble) width * dimensions.height / dimensions.width;
+          /* XXX The X/Y resolution doesn't change a thing regarding
+           * rendering unfortunately so we still have to scale when the
+           * aspect ratio is not kept. I still set these, just in case.
+           */
+          rsvg_handle_set_dpi_x_y (handle, resolution, aspect_height / height * resolution);
+          y_scale = height / aspect_height;
+        }
+      else
+        {
+          aspect_width = (gdouble) height * dimensions.width / dimensions.height;
+          rsvg_handle_set_dpi_x_y (handle, aspect_width / width * resolution, resolution);
+          x_scale = width / aspect_width;
+        }
+    }
+
   surface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32, width, height);
   cr      = cairo_create (surface);
 
-  viewport.width  = width;
-  viewport.height = height;
+  viewport.width  = (double) aspect_width;
+  viewport.height = (double) aspect_height;
+
+  if (x_scale != 1.0 || y_scale != 1.0)
+    cairo_scale (cr, x_scale, y_scale);
 
   rsvg_handle_render_document (handle, cr, &viewport, NULL);
   pixbuf = gdk_pixbuf_new_from_data (cairo_image_surface_get_data (surface),
@@ -705,7 +734,7 @@ load_rsvg_pixbuf (RsvgHandle  *handle,
   vals.resolution = resolution;
   vals.width      = width;
   vals.height     = height;
-  rsvg_handle_set_size_callback (handle, load_set_size_callback, vals, NULL);
+  rsvg_handle_set_size_callback (handle, load_set_size_callback, (gpointer) &vals, NULL);
   pixbuf = rsvg_handle_get_pixbuf (handle);
 #endif
 
@@ -814,9 +843,37 @@ load_dialog (GFile                *file,
   return run ? GIMP_PDB_SUCCESS : GIMP_PDB_CANCEL;
 }
 
+#if LIBRSVG_CHECK_VERSION(2, 46, 0)
+static GimpUnit *
+svg_rsvg_to_gimp_unit (RsvgUnit unit)
+{
+  switch (unit)
+    {
+    case RSVG_UNIT_PERCENT:
+      return gimp_unit_percent ();
+    case RSVG_UNIT_PX:
+      return gimp_unit_pixel ();
+    case RSVG_UNIT_IN:
+      return gimp_unit_inch ();
+    case RSVG_UNIT_MM:
+      return gimp_unit_mm ();
+    case RSVG_UNIT_PT:
+      return gimp_unit_point ();
+    case RSVG_UNIT_PC:
+      return gimp_unit_pica ();
+    case RSVG_UNIT_CM:
+    case RSVG_UNIT_EM:
+    case RSVG_UNIT_EX:
+      /*case RSVG_UNIT_CH:*/
+    default:
+      return NULL;
+    }
+}
+
 static void
 svg_destroy_surface (guchar          *pixels,
                      cairo_surface_t *surface)
 {
   cairo_surface_destroy (surface);
 }
+#endif

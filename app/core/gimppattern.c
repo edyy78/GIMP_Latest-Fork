@@ -49,7 +49,8 @@ static gboolean      gimp_pattern_get_size          (GimpViewable         *viewa
 static GimpTempBuf * gimp_pattern_get_new_preview   (GimpViewable         *viewable,
                                                      GimpContext          *context,
                                                      gint                  width,
-                                                     gint                  height);
+                                                     gint                  height,
+                                                     GeglColor            *fg_color);
 static gchar       * gimp_pattern_get_description   (GimpViewable         *viewable,
                                                      gchar               **tooltip);
 
@@ -80,6 +81,7 @@ gimp_pattern_class_init (GimpPatternClass *klass)
   gimp_object_class->get_memsize    = gimp_pattern_get_memsize;
 
   viewable_class->default_icon_name = "gimp-tool-bucket-fill";
+  viewable_class->default_name      = _("Pattern");
   viewable_class->get_size          = gimp_pattern_get_size;
   viewable_class->get_new_preview   = gimp_pattern_get_new_preview;
   viewable_class->get_description   = gimp_pattern_get_description;
@@ -141,7 +143,8 @@ static GimpTempBuf *
 gimp_pattern_get_new_preview (GimpViewable *viewable,
                               GimpContext  *context,
                               gint          width,
-                              gint          height)
+                              gint          height,
+                              GeglColor    *fg_color G_GNUC_UNUSED)
 {
   GimpPattern *pattern     = GIMP_PATTERN (viewable);
   GimpTempBuf *temp_buf;

@@ -32,10 +32,12 @@
 #include "core/gimpcontext.h"
 #include "core/gimpcontainer.h"
 #include "core/gimpviewable.h"
+#include "core/gimp-utils.h"
 
 #include "gimpcontainerbox.h"
 #include "gimpcontainereditor.h"
 #include "gimpcontainerpopup.h"
+#include "gimpcontainerlistview.h"
 #include "gimpcontainertreeview.h"
 #include "gimpcontainerview.h"
 #include "gimpdialogfactory.h"
@@ -117,9 +119,9 @@ gimp_container_popup_confirm (GimpPopup *popup)
   GimpObject         *object;
 
   object = gimp_context_get_by_type (c_popup->context,
-                                     gimp_container_get_children_type (c_popup->container));
+                                     gimp_container_get_child_type (c_popup->container));
   gimp_context_set_by_type (c_popup->orig_context,
-                            gimp_container_get_children_type (c_popup->container),
+                            gimp_container_get_child_type (c_popup->container),
                             object);
 
   GIMP_POPUP_CLASS (parent_class)->confirm (popup);
@@ -173,7 +175,7 @@ gimp_container_popup_new (GimpContainer     *container,
   popup->view_border_width = view_border_width;
 
   g_signal_connect (popup->context,
-                    gimp_context_type_to_signal_name (gimp_container_get_children_type (container)),
+                    gimp_context_type_to_signal_name (gimp_container_get_child_type (container)),
                     G_CALLBACK (gimp_container_popup_context_changed),
                     popup);
 
@@ -213,7 +215,7 @@ gimp_container_popup_set_view_type (GimpContainerPopup *popup,
     }
 }
 
-gint
+GimpViewSize
 gimp_container_popup_get_view_size (GimpContainerPopup *popup)
 {
   g_return_val_if_fail (GIMP_IS_CONTAINER_POPUP (popup), GIMP_VIEW_SIZE_SMALL);
@@ -223,7 +225,7 @@ gimp_container_popup_get_view_size (GimpContainerPopup *popup)
 
 void
 gimp_container_popup_set_view_size (GimpContainerPopup *popup,
-                                    gint                view_size)
+                                    GimpViewSize        view_size)
 {
   GtkWidget     *scrolled_win;
   GtkWidget     *viewport;
@@ -259,7 +261,7 @@ gimp_container_popup_create_view (GimpContainerPopup *popup)
   GimpEditor  *editor;
   GtkWidget   *button;
   const gchar *signal_name;
-  GType        children_type;
+  GType        child_type;
   gint         rows;
   gint         columns;
 
@@ -276,14 +278,28 @@ gimp_container_popup_create_view (GimpContainerPopup *popup)
 
   if (popup->view_type == GIMP_VIEW_TYPE_LIST)
     {
-      GtkWidget *search_entry;
+      GimpContainerView *view = popup->editor->view;
+      GtkWidget         *entry;
 
-      search_entry = gtk_entry_new ();
-      gtk_box_pack_end (GTK_BOX (popup->editor->view), search_entry,
-                        FALSE, FALSE, 0);
-      gtk_tree_view_set_search_entry (GTK_TREE_VIEW (GIMP_CONTAINER_TREE_VIEW (GIMP_CONTAINER_VIEW (popup->editor->view))->view),
-                                      GTK_ENTRY (search_entry));
-      gtk_widget_show (search_entry);
+      entry = gtk_search_entry_new ();
+      gtk_box_pack_end (GTK_BOX (view), entry, FALSE, FALSE, 0);
+
+      if (GIMP_IS_CONTAINER_TREE_VIEW (view))
+        {
+          GimpContainerTreeView *tree_view = GIMP_CONTAINER_TREE_VIEW (view);
+
+          gtk_tree_view_set_search_entry (GTK_TREE_VIEW (tree_view->view),
+                                          GTK_ENTRY (entry));
+        }
+      else
+        {
+          GimpContainerListView *list_view = GIMP_CONTAINER_LIST_VIEW (view);
+
+          gimp_container_list_view_set_search_entry (list_view,
+                                                     GTK_SEARCH_ENTRY (entry));
+        }
+
+      gtk_widget_show (entry);
     }
 
   /* lame workaround for bug #761998 */
@@ -340,21 +356,17 @@ gimp_container_popup_create_view (GimpContainerPopup *popup)
   /* Special-casing the object types managed by the context to make sure
    * the right items are selected when opening the popup.
    */
-  children_type = gimp_container_get_children_type (popup->container);
-  signal_name   = gimp_context_type_to_signal_name (children_type);
+  child_type  = gimp_container_get_child_type (popup->container);
+  signal_name = gimp_context_type_to_signal_name (child_type);
 
   if (signal_name)
     {
       GimpObject *object;
-      GList      *items = NULL;
 
-      object = gimp_context_get_by_type (popup->orig_context, children_type);
-      if (object)
-        items = g_list_prepend (NULL, object);
+      object = gimp_context_get_by_type (popup->orig_context, child_type);
 
-      gimp_container_view_select_items (popup->editor->view, items);
-
-      g_list_free (items);
+      gimp_container_view_set_1_selected (popup->editor->view,
+                                          GIMP_VIEWABLE (object));
     }
 }
 
@@ -366,7 +378,7 @@ gimp_container_popup_smaller_clicked (GtkWidget          *button,
 
   view_size = gimp_container_view_get_view_size (popup->editor->view, NULL);
 
-  gimp_container_popup_set_view_size (popup, view_size * 0.8);
+  gimp_container_popup_set_view_size (popup, gimp_view_size_get_smaller (view_size));
 }
 
 static void
@@ -377,7 +389,7 @@ gimp_container_popup_larger_clicked (GtkWidget          *button,
 
   view_size = gimp_container_view_get_view_size (popup->editor->view, NULL);
 
-  gimp_container_popup_set_view_size (popup, view_size * 1.2);
+  gimp_container_popup_set_view_size (popup, gimp_view_size_get_larger (view_size));
 }
 
 static void

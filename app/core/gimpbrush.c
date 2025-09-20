@@ -26,6 +26,7 @@
 
 #include "core-types.h"
 
+#include "gimp.h"
 #include "gimpbezierdesc.h"
 #include "gimpbrush.h"
 #include "gimpbrush-boundary.h"
@@ -37,6 +38,7 @@
 #include "gimpbrushcache.h"
 #include "gimpbrushgenerated.h"
 #include "gimpbrushpipe.h"
+#include "gimpcontext.h"
 #include "gimptagged.h"
 #include "gimptempbuf.h"
 
@@ -77,7 +79,8 @@ static gboolean      gimp_brush_get_size              (GimpViewable         *vie
 static GimpTempBuf * gimp_brush_get_new_preview       (GimpViewable         *viewable,
                                                        GimpContext          *context,
                                                        gint                  width,
-                                                       gint                  height);
+                                                       gint                  height,
+                                                       GeglColor            *fg_color);
 static gchar       * gimp_brush_get_description       (GimpViewable         *viewable,
                                                        gchar               **tooltip);
 
@@ -131,6 +134,7 @@ gimp_brush_class_init (GimpBrushClass *klass)
   gimp_object_class->get_memsize    = gimp_brush_get_memsize;
 
   viewable_class->default_icon_name = "gimp-tool-paintbrush";
+  viewable_class->default_name      = _("Brush");
   viewable_class->get_size          = gimp_brush_get_size;
   viewable_class->get_new_preview   = gimp_brush_get_new_preview;
   viewable_class->get_description   = gimp_brush_get_description;
@@ -270,7 +274,8 @@ static GimpTempBuf *
 gimp_brush_get_new_preview (GimpViewable *viewable,
                             GimpContext  *context,
                             gint          width,
-                            gint          height)
+                            gint          height,
+                            GeglColor    *fg_color)
 {
   GimpBrush         *brush       = GIMP_BRUSH (viewable);
   const GimpTempBuf *mask_buf    = brush->priv->mask;
@@ -366,13 +371,18 @@ gimp_brush_get_new_preview (GimpViewable *viewable,
     }
   else
     {
+      guint8 rgb[3] = { 0, 0, 0 };
+
+      if (fg_color)
+        gegl_color_get_pixel (fg_color, babl_format ("R'G'B' u8"), rgb);
+
       for (y = 0; y < mask_height; y++)
         {
           for (x = 0; x < mask_width ; x++)
             {
-              *buf++ = 0;
-              *buf++ = 0;
-              *buf++ = 0;
+              *buf++ = rgb[0];
+              *buf++ = rgb[1];
+              *buf++ = rgb[2];
               *buf++ = *mask++;
             }
         }

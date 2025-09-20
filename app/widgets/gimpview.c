@@ -164,6 +164,8 @@ gimp_view_class_init (GimpViewClass *klass)
   klass->clicked                     = NULL;
   klass->double_clicked              = NULL;
   klass->context                     = NULL;
+
+  gtk_widget_class_set_css_name (widget_class, "GimpView");
 }
 
 static void
@@ -846,7 +848,7 @@ gimp_view_drag_pixbuf (GtkWidget *widget,
 
   if (viewable && gimp_viewable_get_size (viewable, &width, &height))
     return gimp_viewable_get_new_pixbuf (viewable, view->renderer->context,
-                                         width, height);
+                                         width, height, NULL);
 
   return NULL;
 }

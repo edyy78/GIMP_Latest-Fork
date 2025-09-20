@@ -127,6 +127,7 @@ app/core/gimpbrushgenerated-save.c
 app/core/gimpbrushgenerated.c
 app/core/gimpbrushpipe-load.c
 app/core/gimpbrushpipe.c
+app/core/gimpbuffer.c
 app/core/gimpchannel-select.c
 app/core/gimpchannel.c
 app/core/gimpcontext.c
@@ -151,6 +152,7 @@ app/core/gimpdrawable-transform.c
 app/core/gimpdrawablefiltermask.c
 app/core/gimpdynamicsoutput.c
 app/core/gimpfilloptions.c
+app/core/gimpgradient.c
 app/core/gimpgradient-load.c
 app/core/gimpgradient-save.c
 app/core/gimpgrid.c
@@ -579,6 +581,7 @@ app/widgets/gimpdockbook.c
 app/widgets/gimpdockwindow.c
 app/widgets/gimpdocumentview.c
 app/widgets/gimpdrawabletreeview.c
+app/widgets/gimpdrawabletreeview-filters.c
 app/widgets/gimpdynamicseditor.c
 app/widgets/gimpdynamicsoutputeditor.c
 app/widgets/gimpeditor.c
@@ -598,6 +601,7 @@ app/widgets/gimpimagecommenteditor.c
 app/widgets/gimpimageprofileview.c
 app/widgets/gimpimagepropview.c
 app/widgets/gimpitemtreeview.c
+app/widgets/gimpitemtreeview-search.c
 app/widgets/gimplayermodebox.c
 app/widgets/gimplayertreeview.c
 app/widgets/gimpmenudock.c
@@ -612,6 +616,7 @@ app/widgets/gimppickablepopup.c
 app/widgets/gimppluginview.c
 app/widgets/gimpprogressdialog.c
 app/widgets/gimppropwidgets.c
+app/widgets/gimprow.c
 app/widgets/gimpsamplepointeditor.c
 app/widgets/gimpsavedialog.c
 app/widgets/gimpsearchpopup.c

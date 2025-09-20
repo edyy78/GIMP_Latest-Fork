@@ -43,7 +43,6 @@
 #include "core/gimpimage-undo.h"
 #include "core/gimpimage-undo-push.h"
 #include "core/gimpimage.h"
-#include "core/gimpitemlist.h"
 #include "core/gimpitemundo.h"
 #include "core/gimplayer.h"
 #include "core/gimplayer-floating-selection.h"
@@ -59,6 +58,7 @@
 #include "gimpcellrendererviewable.h"
 #include "gimpcontainertreestore.h"
 #include "gimpcontainerview.h"
+#include "gimpcontainerview-cruft.h"
 #include "gimpdnd.h"
 #include "gimphelp-ids.h"
 #include "gimplayermodebox.h"
@@ -101,14 +101,14 @@ static void       gimp_layer_tree_view_set_container              (GimpContainer
                                                                    GimpContainer              *container);
 static void       gimp_layer_tree_view_set_context                (GimpContainerView          *view,
                                                                    GimpContext                *context);
+static void       gimp_layer_tree_view_set_view_size              (GimpContainerView          *view);
+static gboolean   gimp_layer_tree_view_set_selected               (GimpContainerView          *view,
+                                                                   GList                      *items);
+
 static gpointer   gimp_layer_tree_view_insert_item                (GimpContainerView          *view,
                                                                    GimpViewable               *viewable,
                                                                    gpointer                    parent_insert_data,
                                                                    gint                        index);
-static gboolean   gimp_layer_tree_view_select_items               (GimpContainerView          *view,
-                                                                   GList                      *items,
-                                                                   GList                      *paths);
-static void       gimp_layer_tree_view_set_view_size              (GimpContainerView          *view);
 static gboolean   gimp_layer_tree_view_drop_possible              (GimpContainerTreeView      *view,
                                                                    GimpDndType                 src_type,
                                                                    GList                      *src_viewables,
@@ -148,8 +148,6 @@ static void       gimp_layer_tree_view_opacity_scale_changed      (GtkAdjustment
 static void       gimp_layer_tree_view_layer_signal_handler       (GimpLayer                  *layer,
                                                                    GimpLayerTreeView          *view);
 static void       gimp_layer_tree_view_update_options             (GimpLayerTreeView          *view,
-                                                                   GList                      *layers);
-static void       gimp_layer_tree_view_update_menu                (GimpLayerTreeView          *view,
                                                                    GList                      *layers);
 static void       gimp_layer_tree_view_update_highlight           (GimpLayerTreeView          *view);
 static void       gimp_layer_tree_view_mask_update                (GimpLayerTreeView          *view,
@@ -199,14 +197,32 @@ gimp_layer_tree_view_class_init (GimpLayerTreeViewClass *klass)
   tree_view_class = GIMP_CONTAINER_TREE_VIEW_CLASS (klass);
   item_view_class = GIMP_ITEM_TREE_VIEW_CLASS (klass);
 
-  object_class->constructed = gimp_layer_tree_view_constructed;
-  object_class->finalize    = gimp_layer_tree_view_finalize;
+  object_class->constructed           = gimp_layer_tree_view_constructed;
+  object_class->finalize              = gimp_layer_tree_view_finalize;
 
-  tree_view_class->drop_possible   = gimp_layer_tree_view_drop_possible;
-  tree_view_class->drop_color      = gimp_layer_tree_view_drop_color;
-  tree_view_class->drop_uri_list   = gimp_layer_tree_view_drop_uri_list;
-  tree_view_class->drop_component  = gimp_layer_tree_view_drop_component;
-  tree_view_class->drop_pixbuf     = gimp_layer_tree_view_drop_pixbuf;
+  tree_view_class->drop_possible      = gimp_layer_tree_view_drop_possible;
+  tree_view_class->drop_color         = gimp_layer_tree_view_drop_color;
+  tree_view_class->drop_uri_list      = gimp_layer_tree_view_drop_uri_list;
+  tree_view_class->drop_component     = gimp_layer_tree_view_drop_component;
+  tree_view_class->drop_pixbuf        = gimp_layer_tree_view_drop_pixbuf;
+
+  item_view_class->item_type          = GIMP_TYPE_LAYER;
+  item_view_class->signal_name        = "selected-layers-changed";
+
+  item_view_class->set_image          = gimp_layer_tree_view_set_image;
+
+  item_view_class->new_item           = gimp_layer_tree_view_item_new;
+
+  item_view_class->action_group        = "layers";
+  item_view_class->activate_action     = "layers-edit";
+  item_view_class->new_action          = "layers-new";
+  item_view_class->new_default_action  = "layers-new-last-values";
+  item_view_class->raise_action        = "layers-raise";
+  item_view_class->raise_top_action    = "layers-raise-to-top";
+  item_view_class->lower_action        = "layers-lower";
+  item_view_class->lower_bottom_action = "layers-lower-to-bottom";
+  item_view_class->duplicate_action    = "layers-duplicate";
+  item_view_class->delete_action       = "layers-delete";
 
   item_view_class->move_cursor_up_action        = "layers-select-previous";
   item_view_class->move_cursor_down_action      = "layers-select-next";
@@ -215,27 +231,6 @@ gimp_layer_tree_view_class_init (GimpLayerTreeViewClass *klass)
   item_view_class->move_cursor_start_action     = "layers-select-top";
   item_view_class->move_cursor_end_action       = "layers-select-bottom";
 
-  item_view_class->item_type       = GIMP_TYPE_LAYER;
-  item_view_class->signal_name     = "selected-layers-changed";
-
-  item_view_class->set_image       = gimp_layer_tree_view_set_image;
-  item_view_class->get_container   = gimp_image_get_layers;
-  item_view_class->get_selected_items = (GimpGetItemsFunc) gimp_image_get_selected_layers;
-  item_view_class->set_selected_items = (GimpSetItemsFunc) gimp_image_set_selected_layers;
-  item_view_class->add_item        = (GimpAddItemFunc) gimp_image_add_layer;
-  item_view_class->remove_item     = (GimpRemoveItemFunc) gimp_image_remove_layer;
-  item_view_class->new_item        = gimp_layer_tree_view_item_new;
-
-  item_view_class->action_group            = "layers";
-  item_view_class->activate_action         = "layers-edit";
-  item_view_class->new_action              = "layers-new";
-  item_view_class->new_default_action      = "layers-new-last-values";
-  item_view_class->raise_action            = "layers-raise";
-  item_view_class->raise_top_action        = "layers-raise-to-top";
-  item_view_class->lower_action            = "layers-lower";
-  item_view_class->lower_bottom_action     = "layers-lower-to-bottom";
-  item_view_class->duplicate_action        = "layers-duplicate";
-  item_view_class->delete_action           = "layers-delete";
   item_view_class->lock_content_help_id    = GIMP_HELP_LAYER_LOCK_PIXELS;
   item_view_class->lock_position_help_id   = GIMP_HELP_LAYER_LOCK_POSITION;
   item_view_class->lock_visibility_help_id = GIMP_HELP_LAYER_LOCK_VISIBILITY;
@@ -248,9 +243,10 @@ gimp_layer_tree_view_view_iface_init (GimpContainerViewInterface *iface)
 
   iface->set_container = gimp_layer_tree_view_set_container;
   iface->set_context   = gimp_layer_tree_view_set_context;
-  iface->insert_item   = gimp_layer_tree_view_insert_item;
-  iface->select_items  = gimp_layer_tree_view_select_items;
   iface->set_view_size = gimp_layer_tree_view_set_view_size;
+  iface->set_selected  = gimp_layer_tree_view_set_selected;
+
+  iface->insert_item   = gimp_layer_tree_view_insert_item;
 
   iface->model_is_tree = TRUE;
 }
@@ -545,115 +541,6 @@ gimp_layer_tree_view_set_context (GimpContainerView *view,
     }
 }
 
-static gpointer
-gimp_layer_tree_view_insert_item (GimpContainerView *view,
-                                  GimpViewable      *viewable,
-                                  gpointer           parent_insert_data,
-                                  gint               index)
-{
-  GimpLayerTreeView *layer_view = GIMP_LAYER_TREE_VIEW (view);
-  GimpLayer         *layer;
-  GtkTreeIter       *iter;
-
-  iter = parent_view_iface->insert_item (view, viewable,
-                                         parent_insert_data, index);
-
-  layer = GIMP_LAYER (viewable);
-
-  if (! gimp_drawable_has_alpha (GIMP_DRAWABLE (layer)))
-    gimp_layer_tree_view_alpha_update (layer_view, iter, layer);
-
-  gimp_layer_tree_view_mask_update (layer_view, iter, layer);
-
-  if (GIMP_IS_LAYER (viewable) && gimp_layer_is_floating_sel (GIMP_LAYER (viewable)))
-    {
-      GimpContainerTreeView *tree_view = GIMP_CONTAINER_TREE_VIEW (view);
-      GimpLayer             *floating  = GIMP_LAYER (viewable);
-      GimpDrawable          *drawable  = gimp_layer_get_floating_sel_drawable (floating);
-
-      if (GIMP_IS_LAYER_MASK (drawable))
-        {
-          /* Display floating mask in the mask column. */
-          GimpViewRenderer *renderer  = NULL;
-
-          gtk_tree_model_get (GTK_TREE_MODEL (tree_view->model), iter,
-                              GIMP_CONTAINER_TREE_STORE_COLUMN_RENDERER, &renderer,
-                              -1);
-          if (renderer)
-            {
-              gtk_tree_store_set (GTK_TREE_STORE (tree_view->model), iter,
-                                  layer_view->priv->model_column_mask,         renderer,
-                                  layer_view->priv->model_column_mask_visible, TRUE,
-                                  GIMP_CONTAINER_TREE_STORE_COLUMN_RENDERER,   NULL,
-                                  -1);
-              g_object_unref (renderer);
-            }
-        }
-    }
-
-  return iter;
-}
-
-static gboolean
-gimp_layer_tree_view_select_items (GimpContainerView *view,
-                                   GList             *items,
-                                   GList             *paths)
-{
-  GimpContainerTreeView *tree_view  = GIMP_CONTAINER_TREE_VIEW (view);
-  GimpLayerTreeView     *layer_view = GIMP_LAYER_TREE_VIEW (view);
-  GList                 *layers     = items;
-  GList                 *path       = paths;
-  gboolean               success;
-
-  success = parent_view_iface->select_items (view, items, paths);
-
-  if (layers)
-    {
-      if (success)
-        {
-          if (g_list_length (items) == 1)
-            {
-              GtkTreeIter *iter = NULL;
-
-              iter =
-                gimp_container_view_lookup (GIMP_CONTAINER_VIEW (layer_view),
-                                            GIMP_VIEWABLE (layers->data));
-
-              if (iter)
-                gimp_layer_tree_view_update_borders (layer_view, iter);
-            }
-          else
-            {
-              for (layers = items, path = paths;
-                   layers && path;
-                   layers = layers->next, path = path->next)
-                {
-                  GtkTreeIter iter;
-
-                  gtk_tree_model_get_iter (tree_view->model, &iter,
-                                           path->data);
-                  gimp_layer_tree_view_update_borders (layer_view, &iter);
-                }
-            }
-
-          gimp_layer_tree_view_update_options (layer_view, items);
-          gimp_layer_tree_view_update_menu (layer_view, items);
-        }
-    }
-
-  if (! success)
-    {
-      GimpEditor *editor = GIMP_EDITOR (view);
-
-      /* currently, select_items() only ever fails when there is a floating
-       * selection, which can be committed/canceled through the editor buttons.
-       */
-      gimp_widget_blink (GTK_WIDGET (gimp_editor_get_button_box (editor)));
-    }
-
-  return success;
-}
-
 typedef struct
 {
   gint mask_column;
@@ -707,6 +594,95 @@ gimp_layer_tree_view_set_view_size (GimpContainerView *view)
     }
 
   parent_view_iface->set_view_size (view);
+}
+
+static gboolean
+gimp_layer_tree_view_set_selected (GimpContainerView *view,
+                                   GList             *items)
+{
+  GimpLayerTreeView *layer_view = GIMP_LAYER_TREE_VIEW (view);
+  gboolean           success;
+
+  success = parent_view_iface->set_selected (view, items);
+
+  if (items && success)
+    {
+      GList *list;
+
+      for (list = items; list; list = g_list_next (list))
+        {
+          GtkTreeIter *iter;
+
+          iter = _gimp_container_view_lookup (view, list->data);
+
+          if (iter)
+            gimp_layer_tree_view_update_borders (layer_view, iter);
+        }
+
+      gimp_layer_tree_view_update_options (layer_view, items);
+    }
+
+  if (! success)
+    {
+      GimpEditor *editor = GIMP_EDITOR (view);
+
+      /* currently, select_items() only ever fails when there is a
+       * floating selection, which can be committed/canceled through
+       * the editor buttons.
+       */
+      gimp_widget_blink (GTK_WIDGET (gimp_editor_get_button_box (editor)));
+    }
+
+  return success;
+}
+
+static gpointer
+gimp_layer_tree_view_insert_item (GimpContainerView *view,
+                                  GimpViewable      *viewable,
+                                  gpointer           parent_insert_data,
+                                  gint               index)
+{
+  GimpLayerTreeView *layer_view = GIMP_LAYER_TREE_VIEW (view);
+  GimpLayer         *layer;
+  GtkTreeIter       *iter;
+
+  iter = parent_view_iface->insert_item (view, viewable,
+                                         parent_insert_data, index);
+
+  layer = GIMP_LAYER (viewable);
+
+  if (! gimp_drawable_has_alpha (GIMP_DRAWABLE (layer)))
+    gimp_layer_tree_view_alpha_update (layer_view, iter, layer);
+
+  gimp_layer_tree_view_mask_update (layer_view, iter, layer);
+
+  if (GIMP_IS_LAYER (viewable) && gimp_layer_is_floating_sel (GIMP_LAYER (viewable)))
+    {
+      GimpContainerTreeView *tree_view = GIMP_CONTAINER_TREE_VIEW (view);
+      GimpLayer             *floating  = GIMP_LAYER (viewable);
+      GimpDrawable          *drawable  = gimp_layer_get_floating_sel_drawable (floating);
+
+      if (GIMP_IS_LAYER_MASK (drawable))
+        {
+          /* Display floating mask in the mask column. */
+          GimpViewRenderer *renderer  = NULL;
+
+          gtk_tree_model_get (GTK_TREE_MODEL (tree_view->model), iter,
+                              GIMP_CONTAINER_TREE_STORE_COLUMN_RENDERER, &renderer,
+                              -1);
+          if (renderer)
+            {
+              gtk_tree_store_set (GTK_TREE_STORE (tree_view->model), iter,
+                                  layer_view->priv->model_column_mask,         renderer,
+                                  layer_view->priv->model_column_mask_visible, TRUE,
+                                  GIMP_CONTAINER_TREE_STORE_COLUMN_RENDERER,   NULL,
+                                  -1);
+              g_object_unref (renderer);
+            }
+        }
+    }
+
+  return iter;
 }
 
 
@@ -970,7 +946,7 @@ gimp_layer_tree_view_floating_selection_changed (GimpImage         *image,
 
   if (floating_sel)
     {
-      iter = gimp_container_view_lookup (view, (GimpViewable *) floating_sel);
+      iter = _gimp_container_view_lookup (view, (GimpViewable *) floating_sel);
 
       if (iter)
         gtk_tree_store_set (GTK_TREE_STORE (tree_view->model), iter,
@@ -989,7 +965,7 @@ gimp_layer_tree_view_floating_selection_changed (GimpImage         *image,
         {
           GimpDrawable *drawable = list->data;
 
-          iter = gimp_container_view_lookup (view, (GimpViewable *) drawable);
+          iter = _gimp_container_view_lookup (view, (GimpViewable *) drawable);
 
           if (iter)
             gtk_tree_store_set (GTK_TREE_STORE (tree_view->model), iter,
@@ -1036,7 +1012,7 @@ gimp_layer_tree_view_layer_mode_box_callback (GtkWidget         *widget,
                                         GIMP_UNDO_LAYER_MODE);
 
   if (image)
-    layers = GIMP_ITEM_TREE_VIEW_GET_CLASS (view)->get_selected_items (image);
+    layers = gimp_image_get_selected_layers (image);
 
   for (iter = layers; iter; iter = iter->next)
     {
@@ -1091,7 +1067,7 @@ gimp_layer_tree_view_opacity_scale_changed (GtkAdjustment     *adjustment,
   gdouble    opacity;
 
   image   = gimp_item_tree_view_get_image (GIMP_ITEM_TREE_VIEW (view));
-  layers  = GIMP_ITEM_TREE_VIEW_GET_CLASS (view)->get_selected_items (image);
+  layers  = gimp_image_get_selected_layers (image);
   undo    = gimp_image_undo_can_compress (image, GIMP_TYPE_ITEM_UNDO,
                                           GIMP_UNDO_LAYER_OPACITY);
   opacity = gtk_adjustment_get_value (adjustment) / 100.0;
@@ -1147,7 +1123,7 @@ gimp_layer_tree_view_layer_signal_handler (GimpLayer         *layer,
   GList            *selected_layers;
 
   selected_layers =
-    GIMP_ITEM_TREE_VIEW_GET_CLASS (view)->get_selected_items (gimp_item_tree_view_get_image (item_view));
+    gimp_image_get_selected_layers (gimp_item_tree_view_get_image (item_view));
 
   if (g_list_find (selected_layers, layer))
     gimp_layer_tree_view_update_options (view, selected_layers);
@@ -1231,44 +1207,6 @@ gimp_layer_tree_view_update_options (GimpLayerTreeView *view,
 
 #undef BLOCK
 #undef UNBLOCK
-
-
-static void
-gimp_layer_tree_view_update_menu (GimpLayerTreeView *layer_view,
-                                  GList             *layers)
-{
-  GimpUIManager   *ui_manager = gimp_editor_get_ui_manager (GIMP_EDITOR (layer_view));
-  GimpActionGroup *group;
-  GList           *iter;
-  gboolean         have_masks         = FALSE;
-  gboolean         all_masks_shown    = TRUE;
-  gboolean         all_masks_disabled = TRUE;
-
-  group = gimp_ui_manager_get_action_group (ui_manager, "layers");
-
-  for (iter = layers; iter; iter = iter->next)
-    {
-      if (gimp_layer_get_mask (iter->data))
-        {
-          have_masks = TRUE;
-          if (! gimp_layer_get_show_mask (iter->data))
-            all_masks_shown = FALSE;
-          if (gimp_layer_get_apply_mask (iter->data))
-            all_masks_disabled = FALSE;
-        }
-    }
-
-  gimp_action_group_set_action_active (group, "layers-mask-show",
-                                       have_masks && all_masks_shown);
-  gimp_action_group_set_action_active (group, "layers-mask-disable",
-                                       have_masks && all_masks_disabled);
-
-  /* Only one layer mask at a time can be edited. */
-  gimp_action_group_set_action_active (group, "layers-mask-edit",
-                                       g_list_length (layers) == 1 &&
-                                       gimp_layer_get_mask (layers->data) &&
-                                       gimp_layer_get_edit_mask (layers->data));
-}
 
 static void
 gimp_layer_tree_view_update_highlight (GimpLayerTreeView *layer_view)
@@ -1378,7 +1316,7 @@ gimp_layer_tree_view_mask_changed (GimpLayer         *layer,
   GimpContainerView *view = GIMP_CONTAINER_VIEW (layer_view);
   GtkTreeIter       *iter;
 
-  iter = gimp_container_view_lookup (view, GIMP_VIEWABLE (layer));
+  iter = _gimp_container_view_lookup (view, GIMP_VIEWABLE (layer));
 
   if (iter)
     gimp_layer_tree_view_mask_update (layer_view, iter, layer);
@@ -1395,8 +1333,8 @@ gimp_layer_tree_view_renderer_update (GimpViewRenderer  *renderer,
 
   mask = GIMP_LAYER_MASK (renderer->viewable);
 
-  iter = gimp_container_view_lookup (view, (GimpViewable *)
-                                     gimp_layer_mask_get_layer (mask));
+  iter = _gimp_container_view_lookup (view, (GimpViewable *)
+                                      gimp_layer_mask_get_layer (mask));
 
   if (iter)
     {
@@ -1485,7 +1423,7 @@ gimp_layer_tree_view_mask_callback (GimpLayer         *layer,
   GimpContainerView *view = GIMP_CONTAINER_VIEW (layer_view);
   GtkTreeIter       *iter;
 
-  iter = gimp_container_view_lookup (view, (GimpViewable *) layer);
+  iter = _gimp_container_view_lookup (view, (GimpViewable *) layer);
 
   gimp_layer_tree_view_update_borders (layer_view, iter);
 }
@@ -1712,18 +1650,22 @@ gimp_layer_tree_view_alpha_changed (GimpLayer         *layer,
   GimpContainerView *view = GIMP_CONTAINER_VIEW (layer_view);
   GtkTreeIter       *iter;
 
-  iter = gimp_container_view_lookup (view, (GimpViewable *) layer);
+  iter = _gimp_container_view_lookup (view, (GimpViewable *) layer);
 
   if (iter)
     {
       GimpItemTreeView *item_view = GIMP_ITEM_TREE_VIEW (view);
+      GimpImage        *image;
+      GList            *layers;
 
       gimp_layer_tree_view_alpha_update (layer_view, iter, layer);
 
+      image  = gimp_item_tree_view_get_image (item_view);
+      layers = gimp_image_get_selected_layers (image);
+
       /*  update button states  */
-      if (g_list_find (gimp_image_get_selected_layers (gimp_item_tree_view_get_image (item_view)),
-                       layer))
-        gimp_container_view_select_items (GIMP_CONTAINER_VIEW (view),
-                                          gimp_image_get_selected_layers (gimp_item_tree_view_get_image (item_view)));
+      if (g_list_find (layers, layer))
+        gimp_container_view_set_selected (GIMP_CONTAINER_VIEW (view),
+                                          layers);
     }
 }

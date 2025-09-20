@@ -31,8 +31,6 @@
 #include "gimpbuffer.h"
 #include "gimpcontext.h"
 #include "gimpdrawable-edit.h"
-#include "gimpdrawable-filters.h"
-#include "gimpdrawablefilter.h"
 #include "gimperror.h"
 #include "gimpgrouplayer.h"
 #include "gimpimage.h"
@@ -286,7 +284,6 @@ gimp_edit_copy (GimpImage     *image,
       clip_image = gimp_image_new_from_drawables (image->gimp, drawables, TRUE, TRUE);
       gimp_container_remove (image->gimp->images, GIMP_OBJECT (clip_image));
       gimp_set_clipboard_image (image->gimp, clip_image);
-      g_list_free (drawables);
 
       clip_selection = gimp_image_get_mask (clip_image);
       if (! gimp_channel_is_empty (clip_selection))
@@ -339,11 +336,6 @@ gimp_edit_copy (GimpImage     *image,
             }
           g_list_free (all_items);
 
-          gimp_image_undo_disable (clip_image);
-          gimp_image_resize_to_layers (clip_image, context, NULL, NULL, NULL,
-                                       NULL, NULL);
-          gimp_image_undo_enable (clip_image);
-
           /* We need to store the original offsets before the image was
            * resized, in order to move it into the correct location for
            * in-place pasting.
@@ -355,6 +347,42 @@ gimp_edit_copy (GimpImage     *image,
                              "gimp-edit-new-image-y",
                              GINT_TO_POINTER (selection_bounds.y));
         }
+      else
+        {
+          gint offset_x;
+          gint offset_y;
+
+          /* We need to store the minimum offset from the selected layers
+           * in order to move it into the correct location for
+           * in-place pasting.
+           */
+          gimp_item_get_offset (GIMP_ITEM (drawables->data), &offset_x, &offset_y);
+
+          for (iter = g_list_next (drawables); iter; iter = iter->next)
+            {
+              gint item_x;
+              gint item_y;
+
+              gimp_item_get_offset (GIMP_ITEM (iter->data), &item_x, &item_y);
+
+              offset_x = MIN (item_x, offset_x);
+              offset_y = MIN (item_y, offset_y);
+            }
+
+          g_object_set_data (G_OBJECT (clip_image),
+                             "gimp-edit-new-image-x",
+                             GINT_TO_POINTER (offset_x));
+          g_object_set_data (G_OBJECT (clip_image),
+                             "gimp-edit-new-image-y",
+                             GINT_TO_POINTER (offset_y));
+        }
+      g_list_free (drawables);
+
+      gimp_image_undo_disable (clip_image);
+      gimp_image_resize_to_layers (clip_image, context, NULL, NULL, NULL,
+                                   NULL, NULL);
+      gimp_image_undo_enable (clip_image);
+
       /* Remove selection from the clipboard image. */
       gimp_channel_clear (clip_selection, NULL, FALSE);
       g_object_unref (clip_image);
@@ -506,38 +534,9 @@ gimp_edit_paste_get_tagged_layers (GimpImage         *image,
                                                                 "gimp-image-copied-layer"));
       if (copied)
         {
-          GimpContainer *filters;
-
           layer = GIMP_LAYER (gimp_item_convert (GIMP_ITEM (iter->data),
                                                  image, layer_type));
 
-          filters = gimp_drawable_get_filters (GIMP_DRAWABLE (iter->data));
-          if (gimp_container_get_n_children (filters) > 0)
-            {
-              GList *filter_list;
-
-              for (filter_list = GIMP_LIST (filters)->queue->tail;
-                   filter_list;
-                   filter_list = g_list_previous (filter_list))
-                {
-                  if (GIMP_IS_DRAWABLE_FILTER (filter_list->data))
-                    {
-                      GimpDrawableFilter *old_filter = filter_list->data;
-                      GimpDrawableFilter *filter;
-
-                      filter = gimp_drawable_filter_duplicate (GIMP_DRAWABLE (layer), old_filter);
-
-                      if (filter != NULL)
-                        {
-                          gimp_drawable_filter_apply (filter, NULL);
-                          gimp_drawable_filter_commit (filter, TRUE, NULL, FALSE);
-
-                          gimp_drawable_filter_layer_mask_freeze (filter);
-                          g_object_unref (filter);
-                        }
-                    }
-                }
-            }
           returned_layers = g_list_prepend (returned_layers, layer);
 
           switch (paste_type)

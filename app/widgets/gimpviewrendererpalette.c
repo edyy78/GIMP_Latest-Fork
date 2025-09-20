@@ -20,13 +20,10 @@
 
 #include "config.h"
 
-#include <string.h>
-
 #include <gegl.h>
 #include <gtk/gtk.h>
 
 #include "libgimpcolor/gimpcolor.h"
-#include "libgimpmath/gimpmath.h"
 #include "libgimpwidgets/gimpwidgets.h"
 
 #include "widgets-types.h"
@@ -57,9 +54,12 @@ gimp_view_renderer_palette_class_init (GimpViewRendererPaletteClass *klass)
   GObjectClass          *object_class   = G_OBJECT_CLASS (klass);
   GimpViewRendererClass *renderer_class = GIMP_VIEW_RENDERER_CLASS (klass);
 
-  object_class->finalize = gimp_view_renderer_palette_finalize;
+  object_class->finalize          = gimp_view_renderer_palette_finalize;
 
-  renderer_class->render = gimp_view_renderer_palette_render;
+  renderer_class->default_bg      = GIMP_VIEW_BG_STYLE;
+  renderer_class->follow_theme_bg = GIMP_VIEW_BG_STYLE;
+
+  renderer_class->render          = gimp_view_renderer_palette_render;
 }
 
 static void
@@ -140,7 +140,7 @@ gimp_view_renderer_palette_render (GimpViewRenderer *renderer,
   list = gimp_palette_get_colors (palette);
 
   if (! renderer->surface)
-    renderer->surface = cairo_image_surface_create (CAIRO_FORMAT_RGB24,
+    renderer->surface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32,
                                                     renderer->width,
                                                     renderer->height);
 
@@ -157,19 +157,17 @@ gimp_view_renderer_palette_render (GimpViewRenderer *renderer,
 
   for (y = 0; y < renderer->height; y++)
     {
+      gint x;
+
       if ((y % renderpal->cell_height) == 0)
         {
-          guchar  rgb[3];
-          gint    x;
           gint    n = 0;
           guchar *d = row;
 
-          memset (row, renderpal->draw_grid ? 0 : 255, renderer->width * 4);
-
-          rgb[0] = rgb[1] = rgb[2] = (renderpal->draw_grid ? 0 : 255);
-
           for (x = 0; x < renderer->width; x++, d += 4)
             {
+              guchar rgba[4];
+
               if ((x % renderpal->cell_width) == 0)
                 {
                   if (list && n < renderpal->columns &&
@@ -181,27 +179,35 @@ gimp_view_renderer_palette_render (GimpViewRenderer *renderer,
                       n++;
 
                       /* TODO: render directly to widget color space! */
-                      gegl_color_get_pixel (entry->color, babl_format ("R'G'B' u8"), rgb);
+                      gegl_color_get_pixel (entry->color,
+                                            babl_format ("R'G'B'A u8"), rgba);
                     }
                   else
                     {
-                      rgb[0] = rgb[1] = rgb[2] = (renderpal->draw_grid ? 0 : 255);
+                      gint i;
+
+                      /* Background color (not entries, not grids) */
+                      for (i = 0; i < 4; i++)
+                        rgba[i] = 0;
                     }
                 }
 
               if (renderpal->draw_grid && (x % renderpal->cell_width) == 0)
                 {
-                  GIMP_CAIRO_RGB24_SET_PIXEL (d, 0, 0, 0);
+                  /* Vertical grid lines */
+                  GIMP_CAIRO_ARGB32_SET_PIXEL (d, 0, 0, 0, 0);
                 }
               else
                 {
-                  GIMP_CAIRO_RGB24_SET_PIXEL (d, rgb[0], rgb[1], rgb[2]);
+                  /* Palette entry */
+                  GIMP_CAIRO_ARGB32_SET_PIXEL (d, rgba[0], rgba[1], rgba[2], rgba[3]);
                 }
             }
         }
 
       if (renderpal->draw_grid && (y % renderpal->cell_height) == 0)
         {
+          /* Horizontal grid lines */
           memset (dest, 0, renderer->width * 4);
         }
       else
@@ -209,9 +215,9 @@ gimp_view_renderer_palette_render (GimpViewRenderer *renderer,
           if (transform)
             {
               gimp_color_transform_process_pixels (transform,
-                                                   babl_format ("cairo-RGB24"),
+                                                   babl_format ("cairo-ARGB32"),
                                                    row,
-                                                   babl_format ("cairo-RGB24"),
+                                                   babl_format ("cairo-ARGB32"),
                                                    dest,
                                                    renderer->width);
             }

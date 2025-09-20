@@ -73,6 +73,7 @@ enum
   PROP_THEME_SCHEME,
   PROP_OVERRIDE_THEME_ICON_SIZE,
   PROP_CUSTOM_ICON_SIZE,
+  PROP_VIEWABLES_FOLLOW_THEME,
   PROP_ICON_THEME_PATH,
   PROP_ICON_THEME,
   PROP_PREFER_SYMBOLIC_ICONS,
@@ -91,6 +92,7 @@ enum
   PROP_PLAYGROUND_NPD_TOOL,
   PROP_PLAYGROUND_SEAMLESS_CLONE_TOOL,
   PROP_PLAYGROUND_PAINT_SELECT_TOOL,
+  PROP_PLAYGROUND_USE_LIST_BOX,
 
   PROP_HIDE_DOCKS,
   PROP_SINGLE_WINDOW_MODE,
@@ -329,6 +331,13 @@ gimp_gui_config_class_init (GimpGuiConfigClass *klass)
                             GIMP_TYPE_ICON_SIZE,
                             GIMP_ICON_SIZE_MEDIUM,
                             GIMP_PARAM_STATIC_STRINGS);
+  GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_VIEWABLES_FOLLOW_THEME,
+                            "viewables-follow-theme",
+                            "Preview of viewables follow the theme style when relevant",
+                            VIEWABLES_FOLLOW_THEME_BLURB,
+                            FALSE,
+                            GIMP_PARAM_STATIC_STRINGS);
+
 
   path = gimp_config_build_data_path ("icons");
   GIMP_CONFIG_PROP_PATH (object_class, PROP_ICON_THEME_PATH,
@@ -462,6 +471,14 @@ gimp_gui_config_class_init (GimpGuiConfigClass *klass)
                             GIMP_PARAM_STATIC_STRINGS |
                             GIMP_CONFIG_PARAM_RESTART);
 
+  GIMP_CONFIG_PROP_BOOLEAN (object_class,
+                            PROP_PLAYGROUND_USE_LIST_BOX,
+                            "playground-use-list-box",
+                            "Playground Use List Box",
+                            PLAYGROUND_USE_LIST_BOX_BLURB,
+                            FALSE,
+                            GIMP_PARAM_STATIC_STRINGS);
+
   g_object_class_install_property (object_class, PROP_HIDE_DOCKS,
                                    g_param_spec_boolean ("hide-docks",
                                                          NULL,
@@ -591,12 +608,12 @@ gimp_gui_config_finalize (GObject *object)
 {
   GimpGuiConfig *gui_config = GIMP_GUI_CONFIG (object);
 
-  g_free (gui_config->theme_path);
-  g_free (gui_config->theme);
-  g_free (gui_config->icon_theme_path);
-  g_free (gui_config->icon_theme);
-  g_free (gui_config->help_locales);
-  g_free (gui_config->user_manual_online_uri);
+  g_clear_pointer (&gui_config->theme_path,             g_free);
+  g_clear_pointer (&gui_config->theme,                  g_free);
+  g_clear_pointer (&gui_config->icon_theme_path,        g_free);
+  g_clear_pointer (&gui_config->icon_theme,             g_free);
+  g_clear_pointer (&gui_config->help_locales,           g_free);
+  g_clear_pointer (&gui_config->user_manual_online_uri, g_free);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -675,13 +692,11 @@ gimp_gui_config_set_property (GObject      *object,
     case PROP_TOOLBOX_GROUPS:
       gui_config->toolbox_groups = g_value_get_boolean (value);
       break;
-     case PROP_THEME_PATH:
-      g_free (gui_config->theme_path);
-      gui_config->theme_path = g_value_dup_string (value);
+    case PROP_THEME_PATH:
+      g_set_str (&gui_config->theme_path, g_value_get_string (value));
       break;
     case PROP_THEME:
-      g_free (gui_config->theme);
-      gui_config->theme = g_value_dup_string (value);
+      g_set_str (&gui_config->theme, g_value_get_string (value));
       break;
     case PROP_THEME_SCHEME:
       gui_config->theme_scheme = g_value_get_enum (value);
@@ -692,13 +707,14 @@ gimp_gui_config_set_property (GObject      *object,
     case PROP_CUSTOM_ICON_SIZE:
       gui_config->custom_icon_size = g_value_get_enum (value);
       break;
-     case PROP_ICON_THEME_PATH:
-      g_free (gui_config->icon_theme_path);
-      gui_config->icon_theme_path = g_value_dup_string (value);
+    case PROP_VIEWABLES_FOLLOW_THEME:
+      gui_config->viewables_follow_theme = g_value_get_boolean (value);
+      break;
+    case PROP_ICON_THEME_PATH:
+      g_set_str (&gui_config->icon_theme_path, g_value_get_string (value));
       break;
     case PROP_ICON_THEME:
-      g_free (gui_config->icon_theme);
-      gui_config->icon_theme = g_value_dup_string (value);
+      g_set_str (&gui_config->icon_theme, g_value_get_string (value));
       break;
     case PROP_PREFER_SYMBOLIC_ICONS:
       gui_config->prefer_symbolic_icons = g_value_get_boolean (value);
@@ -713,8 +729,7 @@ gimp_gui_config_set_property (GObject      *object,
       gui_config->show_help_button = g_value_get_boolean (value);
       break;
     case PROP_HELP_LOCALES:
-      g_free (gui_config->help_locales);
-      gui_config->help_locales = g_value_dup_string (value);
+      g_set_str (&gui_config->help_locales, g_value_get_string (value));
       break;
     case PROP_HELP_BROWSER:
       gui_config->help_browser = g_value_get_enum (value);
@@ -723,8 +738,7 @@ gimp_gui_config_set_property (GObject      *object,
       gui_config->user_manual_online = g_value_get_boolean (value);
       break;
     case PROP_USER_MANUAL_ONLINE_URI:
-      g_free (gui_config->user_manual_online_uri);
-      gui_config->user_manual_online_uri = g_value_dup_string (value);
+      g_set_str (&gui_config->user_manual_online_uri, g_value_get_string (value));
       break;
     case PROP_ACTION_HISTORY_SIZE:
       gui_config->action_history_size = g_value_get_int (value);
@@ -747,6 +761,9 @@ gimp_gui_config_set_property (GObject      *object,
       break;
     case PROP_PLAYGROUND_PAINT_SELECT_TOOL:
       gui_config->playground_paint_select_tool = g_value_get_boolean (value);
+      break;
+    case PROP_PLAYGROUND_USE_LIST_BOX:
+      gui_config->playground_use_list_box = g_value_get_boolean (value);
       break;
 
     case PROP_HIDE_DOCKS:
@@ -874,6 +891,9 @@ gimp_gui_config_get_property (GObject    *object,
     case PROP_CUSTOM_ICON_SIZE:
       g_value_set_enum (value, gui_config->custom_icon_size);
       break;
+    case PROP_VIEWABLES_FOLLOW_THEME:
+      g_value_set_boolean (value, gui_config->viewables_follow_theme);
+      break;
     case PROP_ICON_THEME_PATH:
       g_value_set_string (value, gui_config->icon_theme_path);
       break;
@@ -925,6 +945,9 @@ gimp_gui_config_get_property (GObject    *object,
       break;
     case PROP_PLAYGROUND_PAINT_SELECT_TOOL:
       g_value_set_boolean (value, gui_config->playground_paint_select_tool);
+      break;
+    case PROP_PLAYGROUND_USE_LIST_BOX:
+      g_value_set_boolean (value, gui_config->playground_use_list_box);
       break;
 
     case PROP_HIDE_DOCKS:

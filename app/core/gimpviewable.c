@@ -48,7 +48,9 @@ enum
   PROP_FROZEN,
   N_PROPS
 };
+
 static GParamSpec *obj_props[N_PROPS] = { NULL, };
+
 
 enum
 {
@@ -68,15 +70,19 @@ struct _GimpViewablePrivate
   GdkPixbuf    *icon_pixbuf;
   gint          freeze_count;
   gboolean      invalidate_pending;
-  gboolean      size_changed_prending;
+  gboolean      size_changed_pending;
   GimpViewable *parent;
   gint          depth;
 
   GimpTempBuf  *preview_temp_buf;
+  GeglColor    *preview_temp_buf_color;
+
   GdkPixbuf    *preview_pixbuf;
+  GeglColor    *preview_pixbuf_color;
 };
 
-#define GET_PRIVATE(viewable) ((GimpViewablePrivate *) gimp_viewable_get_instance_private ((GimpViewable *) (viewable)))
+#define GET_PRIVATE(viewable) \
+  ((GimpViewablePrivate *) gimp_viewable_get_instance_private ((GimpViewable *) (viewable)))
 
 
 static void    gimp_viewable_config_iface_init (GimpConfigInterface *iface);
@@ -100,7 +106,8 @@ static void    gimp_viewable_real_ancestry_changed   (GimpViewable  *viewable);
 static GdkPixbuf * gimp_viewable_real_get_new_pixbuf (GimpViewable  *viewable,
                                                       GimpContext   *context,
                                                       gint           width,
-                                                      gint           height);
+                                                      gint           height,
+                                                      GeglColor     *fg_color);
 static void    gimp_viewable_real_get_preview_size   (GimpViewable  *viewable,
                                                       gint           size,
                                                       gboolean       popup,
@@ -186,6 +193,7 @@ gimp_viewable_class_init (GimpViewableClass *klass)
   gimp_object_class->get_memsize = gimp_viewable_get_memsize;
 
   klass->default_icon_name       = "gimp-image";
+  klass->default_name            = "EEK: Missing Default Name";
   klass->name_changed_signal     = "name-changed";
   klass->name_editable           = FALSE;
 
@@ -245,9 +253,11 @@ gimp_viewable_finalize (GObject *object)
   GimpViewablePrivate *private = GET_PRIVATE (object);
 
   g_clear_pointer (&private->icon_name, g_free);
-  g_clear_object (&private->icon_pixbuf);
+  g_clear_object  (&private->icon_pixbuf);
   g_clear_pointer (&private->preview_temp_buf, gimp_temp_buf_unref);
-  g_clear_object (&private->preview_pixbuf);
+  g_clear_object  (&private->preview_temp_buf_color);
+  g_clear_object  (&private->preview_pixbuf);
+  g_clear_object  (&private->preview_pixbuf_color);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -267,9 +277,7 @@ gimp_viewable_set_property (GObject      *object,
       gimp_viewable_set_icon_name (viewable, g_value_get_string (value));
       break;
     case PROP_ICON_PIXBUF:
-      if (private->icon_pixbuf)
-        g_object_unref (private->icon_pixbuf);
-      private->icon_pixbuf = g_value_dup_object (value);
+      g_set_object (&private->icon_pixbuf, g_value_get_object (value));
       gimp_viewable_invalidate_preview (viewable);
       break;
     case PROP_FROZEN:
@@ -333,7 +341,9 @@ gimp_viewable_real_invalidate_preview (GimpViewable *viewable)
   GimpViewablePrivate *private = GET_PRIVATE (viewable);
 
   g_clear_pointer (&private->preview_temp_buf, gimp_temp_buf_unref);
-  g_clear_object (&private->preview_pixbuf);
+  g_clear_object  (&private->preview_temp_buf_color);
+  g_clear_object  (&private->preview_pixbuf);
+  g_clear_object  (&private->preview_pixbuf_color);
 }
 
 static void
@@ -402,13 +412,16 @@ static GdkPixbuf *
 gimp_viewable_real_get_new_pixbuf (GimpViewable *viewable,
                                    GimpContext  *context,
                                    gint          width,
-                                   gint          height)
+                                   gint          height,
+                                   GeglColor    *fg_color)
 {
   GimpViewablePrivate *private = GET_PRIVATE (viewable);
   GdkPixbuf           *pixbuf  = NULL;
   GimpTempBuf         *temp_buf;
 
-  temp_buf = gimp_viewable_get_preview (viewable, context, width, height);
+  temp_buf = gimp_viewable_get_preview (viewable, context,
+                                        width, height,
+                                        fg_color);
 
   if (temp_buf)
     {
@@ -567,7 +580,6 @@ gimp_viewable_invalidate_preview (GimpViewable *viewable)
 
   g_return_if_fail (GIMP_IS_VIEWABLE (viewable));
 
-
   if (private->freeze_count == 0)
     g_signal_emit (viewable, viewable_signals[INVALIDATE_PREVIEW], 0);
   else
@@ -592,7 +604,7 @@ gimp_viewable_size_changed (GimpViewable *viewable)
   if (private->freeze_count == 0)
     g_signal_emit (viewable, viewable_signals[SIZE_CHANGED], 0);
   else
-    private->size_changed_prending = TRUE;
+    private->size_changed_pending = TRUE;
 }
 
 /**
@@ -677,6 +689,21 @@ gimp_viewable_calc_preview_size (gint       aspect_width,
   if (return_width)  *return_width  = width;
   if (return_height) *return_height = height;
   if (scaling_up)    *scaling_up    = (xratio > 1.0) || (yratio > 1.0);
+}
+
+gboolean
+gimp_viewable_has_preview (GimpViewable *viewable)
+{
+  GimpViewableClass *viewable_class;
+
+  g_return_val_if_fail (GIMP_IS_VIEWABLE (viewable), FALSE);
+
+  viewable_class = GIMP_VIEWABLE_GET_CLASS (viewable);
+
+  return (viewable_class->get_preview     ||
+          viewable_class->get_new_preview ||
+          viewable_class->get_pixbuf      ||
+          viewable_class->get_new_pixbuf);
 }
 
 gboolean
@@ -827,6 +854,8 @@ gimp_viewable_get_popup_size (GimpViewable *viewable,
  * @context:  The context to render the preview for.
  * @width:    desired width for the preview
  * @height:   desired height for the preview
+ * @fg_color :desired foreground color for the preview when the type of
+ *            @viewable support recolorization.
  *
  * Gets a preview for a viewable object, by running through a variety
  * of methods until it finds one that works.  First, if an
@@ -838,6 +867,12 @@ gimp_viewable_get_popup_size (GimpViewable *viewable,
  * method, and executes it, caching the result.  If everything fails,
  * %NULL is returned.
  *
+ * When a drawable can be recolored (for instance a generated or mask
+ * brush), then @color will be used. Note that in many cases, viewables
+ * cannot be recolored (e.g. images, layers or color brushes).
+ * When setting @color to %NULL on a recolorable viewable, the used
+ * color may be anything.
+ *
  * Returns: (nullable): A #GimpTempBuf containing the preview image, or %NULL if
  *          none can be found or created.
  **/
@@ -845,7 +880,8 @@ GimpTempBuf *
 gimp_viewable_get_preview (GimpViewable *viewable,
                            GimpContext  *context,
                            gint          width,
-                           gint          height)
+                           gint          height,
+                           GeglColor    *fg_color)
 {
   GimpViewablePrivate *private = GET_PRIVATE (viewable);
   GimpViewableClass   *viewable_class;
@@ -862,27 +898,54 @@ gimp_viewable_get_preview (GimpViewable *viewable,
   viewable_class = GIMP_VIEWABLE_GET_CLASS (viewable);
 
   if (viewable_class->get_preview)
-    temp_buf = viewable_class->get_preview (viewable, context, width, height);
+    temp_buf = viewable_class->get_preview (viewable, context,
+                                            width, height,
+                                            fg_color);
 
   if (temp_buf)
     return temp_buf;
 
-  if (private->preview_temp_buf)
+  if (private->preview_temp_buf &&
+      ((fg_color == NULL && private->preview_temp_buf_color == NULL) ||
+       (fg_color != NULL && private->preview_temp_buf_color != NULL)))
     {
       if (gimp_temp_buf_get_width  (private->preview_temp_buf) == width &&
           gimp_temp_buf_get_height (private->preview_temp_buf) == height)
         {
-          return private->preview_temp_buf;
-        }
+          gboolean same_colors = TRUE;
 
-      g_clear_pointer (&private->preview_temp_buf, gimp_temp_buf_unref);
+          if (fg_color)
+            {
+              gdouble r1, g1, b1, a1;
+              gdouble r2, g2, b2, a2;
+
+              /* Don't use gimp_color_is_perceptually_identical(). Exact
+               * comparison is fine for this use case.
+               */
+              gegl_color_get_rgba (fg_color,
+                                   &r1, &g1, &b1, &a1);
+              gegl_color_get_rgba (private->preview_temp_buf_color,
+                                   &r2, &g2, &b2, &a2);
+
+              same_colors = (r1 == r2 && g1 == g2 && b1 == b2 && a1 == a2);
+            }
+
+          if (same_colors)
+            return private->preview_temp_buf;
+        }
     }
+
+  g_clear_pointer (&private->preview_temp_buf, gimp_temp_buf_unref);
+  g_clear_object (&private->preview_temp_buf_color);
 
   if (viewable_class->get_new_preview)
     temp_buf = viewable_class->get_new_preview (viewable, context,
-                                                width, height);
+                                                width, height,
+                                                fg_color);
 
-  private->preview_temp_buf = temp_buf;
+  private->preview_temp_buf       = temp_buf;
+  private->preview_temp_buf_color = fg_color ?
+                                    gegl_color_duplicate (fg_color) : NULL;
 
   return temp_buf;
 }
@@ -892,6 +955,8 @@ gimp_viewable_get_preview (GimpViewable *viewable,
  * @viewable: The viewable object to get a preview for.
  * @width:    desired width for the preview
  * @height:   desired height for the preview
+ * @fg_color: desired foreground color for the preview when the type of
+ *            @viewable support recolorization.
  *
  * Gets a new preview for a viewable object.  Similar to
  * gimp_viewable_get_preview(), except that it tries things in a
@@ -906,7 +971,8 @@ GimpTempBuf *
 gimp_viewable_get_new_preview (GimpViewable *viewable,
                                GimpContext  *context,
                                gint          width,
-                               gint          height)
+                               gint          height,
+                               GeglColor    *fg_color)
 {
   GimpViewableClass *viewable_class;
   GimpTempBuf       *temp_buf = NULL;
@@ -923,14 +989,16 @@ gimp_viewable_get_new_preview (GimpViewable *viewable,
 
   if (viewable_class->get_new_preview)
     temp_buf = viewable_class->get_new_preview (viewable, context,
-                                                width, height);
+                                                width, height,
+                                                fg_color);
 
   if (temp_buf)
     return temp_buf;
 
   if (viewable_class->get_preview)
     temp_buf = viewable_class->get_preview (viewable, context,
-                                            width, height);
+                                            width, height,
+                                            fg_color);
 
   if (temp_buf)
     return gimp_temp_buf_copy (temp_buf);
@@ -982,6 +1050,8 @@ gimp_viewable_get_dummy_preview (GimpViewable *viewable,
  * @context:  The context to render the preview for.
  * @width:    desired width for the preview
  * @height:   desired height for the preview
+ * @fg_color: desired foreground color for the preview when the type of
+ *            @viewable supports recolorization.
  *
  * Gets a preview for a viewable object, by running through a variety
  * of methods until it finds one that works.  First, if an
@@ -1000,7 +1070,8 @@ GdkPixbuf *
 gimp_viewable_get_pixbuf (GimpViewable *viewable,
                           GimpContext  *context,
                           gint          width,
-                          gint          height)
+                          gint          height,
+                          GeglColor    *fg_color)
 {
   GimpViewablePrivate *private = GET_PRIVATE (viewable);
   GimpViewableClass   *viewable_class;
@@ -1017,26 +1088,54 @@ gimp_viewable_get_pixbuf (GimpViewable *viewable,
   viewable_class = GIMP_VIEWABLE_GET_CLASS (viewable);
 
   if (viewable_class->get_pixbuf)
-    pixbuf = viewable_class->get_pixbuf (viewable, context, width, height);
+    pixbuf = viewable_class->get_pixbuf (viewable, context,
+                                         width, height,
+                                         fg_color);
 
   if (pixbuf)
     return pixbuf;
 
-  if (private->preview_pixbuf)
+  if (private->preview_pixbuf &&
+      ((fg_color == NULL && private->preview_pixbuf_color == NULL) ||
+       (fg_color != NULL && private->preview_pixbuf_color != NULL)))
     {
       if (gdk_pixbuf_get_width  (private->preview_pixbuf) == width &&
           gdk_pixbuf_get_height (private->preview_pixbuf) == height)
         {
-          return private->preview_pixbuf;
-        }
+          gboolean same_colors = TRUE;
 
-      g_clear_object (&private->preview_pixbuf);
+          if (fg_color)
+            {
+              gdouble r1, g1, b1, a1;
+              gdouble r2, g2, b2, a2;
+
+              /* Don't use gimp_color_is_perceptually_identical(). Exact
+               * comparison is fine for this use case.
+               */
+              gegl_color_get_rgba (fg_color,
+                                   &r1, &g1, &b1, &a1);
+              gegl_color_get_rgba (private->preview_pixbuf_color,
+                                   &r2, &g2, &b2, &a2);
+
+              same_colors = (r1 == r2 && g1 == g2 && b1 == b2 && a1 == a2);
+            }
+
+          if (same_colors)
+            return private->preview_pixbuf;
+        }
     }
 
-  if (viewable_class->get_new_pixbuf)
-    pixbuf = viewable_class->get_new_pixbuf (viewable, context, width, height);
+  g_clear_object (&private->preview_pixbuf);
+  g_clear_object (&private->preview_pixbuf_color);
 
-  private->preview_pixbuf = pixbuf;
+  if (viewable_class->get_new_pixbuf)
+    pixbuf = viewable_class->get_new_pixbuf (viewable, context,
+                                             width, height,
+                                             fg_color);
+
+  private->preview_pixbuf       = pixbuf;
+  private->preview_pixbuf_color = fg_color ?
+                                  gegl_color_duplicate (fg_color) : NULL;
 
   return pixbuf;
 }
@@ -1047,6 +1146,8 @@ gimp_viewable_get_pixbuf (GimpViewable *viewable,
  * @context:  The context to render the preview for.
  * @width:    desired width for the pixbuf
  * @height:   desired height for the pixbuf
+ * @fg_color: desired foreground color for the preview when the type of
+ *            @viewable support recolorization.
  *
  * Gets a new preview for a viewable object.  Similar to
  * gimp_viewable_get_pixbuf(), except that it tries things in a
@@ -1061,7 +1162,8 @@ GdkPixbuf *
 gimp_viewable_get_new_pixbuf (GimpViewable *viewable,
                               GimpContext  *context,
                               gint          width,
-                              gint          height)
+                              gint          height,
+                              GeglColor    *fg_color)
 {
   GimpViewableClass *viewable_class;
   GdkPixbuf         *pixbuf = NULL;
@@ -1077,13 +1179,17 @@ gimp_viewable_get_new_pixbuf (GimpViewable *viewable,
   viewable_class = GIMP_VIEWABLE_GET_CLASS (viewable);
 
   if (viewable_class->get_new_pixbuf)
-    pixbuf = viewable_class->get_new_pixbuf (viewable, context, width, height);
+    pixbuf = viewable_class->get_new_pixbuf (viewable, context,
+                                             width, height,
+                                             fg_color);
 
   if (pixbuf)
     return pixbuf;
 
   if (viewable_class->get_pixbuf)
-    pixbuf = viewable_class->get_pixbuf (viewable, context, width, height);
+    pixbuf = viewable_class->get_pixbuf (viewable, context,
+                                         width, height,
+                                         fg_color);
 
   if (pixbuf)
     return gdk_pixbuf_copy (pixbuf);
@@ -1283,9 +1389,9 @@ gimp_viewable_preview_thaw (GimpViewable *viewable)
 
   if (private->freeze_count == 0)
     {
-      if (private->size_changed_prending)
+      if (private->size_changed_pending)
         {
-          private->size_changed_prending = FALSE;
+          private->size_changed_pending = FALSE;
 
           gimp_viewable_size_changed (viewable);
         }

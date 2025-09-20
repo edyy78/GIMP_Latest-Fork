@@ -403,6 +403,7 @@ gimp_layer_class_init (GimpLayerClass *klass)
   gimp_object_class->get_memsize      = gimp_layer_get_memsize;
 
   viewable_class->default_icon_name   = "gimp-layer";
+  viewable_class->default_name        = _("Layer");
   viewable_class->invalidate_preview  = gimp_layer_invalidate_preview;
   viewable_class->get_description     = gimp_layer_get_description;
 
@@ -424,7 +425,6 @@ gimp_layer_class_init (GimpLayerClass *klass)
   item_class->rotate                  = gimp_layer_rotate;
   item_class->transform               = gimp_layer_transform;
   item_class->to_selection            = gimp_layer_to_selection;
-  item_class->default_name            = _("Layer");
   item_class->rename_desc             = C_("undo-type", "Rename Layer");
   item_class->translate_desc          = C_("undo-type", "Move Layer");
   item_class->scale_desc              = C_("undo-type", "Scale Layer");
@@ -1745,6 +1745,10 @@ gimp_layer_real_transform (GimpLayer              *layer,
                            GimpTransformResize     clip_result,
                            GimpProgress           *progress)
 {
+  if (! gimp_matrix3_is_simple (matrix) &&
+      ! gimp_drawable_has_alpha (GIMP_DRAWABLE (layer)))
+    gimp_layer_add_alpha (GIMP_LAYER (layer));
+
   GIMP_ITEM_CLASS (parent_class)->transform (GIMP_ITEM (layer),
                                              context, matrix, direction,
                                              interpolation_type,
@@ -2080,6 +2084,10 @@ gimp_layer_create_mask (GimpLayer       *layer,
                                          gimp_drawable_get_buffer (drawable),
                                          1.0);
             }
+        }
+      else
+        {
+          gimp_channel_all (GIMP_CHANNEL (mask), FALSE);
         }
       break;
 

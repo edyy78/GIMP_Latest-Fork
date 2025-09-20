@@ -40,7 +40,8 @@ GimpTempBuf *
 gimp_path_get_new_preview (GimpViewable *viewable,
                            GimpContext  *context,
                            gint          width,
-                           gint          height)
+                           gint          height,
+                           GeglColor    *fg_color G_GNUC_UNUSED)
 {
   GimpPath    *path;
   GimpItem    *item;

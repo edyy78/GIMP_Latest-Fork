@@ -38,7 +38,13 @@
 
 #ifdef G_OS_WIN32
 #undef DATADIR
+#include <dwmapi.h>
+#include <gdk/gdkwin32.h>
 #include <windows.h>
+
+#ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
+#define DWMWA_USE_IMMERSIVE_DARK_MODE 20
+#endif
 #endif
 
 #include "gimpcriticaldialog.h"
@@ -75,6 +81,10 @@ static void     gimp_critical_dialog_copy_info    (GimpCriticalDialog *dialog);
 static gboolean browser_open_url                  (GtkWindow    *window,
                                                    const gchar  *url,
                                                    GError      **error);
+#ifdef G_OS_WIN32
+static void     gimp_critical_dialog_realize      (GtkWidget          *widget,
+                                                   GimpCriticalDialog *dialog);
+#endif
 
 
 G_DEFINE_TYPE (GimpCriticalDialog, gimp_critical_dialog, GTK_TYPE_DIALOG)
@@ -109,6 +119,7 @@ gimp_critical_dialog_class_init (GimpCriticalDialogClass *klass)
 static void
 gimp_critical_dialog_init (GimpCriticalDialog *dialog)
 {
+  GtkWidget      *container;
   PangoAttrList  *attrs;
   PangoAttribute *attr;
 
@@ -116,9 +127,12 @@ gimp_critical_dialog_init (GimpCriticalDialog *dialog)
 
   gtk_dialog_set_default_response (GTK_DIALOG (dialog), GTK_RESPONSE_CLOSE);
   gtk_window_set_resizable (GTK_WINDOW (dialog), TRUE);
+  gtk_window_set_position (GTK_WINDOW (dialog), GTK_WIN_POS_CENTER);
+  gtk_window_set_titlebar (GTK_WINDOW (dialog), NULL);
 
   dialog->main_vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 6);
-  gtk_container_set_border_width (GTK_CONTAINER (dialog->main_vbox), 6);
+  container         = gtk_dialog_get_content_area (GTK_DIALOG (dialog));
+  gtk_container_set_border_width (GTK_CONTAINER (container), 12);
   gtk_box_pack_start (GTK_BOX (gtk_dialog_get_content_area (GTK_DIALOG (dialog))),
                       dialog->main_vbox, TRUE, TRUE, 0);
   gtk_widget_show (dialog->main_vbox);
@@ -198,7 +212,7 @@ gimp_critical_dialog_constructed (GObject *object)
       g_signal_connect_swapped (button, "clicked",
                                 G_CALLBACK (gimp_critical_dialog_copy_info),
                                 dialog);
-      gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
+      gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 6);
       gtk_widget_show (button);
 
       gtk_dialog_add_buttons (GTK_DIALOG (dialog),
@@ -219,7 +233,7 @@ gimp_critical_dialog_constructed (GObject *object)
   else
     {
       /* Pack directly (and well visible) the bug details. */
-      gtk_box_pack_start (GTK_BOX (dialog->main_vbox), scrolled, TRUE, TRUE, 0);
+      gtk_box_pack_start (GTK_BOX (dialog->main_vbox), scrolled, TRUE, TRUE, 6);
       gtk_widget_show (scrolled);
 
       gtk_dialog_add_buttons (GTK_DIALOG (dialog),
@@ -272,6 +286,46 @@ gimp_critical_dialog_constructed (GObject *object)
   gtk_widget_show (dialog->details);
   gtk_container_add (GTK_CONTAINER (scrolled), dialog->details);
 }
+
+/* Copied from app/widgets/gimpwidgets-utils.c, to reduce dependency
+ * on internal GIMP procedures */
+#ifdef G_OS_WIN32
+static void
+gimp_critical_dialog_realize (GtkWidget          *widget,
+                              GimpCriticalDialog *dialog)
+{
+  HWND             hwnd;
+  GdkWindow       *window        = NULL;
+  GtkStyleContext *style;
+  GdkRGBA         *color         = NULL;
+  gboolean         use_dark_mode = FALSE;
+
+  window = gtk_widget_get_window (GTK_WIDGET (widget));
+  if (window)
+    {
+      /* Workaround if we don't have access to GimpGuiConfig.
+       * If the background color is below the threshold, then we're
+       * likely in dark mode.
+       */
+      style = gtk_widget_get_style_context (widget);
+      gtk_style_context_get (style, gtk_style_context_get_state (style),
+                             GTK_STYLE_PROPERTY_BACKGROUND_COLOR, &color,
+                             NULL);
+      if (color)
+        {
+          if (color->red < 0.5 && color->green < 0.5 && color->blue < 0.5)
+            use_dark_mode = TRUE;
+
+          gdk_rgba_free (color);
+        }
+
+      hwnd = (HWND) gdk_win32_window_get_handle (window);
+      DwmSetWindowAttribute (hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE,
+                              &use_dark_mode, sizeof (use_dark_mode));
+    }
+}
+#endif
+
 
 static void
 gimp_critical_dialog_finalize (GObject *object)
@@ -526,6 +580,12 @@ gimp_critical_dialog_new (const gchar *title,
                          "release-date", date,
                          NULL);
   g_free (date);
+
+#ifdef G_OS_WIN32
+  g_signal_connect_object (dialog, "realize",
+                           G_CALLBACK (gimp_critical_dialog_realize),
+                           NULL, 0);
+#endif
 
   return dialog;
 }

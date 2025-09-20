@@ -1909,10 +1909,7 @@ gimp_transform_grid_tool_add_filter (GimpDrawable  *drawable,
   GimpLayerMode  mode = GIMP_LAYER_MODE_NORMAL;
 
   if (GIMP_IS_LAYER (drawable))
-    {
-      gimp_layer_get_effective_mode (GIMP_LAYER (drawable),
-                                     &mode, NULL, NULL, NULL);
-    }
+    mode = gimp_layer_get_mode (GIMP_LAYER (drawable));
 
   if (mode != GIMP_LAYER_MODE_PASS_THROUGH)
     {
@@ -2045,7 +2042,7 @@ filter_new (GimpTransformGridTool *tg_tool,
                                   GIMP_TRANSFORM_TOOL_GET_CLASS (tg_tool)->undo_desc,
                                   node,
                                   gimp_tool_get_icon_name (GIMP_TOOL (tg_tool)));
-      g_object_set (filter->filter, "temporary", TRUE, NULL);
+      gimp_drawable_filter_set_temporary (filter->filter, TRUE);
 
       gimp_drawable_filter_set_clip (filter->filter, FALSE);
       gimp_drawable_filter_set_override_constraints (filter->filter, TRUE);

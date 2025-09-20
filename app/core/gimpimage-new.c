@@ -37,8 +37,6 @@
 #include "gimpchannel.h"
 #include "gimpcontext.h"
 #include "gimpdrawable-fill.h"
-#include "gimpdrawable-filters.h"
-#include "gimpdrawablefilter.h"
 #include "gimpgrouplayer.h"
 #include "gimpimage.h"
 #include "gimpimage-color-profile.h"
@@ -53,6 +51,11 @@
 
 #include "gimp-intl.h"
 
+
+static void   gimp_image_new_add_creation_metadata (GimpImage *image);
+
+
+/*  public functions  */
 
 GimpTemplate *
 gimp_image_new_get_last_template (Gimp      *gimp,
@@ -84,7 +87,11 @@ gimp_image_new_get_last_template (Gimp      *gimp,
     }
   else
     {
-      gimp_config_sync (G_OBJECT (gimp->image_new_last_template),
+      GimpTemplate *last_template;
+
+      last_template = gimp_get_last_template (gimp);
+
+      gimp_config_sync (G_OBJECT (last_template),
                         G_OBJECT (template), 0);
     }
 
@@ -98,28 +105,7 @@ gimp_image_new_set_last_template (Gimp         *gimp,
   g_return_if_fail (GIMP_IS_GIMP (gimp));
   g_return_if_fail (GIMP_IS_TEMPLATE (template));
 
-  gimp_config_sync (G_OBJECT (template),
-                    G_OBJECT (gimp->image_new_last_template), 0);
-}
-
-void
-gimp_image_new_add_creation_metadata (GimpImage *image)
-{
-  GimpMetadata *metadata;
-
-  metadata = gimp_image_get_metadata (image);
-  if (! metadata)
-    {
-      g_critical ("Metadata not found. Should not happen!");
-    }
-  else
-    {
-      GDateTime *datetime;
-
-      datetime = g_date_time_new_now_local ();
-      gimp_metadata_set_creation_date (metadata, datetime);
-      g_date_time_unref (datetime);
-    }
+  gimp_set_last_template (gimp, template);
 }
 
 GimpImage *
@@ -225,7 +211,6 @@ gimp_image_new_from_drawable (Gimp         *gimp,
   gdouble            xres;
   gdouble            yres;
   GimpColorProfile  *profile;
-  GimpContainer     *filters;
 
   g_return_val_if_fail (GIMP_IS_GIMP (gimp), NULL);
   g_return_val_if_fail (GIMP_IS_DRAWABLE (drawable), NULL);
@@ -275,36 +260,6 @@ gimp_image_new_from_drawable (Gimp         *gimp,
   gimp_layer_set_opacity (new_layer, GIMP_OPACITY_OPAQUE, FALSE);
   if (gimp_layer_can_lock_alpha (new_layer))
     gimp_layer_set_lock_alpha (new_layer, FALSE, FALSE);
-
-  filters = gimp_drawable_get_filters (GIMP_DRAWABLE (drawable));
-  if (gimp_container_get_n_children (filters) > 0)
-    {
-      GList *filter_list;
-
-      for (filter_list = GIMP_LIST (filters)->queue->tail;
-           filter_list;
-           filter_list = g_list_previous (filter_list))
-        {
-          if (GIMP_IS_DRAWABLE_FILTER (filter_list->data))
-            {
-              GimpDrawableFilter *old_filter = filter_list->data;
-              GimpDrawableFilter *filter;
-
-              filter =
-                gimp_drawable_filter_duplicate (GIMP_DRAWABLE (new_layer),
-                                                old_filter);
-
-              if (filter != NULL)
-                {
-                  gimp_drawable_filter_apply (filter, NULL);
-                  gimp_drawable_filter_commit (filter, TRUE, NULL, FALSE);
-
-                  gimp_drawable_filter_layer_mask_freeze (filter);
-                  g_object_unref (filter);
-                }
-            }
-        }
-    }
 
   gimp_image_add_layer (new_image, new_layer, NULL, 0, TRUE);
 
@@ -397,11 +352,10 @@ gimp_image_new_copy_drawables (GimpImage *image,
     {
       if (g_list_find (copied_drawables, iter->data))
         {
-          GimpLayer     *new_layer;
-          GimpContainer *filters;
-          GType          new_type;
-          gboolean       is_group;
-          gboolean       is_tagged;
+          GimpLayer *new_layer;
+          GType      new_type;
+          gboolean   is_group;
+          gboolean   is_tagged;
 
           if (GIMP_IS_LAYER (iter->data))
             new_type = G_TYPE_FROM_INSTANCE (iter->data);
@@ -444,33 +398,6 @@ gimp_image_new_copy_drawables (GimpImage *image,
 
           if (gimp_layer_can_lock_alpha (new_layer))
             gimp_layer_set_lock_alpha (new_layer, FALSE, FALSE);
-
-          filters = gimp_drawable_get_filters (GIMP_DRAWABLE (iter->data));
-          if (gimp_container_get_n_children (filters) > 0)
-            {
-              GList *filter_list;
-
-              for (filter_list = GIMP_LIST (filters)->queue->tail; filter_list;
-                   filter_list = g_list_previous (filter_list))
-                {
-                  if (GIMP_IS_DRAWABLE_FILTER (filter_list->data))
-                    {
-                      GimpDrawableFilter *old_filter = filter_list->data;
-                      GimpDrawableFilter *filter;
-
-                      filter = gimp_drawable_filter_duplicate (GIMP_DRAWABLE (new_layer), old_filter);
-
-                      if (filter != NULL)
-                        {
-                          gimp_drawable_filter_apply (filter, NULL);
-                          gimp_drawable_filter_commit (filter, TRUE, NULL, FALSE);
-
-                          gimp_drawable_filter_layer_mask_freeze (filter);
-                          g_object_unref (filter);
-                        }
-                    }
-                }
-            }
 
           gimp_image_add_layer (new_image, new_layer, new_parent, index++, TRUE);
 
@@ -727,4 +654,27 @@ gimp_image_new_from_pixbuf (Gimp        *gimp,
   gimp_image_undo_enable (new_image);
 
   return new_image;
+}
+
+
+/*  private functions  */
+
+static void
+gimp_image_new_add_creation_metadata (GimpImage *image)
+{
+  GimpMetadata *metadata;
+
+  metadata = gimp_image_get_metadata (image);
+  if (! metadata)
+    {
+      g_critical ("Metadata not found. Should not happen!");
+    }
+  else
+    {
+      GDateTime *datetime;
+
+      datetime = g_date_time_new_now_local ();
+      gimp_metadata_set_creation_date (metadata, datetime);
+      g_date_time_unref (datetime);
+    }
 }

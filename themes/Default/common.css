@@ -67,6 +67,11 @@ GimpDock .view:drop(active) {
   border-top-color: @dimmed-fg-color;
 }
 
+/* Widget for various previews and icon tabs  */
+GimpView {
+  background-color: @extreme-bg-color;
+}
+
 /* Define the mouse-over color for the path
  * buttons in the various file dialogs.
  */
@@ -172,11 +177,17 @@ notebook stack {
 
 notebook header {
   background-color: @bg-color;
-  border-color: @edge-border-color;
+  border-bottom:    1px solid @edge-border-color;
+  box-shadow:       none;
 }
 
 notebook header button {
   box-shadow: none;
+}
+
+notebook header button:hover {
+  background-color: @selected-color;
+  border-color:     @edge-border-color;
 }
 
 notebook header tabs {
@@ -432,6 +443,20 @@ paned menu separator {
     padding: 0px;
 }
 
+
+/* Highlight icons in Grid View when hovered over */
+iconview:hover {
+  border: 2px solid @dimmed-fg-color;
+}
+
+iconview:selected {
+  border: 2px solid @fg-color;
+}
+
+GimpContainerIconView scrolledwindow {
+  background-color: @extreme-bg-color;
+}
+
 .view button {
   background-color: @bg-color;
   border-color: @border-color;
@@ -536,7 +561,7 @@ GimpSpinScale entry {
   border-radius:      5px 0px 0px 5px;
   border-right-width: 0px;
   box-shadow:         none;
-  padding:            0px 8px 0px 5px;
+  padding:            0px;
 }
 
 GimpSpinScale entry progress {
@@ -544,7 +569,7 @@ GimpSpinScale entry progress {
   background-image: none;
   border-width:     0px;
   border-radius:    3px 0px 0px 3px;
-  margin:           0px -8px 0px -5px;
+  margin:           0px;
 }
 
 GimpSpinScale button {
@@ -643,6 +668,14 @@ tooltip decoration {
 /* The border around a frame */
 border {
   border: 0px;
+}
+
+/* The border around frames in dialogs */
+dialog notebook.frame {
+  border: 1px solid @border-color;
+}
+GimpColorNotebook notebook.frame {
+  border-width: 0px;
 }
 
 /* The border around GimpOffsetArea frame in resize dialogs */
@@ -758,6 +791,11 @@ actionbar revealer box {
   border-width: 0px;
   border-top-width: 1px;
   border-top-color: @strong-border-color;
+}
+
+statusbar progressbar trough,
+statusbar progressbar progress {
+  min-height: 10px;
 }
 
 /* Sidebar in File > Open */

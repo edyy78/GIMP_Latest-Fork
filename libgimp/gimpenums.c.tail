@@ -45,11 +45,11 @@ static const GimpGetTypeFunc get_type_funcs[] =
   gimp_message_handler_type_get_type,
   gimp_offset_type_get_type,
   gimp_orientation_type_get_type,
+  gimp_paint_application_mode_get_type,
+  gimp_path_stroke_type_get_type,
   gimp_pdb_error_handler_get_type,
   gimp_pdb_proc_type_get_type,
   gimp_pdb_status_type_get_type,
-  gimp_paint_application_mode_get_type,
-  gimp_path_stroke_type_get_type,
   gimp_precision_get_type,
   gimp_progress_command_get_type,
   gimp_repeat_mode_get_type,
@@ -64,7 +64,8 @@ static const GimpGetTypeFunc get_type_funcs[] =
   gimp_text_justification_get_type,
   gimp_transfer_mode_get_type,
   gimp_transform_direction_get_type,
-  gimp_transform_resize_get_type
+  gimp_transform_resize_get_type,
+  gimp_trc_type_get_type
 };
 
 static const gchar * const type_names[] =
@@ -111,11 +112,11 @@ static const gchar * const type_names[] =
   "GimpMessageHandlerType",
   "GimpOffsetType",
   "GimpOrientationType",
+  "GimpPaintApplicationMode",
+  "GimpPathStrokeType",
   "GimpPDBErrorHandler",
   "GimpPDBProcType",
   "GimpPDBStatusType",
-  "GimpPaintApplicationMode",
-  "GimpPathStrokeType",
   "GimpPrecision",
   "GimpProgressCommand",
   "GimpRepeatMode",
@@ -130,7 +131,8 @@ static const gchar * const type_names[] =
   "GimpTextJustification",
   "GimpTransferMode",
   "GimpTransformDirection",
-  "GimpTransformResize"
+  "GimpTransformResize",
+  "GimpTRCType"
 };
 
 static gboolean enums_initialized = FALSE;

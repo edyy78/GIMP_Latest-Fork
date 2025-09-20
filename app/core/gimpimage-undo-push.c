@@ -311,6 +311,7 @@ gimp_image_undo_push_drawable_format (GimpImage    *image,
 /***************************/
 /*  Drawable Filter Undos  */
 /***************************/
+
 GimpUndo *
 gimp_image_undo_push_filter_add (GimpImage          *image,
                                  const gchar        *undo_desc,
@@ -319,6 +320,8 @@ gimp_image_undo_push_filter_add (GimpImage          *image,
 {
   g_return_val_if_fail (GIMP_IS_IMAGE (image), NULL);
   g_return_val_if_fail (GIMP_IS_DRAWABLE_FILTER (filter), NULL);
+  g_return_val_if_fail (gimp_drawable_filter_get_temporary (filter) == FALSE,
+                        NULL);
 
   return gimp_image_undo_push (image, GIMP_TYPE_DRAWABLE_FILTER_UNDO,
                                GIMP_UNDO_FILTER_ADD, undo_desc,
@@ -335,6 +338,8 @@ gimp_image_undo_push_filter_remove (GimpImage          *image,
 {
   g_return_val_if_fail (GIMP_IS_IMAGE (image), NULL);
   g_return_val_if_fail (GIMP_IS_DRAWABLE_FILTER (filter), NULL);
+  g_return_val_if_fail (gimp_drawable_filter_get_temporary (filter) == FALSE,
+                        NULL);
 
   return gimp_image_undo_push (image, GIMP_TYPE_DRAWABLE_FILTER_UNDO,
                                GIMP_UNDO_FILTER_REMOVE, undo_desc,
@@ -351,6 +356,8 @@ gimp_image_undo_push_filter_reorder (GimpImage          *image,
 {
   g_return_val_if_fail (GIMP_IS_IMAGE (image), NULL);
   g_return_val_if_fail (GIMP_IS_DRAWABLE_FILTER (filter), NULL);
+  g_return_val_if_fail (gimp_drawable_filter_get_temporary (filter) == FALSE,
+                        NULL);
 
   return gimp_image_undo_push (image, GIMP_TYPE_DRAWABLE_FILTER_UNDO,
                                GIMP_UNDO_FILTER_REORDER, undo_desc,
@@ -367,6 +374,8 @@ gimp_image_undo_push_filter_modified (GimpImage          *image,
 {
   g_return_val_if_fail (GIMP_IS_IMAGE (image), NULL);
   g_return_val_if_fail (GIMP_IS_DRAWABLE_FILTER (filter), NULL);
+  g_return_val_if_fail (gimp_drawable_filter_get_temporary (filter) == FALSE,
+                        NULL);
 
   return gimp_image_undo_push (image, GIMP_TYPE_DRAWABLE_FILTER_UNDO,
                                GIMP_UNDO_FILTER_MODIFIED, undo_desc,

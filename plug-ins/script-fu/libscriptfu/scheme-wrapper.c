@@ -112,6 +112,8 @@ static pointer  script_fu_register_call_procedure                 (scheme       
                                                                    pointer               a);
 static pointer  script_fu_menu_register_call                      (scheme               *sc,
                                                                    pointer               a);
+static pointer  script_fu_register_i18n_call                      (scheme               *sc,
+                                                                   pointer               a);
 static pointer  script_fu_use_v3_call                             (scheme               *sc,
                                                                    pointer               a);
 static pointer  script_fu_use_v2_call                             (scheme               *sc,
@@ -553,6 +555,7 @@ ts_define_procedure (sc, "load-extension", scm_load_ext);
       ts_define_procedure (sc, "script-fu-register-filter", script_fu_register_call_filter);
       ts_define_procedure (sc, "script-fu-register-procedure", script_fu_register_call_procedure);
       ts_define_procedure (sc, "script-fu-menu-register",   script_fu_menu_register_call);
+      ts_define_procedure (sc, "script-fu-register-i18n",   script_fu_register_i18n_call);
     }
   else
     {
@@ -560,6 +563,7 @@ ts_define_procedure (sc, "load-extension", scm_load_ext);
       ts_define_procedure (sc, "script-fu-register-filter", script_fu_nil_call);
       ts_define_procedure (sc, "script-fu-register-procedure", script_fu_nil_call);
       ts_define_procedure (sc, "script-fu-menu-register",   script_fu_nil_call);
+      ts_define_procedure (sc, "script-fu-register-i18n",   script_fu_nil_call);
     }
 
   ts_define_procedure (sc, "script-fu-use-v3",    script_fu_use_v3_call);
@@ -765,8 +769,10 @@ script_fu_marshal_arg_to_value (scheme       *sc,
           GParamSpecInt *ispec = G_PARAM_SPEC_INT (arg_spec);
           gint           v     = sc->vptr->ivalue (sc->vptr->pair_car (a));
 
-          if (v < ispec->minimum || v > ispec->maximum)
-            return script_int_range_error (sc, arg_index, proc_name, ispec->minimum, ispec->maximum, v);
+          if (! (arg_spec->flags & GIMP_PARAM_NO_VALIDATE) &&
+              (v < ispec->minimum || v > ispec->maximum))
+            return script_int_range_error (sc, arg_index, proc_name,
+                                           ispec->minimum, ispec->maximum, v);
 
           g_value_set_int (value, v);
           if (strvalue)
@@ -784,8 +790,10 @@ script_fu_marshal_arg_to_value (scheme       *sc,
           GParamSpecUInt *ispec = G_PARAM_SPEC_UINT (arg_spec);
           gint            v     = sc->vptr->ivalue (arg_val);
 
-          if (v < ispec->minimum || v > ispec->maximum)
-            return script_int_range_error (sc, arg_index, proc_name, ispec->minimum, ispec->maximum, v);
+          if (! (arg_spec->flags & GIMP_PARAM_NO_VALIDATE) &&
+              (v < ispec->minimum || v > ispec->maximum))
+            return script_int_range_error (sc, arg_index, proc_name,
+                                           ispec->minimum, ispec->maximum, v);
 
           g_value_set_uint (value, v);
           if (strvalue)
@@ -803,8 +811,10 @@ script_fu_marshal_arg_to_value (scheme       *sc,
           GParamSpecUChar *cspec = G_PARAM_SPEC_UCHAR (arg_spec);
           gint             c     = sc->vptr->ivalue (arg_val);
 
-          if (c < cspec->minimum || c > cspec->maximum)
-            return script_int_range_error (sc, arg_index, proc_name, cspec->minimum, cspec->maximum, c);
+          if (! (arg_spec->flags & GIMP_PARAM_NO_VALIDATE) &&
+              (c < cspec->minimum || c > cspec->maximum))
+            return script_int_range_error (sc, arg_index, proc_name,
+                                           cspec->minimum, cspec->maximum, c);
 
           g_value_set_uchar (value, c);
           if (strvalue)
@@ -822,7 +832,8 @@ script_fu_marshal_arg_to_value (scheme       *sc,
           GParamSpecDouble *dspec = G_PARAM_SPEC_DOUBLE (arg_spec);
           gdouble           d     = sc->vptr->rvalue (arg_val);
 
-          if (d < dspec->minimum || d > dspec->maximum)
+          if (! (arg_spec->flags & GIMP_PARAM_NO_VALIDATE) &&
+              (d < dspec->minimum || d > dspec->maximum))
             return script_float_range_error (sc, arg_index, proc_name, dspec->minimum, dspec->maximum, d);
 
           g_value_set_double (value, d);
@@ -1716,7 +1727,8 @@ script_fu_marshal_procedure_call (scheme   *sc,
             }
 
           debug_gvalue (&value);
-          if (g_param_value_validate (arg_spec, &value))
+          if (! (arg_spec->flags & GIMP_PARAM_NO_VALIDATE) &&
+              g_param_value_validate (arg_spec, &value))
             {
               gchar error_message[1024];
 
@@ -2336,6 +2348,13 @@ script_fu_menu_register_call (scheme  *sc,
                               pointer  a)
 {
   return script_fu_add_menu (sc, a);
+}
+
+static pointer
+script_fu_register_i18n_call (scheme  *sc,
+                              pointer  a)
+{
+  return script_fu_add_i18n (sc, a);
 }
 
 static pointer

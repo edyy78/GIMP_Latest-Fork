@@ -121,7 +121,10 @@ gimp_user_install_items[] =
 static gboolean  user_install_detect_old         (GimpUserInstall    *install,
                                                   const gchar        *gimp_dir);
 static gchar   * user_install_old_style_gimpdir  (void);
+
+#ifdef G_OS_UNIX
 static gchar   * user_install_flatpak_gimpdir    (gint                minor);
+#endif
 
 static void      user_install_log                (GimpUserInstall    *install,
                                                   const gchar        *format,
@@ -297,7 +300,7 @@ user_install_detect_old (GimpUserInstall *install,
       gint major;
       gint minor;
 
-      for (major = 3; major >= 2; major--)
+      for (major = GIMP_MAJOR_VERSION; major >= 2; major--)
         {
           gint max_minor;
 
@@ -324,14 +327,14 @@ user_install_detect_old (GimpUserInstall *install,
 
               if (migrate)
                 {
-                  install->old_major = 2;
+                  install->old_major = major;
                   install->old_minor = minor;
 
                   break;
                 }
 
 #ifdef G_OS_UNIX
-              if (minor == 10)
+              if (major == 2 && minor == 10)
                 {
                   /* This is special-casing for GIMP 2.10 as flatpak where
                    * we had this weird inconsistency: depending on whether a
@@ -381,6 +384,8 @@ user_install_detect_old (GimpUserInstall *install,
                 }
 #endif
             }
+          if (migrate)
+            break;
         }
     }
 
@@ -446,6 +451,7 @@ user_install_old_style_gimpdir (void)
   return gimp_dir;
 }
 
+#ifdef G_OS_UNIX
 static gchar *
 user_install_flatpak_gimpdir (gint minor)
 {
@@ -466,6 +472,7 @@ user_install_flatpak_gimpdir (gint minor)
 
   return gimp_dir;
 }
+#endif
 
 static void
 user_install_log (GimpUserInstall *install,
@@ -758,7 +765,7 @@ user_update_menurc_over20 (const GMatchInfo *matched_value,
   return FALSE;
 }
 
-gchar *
+static gchar *
 user_update_post_process_menurc_over20 (gpointer user_data)
 {
   GString         *string  = g_string_new (NULL);

@@ -39,6 +39,7 @@ static void   gimp_layer_stack_remove                  (GimpContainer *container
                                                         GimpObject    *object);
 static void   gimp_layer_stack_reorder                 (GimpContainer *container,
                                                         GimpObject    *object,
+                                                        gint           old_index,
                                                         gint           new_index);
 
 static void   gimp_layer_stack_layer_active            (GimpLayer      *layer,
@@ -85,7 +86,7 @@ gimp_layer_stack_constructed (GObject *object)
 
   G_OBJECT_CLASS (parent_class)->constructed (object);
 
-  gimp_assert (g_type_is_a (gimp_container_get_children_type (container),
+  gimp_assert (g_type_is_a (gimp_container_get_child_type (container),
                             GIMP_TYPE_LAYER));
 
   gimp_container_add_handler (container, "active-changed",
@@ -130,22 +131,20 @@ gimp_layer_stack_remove (GimpContainer *container,
 static void
 gimp_layer_stack_reorder (GimpContainer *container,
                           GimpObject    *object,
+                          gint           old_index,
                           gint           new_index)
 {
   GimpLayerStack *stack = GIMP_LAYER_STACK (container);
   gboolean        update_backdrop;
-  gint            index;
 
   update_backdrop = gimp_filter_get_active (GIMP_FILTER (object)) &&
                     gimp_layer_get_excludes_backdrop (GIMP_LAYER (object));
 
-  if (update_backdrop)
-    index = gimp_container_get_child_index (container, object);
-
-  GIMP_CONTAINER_CLASS (parent_class)->reorder (container, object, new_index);
+  GIMP_CONTAINER_CLASS (parent_class)->reorder (container, object,
+                                                old_index, new_index);
 
   if (update_backdrop)
-    gimp_layer_stack_update_range (stack, index, new_index);
+    gimp_layer_stack_update_range (stack, old_index, new_index);
 }
 
 
@@ -157,9 +156,9 @@ gimp_layer_stack_new (GType layer_type)
   g_return_val_if_fail (g_type_is_a (layer_type, GIMP_TYPE_LAYER), NULL);
 
   return g_object_new (GIMP_TYPE_LAYER_STACK,
-                       "name",          g_type_name (layer_type),
-                       "children-type", layer_type,
-                       "policy",        GIMP_CONTAINER_POLICY_STRONG,
+                       "name",       g_type_name (layer_type),
+                       "child-type", layer_type,
+                       "policy",     GIMP_CONTAINER_POLICY_STRONG,
                        NULL);
 }
 

@@ -106,7 +106,8 @@ gimp_drawable_filter_undo_constructed (GObject *object)
 
   G_OBJECT_CLASS (parent_class)->constructed (object);
 
-  gimp_assert (GIMP_IS_DRAWABLE_FILTER (df_undo->filter));
+  gimp_assert (GIMP_IS_DRAWABLE_FILTER (df_undo->filter) &&
+               ! gimp_drawable_filter_get_temporary (df_undo->filter));
 
   drawable = gimp_drawable_filter_get_drawable (df_undo->filter);
   if (drawable)
@@ -242,10 +243,7 @@ gimp_drawable_filter_undo_pop (GimpUndo            *undo,
         {
           gimp_drawable_remove_filter (drawable, GIMP_FILTER (filter));
 
-          gimp_item_set_visible (GIMP_ITEM (drawable), FALSE, FALSE);
-          gimp_image_flush (undo->image);
-          gimp_item_set_visible (GIMP_ITEM (drawable), TRUE, FALSE);
-          gimp_image_flush (undo->image);
+          gimp_drawable_update (drawable, 0, 0, -1, -1);
         }
     }
   if ((undo_mode       == GIMP_UNDO_MODE_UNDO &&
@@ -267,7 +265,7 @@ gimp_drawable_filter_undo_pop (GimpUndo            *undo,
     {
       gimp_container_reorder (filter_stack, GIMP_OBJECT (filter),
                               df_undo->row_index);
-      gimp_drawable_filter_apply (filter, NULL);
+      gimp_drawable_update (drawable, 0, 0, -1, -1);
     }
   else if (undo->undo_type == GIMP_UNDO_FILTER_MODIFIED)
     {
@@ -354,11 +352,8 @@ gimp_drawable_filter_undo_free (GimpUndo     *undo,
 {
   GimpDrawableFilterUndo *drawable_filter_undo = GIMP_DRAWABLE_FILTER_UNDO (undo);
 
-  if (drawable_filter_undo->filter)
-    g_clear_object (&drawable_filter_undo->filter);
-
-  if (drawable_filter_undo->node)
-    g_object_unref (drawable_filter_undo->node);
+  g_clear_object (&drawable_filter_undo->filter);
+  g_clear_object (&drawable_filter_undo->node);
 
   GIMP_UNDO_CLASS (parent_class)->free (undo, undo_mode);
 }

@@ -30,6 +30,7 @@
 
 typedef struct _GimpControllerInfo           GimpControllerInfo;
 typedef struct _GimpControllerKeyboard       GimpControllerKeyboard;
+typedef struct _GimpControllerManager        GimpControllerManager;
 typedef struct _GimpControllerMouse          GimpControllerMouse;
 typedef struct _GimpControllerWheel          GimpControllerWheel;
 typedef struct _GimpDeviceInfo               GimpDeviceInfo;
@@ -89,6 +90,7 @@ typedef struct _GimpContainerBox             GimpContainerBox;
 typedef struct _GimpContainerComboBox        GimpContainerComboBox;
 typedef struct _GimpContainerEntry           GimpContainerEntry;
 typedef struct _GimpContainerIconView        GimpContainerIconView;
+typedef struct _GimpContainerListView        GimpContainerListView;
 typedef struct _GimpContainerTreeStore       GimpContainerTreeStore;
 typedef struct _GimpContainerTreeView        GimpContainerTreeView;
 typedef struct _GimpContainerView            GimpContainerView; /* dummy typedef */
@@ -261,6 +263,7 @@ typedef struct _GimpViewRenderer             GimpViewRenderer;
 typedef struct _GimpViewRendererBrush        GimpViewRendererBrush;
 typedef struct _GimpViewRendererBuffer       GimpViewRendererBuffer;
 typedef struct _GimpViewRendererDrawable     GimpViewRendererDrawable;
+typedef struct _GimpViewRendererFont         GimpViewRendererFont;
 typedef struct _GimpViewRendererGradient     GimpViewRendererGradient;
 typedef struct _GimpViewRendererImage        GimpViewRendererImage;
 typedef struct _GimpViewRendererImagefile    GimpViewRendererImagefile;
@@ -274,6 +277,11 @@ typedef struct _GimpViewRendererPath         GimpViewRendererPath;
 typedef struct _GimpCellRendererButton       GimpCellRendererButton;
 typedef struct _GimpCellRendererDashes       GimpCellRendererDashes;
 typedef struct _GimpCellRendererViewable     GimpCellRendererViewable;
+
+
+/*  list rows  */
+
+typedef struct _GimpRow                      GimpRow;
 
 
 /*  misc objects  */

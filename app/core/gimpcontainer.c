@@ -56,7 +56,7 @@ enum
 enum
 {
   PROP_0,
-  PROP_CHILDREN_TYPE,
+  PROP_CHILD_TYPE,
   PROP_POLICY
 };
 
@@ -72,18 +72,21 @@ typedef struct
 
 struct _GimpContainerPrivate
 {
-  GType                children_type;
+  GType                child_type;
   GimpContainerPolicy  policy;
   gint                 n_children;
 
   GList               *handlers;
   gint                 freeze_count;
+  gint                 n_children_before_freeze;
+  gint                 suspend_items_changed;
 };
 
 
 /*  local function prototypes  */
 
-static void   gimp_container_config_iface_init   (GimpConfigInterface *iface);
+static void   gimp_container_list_model_iface_init (GListModelInterface *iface);
+static void   gimp_container_config_iface_init     (GimpConfigInterface *iface);
 
 static void       gimp_container_dispose         (GObject          *object);
 
@@ -103,6 +106,15 @@ static void       gimp_container_real_add        (GimpContainer    *container,
                                                   GimpObject       *object);
 static void       gimp_container_real_remove     (GimpContainer    *container,
                                                   GimpObject       *object);
+static void       gimp_container_real_reorder    (GimpContainer    *container,
+                                                  GimpObject       *object,
+                                                  gint              old_index,
+                                                  gint              new_index);
+
+static GType      gimp_container_get_item_type   (GListModel       *list);
+static guint      gimp_container_get_n_items     (GListModel       *list);
+static gpointer   gimp_container_get_item        (GListModel       *list,
+                                                  guint             index);
 
 static gboolean   gimp_container_serialize       (GimpConfig       *config,
                                                   GimpConfigWriter *writer,
@@ -121,6 +133,8 @@ static void       gimp_container_free_handler    (GimpContainer    *container,
 
 G_DEFINE_TYPE_WITH_CODE (GimpContainer, gimp_container, GIMP_TYPE_OBJECT,
                          G_ADD_PRIVATE (GimpContainer)
+                         G_IMPLEMENT_INTERFACE (G_TYPE_LIST_MODEL,
+                                                gimp_container_list_model_iface_init)
                          G_IMPLEMENT_INTERFACE (GIMP_TYPE_CONFIG,
                                                 gimp_container_config_iface_init))
 
@@ -159,9 +173,10 @@ gimp_container_class_init (GimpContainerClass *klass)
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpContainerClass, reorder),
                   NULL, NULL,
-                  gimp_marshal_VOID__OBJECT_INT,
-                  G_TYPE_NONE, 2,
+                  gimp_marshal_VOID__OBJECT_INT_INT,
+                  G_TYPE_NONE, 3,
                   GIMP_TYPE_OBJECT,
+                  G_TYPE_INT,
                   G_TYPE_INT);
 
   container_signals[FREEZE] =
@@ -188,7 +203,7 @@ gimp_container_class_init (GimpContainerClass *klass)
 
   klass->add                     = gimp_container_real_add;
   klass->remove                  = gimp_container_real_remove;
-  klass->reorder                 = NULL;
+  klass->reorder                 = gimp_container_real_reorder;
   klass->freeze                  = NULL;
   klass->thaw                    = NULL;
 
@@ -202,8 +217,8 @@ gimp_container_class_init (GimpContainerClass *klass)
   klass->get_child_by_index      = NULL;
   klass->get_child_index         = NULL;
 
-  g_object_class_install_property (object_class, PROP_CHILDREN_TYPE,
-                                   g_param_spec_gtype ("children-type",
+  g_object_class_install_property (object_class, PROP_CHILD_TYPE,
+                                   g_param_spec_gtype ("child-type",
                                                        NULL, NULL,
                                                        GIMP_TYPE_OBJECT,
                                                        GIMP_PARAM_READWRITE |
@@ -219,6 +234,14 @@ gimp_container_class_init (GimpContainerClass *klass)
 }
 
 static void
+gimp_container_list_model_iface_init (GListModelInterface *iface)
+{
+  iface->get_item_type = gimp_container_get_item_type;
+  iface->get_n_items   = gimp_container_get_n_items;
+  iface->get_item      = gimp_container_get_item;
+}
+
+static void
 gimp_container_config_iface_init (GimpConfigInterface *iface)
 {
   iface->serialize   = gimp_container_serialize;
@@ -229,12 +252,13 @@ static void
 gimp_container_init (GimpContainer *container)
 {
   container->priv = gimp_container_get_instance_private (container);
-  container->priv->handlers      = NULL;
-  container->priv->freeze_count  = 0;
 
-  container->priv->children_type = G_TYPE_NONE;
-  container->priv->policy        = GIMP_CONTAINER_POLICY_STRONG;
-  container->priv->n_children    = 0;
+  container->priv->handlers     = NULL;
+  container->priv->freeze_count = 0;
+
+  container->priv->child_type   = G_TYPE_NONE;
+  container->priv->policy       = GIMP_CONTAINER_POLICY_STRONG;
+  container->priv->n_children   = 0;
 }
 
 static void
@@ -249,10 +273,10 @@ gimp_container_dispose (GObject *object)
                                    ((GimpContainerHandler *)
                                     container->priv->handlers->data)->quark);
 
-  if (container->priv->children_type != G_TYPE_NONE)
+  if (container->priv->child_type != G_TYPE_NONE)
     {
-      g_type_class_unref (g_type_class_peek (container->priv->children_type));
-      container->priv->children_type = G_TYPE_NONE;
+      g_type_class_unref (g_type_class_peek (container->priv->child_type));
+      container->priv->child_type = G_TYPE_NONE;
     }
 
   G_OBJECT_CLASS (parent_class)->dispose (object);
@@ -268,9 +292,9 @@ gimp_container_set_property (GObject      *object,
 
   switch (property_id)
     {
-    case PROP_CHILDREN_TYPE:
-      container->priv->children_type = g_value_get_gtype (value);
-      g_type_class_ref (container->priv->children_type);
+    case PROP_CHILD_TYPE:
+      container->priv->child_type = g_value_get_gtype (value);
+      g_type_class_ref (container->priv->child_type);
       break;
     case PROP_POLICY:
       container->priv->policy = g_value_get_enum (value);
@@ -291,8 +315,8 @@ gimp_container_get_property (GObject    *object,
 
   switch (property_id)
     {
-    case PROP_CHILDREN_TYPE:
-      g_value_set_gtype (value, container->priv->children_type);
+    case PROP_CHILD_TYPE:
+      g_value_set_gtype (value, container->priv->child_type);
       break;
     case PROP_POLICY:
       g_value_set_enum (value, container->priv->policy);
@@ -338,6 +362,43 @@ gimp_container_real_remove (GimpContainer *container,
   container->priv->n_children--;
 }
 
+static void
+gimp_container_real_reorder (GimpContainer *container,
+                             GimpObject    *object,
+                             gint           old_index,
+                             gint           new_index)
+{
+}
+
+
+/*  GListModel functions  */
+
+static GType
+gimp_container_get_item_type (GListModel *list)
+{
+  return gimp_container_get_child_type (GIMP_CONTAINER (list));
+}
+
+static guint
+gimp_container_get_n_items (GListModel *list)
+{
+  return gimp_container_get_n_children (GIMP_CONTAINER (list));
+}
+
+static void *
+gimp_container_get_item (GListModel *list,
+                         guint       index)
+{
+  GimpContainer *self = GIMP_CONTAINER (list);
+
+  if (index >= gimp_container_get_n_children (self))
+    return NULL;
+
+  return g_object_ref (gimp_container_get_child_by_index (self, index));
+}
+
+
+/*  GimpConfig functions  */
 
 typedef struct
 {
@@ -434,12 +495,12 @@ gimp_container_deserialize (GimpConfig *config,
                 return FALSE;
               }
 
-            if (! g_type_is_a (type, container->priv->children_type))
+            if (! g_type_is_a (type, container->priv->child_type))
               {
                 g_scanner_error (scanner,
                                  "'%s' is not a subclass of '%s'",
                                  scanner->value.v_identifier,
-                                 g_type_name (container->priv->children_type));
+                                 g_type_name (container->priv->child_type));
                 return FALSE;
               }
 
@@ -555,11 +616,11 @@ gimp_container_free_handler (GimpContainer        *container,
 }
 
 GType
-gimp_container_get_children_type (GimpContainer *container)
+gimp_container_get_child_type (GimpContainer *container)
 {
   g_return_val_if_fail (GIMP_IS_CONTAINER (container), G_TYPE_NONE);
 
-  return container->priv->children_type;
+  return container->priv->child_type;
 }
 
 GimpContainerPolicy
@@ -588,7 +649,7 @@ gimp_container_add (GimpContainer *container,
   g_return_val_if_fail (GIMP_IS_CONTAINER (container), FALSE);
   g_return_val_if_fail (object != NULL, FALSE);
   g_return_val_if_fail (G_TYPE_CHECK_INSTANCE_TYPE (object,
-                                                    container->priv->children_type),
+                                                    container->priv->child_type),
                         FALSE);
 
   if (gimp_container_have (container, object))
@@ -638,6 +699,14 @@ gimp_container_add (GimpContainer *container,
       container->priv->n_children++;
     }
 
+  if (container->priv->freeze_count          == 0 &&
+      container->priv->suspend_items_changed == 0)
+    {
+      gint index = gimp_container_get_child_index (container, object);
+
+      g_list_model_items_changed (G_LIST_MODEL (container), index, 0, 1);
+    }
+
   return TRUE;
 }
 
@@ -647,11 +716,12 @@ gimp_container_remove (GimpContainer *container,
 {
   GList *list;
   gint   n_children;
+  gint   index;
 
   g_return_val_if_fail (GIMP_IS_CONTAINER (container), FALSE);
   g_return_val_if_fail (object != NULL, FALSE);
   g_return_val_if_fail (G_TYPE_CHECK_INSTANCE_TYPE (object,
-                                                    container->priv->children_type),
+                                                    container->priv->child_type),
                         FALSE);
 
   if (! gimp_container_have (container, object))
@@ -678,6 +748,7 @@ gimp_container_remove (GimpContainer *container,
     }
 
   n_children = container->priv->n_children;
+  index      = gimp_container_get_child_index (container, object);
 
   g_signal_emit (container, container_signals[REMOVE], 0, object);
 
@@ -703,6 +774,12 @@ gimp_container_remove (GimpContainer *container,
       break;
     }
 
+  if (container->priv->freeze_count          == 0 &&
+      container->priv->suspend_items_changed == 0)
+    {
+      g_list_model_items_changed (G_LIST_MODEL (container), index, 1, 0);
+    }
+
   return TRUE;
 }
 
@@ -711,10 +788,12 @@ gimp_container_insert (GimpContainer *container,
                        GimpObject    *object,
                        gint           index)
 {
+  gboolean success = FALSE;
+
   g_return_val_if_fail (GIMP_IS_CONTAINER (container), FALSE);
   g_return_val_if_fail (object != NULL, FALSE);
   g_return_val_if_fail (G_TYPE_CHECK_INSTANCE_TYPE (object,
-                                                    container->priv->children_type),
+                                                    container->priv->child_type),
                         FALSE);
 
   g_return_val_if_fail (index >= -1 &&
@@ -727,12 +806,30 @@ gimp_container_insert (GimpContainer *container,
       return FALSE;
     }
 
+  container->priv->suspend_items_changed++;
+
   if (gimp_container_add (container, object))
     {
-      return gimp_container_reorder (container, object, index);
+      /*  set success to TRUE even if reorder() fails, because the
+       *  object has in fact been added
+       */
+      success = TRUE;
+
+      gimp_container_reorder (container, object, index);
     }
 
-  return FALSE;
+  container->priv->suspend_items_changed--;
+
+  if (success                                     &&
+      container->priv->freeze_count          == 0 &&
+      container->priv->suspend_items_changed == 0)
+    {
+      gint index = gimp_container_get_child_index (container, object);
+
+      g_list_model_items_changed (G_LIST_MODEL (container), index, 0, 1);
+    }
+
+  return success;
 }
 
 gboolean
@@ -740,12 +837,12 @@ gimp_container_reorder (GimpContainer *container,
                         GimpObject    *object,
                         gint           new_index)
 {
-  gint index;
+  gint old_index;
 
   g_return_val_if_fail (GIMP_IS_CONTAINER (container), FALSE);
   g_return_val_if_fail (object != NULL, FALSE);
   g_return_val_if_fail (G_TYPE_CHECK_INSTANCE_TYPE (object,
-                                                    container->priv->children_type),
+                                                    container->priv->child_type),
                         FALSE);
 
   g_return_val_if_fail (new_index >= -1 &&
@@ -754,18 +851,31 @@ gimp_container_reorder (GimpContainer *container,
   if (new_index == -1)
     new_index = container->priv->n_children - 1;
 
-  index = gimp_container_get_child_index (container, object);
+  old_index = gimp_container_get_child_index (container, object);
 
-  if (index == -1)
+  if (old_index == -1)
     {
       g_warning ("%s: container %p does not contain object %p",
                  G_STRFUNC, container, object);
       return FALSE;
     }
 
-  if (index != new_index)
-    g_signal_emit (container, container_signals[REORDER], 0,
-                   object, new_index);
+  if (old_index != new_index)
+    {
+      g_signal_emit (container, container_signals[REORDER], 0,
+                     object, old_index, new_index);
+
+      if (container->priv->freeze_count          == 0 &&
+          container->priv->suspend_items_changed == 0)
+        {
+          gint new_index = gimp_container_get_child_index (container, object);
+
+          g_list_model_items_changed (G_LIST_MODEL (container),
+                                      MIN (old_index, new_index),
+                                      ABS (old_index - new_index) + 1,
+                                      ABS (old_index - new_index) + 1);
+        }
+    }
 
   return TRUE;
 }
@@ -778,19 +888,30 @@ gimp_container_freeze (GimpContainer *container)
   container->priv->freeze_count++;
 
   if (container->priv->freeze_count == 1)
-    g_signal_emit (container, container_signals[FREEZE], 0);
+    {
+      container->priv->n_children_before_freeze = container->priv->n_children;
+
+      g_signal_emit (container, container_signals[FREEZE], 0);
+    }
 }
 
 void
 gimp_container_thaw (GimpContainer *container)
 {
   g_return_if_fail (GIMP_IS_CONTAINER (container));
+  g_return_if_fail (container->priv->freeze_count > 0);
 
-  if (container->priv->freeze_count > 0)
-    container->priv->freeze_count--;
+  container->priv->freeze_count--;
 
   if (container->priv->freeze_count == 0)
-    g_signal_emit (container, container_signals[THAW], 0);
+    {
+      g_list_model_items_changed (G_LIST_MODEL (container), 0,
+                                  container->priv->n_children_before_freeze,
+                                  container->priv->n_children);
+      container->priv->n_children_before_freeze = 0;
+
+      g_signal_emit (container, container_signals[THAW], 0);
+    }
 }
 
 gboolean
@@ -981,7 +1102,7 @@ gimp_container_get_child_index (GimpContainer *container,
   g_return_val_if_fail (GIMP_IS_CONTAINER (container), -1);
   g_return_val_if_fail (object != NULL, -1);
   g_return_val_if_fail (G_TYPE_CHECK_INSTANCE_TYPE (object,
-                                                    container->priv->children_type),
+                                                    container->priv->child_type),
                         -1);
 
   return GIMP_CONTAINER_GET_CLASS (container)->get_child_index (container,
@@ -1076,7 +1197,7 @@ gimp_container_add_handler (GimpContainer *container,
 
   if (! g_str_has_prefix (signame, "notify::"))
     g_return_val_if_fail (g_signal_lookup (signame,
-                                           container->priv->children_type), 0);
+                                           container->priv->child_type), 0);
 
   handler = g_slice_new0 (GimpContainerHandler);
 
@@ -1154,8 +1275,8 @@ gimp_container_remove_handlers_by_func (GimpContainer *container,
         {
           gimp_container_free_handler (container, handler);
 
-          container->priv->handlers = g_list_delete_link (
-            container->priv->handlers, list);
+          container->priv->handlers =
+            g_list_delete_link (container->priv->handlers, list);
         }
 
       list = next;
@@ -1181,8 +1302,8 @@ gimp_container_remove_handlers_by_data (GimpContainer *container,
         {
           gimp_container_free_handler (container, handler);
 
-          container->priv->handlers = g_list_delete_link (
-            container->priv->handlers, list);
+          container->priv->handlers =
+            g_list_delete_link (container->priv->handlers, list);
         }
 
       list = next;

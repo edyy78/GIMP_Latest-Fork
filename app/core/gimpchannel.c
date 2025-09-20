@@ -236,8 +236,9 @@ gimp_channel_class_init (GimpChannelClass *klass)
 
   gimp_object_class->get_memsize    = gimp_channel_get_memsize;
 
-  viewable_class->get_description   = gimp_channel_get_description;
   viewable_class->default_icon_name = "gimp-channel";
+  viewable_class->default_name      = _("Channel");
+  viewable_class->get_description   = gimp_channel_get_description;
 
   filter_class->get_node            = gimp_channel_get_node;
 
@@ -253,7 +254,6 @@ gimp_channel_class_init (GimpChannelClass *klass)
   item_class->fill                 = gimp_channel_fill;
   item_class->stroke               = gimp_channel_stroke;
   item_class->to_selection         = gimp_channel_to_selection;
-  item_class->default_name         = _("Channel");
   item_class->rename_desc          = C_("undo-type", "Rename Channel");
   item_class->translate_desc       = C_("undo-type", "Move Channel");
   item_class->scale_desc           = C_("undo-type", "Scale Channel");
@@ -315,6 +315,7 @@ gimp_channel_init (GimpChannel *channel)
   channel->num_segs_in    = 0;
   channel->num_segs_out   = 0;
   channel->empty          = FALSE;
+  channel->full           = FALSE;
   channel->bounds_known   = FALSE;
   channel->x1             = 0;
   channel->y1             = 0;
@@ -469,7 +470,7 @@ gimp_channel_bounds (GimpItem *item,
                                                 &channel->y1,
                                                 &channel->x2,
                                                 &channel->y2);
-
+      channel->full         = FALSE;
       channel->bounds_known = TRUE;
     }
 
@@ -503,6 +504,7 @@ gimp_channel_duplicate (GimpItem *item,
       /*  selection mask variables  */
       new_channel->bounds_known = channel->bounds_known;
       new_channel->empty        = channel->empty;
+      new_channel->full         = channel->full;
       new_channel->x1           = channel->x1;
       new_channel->y1           = channel->y1;
       new_channel->x2           = channel->x2;
@@ -706,8 +708,8 @@ gimp_channel_scale (GimpItem              *item,
       new_offset_y = 0;
     }
 
-  /*  don't waste CPU cycles scaling an empty channel  */
-  if (channel->bounds_known && channel->empty)
+  /*  don't waste CPU cycles scaling an empty or full channel  */
+  if (channel->bounds_known && (channel->empty || channel->full))
     {
       GimpDrawable *drawable = GIMP_DRAWABLE (item);
       GeglBuffer   *new_buffer;
@@ -724,7 +726,10 @@ gimp_channel_scale (GimpItem              *item,
                                      TRUE);
       g_object_unref (new_buffer);
 
-      gimp_channel_clear (GIMP_CHANNEL (item), NULL, FALSE);
+      if (channel->empty)
+        gimp_channel_clear (GIMP_CHANNEL (item), NULL, FALSE);
+      else
+        gimp_channel_all (GIMP_CHANNEL (item), FALSE);
     }
   else
     {
@@ -1105,6 +1110,7 @@ gimp_channel_real_is_empty (GimpChannel *channel)
   g_clear_pointer (&channel->segs_out, g_free);
 
   channel->empty          = TRUE;
+  channel->full           = FALSE;
   channel->num_segs_in    = 0;
   channel->num_segs_out   = 0;
   channel->bounds_known   = TRUE;
@@ -1120,11 +1126,10 @@ gimp_channel_real_is_empty (GimpChannel *channel)
 static gboolean
 gimp_channel_real_is_full (GimpChannel *channel)
 {
-  return ! gimp_channel_is_empty (channel)                          &&
-         channel->x1 == 0                                           &&
-         channel->y1 == 0                                           &&
-         channel->x2 == gimp_item_get_width  (GIMP_ITEM (channel))  &&
-         channel->y2 == gimp_item_get_height (GIMP_ITEM (channel));
+  if (channel->bounds_known)
+    return channel->full;
+
+  return FALSE;
 }
 
 static void
@@ -1232,6 +1237,7 @@ gimp_channel_real_clear (GimpChannel *channel,
   /*  we know the bounds  */
   channel->bounds_known = TRUE;
   channel->empty        = TRUE;
+  channel->full         = FALSE;
   channel->x1           = 0;
   channel->y1           = 0;
   channel->x2           = gimp_item_get_width  (GIMP_ITEM (channel));
@@ -1260,6 +1266,7 @@ gimp_channel_real_all (GimpChannel *channel,
   /*  we know the bounds  */
   channel->bounds_known = TRUE;
   channel->empty        = FALSE;
+  channel->full         = TRUE;
   channel->x1           = 0;
   channel->y1           = 0;
   channel->x2           = gimp_item_get_width  (GIMP_ITEM (channel));
@@ -1281,6 +1288,10 @@ gimp_channel_real_invert (GimpChannel *channel,
   if (channel->bounds_known && channel->empty)
     {
       gimp_channel_all (channel, FALSE);
+    }
+  else if (channel->bounds_known && channel->full)
+    {
+      gimp_channel_clear (channel, NULL, FALSE);
     }
   else
     {
@@ -1389,7 +1400,8 @@ gimp_channel_real_grow (GimpChannel *channel,
   x2 += x1;
   y2 += y1;
 
-  if (gimp_channel_is_empty (channel))
+  if (gimp_channel_is_empty (channel) ||
+      gimp_channel_is_full (channel))
     return;
 
   if (x1 - radius_x > 0)
@@ -1486,7 +1498,8 @@ gimp_channel_real_flood (GimpChannel *channel,
   if (! gimp_item_bounds (GIMP_ITEM (channel), &x, &y, &width, &height))
     return;
 
-  if (gimp_channel_is_empty (channel))
+  if (gimp_channel_is_empty (channel) ||
+      gimp_channel_is_full (channel))
     return;
 
   if (push_undo)

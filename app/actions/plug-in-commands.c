@@ -102,7 +102,7 @@ plug_in_run_cmd_callback (GimpAction *action,
           context   = gimp_container_view_get_context (editor->view);
 
           object = gimp_context_get_by_type (context,
-                                             gimp_container_get_children_type (container));
+                                             gimp_container_get_child_type (container));
 
           args = procedure_commands_get_data_args (procedure, object);
         }
@@ -119,14 +119,16 @@ plug_in_run_cmd_callback (GimpAction *action,
         {
           GimpItemTreeView *view = GIMP_ITEM_TREE_VIEW (data);
           GimpImage        *image;
-          GList            *items;
+          GList            *items = NULL;
 
           image = gimp_item_tree_view_get_image (view);
 
           if (image)
-            items = GIMP_ITEM_TREE_VIEW_GET_CLASS (view)->get_selected_items (image);
-          else
-            items = NULL;
+            {
+              GType item_type = GIMP_ITEM_TREE_VIEW_GET_CLASS (view)->item_type;
+
+              items = gimp_image_get_selected_items (image, item_type);
+            }
 
           args = procedure_commands_get_items_args (procedure, image, items);
         }

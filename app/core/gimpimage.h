@@ -355,6 +355,8 @@ GimpItemTree  * gimp_image_get_layer_tree        (GimpImage          *image);
 GimpItemTree  * gimp_image_get_channel_tree      (GimpImage          *image);
 GimpItemTree  * gimp_image_get_path_tree         (GimpImage          *image);
 
+GimpContainer * gimp_image_get_items             (GimpImage          *image,
+                                                  GType               item_type);
 GimpContainer * gimp_image_get_layers            (GimpImage          *image);
 GimpContainer * gimp_image_get_channels          (GimpImage          *image);
 GimpContainer * gimp_image_get_paths             (GimpImage          *image);
@@ -379,10 +381,16 @@ gboolean     gimp_image_equal_selected_drawables (GimpImage          *image,
                                                   GList              *drawables);
 
 GList        * gimp_image_get_selected_drawables (GimpImage          *image);
+
+GList         * gimp_image_get_selected_items    (GimpImage          *image,
+                                                  GType               item_type);
 GList         * gimp_image_get_selected_layers   (GimpImage          *image);
 GList         * gimp_image_get_selected_channels (GimpImage          *image);
 GList         * gimp_image_get_selected_paths    (GimpImage          *image);
 
+void            gimp_image_set_selected_items    (GimpImage          *image,
+                                                  GType               item_type,
+                                                  GList              *items);
 void            gimp_image_set_selected_layers   (GimpImage          *image,
                                                   GList              *layers);
 void            gimp_image_set_selected_channels (GimpImage          *image,
@@ -421,6 +429,16 @@ gboolean        gimp_image_lower_item            (GimpImage          *image,
 gboolean        gimp_image_lower_item_to_bottom  (GimpImage          *image,
                                                   GimpItem           *item);
 
+gboolean        gimp_image_add_item              (GimpImage          *image,
+                                                  GimpItem           *item,
+                                                  GimpItem          *parent,
+                                                  gint                position,
+                                                  gboolean            push_undo);
+void            gimp_image_remove_item           (GimpImage          *image,
+                                                  GimpItem           *item,
+                                                  gboolean            push_undo,
+                                                  GList              *new_selected);
+
 gboolean        gimp_image_add_layer             (GimpImage          *image,
                                                   GimpLayer          *layer,
                                                   GimpLayer          *parent,
@@ -441,21 +459,6 @@ void            gimp_image_add_layers            (GimpImage          *image,
                                                   gint                height,
                                                   const gchar        *undo_desc);
 
-void            gimp_image_store_item_set        (GimpImage          *image,
-                                                  GimpItemList       *set);
-gboolean        gimp_image_unlink_item_set       (GimpImage          *image,
-                                                  GimpItemList       *set);
-GList         * gimp_image_get_stored_item_sets   (GimpImage         *image,
-                                                   GType              item_type);
-void            gimp_image_select_item_set       (GimpImage          *image,
-                                                  GimpItemList       *set);
-void            gimp_image_add_item_set          (GimpImage          *image,
-                                                  GimpItemList       *set);
-void            gimp_image_remove_item_set       (GimpImage          *image,
-                                                  GimpItemList       *set);
-void            gimp_image_intersect_item_set    (GimpImage        *image,
-                                                  GimpItemList       *set);
-
 gboolean        gimp_image_add_channel           (GimpImage          *image,
                                                   GimpChannel        *channel,
                                                   GimpChannel        *parent,
@@ -475,6 +478,21 @@ void            gimp_image_remove_path           (GimpImage          *image,
                                                   GimpPath           *path,
                                                   gboolean            push_undo,
                                                   GList              *new_selected);
+
+void            gimp_image_store_item_set        (GimpImage          *image,
+                                                  GimpItemList       *set);
+gboolean        gimp_image_unlink_item_set       (GimpImage          *image,
+                                                  GimpItemList       *set);
+GList         * gimp_image_get_stored_item_sets   (GimpImage         *image,
+                                                   GType              item_type);
+void            gimp_image_select_item_set       (GimpImage          *image,
+                                                  GimpItemList       *set);
+void            gimp_image_add_item_set          (GimpImage          *image,
+                                                  GimpItemList       *set);
+void            gimp_image_remove_item_set       (GimpImage          *image,
+                                                  GimpItemList       *set);
+void            gimp_image_intersect_item_set    (GimpImage        *image,
+                                                  GimpItemList       *set);
 
 gboolean        gimp_image_add_hidden_item       (GimpImage          *image,
                                                   GimpItem           *item);
