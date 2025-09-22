@@ -683,7 +683,7 @@ gimp_color_selection_notebook_changed (GimpColorSelector  *selector,
   selection->color = gegl_color_duplicate (color);
 
   update = UPDATE_SCALES | UPDATE_ENTRY;
-  if (! gimp_color_is_perceptually_identical (color, old_color))
+  if (! gimp_color_is_identical (color, old_color))
     update |= UPDATE_COLOR;
 
   gimp_color_selection_update (selection, update);
