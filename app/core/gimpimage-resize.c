@@ -27,6 +27,7 @@
 #include "gimp.h"
 #include "gimpcontainer.h"
 #include "gimpcontext.h"
+#include "gimpgrouplayer.h"
 #include "gimpguide.h"
 #include "gimpimage.h"
 #include "gimpimage-guides.h"
@@ -295,6 +296,84 @@ gimp_image_resize_to_layers (GimpImage    *image,
                             gimp_item_get_height (item),
                             &x, &y,
                             &width, &height);
+    }
+
+  gimp_image_resize (image, context,
+                     width, height, -x, -y,
+                     progress);
+  if (offset_x)
+    *offset_x = -x;
+  if (offset_y)
+    *offset_y = -y;
+  if (new_width)
+    *new_width = width;
+  if (new_height)
+    *new_height = height;
+}
+
+void
+gimp_image_resize_to_visible_layers (GimpImage    *image,
+                                     GimpContext  *context,
+                                     gint         *offset_x,
+                                     gint         *offset_y,
+                                     gint         *new_width,
+                                     gint         *new_height,
+                                     GimpProgress *progress)
+{
+  GList    *list;
+  GimpItem *item;
+  gint      x, y;
+  gint      width, height;
+
+  g_return_if_fail (GIMP_IS_IMAGE (image));
+  g_return_if_fail (GIMP_IS_CONTEXT (context));
+  g_return_if_fail (progress == NULL || GIMP_IS_PROGRESS (progress));
+
+  list = gimp_image_get_layer_list (image);
+
+  if (! list)
+    return;
+
+  /* Starting values can be an empty rectangle */
+  x      = 0;
+  y      = 0;
+  width  = 0;
+  height = 0;
+
+  for (list; list; list = g_list_next (list))
+    {
+      item = list->data;
+
+      /* Consider only actual layers */
+      if (! GIMP_IS_GROUP_LAYER (item))
+        {
+          /* Consider only visible layers  */
+          if (gimp_item_get_visible (item))
+            {
+              /* If width and height are still 0 at this point, then
+                 (re-)initialize the starting values to the visible item's
+                 values */
+              if (width==0 && height==0)
+                {
+                  x      = gimp_item_get_offset_x (item);
+                  y      = gimp_item_get_offset_y (item);
+                  width  = gimp_item_get_width  (item);
+                  height = gimp_item_get_height (item);
+                }
+              else
+                {
+                  gimp_rectangle_union (x, y,
+                                        width, height,
+                                        gimp_item_get_offset_x (item),
+                                        gimp_item_get_offset_y (item),
+                                        gimp_item_get_width  (item),
+                                        gimp_item_get_height (item),
+                                        &x, &y,
+                                        &width, &height);
+                }
+            }
+
+        }
     }
 
   gimp_image_resize (image, context,
