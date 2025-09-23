@@ -133,6 +133,7 @@ test_scripts = [
 install_data(
   test_framework_scripts,
   install_dir: gimpdatadir / 'scripts',
+  install_tag: 'plugins',
 )
 
 # Install test scripts to shared /tests
@@ -141,6 +142,7 @@ install_data(
 install_data(
   test_scripts,
   install_dir: gimpdatadir / 'tests',
+  install_tag: 'plugins',
 )
 
 

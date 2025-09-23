@@ -15,5 +15,6 @@ if have_lua and not meson.is_cross_build() and is_variable('lua') and lua.found(
                  output: 'lua.interp',
                  configuration: lua_config,
                  install: true,
-                 install_dir: gimpplugindir / 'interpreters')
+                 install_dir: gimpplugindir / 'interpreters',
+                 install_tag: 'extensions')
 endif

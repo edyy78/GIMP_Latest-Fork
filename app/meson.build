@@ -229,6 +229,7 @@ gimpmain_exe = executable(gimpmain_exe_name,
   ],
   win_subsystem: 'windows',
   install: true,
+  install_tag: 'app',
 )
 
 if enable_default_bin

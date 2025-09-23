@@ -11,4 +11,5 @@ install_data([
     'stars',
   ],
   install_dir: gimpdatadir / 'gfig',
+  install_tag: 'plugins',
 )

@@ -5,6 +5,7 @@ gimp_tags_default = i18n.merge_file(
   po_dir: potags_dir,
   install: true,
   install_dir: gimpdatadir / 'tags',
+  install_tag: 'data',
 )
 
 if xmllint.found()
@@ -17,6 +18,7 @@ if xmllint.found()
     ],
     output: [ 'validate-tags-output.xml' ],
     build_by_default: true,
-    install: false
+    install: false,
+    install_tag: 'data',
   )
 endif

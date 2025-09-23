@@ -17,10 +17,12 @@ compat_scripts = [
 install_data(
   init_scripts,
   install_dir: gimpdatadir / 'scripts' / 'scriptfu-init',
+  install_tag: 'plugins',
 )
 
 install_data(
   compat_scripts,
   install_dir: gimpdatadir / 'scripts' / 'scriptfu-init',
+  install_tag: 'plugins',
 )
 

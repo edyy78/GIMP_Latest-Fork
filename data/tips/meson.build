@@ -5,6 +5,7 @@ gimp_tips = i18n.merge_file(
   po_dir: potips_dir,
   install: true,
   install_dir: gimpdatadir / 'tips',
+  install_tag: 'data',
 )
 
 fortunes_tips = custom_target('fortunes-tips',
@@ -18,6 +19,7 @@ fortunes_tips = custom_target('fortunes-tips',
     '@INPUT1@',
     '@INPUT0@',
   ],
+  install_tag: 'data',
 )
 
 if xmllint.found()
@@ -30,6 +32,7 @@ if xmllint.found()
   ],
     output: [ 'validate-tips-output.xml' ],
     build_by_default: true,
-    install: false
+    install: false,
+    install_tag: 'data',
   )
 endif

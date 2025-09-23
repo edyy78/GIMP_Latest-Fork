@@ -10,6 +10,7 @@ dynamics = files(
 
 install_data(dynamics,
   install_dir: gimpdatadir / 'dynamics',
+  install_tag: 'data',
 )
 
 dynamics_types = [
@@ -21,5 +22,6 @@ foreach dynamics_type : dynamics_types
   install_data(
     dynamics,
     install_dir: gimpdatadir / 'dynamics' / dynamics_type,
+    install_tag: 'data',
   )
 endforeach

@@ -18,4 +18,5 @@ install_data(
     'unitrc',
   ],
   install_dir: gimpsysconfdir,
+  install_tag: 'etc',
 )

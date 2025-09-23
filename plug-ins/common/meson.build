@@ -245,7 +245,8 @@ foreach plugin : common_plugins_list
                           c_args: plugin_cflags,
                           win_subsystem: 'windows',
                           install: true,
-                          install_dir: gimpplugindir / 'plug-ins' / plugin_name)
+                          install_dir: gimpplugindir / 'plug-ins' / plugin_name,
+                          install_tag: 'plugins')
 
   # Ugly trick to copy executables into subfolders so that we can run GIMP from
   # the build directory without installing it.

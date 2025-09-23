@@ -94,5 +94,8 @@ foreach module : modules
     link_args: link_args,
     install: true,
     install_dir: gimpplugindir / 'modules',
+    install_tag: 'modules',
+    # Explicitly set .so suffix on macOS
+    name_suffix: host_machine.system() == 'darwin' ? 'so' : [],
   )
 endforeach

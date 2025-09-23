@@ -382,6 +382,7 @@ libgimp = library('gimp-'+ gimp_api_version,
   ],
   vs_module_defs: 'gimp.def',
   install: true,
+  install_tag: 'libgimp',
   version: so_version,
 )
 
@@ -420,6 +421,7 @@ libgimpui = library('gimpui-'+ gimp_api_version,
   ],
   vs_module_defs: 'gimpui.def',
   install: true,
+  install_tag: 'libgimp',
   version: so_version,
 )
 
@@ -626,5 +628,6 @@ if not platform_windows and not platform_osx
       python, meson.project_source_root() / 'tools' / 'defcheck.py', meson.project_source_root(),
     ],
     build_by_default: true,
+    install_tag: 'libgimp',
   )
 endif

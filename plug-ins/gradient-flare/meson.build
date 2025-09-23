@@ -29,5 +29,6 @@ plugin_exe = executable(plugin_name,
                         ],
                         win_subsystem: 'windows',
                         install: true,
-                        install_dir: gimpplugindir / 'plug-ins' / plugin_name)
+                        install_dir: gimpplugindir / 'plug-ins' / plugin_name,
+                        install_tag: 'plugins')
 plugin_executables += [plugin_exe.full_path()]

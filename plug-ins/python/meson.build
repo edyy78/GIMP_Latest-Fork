@@ -26,7 +26,7 @@ foreach plugin : python_plugins
   srcs = plugin.get('srcs', [name + '.py'])
 
   install_data(srcs, install_dir: gimpplugindir / 'plug-ins' / name,
-               install_mode: 'rwxr-xr-x')
+               install_mode: 'rwxr-xr-x', install_tag: 'plugins')
 
   foreach src : srcs
     # Ugly trick to copy Python plug-ins into subfolders so that we can run GIMP
@@ -58,5 +58,6 @@ if (platform_windows or platform_osx) and not meson.is_cross_build() and python.
                  output: 'pygimp.interp',
                  configuration: python_config,
                  install: true,
-                 install_dir: gimpplugindir / 'interpreters')
+                 install_dir: gimpplugindir / 'interpreters',
+                 install_tag: 'plugins')
 endif

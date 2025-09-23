@@ -11,5 +11,6 @@ foreach tool_presets_type : tool_presets_types
   install_data(
     tool_presets,
     install_dir: gimpdatadir / 'tool-presets' / tool_presets_type,
+    install_tag: 'data',
   )
 endforeach

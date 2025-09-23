@@ -19,6 +19,7 @@ gimptool = executable('gimptool' + exec_ver,
     '-DDATADIR="@0@"'.format(get_option('datadir')),
   ],
   install: true,
+  install_tag: 'tools',
 )
 
 gimp_test_clipboard = executable('gimp-test-clipboard' + exec_ver,
@@ -28,6 +29,7 @@ gimp_test_clipboard = executable('gimp-test-clipboard' + exec_ver,
     gegl, gtk3,
   ],
   install: true,
+  install_tag: 'tools',
 )
 
 if isocodes.found()

@@ -6,4 +6,5 @@ install_data([
     'texture3.jpg',
   ],
   install_dir: gimpdatadir / 'scripts' / 'images',
+  install_tag: 'plugins',
 )

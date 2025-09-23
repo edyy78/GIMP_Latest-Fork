@@ -3,6 +3,7 @@ project('gimp',
   version: '3.1.5',
   meson_version: '>=0.61.0',
   default_options: [
+    'c_std=gnu17',
     'cpp_std=gnu++14',
     'buildtype=debugoptimized',
   ],
@@ -1424,6 +1425,11 @@ foreach header : [
   conf.set(header['m'], cc.has_header(header['v']) ? 1 : false)
 endforeach
 
+# Check that all install scripts have assigned an installation tag.
+check_install_tags = find_program('build' / 'meson' / 'check-install-tags.sh', required: true)
+test('check missing install tags',
+     check_install_tags,
+     suite: 'build')
 
 ################################################################################
 # Check for shared memory handling

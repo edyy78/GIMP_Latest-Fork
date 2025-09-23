@@ -55,6 +55,7 @@ if not meson.is_cross_build()
       configuration: scriptfu_config,
       install: true,
       install_dir: gimpplugindir / 'interpreters',
+      install_tag: 'plugins'
     )
   endif
 
@@ -78,6 +79,7 @@ if not meson.is_cross_build()
                           link_with : [libscriptfuconsole, libscriptfu ],
                           win_subsystem: 'windows',
                           install: true,
-                          install_dir: gimpplugindir / 'plug-ins' / executable_name)
+                          install_dir: gimpplugindir / 'plug-ins' / executable_name,
+                          install_tag: 'plugins',)
   plugin_executables += [plugin_exe.full_path()]
 endif

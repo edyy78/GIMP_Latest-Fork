@@ -8,4 +8,5 @@ install_data([
     'Hidden_Planet',
   ],
   install_dir: gimpdatadir / 'gflare',
+  install_tag: 'plugins',
 )
