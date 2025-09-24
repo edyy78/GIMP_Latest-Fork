@@ -56,10 +56,10 @@
 
 /*  private variables  */
 
-static gboolean   menurc_deleted      = FALSE;
+static gboolean menurc_deleted = FALSE;
 
 #ifdef PLATFORM_OSX
-static Gimp      *unique_gimp         = NULL;
+static Gimp    *unique_gimp    = NULL;
 #endif
 
 
