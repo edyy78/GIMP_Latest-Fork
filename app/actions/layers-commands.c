@@ -1241,6 +1241,8 @@ layers_text_along_path_cmd_callback (GimpAction *action,
         case GIMP_TEXT_DIRECTION_TTB_RTL_UPRIGHT:
         case GIMP_TEXT_DIRECTION_TTB_LTR:
         case GIMP_TEXT_DIRECTION_TTB_LTR_UPRIGHT:
+        case GIMP_TEXT_DIRECTION_SIDEWAYS_RL:
+        case GIMP_TEXT_DIRECTION_SIDEWAYS_LR:
           {
             GimpStroke *stroke = NULL;
 

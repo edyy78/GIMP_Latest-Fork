@@ -12,5 +12,7 @@
     <item><attribute name="action">text-editor.text-editor-direction-ttb-rtl-upright</attribute></item>
     <item><attribute name="action">text-editor.text-editor-direction-ttb-ltr</attribute></item>
     <item><attribute name="action">text-editor.text-editor-direction-ttb-ltr-upright</attribute></item>
+    <item><attribute name="action">text-editor.text-editor-direction-sideways-rl</attribute></item>
+    <item><attribute name="action">text-editor.text-editor-direction-sideways-lr</attribute></item>
   </menu>
 </interface>

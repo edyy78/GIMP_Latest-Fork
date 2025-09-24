@@ -238,10 +238,12 @@ gimp_canvas_text_cursor_transform (GimpCanvasItem *item,
       break;
     case GIMP_TEXT_DIRECTION_TTB_RTL:
     case GIMP_TEXT_DIRECTION_TTB_RTL_UPRIGHT:
+    case GIMP_TEXT_DIRECTION_SIDEWAYS_RL:
       *x = *x - *w;
       break;
     case GIMP_TEXT_DIRECTION_TTB_LTR:
     case GIMP_TEXT_DIRECTION_TTB_LTR_UPRIGHT:
+    case GIMP_TEXT_DIRECTION_SIDEWAYS_LR:
       *y = *y + *h;
       break;
     }
@@ -262,11 +264,13 @@ gimp_canvas_text_cursor_transform (GimpCanvasItem *item,
            break;
         case GIMP_TEXT_DIRECTION_TTB_RTL:
         case GIMP_TEXT_DIRECTION_TTB_RTL_UPRIGHT:
+        case GIMP_TEXT_DIRECTION_SIDEWAYS_RL:
           *w = ceil (*w) - 1.0;
           *h = 0;
           break;
         case GIMP_TEXT_DIRECTION_TTB_LTR:
         case GIMP_TEXT_DIRECTION_TTB_LTR_UPRIGHT:
+        case GIMP_TEXT_DIRECTION_SIDEWAYS_LR:
           *w = ceil (*w) - 1.0;
           *h = 0;
           break;
@@ -307,6 +311,8 @@ gimp_canvas_text_cursor_draw (GimpCanvasItem *item,
         case GIMP_TEXT_DIRECTION_TTB_RTL_UPRIGHT:
         case GIMP_TEXT_DIRECTION_TTB_LTR:
         case GIMP_TEXT_DIRECTION_TTB_LTR_UPRIGHT:
+        case GIMP_TEXT_DIRECTION_SIDEWAYS_RL:
+        case GIMP_TEXT_DIRECTION_SIDEWAYS_LR:
           cairo_move_to (cr, x, y);
           cairo_line_to (cr, x + w, y);
 
@@ -354,6 +360,8 @@ gimp_canvas_text_cursor_get_extents (GimpCanvasItem *item)
         case GIMP_TEXT_DIRECTION_TTB_RTL_UPRIGHT:
         case GIMP_TEXT_DIRECTION_TTB_LTR:
         case GIMP_TEXT_DIRECTION_TTB_LTR_UPRIGHT:
+        case GIMP_TEXT_DIRECTION_SIDEWAYS_RL:
+        case GIMP_TEXT_DIRECTION_SIDEWAYS_LR:
           rectangle.x      = floor (x - 1.5);
           rectangle.y      = floor (y - 4.5);
           rectangle.width  = ceil (w + 3.0);

@@ -137,7 +137,17 @@ static const GimpRadioActionEntry text_tool_direction_actions[] =
   { "text-tool-direction-ttb-ltr-upright", GIMP_ICON_FORMAT_TEXT_DIRECTION_TTB_LTR_UPRIGHT,
     NC_("text-tool-action", "Vertical, left to right (upright orientation)"), NULL, { NULL }, NULL,
     GIMP_TEXT_DIRECTION_TTB_LTR_UPRIGHT,
-    GIMP_HELP_TEXT_TOOL_DIRECTION_TTB_LTR_UP }
+    GIMP_HELP_TEXT_TOOL_DIRECTION_TTB_LTR_UP },
+
+  { "text-tool-direction-sideways-rl", GIMP_ICON_FORMAT_TEXT_DIRECTION_SIDEWAYS_RL,
+    NC_("text-tool-action", "Sideways, 90° clockwise, right to left"), NULL, { NULL }, NULL,
+    GIMP_TEXT_DIRECTION_SIDEWAYS_RL,
+    GIMP_HELP_TEXT_TOOL_DIRECTION_SIDEWAYS_RL },
+
+  { "text-tool-direction-sideways-lr", GIMP_ICON_FORMAT_TEXT_DIRECTION_SIDEWAYS_LR,
+    NC_("text-tool-action", "Sideways, 90° counterclockwise, left to right"), NULL, { NULL }, NULL,
+    GIMP_TEXT_DIRECTION_SIDEWAYS_LR,
+    GIMP_HELP_TEXT_TOOL_DIRECTION_SIDEWAYS_LR }
 };
 
 

@@ -1702,6 +1702,18 @@ drawText (GimpLayer *layer,
       pango_context_set_gravity_hint (context, PANGO_GRAVITY_HINT_STRONG);
       pango_context_set_base_gravity (context, PANGO_GRAVITY_WEST);
       break;
+
+    case GIMP_TEXT_DIRECTION_SIDEWAYS_RL:
+      pango_context_set_base_dir (context, PANGO_DIRECTION_LTR);
+      pango_context_set_gravity_hint (context, PANGO_GRAVITY_HINT_STRONG);
+      pango_context_set_base_gravity (context, PANGO_GRAVITY_SOUTH);
+      break;
+
+    case GIMP_TEXT_DIRECTION_SIDEWAYS_LR:
+      pango_context_set_base_dir (context, PANGO_DIRECTION_LTR);
+      pango_context_set_gravity_hint (context, PANGO_GRAVITY_HINT_STRONG);
+      pango_context_set_base_gravity (context, PANGO_GRAVITY_SOUTH);
+      break;
     }
 
   /* We are done with the context's settings. It's time to create the
@@ -1718,7 +1730,9 @@ drawText (GimpLayer *layer,
   pango_layout_set_font_description (layout, font_description);
 
   /* Width */
-  if (! PANGO_GRAVITY_IS_VERTICAL (pango_context_get_base_gravity (context)))
+  if (! (PANGO_GRAVITY_IS_VERTICAL (pango_context_get_base_gravity (context)) ||
+        dir == GIMP_TEXT_DIRECTION_SIDEWAYS_RL ||
+        dir == GIMP_TEXT_DIRECTION_SIDEWAYS_LR))
     pango_layout_set_width (layout,
                             gimp_drawable_get_width (GIMP_DRAWABLE (layer)) *
                             PANGO_SCALE);
@@ -1774,14 +1788,16 @@ drawText (GimpLayer *layer,
     pango_layout_set_text (layout, text, -1);
 
   if (dir == GIMP_TEXT_DIRECTION_TTB_RTL ||
-      dir == GIMP_TEXT_DIRECTION_TTB_RTL_UPRIGHT)
+      dir == GIMP_TEXT_DIRECTION_TTB_RTL_UPRIGHT ||
+      dir == GIMP_TEXT_DIRECTION_SIDEWAYS_RL)
     {
       cairo_translate (cr, gimp_drawable_get_width (GIMP_DRAWABLE (layer)), 0);
       cairo_rotate (cr, G_PI_2);
     }
 
   if (dir == GIMP_TEXT_DIRECTION_TTB_LTR ||
-      dir == GIMP_TEXT_DIRECTION_TTB_LTR_UPRIGHT)
+      dir == GIMP_TEXT_DIRECTION_TTB_LTR_UPRIGHT ||
+      dir == GIMP_TEXT_DIRECTION_SIDEWAYS_LR)
     {
       cairo_translate (cr, 0, gimp_drawable_get_height (GIMP_DRAWABLE (layer)));
       cairo_rotate (cr, -G_PI_2);

@@ -986,6 +986,7 @@ gimp_text_tool_draw_selection (GimpDrawTool *draw_tool)
               break;
             case GIMP_TEXT_DIRECTION_TTB_RTL:
             case GIMP_TEXT_DIRECTION_TTB_RTL_UPRIGHT:
+            case GIMP_TEXT_DIRECTION_SIDEWAYS_RL:
               rect.y = offset_x - rect.y + width;
               rect.x = offset_y + rect.x;
               gimp_draw_tool_add_rectangle (draw_tool, FALSE,
@@ -994,6 +995,7 @@ gimp_text_tool_draw_selection (GimpDrawTool *draw_tool)
               break;
             case GIMP_TEXT_DIRECTION_TTB_LTR:
             case GIMP_TEXT_DIRECTION_TTB_LTR_UPRIGHT:
+            case GIMP_TEXT_DIRECTION_SIDEWAYS_LR:
               rect.y = offset_x + rect.y;
               rect.x = offset_y - rect.x + height;
               gimp_draw_tool_add_rectangle (draw_tool, FALSE,
@@ -1669,7 +1671,8 @@ gimp_text_tool_create_layer (GimpTextTool *text_tool,
     {
       if (text_tool->text &&
           (text_tool->text->base_dir == GIMP_TEXT_DIRECTION_TTB_RTL ||
-           text_tool->text->base_dir == GIMP_TEXT_DIRECTION_TTB_RTL_UPRIGHT))
+           text_tool->text->base_dir == GIMP_TEXT_DIRECTION_TTB_RTL_UPRIGHT ||
+           text_tool->text->base_dir == GIMP_TEXT_DIRECTION_SIDEWAYS_RL))
         {
           x1 -= gimp_item_get_width (GIMP_ITEM (layer));
         }
@@ -2429,6 +2432,8 @@ gimp_text_tool_create_path_warped (GimpTextTool  *text_tool,
     case GIMP_TEXT_DIRECTION_TTB_RTL_UPRIGHT:
     case GIMP_TEXT_DIRECTION_TTB_LTR:
     case GIMP_TEXT_DIRECTION_TTB_LTR_UPRIGHT:
+    case GIMP_TEXT_DIRECTION_SIDEWAYS_RL:
+    case GIMP_TEXT_DIRECTION_SIDEWAYS_LR:
       {
         GimpStroke *stroke = NULL;
 

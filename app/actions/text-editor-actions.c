@@ -86,6 +86,18 @@ static const GimpRadioActionEntry text_editor_direction_actions[] =
     NC_("text-editor-action", "Vertical, left to right (upright orientation)"),
     GIMP_TEXT_DIRECTION_TTB_LTR_UPRIGHT,
     NULL },
+
+  { "text-editor-direction-sideways-rl", GIMP_ICON_FORMAT_TEXT_DIRECTION_SIDEWAYS_RL,
+    NC_("text-editor-action", "SIDEWAYS-RL"), NULL, { NULL },
+    NC_("text-editor-action", "Sideways, 90° clockwise, right to left"),
+    GIMP_TEXT_DIRECTION_SIDEWAYS_RL,
+    NULL },
+
+  { "text-editor-direction-sideways-lr", GIMP_ICON_FORMAT_TEXT_DIRECTION_SIDEWAYS_LR,
+    NC_("text-editor-action", "SIDEWAYS-LR"), NULL, { NULL },
+    NC_("text-editor-action", "Sideways, 90° counterclockwise, left to right"),
+    GIMP_TEXT_DIRECTION_SIDEWAYS_LR,
+    NULL },
 };
 
 
@@ -137,6 +149,14 @@ text_editor_actions_update (GimpActionGroup *group,
 
     case GIMP_TEXT_DIRECTION_TTB_LTR_UPRIGHT:
       SET_ACTIVE ("text-editor-direction-ttb-ltr-upright", TRUE);
+      break;
+
+    case GIMP_TEXT_DIRECTION_SIDEWAYS_RL:
+      SET_ACTIVE ("text-editor-direction-sideways-rl", TRUE);
+      break;
+
+    case GIMP_TEXT_DIRECTION_SIDEWAYS_LR:
+      SET_ACTIVE ("text-editor-direction-sideways-lr", TRUE);
       break;
     }
 

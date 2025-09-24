@@ -660,10 +660,12 @@ gimp_text_layer_text_changed (GimpTextLayer *layer)
             case GIMP_TEXT_DIRECTION_RTL:
             case GIMP_TEXT_DIRECTION_TTB_LTR:
             case GIMP_TEXT_DIRECTION_TTB_LTR_UPRIGHT:
+            case GIMP_TEXT_DIRECTION_SIDEWAYS_LR:
               switch (new_base_dir)
                 {
                 case GIMP_TEXT_DIRECTION_TTB_RTL:
                 case GIMP_TEXT_DIRECTION_TTB_RTL_UPRIGHT:
+                case GIMP_TEXT_DIRECTION_SIDEWAYS_RL:
                   gimp_item_translate (item, -new_width, 0, FALSE);
                   break;
 
@@ -671,30 +673,35 @@ gimp_text_layer_text_changed (GimpTextLayer *layer)
                 case GIMP_TEXT_DIRECTION_RTL:
                 case GIMP_TEXT_DIRECTION_TTB_LTR:
                 case GIMP_TEXT_DIRECTION_TTB_LTR_UPRIGHT:
+                case GIMP_TEXT_DIRECTION_SIDEWAYS_LR:
                   break;
                 }
               break;
 
             case GIMP_TEXT_DIRECTION_TTB_RTL:
             case GIMP_TEXT_DIRECTION_TTB_RTL_UPRIGHT:
+            case GIMP_TEXT_DIRECTION_SIDEWAYS_RL:
               switch (new_base_dir)
                 {
                 case GIMP_TEXT_DIRECTION_LTR:
                 case GIMP_TEXT_DIRECTION_RTL:
                 case GIMP_TEXT_DIRECTION_TTB_LTR:
                 case GIMP_TEXT_DIRECTION_TTB_LTR_UPRIGHT:
+                case GIMP_TEXT_DIRECTION_SIDEWAYS_LR:
                   gimp_item_translate (item, old_width, 0, FALSE);
                   break;
 
                 case GIMP_TEXT_DIRECTION_TTB_RTL:
                 case GIMP_TEXT_DIRECTION_TTB_RTL_UPRIGHT:
+                case GIMP_TEXT_DIRECTION_SIDEWAYS_RL:
                   break;
                 }
               break;
             }
         }
       else if ((new_base_dir == GIMP_TEXT_DIRECTION_TTB_RTL ||
-              new_base_dir == GIMP_TEXT_DIRECTION_TTB_RTL_UPRIGHT))
+              new_base_dir == GIMP_TEXT_DIRECTION_TTB_RTL_UPRIGHT ||
+              new_base_dir == GIMP_TEXT_DIRECTION_SIDEWAYS_RL))
         {
           if (old_width != new_width)
             gimp_item_translate (item, old_width - new_width, 0, FALSE);
