@@ -45,7 +45,7 @@
 @define-color selected-color         #898989;
 
 /* Background color more extreme in the theme tendency, i.e. darker on a
- * dark theme, ligther on a light theme. */
+ * dark theme, lighter on a light theme. */
 @define-color extreme-bg-color       #898989;
 /* Color for a selected item to "stick out" when @extreme-bg-color is
  * used. It will usually be darker than @bg-color on a light theme,
