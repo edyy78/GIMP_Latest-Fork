@@ -51,6 +51,7 @@ common_plugins_list = [
   { 'name': 'file-psp',
     'deps': [ gtk3, gegl, zlib, ],
   },
+  { 'name': 'file-pvr', },
   { 'name': 'file-raw-data', },
   { 'name': 'file-seattle-filmworks', },
   { 'name': 'file-sunras', },
