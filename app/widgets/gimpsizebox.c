@@ -63,6 +63,7 @@ struct _GimpSizeBoxPrivate
   GimpChainButton *size_chain;
   GtkWidget       *pixel_label;
   GtkWidget       *res_label;
+  GtkWidget       *aspect_box;
 };
 
 
@@ -81,6 +82,8 @@ static void   gimp_size_box_update_size       (GimpSizeBox     *box);
 static void   gimp_size_box_update_resolution (GimpSizeBox     *box);
 static void   gimp_size_box_chain_toggled     (GimpChainButton *button,
                                                GimpSizeBox     *box);
+static void   gimp_size_box_aspect_callback   (GtkWidget          *widget,
+                                               GimpSizeBoxPrivate *sizeBox);
 
 
 G_DEFINE_TYPE_WITH_PRIVATE (GimpSizeBox, gimp_size_box, GTK_TYPE_BOX)
@@ -174,6 +177,8 @@ gimp_size_box_constructed (GObject *object)
   GtkWidget          *entry;
   GtkWidget          *hbox;
   GtkWidget          *label;
+  GtkWidget          *aspect_box;
+  GtkWidget          *aspect_button;
   GList              *children;
   GList              *list;
 
@@ -225,9 +230,27 @@ gimp_size_box_constructed (GObject *object)
       gtk_size_group_add_widget (box->size_group, list->data);
   g_list_free (children);
 
+  hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 12);
+  gtk_widget_show (hbox);
+
+  gtk_grid_attach (GTK_GRID (entry), hbox, 1, 2, 2, 1);
   vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
-  gtk_grid_attach (GTK_GRID (entry), vbox, 1, 2, 2, 1);
   gtk_widget_show (vbox);
+  gtk_box_pack_start (GTK_BOX (hbox), vbox, FALSE, FALSE, 0);
+
+  aspect_box = gimp_enum_icon_box_new (GIMP_TYPE_ASPECT_TYPE,
+                                       "gimp", GTK_ICON_SIZE_MENU,
+                                       G_CALLBACK (gimp_size_box_aspect_callback),
+                                       priv, NULL,
+                                       &aspect_button);
+  gtk_widget_hide (aspect_button); /* hide "square" */
+  gtk_box_pack_start (GTK_BOX (vbox), aspect_box, FALSE, FALSE, 0);
+  gtk_widget_show (aspect_box);
+  priv->aspect_box = aspect_box;
+
+  vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
+  gtk_widget_show (vbox);
+  gtk_box_pack_start (GTK_BOX (hbox), vbox, FALSE, FALSE, 0);
 
   label = gtk_label_new (NULL);
   gimp_label_set_attributes (GTK_LABEL (label),
@@ -468,4 +491,33 @@ gimp_size_box_chain_toggled (GimpChainButton *button,
   g_object_set (box,
                 "keep-aspect", gimp_chain_button_get_active (button),
                 NULL);
+}
+
+/* When chain button is active, size_entry recalculates
+ * width/height to keep the ratio between them.
+ * Temporary disable it to swap the values.
+ * Probably good idea is to move the logic of swapping into GimpSizeEntry
+ * and have the calling code use
+ * gimp_size_entry_swap_values (size_entry, 0, 1);
+ */
+
+static void
+gimp_size_box_aspect_callback (GtkWidget          *widget,
+                               GimpSizeBoxPrivate *sizeBox)
+{
+  if (gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (widget)))
+    {
+      GimpSizeEntry   *size_entry  = sizeBox->size_entry;
+      GimpChainButton *size_chain  = sizeBox->size_chain;
+      gdouble          width       = gimp_size_entry_get_value (size_entry, 0);
+      gdouble          height      = gimp_size_entry_get_value (size_entry, 1);
+      gboolean         keep_aspect = gimp_chain_button_get_active (size_chain);
+
+      gimp_chain_button_set_active (size_chain, FALSE);
+
+      gimp_size_entry_set_value (size_entry, 1, width);
+      gimp_size_entry_set_value (size_entry, 0, height);
+
+      gimp_chain_button_set_active (size_chain, keep_aspect);
+    }
 }
