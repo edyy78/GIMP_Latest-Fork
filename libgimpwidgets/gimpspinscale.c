@@ -76,6 +76,7 @@ struct _GimpSpinScale
   PangoLayout     *layout;
   gboolean         changing_value;
   gboolean         relative_change;
+  gboolean         always_relative;
   gdouble          start_x;
   gdouble          start_value;
   gint             start_pointer_x;
@@ -816,27 +817,20 @@ gimp_spin_scale_button_press (GtkWidget      *widget,
     {
     case TARGET_GRAB:
     case TARGET_GRABBING:
-      scale->changing_value = TRUE;
-
-      gtk_widget_grab_focus (widget);
-
-      gimp_spin_scale_change_value (widget, x, event->state);
-
-      gimp_spin_scale_update_cursor (widget, event->window);
-
-      return TRUE;
-
     case TARGET_RELATIVE:
       scale->changing_value = TRUE;
 
       gtk_widget_grab_focus (widget);
 
-      scale->relative_change = TRUE;
+      scale->always_relative = event->button == 3;
+      scale->relative_change = scale->target == TARGET_RELATIVE;
       scale->start_x = x;
       scale->start_value = gtk_adjustment_get_value (gtk_spin_button_get_adjustment (GTK_SPIN_BUTTON (widget)));
 
       scale->start_pointer_x = floor (event->x_root);
       scale->start_pointer_y = floor (event->y_root);
+
+      gimp_spin_scale_change_value (widget, x, event->state);
 
       gimp_spin_scale_update_cursor (widget, event->window);
 
@@ -922,6 +916,7 @@ gimp_spin_scale_motion_notify (GtkWidget      *widget,
       GdkDisplay   *display;
       gint          pointer_x;
       gint          pointer_y;
+      gboolean      shift_down;
       GdkMonitor   *monitor;
       GdkRectangle  monitor_geometry;
 
@@ -931,8 +926,17 @@ gimp_spin_scale_motion_notify (GtkWidget      *widget,
       pointer_x = floor (event->x_root);
       pointer_y = floor (event->y_root);
 
+      shift_down = (event->state & GDK_SHIFT_MASK);
+
       monitor = gdk_display_get_monitor_at_point (display, pointer_x, pointer_y);
       gdk_monitor_get_geometry (monitor, &monitor_geometry);
+
+      if (! scale->always_relative && scale->relative_change != shift_down)
+        {
+          scale->relative_change = shift_down;
+          scale->target = shift_down ? TARGET_RELATIVE : TARGET_GRABBING;
+          gimp_spin_scale_update_cursor (widget, event->window);
+        }
 
       /* when applying a relative change, we wrap the pointer around the left
        * and right edges of the current monitor, so that the adjustment is not
