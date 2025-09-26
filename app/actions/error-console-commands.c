@@ -90,6 +90,8 @@ error_console_save_cmd_callback (GimpAction *action,
       return;
     }
 
+  console->save_selection = selection;
+
   if (! console->file_dialog)
     {
       GtkWidget *dialog;
@@ -108,8 +110,6 @@ error_console_save_cmd_callback (GimpAction *action,
                                                 GTK_RESPONSE_OK,
                                                 GTK_RESPONSE_CANCEL,
                                                 -1);
-
-      console->save_selection = selection;
 
       g_set_weak_pointer (&console->file_dialog, dialog);
 
@@ -201,5 +201,5 @@ error_console_save_response (GtkWidget        *dialog,
       g_object_unref (file);
     }
 
-  gtk_widget_destroy (dialog);
+  gtk_widget_set_visible (dialog, FALSE);
 }
