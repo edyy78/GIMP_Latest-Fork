@@ -136,7 +136,7 @@ gimp_container_entry_init (GimpContainerEntry *entry)
                              "popup-single-match", TRUE,
                              "popup-set-width",    FALSE,
                              NULL);
-
+  gtk_entry_completion_set_minimum_key_length (completion, 0);
   gimp_container_tree_store_columns_init (types, &n_types);
 
   model = gimp_container_tree_store_new (GIMP_CONTAINER_VIEW (entry),
