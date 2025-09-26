@@ -98,4 +98,5 @@ gint            gimp_histogram_n_components    (GimpHistogram        *histogram)
 gint            gimp_histogram_n_bins          (GimpHistogram        *histogram);
 gboolean        gimp_histogram_has_channel     (GimpHistogram        *histogram,
                                                 GimpHistogramChannel  channel);
-guint           gimp_histogram_unique_colors   (GimpDrawable         *drawable);
+guint           gimp_histogram_unique_colors   (GimpDrawable         *drawable,
+                                                gboolean              include_alpha);

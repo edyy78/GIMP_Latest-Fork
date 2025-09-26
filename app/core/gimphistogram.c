@@ -1279,10 +1279,11 @@ gimp_histogram_calculate_async_callback (GimpAsync        *async,
 }
 
 guint
-gimp_histogram_unique_colors (GimpDrawable *drawable)
+gimp_histogram_unique_colors (GimpDrawable *drawable,
+                              gboolean      include_alpha)
 {
   const Babl         *format;
-  guint               bpp;
+  guint               bpp, bpp_to_consider;
   GeglBufferIterator *iter;
   GHashTable         *hash_table;
   guint               uniques = 0;
@@ -1291,6 +1292,15 @@ gimp_histogram_unique_colors (GimpDrawable *drawable)
 
   format = gimp_drawable_get_format (drawable);
   bpp    = babl_format_get_bytes_per_pixel (format);
+
+  /* If the drawable has an alpha channel and we do not want
+   * to include it in the unique color calculation, we must
+   * ignore the last component (alpha) when generating the hash key.
+   */
+  if (babl_format_has_alpha (format) && ! include_alpha)
+    bpp_to_consider = bpp - 1;
+  else
+    bpp_to_consider = bpp;
 
   iter = gegl_buffer_iterator_new (gimp_drawable_get_buffer (drawable),
                                    NULL, 0, format,
@@ -1309,7 +1319,7 @@ gimp_histogram_unique_colors (GimpDrawable *drawable)
 
       while (length--)
         {
-          GBytes *key = g_bytes_new (data, bpp);
+          GBytes *key = g_bytes_new (data, bpp_to_consider);
 
           if (! g_hash_table_lookup_extended (hash_table, key, NULL, NULL))
             {
