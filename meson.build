@@ -1053,7 +1053,7 @@ endif
 ################################################################################
 # ISO codes
 
-isocodes = dependency('iso-codes', required: false)
+isocodes = dependency('iso-codes', required: false, native: true)
 if isocodes.found()
   isocodes_prefix = isocodes.get_variable(pkgconfig: 'prefix')
   isocodes_location = isocodes_prefix / 'share' / 'xml' / 'iso-codes'
