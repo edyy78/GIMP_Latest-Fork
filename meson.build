@@ -827,6 +827,11 @@ foreach lib : webp_libs
   webp_found = webp_found and  lib.found()
 endforeach
 
+have_image_scanner = get_option('image-scanner')
+if platform_osx or platform_windows
+    have_image_scanner = false
+endif
+
 libheif_minver = '1.15.1'
 libheif = dependency('libheif', version: '>='+libheif_minver,
   required: get_option('heif')
@@ -2101,29 +2106,30 @@ final_message = [
 '''  OpenMP:                        @0@'''.format(have_openmp),
 '',
 '''Optional Plug-Ins:''',
-'''  Ascii Art:           @0@'''.format(libaa.found()),
-'''  Ghostscript:         @0@'''.format(ghostscript.found()),
-'''  JPEG 2000:           @0@'''.format(openjpeg.found()),
-'''  JPEG XL:             @0@'''.format(libjxl.found()),
-'''  MNG:                 @0@'''.format(libmng.found()),
-'''  OpenEXR:             @0@'''.format(openexr.found()),
-'''  WebP:                @0@'''.format(webp_found),
-'''  HEIC:                import: @0@ - export: @1@'''
+'''  Ascii Art:             @0@'''.format(libaa.found()),
+'''  Ghostscript:           @0@'''.format(ghostscript.found()),
+'''  JPEG 2000:             @0@'''.format(openjpeg.found()),
+'''  JPEG XL:               @0@'''.format(libjxl.found()),
+'''  MNG:                   @0@'''.format(libmng.found()),
+'''  OpenEXR:               @0@'''.format(openexr.found()),
+'''  WebP:                  @0@'''.format(webp_found),
+'''  HEIC:                import:   @0@ - export:   @1@'''
                                 .format(can_import_heic, can_export_heic),
-'''  AVIF:                import: @0@ - export: @1@'''
+'''  AVIF:                import:   @0@ - export:   @1@'''
                                 .format(can_import_avif, can_export_avif),
-'''  PDF (export):        @0@'''.format(cairopdf.found()),
-'''  Print:               @0@'''.format(have_print),
-'''  Javascript plug-ins: @0@'''.format(have_javascript),
-'''  Vala plug-ins:       @0@'''.format(have_vala),
-'''  TWAIN (Win32):       @0@'''.format(platform_windows),
-'''  WMF:                 @0@'''.format(wmf.found()),
-'''  X11 Mouse Cursor:    @0@'''.format(xmc.found()),
-'''  XPM:                 @0@'''.format(libxpm.found()),
-'''  Quite-OK Image:      @0@'''.format(have_qoi),
-'''  Amiga IFF/ILBM:      @0@'''.format(have_ilbm),
-'''  Email:               @0@'''.format(email_message),
-'''  FITS:                @0@'''.format(cfitsio_dep.found()),
+'''  PDF (export):          @0@'''.format(cairopdf.found()),
+'''  Print:                 @0@'''.format(have_print),
+'''  Image Scanner (Linux): @0@'''.format(have_image_scanner),
+'''  Javascript plug-ins:   @0@'''.format(have_javascript),
+'''  Vala plug-ins:         @0@'''.format(have_vala),
+'''  TWAIN (Win32):         @0@'''.format(platform_windows),
+'''  WMF:                   @0@'''.format(wmf.found()),
+'''  X11 Mouse Cursor:      @0@'''.format(xmc.found()),
+'''  XPM:                   @0@'''.format(libxpm.found()),
+'''  Quite-OK Image:        @0@'''.format(have_qoi),
+'''  Amiga IFF/ILBM:        @0@'''.format(have_ilbm),
+'''  Email:                 @0@'''.format(email_message),
+'''  FITS:                  @0@'''.format(cfitsio_dep.found()),
 '',
 '''Experimental Plug-Ins (discouraged except for developers):''',
 '''  Lua plug-ins:        @0@'''.format(have_lua_output),
