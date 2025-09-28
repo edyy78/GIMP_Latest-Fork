@@ -86,6 +86,7 @@
 #define GRAD_VIEW_SIZE            96
 #define GRAD_CONTROL_HEIGHT       14
 #define GRAD_CURRENT_COLOR_WIDTH  16
+#define GRAD_CONTROL_MAX_WIDTH    2048
 
 #define GRAD_MOVE_TIME 150 /* ms between mouse click and detection of movement in gradient control */
 
@@ -2156,6 +2157,8 @@ control_draw_all (GimpGradientEditor *editor,
   gint                    sel_r;
   gdouble                 g_pos;
   GtkStateFlags           flags;
+  gint                    actual_width = MIN (GRAD_CONTROL_MAX_WIDTH, width);
+  gint                    offset;
 
   if (! gradient)
     return;
@@ -2167,13 +2170,15 @@ control_draw_all (GimpGradientEditor *editor,
   sel_l = control_calc_p_pos (editor, editor->control_sel_l->left);
   sel_r = control_calc_p_pos (editor, editor->control_sel_r->right);
 
+  offset = (width - actual_width) / 2;
+
   gtk_style_context_save (style);
 
   gtk_style_context_add_class (style, GTK_STYLE_CLASS_VIEW);
-  gtk_render_background (style, cr, 0, 0, width, height);
+  gtk_render_background (style, cr, offset, 0, actual_width, height);
 
   gtk_style_context_set_state (style, GTK_STATE_FLAG_SELECTED);
-  gtk_render_background (style, cr,sel_l, 0, sel_r - sel_l + 1, height);
+  gtk_render_background (style, cr, sel_l, 0, sel_r - sel_l + 1, height);
 
   gtk_style_context_restore (style);
 
@@ -2308,10 +2313,12 @@ control_calc_p_pos (GimpGradientEditor *editor,
   GtkAdjustment *adjustment = editor->scroll_data;
   GtkAllocation  allocation;
   gint           pwidth;
+  gint           offset;
 
   gtk_widget_get_allocation (editor->control, &allocation);
 
-  pwidth = allocation.width;
+  pwidth = MIN (GRAD_CONTROL_MAX_WIDTH, allocation.width);
+  offset = (allocation.width - pwidth) / 2;
 
   /* Calculate the position (in widget's coordinates) of the
    * requested point from the gradient.  Rounding is done to
@@ -2319,8 +2326,9 @@ control_calc_p_pos (GimpGradientEditor *editor,
    * and the gradient control's handles.
    */
 
-  return RINT ((pwidth - 1) * (pos - gtk_adjustment_get_value (adjustment)) /
-               gtk_adjustment_get_page_size (adjustment));
+  return offset
+         + RINT ((pwidth - 1) * (pos - gtk_adjustment_get_value (adjustment))
+                 / gtk_adjustment_get_page_size (adjustment));
 }
 
 static gdouble
@@ -2330,10 +2338,40 @@ control_calc_g_pos (GimpGradientEditor *editor,
   GtkAdjustment *adjustment = editor->scroll_data;
   GtkAllocation  allocation;
   gint           pwidth;
+  gint           offset;
 
   gtk_widget_get_allocation (editor->control, &allocation);
 
   pwidth = allocation.width;
+
+  if (pwidth >= GRAD_CONTROL_MAX_WIDTH)
+    {
+      /* Adjust gradient position when pwidth >= 2048 */
+
+      pwidth = GRAD_CONTROL_MAX_WIDTH;
+      offset = (allocation.width - GRAD_CONTROL_MAX_WIDTH) / 2;
+
+      /* |----------|---------------------|----------|
+       *   lpadding    gradient controls    rpadding
+       *
+       * when pos in
+       * lpadding -> 0 -- offset (maps to 0.0)
+       * rpadding -> offset + 2048 -- allocated width (maps to 1.0)
+       * gradient controls -> 2048px (normalised between 0.0 and 1.0)
+       */
+      if (pos <= offset)
+        {
+          pos = 0.0;
+        }
+      else if (pos >= offset + GRAD_CONTROL_MAX_WIDTH)
+        {
+          pos = pwidth;
+        }
+      else
+        {
+          pos -= offset;
+        }
+    }
 
   /* Calculate the gradient position that corresponds to widget's coordinates */
 
