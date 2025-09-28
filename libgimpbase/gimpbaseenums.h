@@ -1191,8 +1191,8 @@ GType gimp_text_justification_get_type (void) G_GNUC_CONST;
 typedef enum
 {
   GIMP_TEXT_JUSTIFY_LEFT,    /*< desc="Left justified"  >*/
-  GIMP_TEXT_JUSTIFY_RIGHT,   /*< desc="Right justified" >*/
   GIMP_TEXT_JUSTIFY_CENTER,  /*< desc="Centered"        >*/
+  GIMP_TEXT_JUSTIFY_RIGHT,   /*< desc="Right justified" >*/
   GIMP_TEXT_JUSTIFY_FILL     /*< desc="Filled"          >*/
 } GimpTextJustification;
 

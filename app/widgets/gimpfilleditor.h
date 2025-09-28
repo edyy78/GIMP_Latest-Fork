@@ -20,6 +20,8 @@
 
 #pragma once
 
+#include "core/gimpfilloptions.h"
+
 
 #define GIMP_TYPE_FILL_EDITOR            (gimp_fill_editor_get_type ())
 #define GIMP_FILL_EDITOR(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_FILL_EDITOR, GimpFillEditor))
@@ -29,15 +31,18 @@
 #define GIMP_FILL_EDITOR_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_FILL_EDITOR, GimpFillEditorClass))
 
 
-typedef struct _GimpFillEditorClass GimpFillEditorClass;
+typedef struct _GimpFillEditorClass   GimpFillEditorClass;
+typedef struct _GimpFillEditorPrivate GimpFillEditorPrivate;
 
 struct _GimpFillEditor
 {
-  GtkBox           parent_instance;
+  GtkBox                 parent_instance;
 
-  GimpFillOptions *options;
-  gboolean         edit_context;
-  gboolean         use_custom_style; /* For solid color and pattern only */
+  GimpFillOptions       *options;
+  gboolean               edit_context;
+  gboolean               use_custom_style; /* For solid color and pattern only */
+
+  GimpFillEditorPrivate *private;
 };
 
 struct _GimpFillEditorClass
@@ -51,3 +56,7 @@ GType       gimp_fill_editor_get_type (void) G_GNUC_CONST;
 GtkWidget * gimp_fill_editor_new      (GimpFillOptions *options,
                                        gboolean         edit_context,
                                        gboolean         use_custom_style);
+
+void        gimp_fill_editor_outline_style_changed
+                                      (GimpFillEditor  *editor,
+                                       const gchar     *style);

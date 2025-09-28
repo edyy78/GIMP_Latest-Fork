@@ -1760,8 +1760,8 @@ gimp_text_justification_get_type (void)
   static const GEnumValue values[] =
   {
     { GIMP_TEXT_JUSTIFY_LEFT, "GIMP_TEXT_JUSTIFY_LEFT", "left" },
-    { GIMP_TEXT_JUSTIFY_RIGHT, "GIMP_TEXT_JUSTIFY_RIGHT", "right" },
     { GIMP_TEXT_JUSTIFY_CENTER, "GIMP_TEXT_JUSTIFY_CENTER", "center" },
+    { GIMP_TEXT_JUSTIFY_RIGHT, "GIMP_TEXT_JUSTIFY_RIGHT", "right" },
     { GIMP_TEXT_JUSTIFY_FILL, "GIMP_TEXT_JUSTIFY_FILL", "fill" },
     { 0, NULL, NULL }
   };
@@ -1769,8 +1769,8 @@ gimp_text_justification_get_type (void)
   static const GimpEnumDesc descs[] =
   {
     { GIMP_TEXT_JUSTIFY_LEFT, NC_("text-justification", "Left justified"), NULL },
-    { GIMP_TEXT_JUSTIFY_RIGHT, NC_("text-justification", "Right justified"), NULL },
     { GIMP_TEXT_JUSTIFY_CENTER, NC_("text-justification", "Centered"), NULL },
+    { GIMP_TEXT_JUSTIFY_RIGHT, NC_("text-justification", "Right justified"), NULL },
     { GIMP_TEXT_JUSTIFY_FILL, NC_("text-justification", "Filled"), NULL },
     { 0, NULL, NULL }
   };

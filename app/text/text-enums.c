@@ -44,6 +44,7 @@ gimp_text_outline_get_type (void)
   static const GEnumValue values[] =
   {
     { GIMP_TEXT_OUTLINE_NONE, "GIMP_TEXT_OUTLINE_NONE", "none" },
+    { GIMP_TEXT_OUTLINE_FILLED_ONLY, "GIMP_TEXT_OUTLINE_FILLED_ONLY", "filled-only" },
     { GIMP_TEXT_OUTLINE_STROKE_ONLY, "GIMP_TEXT_OUTLINE_STROKE_ONLY", "stroke-only" },
     { GIMP_TEXT_OUTLINE_STROKE_FILL, "GIMP_TEXT_OUTLINE_STROKE_FILL", "stroke-fill" },
     { 0, NULL, NULL }
@@ -51,7 +52,8 @@ gimp_text_outline_get_type (void)
 
   static const GimpEnumDesc descs[] =
   {
-    { GIMP_TEXT_OUTLINE_NONE, NC_("text-outline", "Filled"), NULL },
+    { GIMP_TEXT_OUTLINE_NONE, NC_("text-outline", "None"), NULL },
+    { GIMP_TEXT_OUTLINE_FILLED_ONLY, NC_("text-outline", "Filled"), NULL },
     { GIMP_TEXT_OUTLINE_STROKE_ONLY, NC_("text-outline", "Outlined"), NULL },
     { GIMP_TEXT_OUTLINE_STROKE_FILL, NC_("text-outline", "Outlined and filled"), NULL },
     { 0, NULL, NULL }

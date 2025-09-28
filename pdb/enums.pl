@@ -574,11 +574,11 @@ package Gimp::CodeGen::enums;
     GimpTextJustification =>
 	{ contig => 1,
 	  header => 'libgimpbase/gimpbaseenums.h',
-	  symbols => [ qw(GIMP_TEXT_JUSTIFY_LEFT GIMP_TEXT_JUSTIFY_RIGHT
-			  GIMP_TEXT_JUSTIFY_CENTER GIMP_TEXT_JUSTIFY_FILL) ],
+	  symbols => [ qw(GIMP_TEXT_JUSTIFY_LEFT GIMP_TEXT_JUSTIFY_CENTER
+			  GIMP_TEXT_JUSTIFY_RIGHT GIMP_TEXT_JUSTIFY_FILL) ],
 	  mapping => { GIMP_TEXT_JUSTIFY_LEFT => '0',
-		       GIMP_TEXT_JUSTIFY_RIGHT => '1',
-		       GIMP_TEXT_JUSTIFY_CENTER => '2',
+		       GIMP_TEXT_JUSTIFY_CENTER => '1',
+		       GIMP_TEXT_JUSTIFY_RIGHT => '2',
 		       GIMP_TEXT_JUSTIFY_FILL => '3' }
 	},
     GimpTransferMode =>

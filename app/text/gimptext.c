@@ -32,6 +32,7 @@
 #include "libgimpcolor/gimpcolor.h"
 #include "libgimpconfig/gimpconfig.h"
 
+#include "text-enums.h"
 #include "text-types.h"
 
 #include "gimpfont.h"
@@ -63,7 +64,8 @@ enum
   PROP_LANGUAGE,
   PROP_BASE_DIR,
   PROP_COLOR,
-  PROP_OUTLINE,
+  PROP_OUTLINE_ENABLE,
+  PROP_FILL_ENABLE,
   PROP_JUSTIFICATION,
   PROP_INDENTATION,
   PROP_LINE_SPACING,
@@ -90,7 +92,8 @@ enum
   PROP_OUTLINE_DASH_OFFSET,
   PROP_OUTLINE_DASH_INFO,
   /* for backward compatibility */
-  PROP_HINTING
+  PROP_HINTING,
+  PROP_OUTLINE
 };
 
 enum
@@ -126,6 +129,8 @@ static void     gimp_text_dispatch_properties_changed (GObject      *object,
                                                        GParamSpec  **pspecs);
 static gint64   gimp_text_get_memsize                 (GimpObject   *object,
                                                        gint64       *gui_size);
+
+static void     gimp_text_set_outline_style           (GimpText     *text);
 
 
 G_DEFINE_TYPE_WITH_CODE (GimpText, gimp_text, GIMP_TYPE_OBJECT,
@@ -240,13 +245,17 @@ gimp_text_class_init (GimpTextClass *klass)
                           FALSE, black,
                           GIMP_PARAM_STATIC_STRINGS);
 
-  GIMP_CONFIG_PROP_ENUM (object_class, PROP_OUTLINE,
-                         "outline",
-                         NULL, NULL,
-                         GIMP_TYPE_TEXT_OUTLINE,
-                         GIMP_TEXT_OUTLINE_NONE,
-                         GIMP_PARAM_STATIC_STRINGS |
-                         GIMP_CONFIG_PARAM_DEFAULTS);
+  GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_OUTLINE_ENABLE,
+                            "outline-enable",
+                            NULL, NULL,
+                            FALSE,
+                            GIMP_PARAM_STATIC_STRINGS);
+
+  GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_FILL_ENABLE,
+                            "fill-enable",
+                            NULL, NULL,
+                            TRUE,
+                            GIMP_PARAM_STATIC_STRINGS);
 
   GIMP_CONFIG_PROP_ENUM (object_class, PROP_JUSTIFICATION,
                          "justify",
@@ -392,6 +401,16 @@ gimp_text_class_init (GimpTextClass *klass)
                             TRUE,
                             GIMP_PARAM_STATIC_STRINGS);
 
+  /* the old outline options have been replaced by 'outline-enable' */
+  GIMP_CONFIG_PROP_ENUM (object_class, PROP_OUTLINE,
+                         "outline",
+                         NULL, NULL,
+                         GIMP_TYPE_TEXT_OUTLINE,
+                         GIMP_TEXT_OUTLINE_NONE,
+                         GIMP_PARAM_STATIC_STRINGS |
+                         GIMP_CONFIG_PARAM_DEFAULTS);
+
+
   g_object_class_install_property (object_class, PROP_GIMP,
                                    g_param_spec_object ("gimp", NULL, NULL,
                                                         GIMP_TYPE_GIMP,
@@ -474,8 +493,13 @@ gimp_text_get_property (GObject      *object,
     case PROP_COLOR:
       g_value_set_object (value, text->color);
       break;
-    case PROP_OUTLINE:
-      g_value_set_enum (value, text->outline);
+    case PROP_OUTLINE_ENABLE:
+      g_value_set_boolean (value, text->outline_enable);
+      gimp_text_set_outline_style (text);
+      break;
+    case PROP_FILL_ENABLE:
+      g_value_set_boolean (value, text->fill_enable);
+      gimp_text_set_outline_style (text);
       break;
     case PROP_JUSTIFICATION:
       g_value_set_enum (value, text->justify);
@@ -552,6 +576,16 @@ gimp_text_get_property (GObject      *object,
       g_value_set_boolean (value,
                            text->hint_style != GIMP_TEXT_HINT_STYLE_NONE);
       break;
+    case PROP_OUTLINE:
+      if (text->fill_enable && text->outline_enable)
+        g_value_set_enum (value, GIMP_TEXT_OUTLINE_STROKE_FILL);
+      else if (text->fill_enable)
+        g_value_set_enum (value, GIMP_TEXT_OUTLINE_FILLED_ONLY);
+      else if (text->outline_enable)
+        g_value_set_enum (value, GIMP_TEXT_OUTLINE_STROKE_ONLY);
+      else
+        g_value_set_enum (value, GIMP_TEXT_OUTLINE_NONE);
+      break;
     case PROP_GIMP:
       g_value_set_object (value, text->gimp);
       break;
@@ -623,8 +657,13 @@ gimp_text_set_property (GObject      *object,
     case PROP_COLOR:
       g_set_object (&text->color, g_value_get_object (value));;
       break;
-    case PROP_OUTLINE:
-      text->outline = g_value_get_enum (value);
+    case PROP_OUTLINE_ENABLE:
+      text->outline_enable = g_value_get_boolean (value);
+      gimp_text_set_outline_style (text);
+      break;
+    case PROP_FILL_ENABLE:
+      text->fill_enable = g_value_get_boolean (value);
+      gimp_text_set_outline_style (text);
       break;
     case PROP_JUSTIFICATION:
       text->justify = g_value_get_enum (value);
@@ -664,7 +703,7 @@ gimp_text_set_property (GObject      *object,
       text->outline_style = g_value_get_enum (value);
       break;
     case PROP_OUTLINE_FOREGROUND:
-      g_set_object (&text->outline_foreground, g_value_get_object (value));;
+      g_set_object (&text->outline_foreground, g_value_get_object (value));
       break;
     case PROP_OUTLINE_PATTERN:
       {
@@ -718,6 +757,19 @@ gimp_text_set_property (GObject      *object,
         text->hint_style = (g_value_get_boolean (value) ?
                             GIMP_TEXT_HINT_STYLE_MEDIUM :
                             GIMP_TEXT_HINT_STYLE_NONE);
+      break;
+    case PROP_OUTLINE:
+      {
+        GimpTextOutline outline = g_value_get_enum (value);
+
+        if (outline == GIMP_TEXT_OUTLINE_NONE)
+          text->outline = GIMP_TEXT_OUTLINE_FILLED_ONLY;
+        else
+          text->outline = outline;
+
+        text->fill_enable = (outline != GIMP_TEXT_OUTLINE_STROKE_ONLY);
+        text->outline_enable = (outline != GIMP_TEXT_OUTLINE_NONE);
+      }
       break;
     case PROP_GIMP:
       text->gimp = g_value_get_object (value);
@@ -857,7 +909,7 @@ gimp_text_serialize_property (GimpConfig       *config,
                                                              (GimpContainerSearchFunc) gimp_font_match_by_lookup_name,
                                                              (gpointer) altered_font_name));
                   /* in case pango returns a non existant font name */
-                  if (font == NULL) 
+                  if (font == NULL)
                     {
                       font = GIMP_FONT (gimp_font_get_standard ());
                       font_name = "gimpfont";
@@ -1035,4 +1087,19 @@ gimp_text_deserialize_property (GimpConfig *object,
     }
 
   return FALSE;
+}
+
+static void
+gimp_text_set_outline_style (GimpText *text)
+{
+  g_return_if_fail (GIMP_IS_TEXT (text));
+
+  if (text->fill_enable && text->outline_enable)
+    text->outline = GIMP_TEXT_OUTLINE_STROKE_FILL;
+  else if (text->fill_enable)
+    text->outline = GIMP_TEXT_OUTLINE_FILLED_ONLY;
+  else if (text->outline_enable)
+    text->outline = GIMP_TEXT_OUTLINE_STROKE_ONLY;
+  else
+    text->outline = GIMP_TEXT_OUTLINE_NONE;
 }

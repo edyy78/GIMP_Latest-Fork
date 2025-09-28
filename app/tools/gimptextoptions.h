@@ -28,8 +28,9 @@
 #define GIMP_TEXT_OPTIONS_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_TEXT_OPTIONS, GimpTextOptionsClass))
 
 
-typedef struct _GimpTextOptions      GimpTextOptions;
-typedef struct _GimpToolOptionsClass GimpTextOptionsClass;
+typedef struct _GimpTextOptions        GimpTextOptions;
+typedef struct _GimpTextOptionsPrivate GimpTextOptionsPrivate;
+typedef struct _GimpToolOptionsClass   GimpTextOptionsClass;
 
 struct _GimpTextOptions
 {
@@ -47,6 +48,8 @@ struct _GimpTextOptions
   gdouble                   letter_spacing;
   GimpTextBoxMode           box_mode;
 
+  gboolean                  fill_enable;
+  gboolean                  outline_enable;
   GimpTextOutline           outline;
   GimpCustomStyle           outline_style;
   GeglColor                *outline_foreground;
@@ -69,6 +72,8 @@ struct _GimpTextOptions
 
   /*  options gui  */
   GtkWidget                *size_entry;
+
+  GimpTextOptionsPrivate   *private;
 };
 
 
@@ -79,6 +84,8 @@ void        gimp_text_options_connect_text (GimpTextOptions *options,
 
 GtkWidget * gimp_text_options_gui          (GimpToolOptions *tool_options);
 
+void        gimp_text_options_update_gui   (GimpTextOptions *options);
+
 GtkWidget * gimp_text_options_editor_new   (GtkWindow       *parent,
                                             Gimp            *gimp,
                                             GimpTextOptions *options,
@@ -88,3 +95,6 @@ GtkWidget * gimp_text_options_editor_new   (GtkWindow       *parent,
                                             GimpTextBuffer  *text_buffer,
                                             gdouble          xres,
                                             gdouble          yres);
+
+void      gimp_text_options_update_toggles (GimpTextOptions *options,
+                                            GimpTextBuffer  *text_buffer);

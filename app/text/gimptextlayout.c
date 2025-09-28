@@ -786,7 +786,7 @@ gimp_text_layout_position (GimpTextLayout *layout)
 
   border = (layout->text->border > 0) ? layout->text->border : 0;
 
-  if (layout->text->outline != GIMP_TEXT_OUTLINE_NONE &&
+  if (layout->text->outline != GIMP_TEXT_OUTLINE_FILLED_ONLY &&
       layout->text->outline_direction != GIMP_TEXT_OUTLINE_DIRECTION_INNER)
     border += layout->text->outline_width;
 

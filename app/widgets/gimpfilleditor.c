@@ -28,7 +28,6 @@
 
 #include "widgets-types.h"
 
-#include "core/gimpfilloptions.h"
 
 #include "gimpcolorpanel.h"
 #include "gimpfilleditor.h"
@@ -47,6 +46,10 @@ enum
   PROP_USE_CUSTOM_STYLE
 };
 
+struct _GimpFillEditorPrivate
+{
+  GtkStack *stack;
+};
 
 static void   gimp_fill_editor_constructed  (GObject      *object);
 static void   gimp_fill_editor_finalize     (GObject      *object);
@@ -58,9 +61,13 @@ static void   gimp_fill_editor_get_property (GObject      *object,
                                              guint         property_id,
                                              GValue       *value,
                                              GParamSpec   *pspec);
+static void   gimp_fill_editor_switcher_notify
+                                            (GObject      *object,
+                                             GParamSpec   *pspec,
+                                             gpointer      data);
 
 
-G_DEFINE_TYPE (GimpFillEditor, gimp_fill_editor, GTK_TYPE_BOX)
+G_DEFINE_TYPE_WITH_PRIVATE (GimpFillEditor, gimp_fill_editor, GTK_TYPE_BOX)
 
 #define parent_class gimp_fill_editor_parent_class
 
@@ -100,84 +107,110 @@ gimp_fill_editor_class_init (GimpFillEditorClass *klass)
 static void
 gimp_fill_editor_init (GimpFillEditor *editor)
 {
+  GimpFillEditorPrivate *priv;
+
+  g_return_if_fail (GIMP_IS_FILL_EDITOR (editor));
+
+  priv = gimp_fill_editor_get_instance_private (editor);
+
   gtk_orientable_set_orientation (GTK_ORIENTABLE (editor),
                                   GTK_ORIENTATION_VERTICAL);
 
   gtk_box_set_spacing (GTK_BOX (editor), 6);
+
+  editor->private = priv;
 }
 
 static void
 gimp_fill_editor_constructed (GObject *object)
 {
   GimpFillEditor *editor = GIMP_FILL_EDITOR (object);
-  GtkWidget      *box;
   GtkWidget      *button;
 
   G_OBJECT_CLASS (parent_class)->constructed (object);
 
   gimp_assert (GIMP_IS_FILL_OPTIONS (editor->options));
 
-  if (editor->use_custom_style)
-    box = gimp_prop_enum_radio_box_new (G_OBJECT (editor->options),
-                                        "custom-style", 0, 0);
-  else
-    box = gimp_prop_enum_radio_box_new (G_OBJECT (editor->options), "style",
-                                        0, 0);
-
-  gtk_box_pack_start (GTK_BOX (editor), box, FALSE, FALSE, 0);
-
   if (editor->edit_context)
     {
-      GtkWidget *color_button;
+      GtkWidget *color_box;
       GtkWidget *pattern_box;
+      GtkWidget *switcher;
+      GtkWidget *stack;
 
-      if (editor->use_custom_style)
-        {
-          color_button = gimp_prop_color_button_new (G_OBJECT (editor->options),
-                                                     "foreground",
-                                                     _("Fill Color"),
-                                                     1, 24,
-                                                     GIMP_COLOR_AREA_SMALL_CHECKS);
-          gimp_color_panel_set_context (GIMP_COLOR_PANEL (color_button),
-                                        GIMP_CONTEXT (editor->options));
-          gimp_enum_radio_box_add (GTK_BOX (box), color_button,
-                                   GIMP_CUSTOM_STYLE_SOLID_COLOR, FALSE);
-        }
-      else
-        {
-          color_button = gimp_prop_color_button_new (G_OBJECT (editor->options),
-                                                     "foreground",
-                                                     _("Fill Color"),
-                                                     1, 24,
-                                                     GIMP_COLOR_AREA_SMALL_CHECKS);
-          gimp_color_panel_set_context (GIMP_COLOR_PANEL (color_button),
-                                        GIMP_CONTEXT (editor->options));
-          gimp_enum_radio_box_add (GTK_BOX (box), color_button,
-                                   GIMP_FILL_STYLE_FG_COLOR, FALSE);
-          gimp_color_button_set_update (GIMP_COLOR_BUTTON (color_button), TRUE);
+      switcher = gtk_stack_switcher_new ();
+      stack    = gtk_stack_new ();
 
-          color_button = gimp_prop_color_button_new (G_OBJECT (editor->options),
-                                                     "background",
-                                                     _("Fill BG Color"),
-                                                     1, 24,
-                                                     GIMP_COLOR_AREA_SMALL_CHECKS);
-          gimp_color_panel_set_context (GIMP_COLOR_PANEL (color_button),
+      gtk_stack_switcher_set_stack (GTK_STACK_SWITCHER (switcher), GTK_STACK (stack));
+      gtk_box_pack_start (GTK_BOX (editor), switcher, FALSE, FALSE, 0);
+      gtk_box_pack_start (GTK_BOX (editor), stack, FALSE, FALSE, 0);
+      gtk_widget_show (switcher);
+      gtk_widget_show (stack);
+
+      color_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 6);
+
+      button = gimp_prop_color_button_new (G_OBJECT (editor->options),
+                                           "foreground",
+                                           _("Fill Color"),
+                                           1, 24,
+                                           GIMP_COLOR_AREA_SMALL_CHECKS);
+      gimp_color_button_set_update (GIMP_COLOR_BUTTON (button), TRUE);
+      gimp_color_panel_set_context (GIMP_COLOR_PANEL (button),
+                                    GIMP_CONTEXT (editor->options));
+      gtk_box_pack_start (GTK_BOX (color_box), button, FALSE, FALSE, 0);
+
+      gtk_stack_add_titled (GTK_STACK (stack), color_box, "color-fg",
+                            _("Solid color"));
+      gtk_widget_show (color_box);
+
+      if (! editor->use_custom_style)
+        {
+          color_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 6);
+
+          button = gimp_prop_color_button_new (G_OBJECT (editor->options),
+                                               "background",
+                                               _("Fill BG Color"),
+                                               1, 24,
+                                               GIMP_COLOR_AREA_SMALL_CHECKS);
+          gimp_color_button_set_update (GIMP_COLOR_BUTTON (button), TRUE);
+          gimp_color_panel_set_context (GIMP_COLOR_PANEL (button),
                                         GIMP_CONTEXT (editor->options));
-          gimp_enum_radio_box_add (GTK_BOX (box), color_button,
-                                   GIMP_FILL_STYLE_BG_COLOR, FALSE);
+          gtk_box_pack_start (GTK_BOX (color_box), button, FALSE, FALSE, 0);
+          gtk_widget_show (button);
+
+          gtk_stack_add_titled (GTK_STACK (stack), color_box, "color-bg",
+                                _("Solid BG color"));
+          gtk_widget_show (color_box);
         }
-      gimp_color_button_set_update (GIMP_COLOR_BUTTON (color_button), TRUE);
 
       pattern_box = gimp_prop_pattern_box_new (NULL,
                                                GIMP_CONTEXT (editor->options),
                                                NULL, 2,
                                                "pattern-view-type",
                                                "pattern-view-size");
-      gimp_enum_radio_box_add (GTK_BOX (box), pattern_box,
-                               (editor->use_custom_style ?
-                                GIMP_CUSTOM_STYLE_PATTERN :
-                                GIMP_FILL_STYLE_PATTERN),
-                               FALSE);
+      gtk_stack_add_titled (GTK_STACK (stack), pattern_box, "pattern",
+                            _("Pattern"));
+      gtk_widget_show (pattern_box);
+
+      g_signal_connect_object (stack,
+                               "notify::visible-child-name",
+                               G_CALLBACK (gimp_fill_editor_switcher_notify),
+                               editor, 0);
+
+      editor->private->stack = GTK_STACK (stack);
+    }
+  else
+    {
+      GtkWidget *box;
+
+      if (editor->use_custom_style)
+        box = gimp_prop_enum_radio_box_new (G_OBJECT (editor->options),
+                                            "custom-style", 0, 0);
+      else
+        box = gimp_prop_enum_radio_box_new (G_OBJECT (editor->options), "style",
+                                            0, 0);
+
+      gtk_box_pack_start (GTK_BOX (editor), box, FALSE, FALSE, 0);
     }
 
   button = gimp_prop_check_button_new (G_OBJECT (editor->options),
@@ -252,6 +285,37 @@ gimp_fill_editor_get_property (GObject    *object,
     }
 }
 
+static void
+gimp_fill_editor_switcher_notify (GObject    *object,
+                                  GParamSpec *pspec,
+                                  gpointer    data)
+{
+  GimpFillEditor *editor = GIMP_FILL_EDITOR (data);
+  const gchar    *name   = gtk_stack_get_visible_child_name (GTK_STACK (object));
+
+  if (g_strcmp0 (name, "color-fg") == 0)
+    g_object_set (editor->options,
+                  editor->use_custom_style ? "custom-style" : "style",
+                  (editor->use_custom_style ?
+                   GIMP_CUSTOM_STYLE_SOLID_COLOR :
+                   GIMP_FILL_STYLE_FG_COLOR),
+                  NULL);
+  else if (g_strcmp0 (name, "color-bg") == 0)
+    g_object_set (editor->options,
+                  editor->use_custom_style ? "custom-style" : "style",
+                  (editor->use_custom_style ?
+                   GIMP_CUSTOM_STYLE_SOLID_COLOR :
+                   GIMP_FILL_STYLE_BG_COLOR),
+                  NULL);
+  else if (g_strcmp0 (name, "pattern") == 0)
+    g_object_set (editor->options,
+                  editor->use_custom_style ? "custom-style" : "style",
+                  (editor->use_custom_style ?
+                   GIMP_CUSTOM_STYLE_PATTERN :
+                   GIMP_FILL_STYLE_PATTERN),
+                  NULL);
+}
+
 GtkWidget *
 gimp_fill_editor_new (GimpFillOptions *options,
                       gboolean         edit_context,
@@ -264,4 +328,14 @@ gimp_fill_editor_new (GimpFillOptions *options,
                        "edit-context",     edit_context ? TRUE : FALSE,
                        "use-custom-style", use_custom_style ? TRUE : FALSE,
                        NULL);
+}
+
+void
+gimp_fill_editor_outline_style_changed (GimpFillEditor *editor,
+                                        const gchar    *style)
+{
+  g_return_if_fail (GIMP_IS_FILL_EDITOR (editor));
+
+  if (gtk_stack_get_child_by_name (editor->private->stack, style))
+    gtk_stack_set_visible_child_name (editor->private->stack, style);
 }

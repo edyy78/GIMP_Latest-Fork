@@ -27,6 +27,7 @@
 #include "libgimpwidgets/gimpwidgets-private.h"
 
 #include "tools-types.h"
+#include "tool_manager.h"
 
 #include "config/gimpconfig-utils.h"
 
@@ -39,9 +40,10 @@
 #include "core/gimptoolinfo.h"
 #include "core/gimpviewable.h"
 
-#include "text/gimptext.h"
+#include "menus/menus.h"
 
 #include "text/gimpfont.h"
+#include "text/gimptext.h"
 
 #include "widgets/gimpcolorpanel.h"
 #include "widgets/gimpmenufactory.h"
@@ -49,9 +51,11 @@
 #include "widgets/gimpstrokeeditor.h"
 #include "widgets/gimptextbuffer.h"
 #include "widgets/gimptexteditor.h"
+#include "widgets/gimpuimanager.h"
 #include "widgets/gimpviewablebox.h"
 #include "widgets/gimpwidgets-utils.h"
 
+#include "gimptexttool.h"
 #include "gimptextoptions.h"
 #include "gimptooloptions-gui.h"
 
@@ -73,6 +77,7 @@ enum
   PROP_LETTER_SPACING,
   PROP_BOX_MODE,
 
+  PROP_FILL,
   PROP_OUTLINE,
   PROP_OUTLINE_STYLE,       /* fill-options */
   PROP_OUTLINE_FOREGROUND,  /* context */
@@ -91,6 +96,14 @@ enum
 
   PROP_FONT_VIEW_TYPE,
   PROP_FONT_VIEW_SIZE
+};
+
+struct _GimpTextOptionsPrivate
+{
+  GimpStrokeEditor *stroke_editor;
+
+  /* List of toggles for bold, italic, underline and strikethrough */
+  GList            *toggles;
 };
 
 
@@ -134,13 +147,23 @@ static void  gimp_text_options_notify_color         (GimpContext         *contex
 static void  gimp_text_options_notify_text_color    (GimpText            *text,
                                                      GParamSpec          *pspec,
                                                      GimpContext         *context);
-static void  gimp_text_options_outline_changed      (GtkWidget           *combo,
-                                                     GtkWidget           *vbox);
+static void  gimp_text_options_set_outline          (GimpTextOptions     *options);
+
+static GtkWidget *
+             gimp_text_options_create_toggle        (GimpTextOptions     *options,
+                                                     const gchar         *prop_name,
+                                                     const gchar         *icon_name,
+                                                     const gchar         *tooltip);
+static void  gimp_text_options_toggle_changed       (GtkToggleButton     *toggle,
+                                                     GimpTextOptions     *options);
+static void  gimp_text_options_open_gegl_styles     (GtkButton           *button,
+                                                     GimpTextOptions     *options);
 
 
 
 G_DEFINE_TYPE_WITH_CODE (GimpTextOptions, gimp_text_options,
                          GIMP_TYPE_TOOL_OPTIONS,
+                         G_ADD_PRIVATE (GimpTextOptions)
                          G_IMPLEMENT_INTERFACE (GIMP_TYPE_CONFIG,
                                                 gimp_text_options_config_iface_init))
 
@@ -273,13 +296,18 @@ gimp_text_options_class_init (GimpTextOptionsClass *klass)
                         GIMP_VIEWABLE_MAX_BUTTON_SIZE,
                         GIMP_VIEW_SIZE_SMALL,
                         GIMP_PARAM_STATIC_STRINGS);
-  GIMP_CONFIG_PROP_ENUM (object_class, PROP_OUTLINE,
-                         "outline",
-                         NULL, NULL,
-                         GIMP_TYPE_TEXT_OUTLINE,
-                         GIMP_TEXT_OUTLINE_NONE,
-                         GIMP_PARAM_STATIC_STRINGS |
-                         GIMP_CONFIG_PARAM_DEFAULTS);
+  GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_FILL,
+                            "fill-enable",
+                            _("Fill"),
+                            _("Fill the text with a selected color"),
+                            TRUE,
+                            GIMP_PARAM_STATIC_STRINGS);
+  GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_OUTLINE,
+                            "outline-enable",
+                            _("Outline"),
+                            _("Outline the text with a selected color or pattern"),
+                            FALSE,
+                            GIMP_PARAM_STATIC_STRINGS);
    GIMP_CONFIG_PROP_ENUM (object_class, PROP_OUTLINE_STYLE,
                           "outline-custom-style",
                           NULL, NULL,
@@ -372,10 +400,12 @@ gimp_text_options_config_iface_init (GimpConfigInterface *config_iface)
 static void
 gimp_text_options_init (GimpTextOptions *options)
 {
-  GeglColor *gray = gegl_color_new ("gray");
+  GeglColor              *gray = gegl_color_new ("gray");
+  GimpTextOptionsPrivate *priv = gimp_text_options_get_instance_private (options);
 
   options->size_entry         = NULL;
   options->outline_foreground = gray;
+  options->private            = priv;
 }
 
 static void
@@ -433,8 +463,13 @@ gimp_text_options_get_property (GObject    *object,
       g_value_set_enum (value, options->box_mode);
       break;
 
+    case PROP_FILL:
+      g_value_set_boolean (value, options->fill_enable);
+      gimp_text_options_set_outline (options);
+      break;
     case PROP_OUTLINE:
-      g_value_set_enum (value, options->outline);
+      g_value_set_boolean (value, options->outline_enable);
+      gimp_text_options_set_outline (options);
       break;
     case PROP_OUTLINE_STYLE:
       g_value_set_enum (value, options->outline_style);
@@ -542,8 +577,13 @@ gimp_text_options_set_property (GObject      *object,
       options->box_mode = g_value_get_enum (value);
       break;
 
+    case PROP_FILL:
+      options->fill_enable = g_value_get_boolean (value);
+      gimp_text_options_set_outline (options);
+      break;
     case PROP_OUTLINE:
-      options->outline = g_value_get_enum (value);
+      options->outline_enable = g_value_get_boolean (value);
+      gimp_text_options_set_outline (options);
       break;
     case PROP_OUTLINE_STYLE:
       options->outline_style = g_value_get_enum (value);
@@ -642,7 +682,8 @@ gimp_text_options_reset (GimpConfig *config)
   gimp_config_reset_property (object, "letter-spacing");
   gimp_config_reset_property (object, "box-mode");
 
-  gimp_config_reset_property (object, "outline");
+  gimp_config_reset_property (object, "fill-enable");
+  gimp_config_reset_property (object, "outline-enable");
   gimp_config_reset_property (object, "outline-custom-style");
   gimp_config_reset_property (object, "outline-foreground");
   gimp_config_reset_property (object, "outline-pattern");
@@ -773,19 +814,22 @@ gimp_text_options_gui (GimpToolOptions *tool_options)
   GimpAsyncSet      *async_set;
   GtkWidget         *options_vbox;
   GtkWidget         *outline_grid;
+  GtkWidget         *fill_grid;
   GtkWidget         *grid;
   GtkWidget         *vbox;
   GtkWidget         *hbox;
   GtkWidget         *button;
+  GtkWidget         *expander;
   GtkWidget         *entry;
   GtkWidget         *box;
   GtkWidget         *spinbutton;
   GtkWidget         *combo;
   GtkWidget         *editor;
   GimpStrokeOptions *stroke_options;
-  GtkWidget         *outline_frame;
   GtkSizeGroup      *size_group;
   gint               row = 0;
+
+  size_group = gtk_size_group_new (GTK_SIZE_GROUP_HORIZONTAL);
 
   async_set =
     gimp_data_factory_get_async_set (tool_options->tool_info->gimp->font_factory);
@@ -822,129 +866,51 @@ gimp_text_options_gui (GimpToolOptions *tool_options)
   entry = gimp_prop_size_entry_new (config,
                                     "font-size", FALSE, "font-size-unit", "%n",
                                     GIMP_SIZE_ENTRY_UPDATE_SIZE, 72.0);
+  gtk_widget_set_halign (entry, GTK_ALIGN_START);
   gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++,
                             _("Size:"), 0.0, 0.5,
                             entry, 2);
+  gtk_size_group_add_widget (size_group, entry);
 
   options->size_entry = entry;
 
-  vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
-  gtk_box_pack_start (GTK_BOX (options_vbox), vbox, FALSE, FALSE, 0);
-  gtk_widget_show (vbox);
-
-  button = gimp_prop_check_button_new (config, "use-editor", NULL);
-  gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
-
-  button = gimp_prop_check_button_new (config, "show-on-canvas", NULL);
-  gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
-
-  button = gimp_prop_check_button_new (config, "antialias", NULL);
-  gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
-
-  grid = gtk_grid_new ();
-  gtk_grid_set_column_spacing (GTK_GRID (grid), 2);
-  gtk_grid_set_row_spacing (GTK_GRID (grid), 2);
-  gtk_box_pack_start (GTK_BOX (options_vbox), grid, FALSE, FALSE, 0);
-  gtk_widget_show (grid);
-
-  row = 0;
-
-  size_group = gtk_size_group_new (GTK_SIZE_GROUP_HORIZONTAL);
-
-  button = gimp_prop_enum_combo_box_new (config, "hint-style", -1, -1);
-  gtk_widget_set_halign (button, GTK_ALIGN_START);
-  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++,
-                            _("Hinting:"), 0.0, 0.5,
-                            button, 1);
-  gtk_size_group_add_widget (size_group, button);
+  fill_grid = gtk_grid_new ();
+  gtk_grid_set_column_spacing (GTK_GRID (fill_grid), 2);
+  gtk_grid_set_row_spacing (GTK_GRID (fill_grid), 2);
 
   button = gimp_prop_color_button_new (config, "foreground", _("Text Color"),
                                        40, 24, GIMP_COLOR_AREA_FLAT);
   gimp_color_button_set_update (GIMP_COLOR_BUTTON (button), TRUE);
   gimp_color_panel_set_context (GIMP_COLOR_PANEL (button),
                                 GIMP_CONTEXT (options));
-  gtk_widget_set_halign (button, GTK_ALIGN_START);
-  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++,
+
+  gimp_grid_attach_aligned (GTK_GRID (fill_grid), 0, 0,
                             _("Color:"), 0.0, 0.5,
-                            button, 1);
+                            button, 2);
+  gtk_widget_set_halign (button, GTK_ALIGN_START);
   gtk_size_group_add_widget (size_group, button);
 
-  button = gimp_prop_enum_combo_box_new (config, "outline", -1, -1);
-  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++,
-                             _("Style:"), 0.0, 0.5,
-                             button, 1);
-  gtk_size_group_add_widget (size_group, button);
-
-  outline_frame = gimp_frame_new (_("Outline Options"));
-  gimp_widget_set_identifier (outline_frame, "text-outline-settings");
-  gtk_box_pack_start (GTK_BOX (options_vbox), outline_frame, FALSE, FALSE, 0);
-  gtk_widget_show (outline_frame);
-
-  g_signal_connect (button, "changed",
-                    G_CALLBACK (gimp_text_options_outline_changed),
-                    outline_frame);
-  gimp_text_options_outline_changed (button, outline_frame);
+  expander = gimp_prop_expanding_frame_new (config, "fill-enable",
+                                            _("Fill"), fill_grid, NULL);
+  gtk_box_pack_start (GTK_BOX (options_vbox), expander, FALSE, FALSE, 0);
 
   outline_grid = gtk_grid_new ();
   gtk_grid_set_column_spacing (GTK_GRID (outline_grid), 2);
   gtk_grid_set_row_spacing (GTK_GRID (outline_grid), 2);
-  gtk_container_add (GTK_CONTAINER (outline_frame), outline_grid);
   gtk_widget_show (outline_grid);
 
   button = gimp_prop_enum_combo_box_new (config, "outline-direction", -1, -1);
   gimp_int_combo_box_set_label (GIMP_INT_COMBO_BOX (button), _("Outline Direction:"));
+  gtk_widget_set_hexpand (button, TRUE);
   gimp_grid_attach_aligned (GTK_GRID (outline_grid), 0, 0,
                             NULL, 0.0, 0.5,
                             button, 1);
 
-  grid = gtk_grid_new ();
-  gtk_grid_set_column_spacing (GTK_GRID (grid), 2);
-  gtk_grid_set_row_spacing (GTK_GRID (grid), 2);
-  gtk_box_pack_start (GTK_BOX (options_vbox), grid, FALSE, FALSE, 0);
-  gtk_widget_show (grid);
-
-  row = 0;
-
-  box = gimp_prop_enum_icon_box_new (config, "justify", "format-justify", 0, 0);
-  gtk_widget_set_halign (box, GTK_ALIGN_START);
-  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++,
-                            _("Justify:"), 0.0, 0.5,
-                            box, 2);
-  gtk_size_group_add_widget (size_group, box);
-  g_object_unref (size_group);
-
-  spinbutton = gimp_prop_spin_button_new (config, "indent", 1.0, 10.0, 1);
-  gtk_entry_set_width_chars (GTK_ENTRY (spinbutton), 5);
-  gtk_widget_set_halign (spinbutton, GTK_ALIGN_START);
-  gimp_grid_attach_icon (GTK_GRID (grid), row++,
-                         GIMP_ICON_FORMAT_INDENT_MORE,
-                         spinbutton, 1);
-
-  spinbutton = gimp_prop_spin_button_new (config, "line-spacing", 1.0, 10.0, 1);
-  gtk_entry_set_width_chars (GTK_ENTRY (spinbutton), 5);
-  gtk_widget_set_halign (spinbutton, GTK_ALIGN_START);
-  gimp_grid_attach_icon (GTK_GRID (grid), row++,
-                         GIMP_ICON_FORMAT_TEXT_SPACING_LINE,
-                         spinbutton, 1);
-
-  spinbutton = gimp_prop_spin_button_new (config,
-                                          "letter-spacing", 1.0, 10.0, 1);
-  gtk_entry_set_width_chars (GTK_ENTRY (spinbutton), 5);
-  gtk_widget_set_halign (spinbutton, GTK_ALIGN_START);
-  gimp_grid_attach_icon (GTK_GRID (grid), row++,
-                         GIMP_ICON_FORMAT_TEXT_SPACING_LETTER,
-                         spinbutton, 1);
-
-  combo = gimp_prop_enum_combo_box_new (config, "box-mode", 0, 0);
-  gtk_widget_set_halign (combo, GTK_ALIGN_START);
-  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++,
-                            _("Box:"), 0.0, 0.5,
-                            combo, 1);
   stroke_options = gimp_stroke_options_new (GIMP_CONTEXT (options)->gimp,
                                             NULL, FALSE);
-#define BIND(a)                                    \
-  g_object_bind_property (options, "outline-" #a,  \
-                          stroke_options, #a,                           \
+#define BIND(a)                                   \
+  g_object_bind_property (options, "outline-" #a, \
+                          stroke_options, #a,     \
                           G_BINDING_BIDIRECTIONAL | G_BINDING_SYNC_CREATE)
   BIND (custom-style);
   BIND (foreground);
@@ -964,9 +930,118 @@ gimp_text_options_gui (GimpToolOptions *tool_options)
                             editor, 1);
   gtk_widget_set_visible (editor, TRUE);
 
+  options->private->stroke_editor = GIMP_STROKE_EDITOR (editor);
+
   g_object_unref (stroke_options);
 
-  /*  Only add the language entry if the iso-codes package is available.  */
+  expander = gimp_prop_expanding_frame_new (config, "outline-enable", _("Outline"),
+                                            outline_grid, NULL);
+  gtk_box_pack_start (GTK_BOX (options_vbox), expander, FALSE, FALSE, 0);
+
+  button = gtk_button_new_with_label (_("Text Styling"));
+  gtk_widget_set_tooltip_text (button,
+                               _("Open the GEGL styles dialog to create or edit text styles"));
+  gtk_widget_set_halign (button, GTK_ALIGN_FILL);
+  gtk_box_pack_start (GTK_BOX (options_vbox), button, FALSE, FALSE, 0);
+  gtk_widget_show (button);
+
+  g_signal_connect (button, "clicked",
+                    G_CALLBACK (gimp_text_options_open_gegl_styles),
+                    options);
+
+  grid = gtk_grid_new ();
+  gtk_grid_set_column_spacing (GTK_GRID (grid), 2);
+  gtk_grid_set_row_spacing (GTK_GRID (grid), 2);
+  gtk_box_pack_start (GTK_BOX (options_vbox), grid, FALSE, FALSE, 0);
+  gtk_widget_show (grid);
+
+  row = 0;
+
+  box = gimp_prop_enum_icon_box_new (config, "justify", "format-justify", 0, 0);
+  gtk_widget_set_halign (box, GTK_ALIGN_START);
+  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++,
+                            _("Justify:"), 0.0, 0.5,
+                            box, 2);
+
+  spinbutton = gimp_prop_spin_button_new (config, "indent", 1.0, 10.0, 1);
+  gtk_entry_set_width_chars (GTK_ENTRY (spinbutton), 5);
+  gtk_widget_set_halign (spinbutton, GTK_ALIGN_START);
+  gimp_grid_attach_icon (GTK_GRID (grid), row++,
+                         GIMP_ICON_FORMAT_INDENT_MORE,
+                         spinbutton, 1);
+
+  hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
+
+  spinbutton = gimp_prop_spin_button_new (config, "line-spacing", 1.0, 10.0, 1);
+  gtk_entry_set_width_chars (GTK_ENTRY (spinbutton), 5);
+  gtk_box_pack_start (GTK_BOX (hbox), spinbutton, FALSE, FALSE, 0);
+
+  spinbutton = gimp_prop_spin_button_new (config,
+                                          "letter-spacing", 1.0, 10.0, 1);
+  gtk_entry_set_width_chars (GTK_ENTRY (spinbutton), 5);
+  gtk_box_pack_start (GTK_BOX (hbox), spinbutton, FALSE, FALSE, 0);
+
+  gimp_grid_attach_icon (GTK_GRID (grid), row++,
+                         GIMP_ICON_FORMAT_TEXT_SPACING_LINE,
+                         hbox, 2);
+
+  hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
+  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++,
+                            _("Style:"), 0.0, 0.5,
+                            hbox, 2);
+  gtk_box_pack_start (GTK_BOX (hbox), NULL, FALSE, FALSE, 0);
+
+  button = gimp_text_options_create_toggle (options, "bold",
+                                            GIMP_ICON_FORMAT_TEXT_BOLD, _("Bold"));
+  gtk_box_pack_start (GTK_BOX (hbox), button, FALSE, FALSE, 0);
+  gtk_widget_show (button);
+
+  button = gimp_text_options_create_toggle (options, "italic",
+                                            GIMP_ICON_FORMAT_TEXT_ITALIC, _("Italic"));
+  gtk_box_pack_start (GTK_BOX (hbox), button, FALSE, FALSE, 0);
+  gtk_widget_show (button);
+
+  button = gimp_text_options_create_toggle (options, "underline",
+                                            GIMP_ICON_FORMAT_TEXT_UNDERLINE, _("Underline"));
+  gtk_box_pack_start (GTK_BOX (hbox), button, FALSE, FALSE, 0);
+  gtk_widget_show (button);
+
+  button = gimp_text_options_create_toggle (options, "strikethrough",
+                                            GIMP_ICON_FORMAT_TEXT_STRIKETHROUGH, _("Strikethrough"));
+  gtk_box_pack_start (GTK_BOX (hbox), button, FALSE, FALSE, 0);
+  gtk_widget_show (button);
+
+  box = gimp_prop_enum_icon_box_new_multiprefix (config, "base-direction",
+                                                 "format-text-direction", "gimp-text-dir",
+                                                 NULL);
+  gtk_widget_set_halign (box, GTK_ALIGN_START);
+  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++,
+                            _("Base direction:"), 0.0, 0.5,
+                            box, 2);
+
+  combo = gimp_prop_enum_combo_box_new (config, "box-mode", 0, 0);
+  gtk_widget_set_halign (combo, GTK_ALIGN_START);
+  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++,
+                            _("Box:"), 0.0, 0.5,
+                            combo, 1);
+  gtk_size_group_add_widget (size_group, combo);
+
+  vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
+  gtk_widget_show (vbox);
+
+  button = gimp_prop_check_button_new (config, "antialias", NULL);
+  gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
+  gtk_widget_set_halign (button, GTK_ALIGN_START);
+  gtk_grid_attach (GTK_GRID (grid), vbox, 0, row++, 2, 1);
+
+  button = gimp_prop_enum_combo_box_new (config, "hint-style", -1, -1);
+  gtk_widget_set_halign (button, GTK_ALIGN_START);
+  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row,
+                            _("Hinting:"), 0.0, 0.5,
+                            button, 1);
+  gtk_size_group_add_widget (size_group, button);
+
+  g_object_unref (size_group);
 
 #ifdef HAVE_ISO_CODES
   {
@@ -989,7 +1064,31 @@ gimp_text_options_gui (GimpToolOptions *tool_options)
   }
 #endif
 
+  button = gimp_prop_check_button_new (config, "use-editor", NULL);
+  gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
+
+  button = gimp_prop_check_button_new (config, "show-on-canvas", NULL);
+  gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
+
   return main_vbox;
+}
+
+void
+gimp_text_options_update_gui (GimpTextOptions *options)
+{
+  const gchar *style;
+
+  g_return_if_fail (GIMP_IS_TEXT_OPTIONS (options));
+
+  if (options->private->stroke_editor)
+    {
+      if (options->outline_style == GIMP_CUSTOM_STYLE_PATTERN)
+        style = "pattern";
+      else
+        style = "color-fg";
+
+      gimp_stroke_editor_outline_style_changed (options->private->stroke_editor, style);
+    }
 }
 
 static void
@@ -1028,17 +1127,85 @@ gimp_text_options_editor_notify_font (GimpTextOptions *options,
 }
 
 static void
-gimp_text_options_outline_changed (GtkWidget *combo,
-                                   GtkWidget *vbox)
+gimp_text_options_set_outline (GimpTextOptions *options)
 {
-  GimpTextOutline active;
+  g_return_if_fail (GIMP_IS_TEXT_OPTIONS (options));
 
-  active = (GimpTextOutline) gtk_combo_box_get_active (GTK_COMBO_BOX (combo));
-
-  if (active == GIMP_TEXT_OUTLINE_NONE)
-    gtk_widget_hide (vbox);
+  if (options->fill_enable && options->outline_enable)
+    options->outline = GIMP_TEXT_OUTLINE_STROKE_FILL;
+  else if (options->fill_enable)
+    options->outline = GIMP_TEXT_OUTLINE_FILLED_ONLY;
+  else if (options->fill_enable)
+    options->outline = GIMP_TEXT_OUTLINE_STROKE_ONLY;
   else
-    gtk_widget_show (vbox);
+    options->outline = GIMP_TEXT_OUTLINE_NONE;
+}
+
+static GtkWidget *
+gimp_text_options_create_toggle (GimpTextOptions *options,
+                                 const gchar     *prop_name,
+                                 const gchar     *icon_name,
+                                 const gchar     *tooltip)
+{
+  GtkWidget *toggle;
+  GtkWidget *image;
+
+  toggle = gtk_toggle_button_new ();
+  gtk_widget_set_can_focus (toggle, FALSE);
+  gtk_widget_show (toggle);
+
+  gimp_help_set_help_data (toggle, tooltip, NULL);
+
+  image = gtk_image_new_from_icon_name (icon_name, GTK_ICON_SIZE_MENU);
+  gtk_container_add (GTK_CONTAINER (toggle), image);
+  gtk_widget_show (image);
+
+  g_object_set_data_full (G_OBJECT (toggle), "decoration-prop-name",
+                          g_strdup (prop_name), g_free);
+
+  options->private->toggles = g_list_append (options->private->toggles, toggle);
+
+  g_signal_connect_object (toggle, "toggled",
+                           G_CALLBACK (gimp_text_options_toggle_changed),
+                           options, 0);
+
+  return toggle;
+}
+
+static void
+gimp_text_options_toggle_changed (GtkToggleButton *toggle,
+                                  GimpTextOptions *options)
+{
+  Gimp        *gimp;
+  GimpTool    *tool;
+  const gchar *prop_name;
+
+  g_return_if_fail (GIMP_IS_TEXT_OPTIONS (options));
+
+  gimp = options->tool_options.tool_info->gimp;
+  tool = tool_manager_get_active (gimp);
+
+  prop_name = g_object_get_data (G_OBJECT (toggle), "decoration-prop-name");
+
+  if (gtk_toggle_button_get_active (toggle))
+    gimp_text_tool_tag_apply (tool, prop_name, TRUE);
+  else
+    gimp_text_tool_tag_apply (tool, prop_name, FALSE);
+}
+
+static void
+gimp_text_options_open_gegl_styles (GtkButton       *button,
+                                    GimpTextOptions *options)
+{
+  Gimp *gimp;
+
+  g_return_if_fail (GIMP_IS_TEXT_OPTIONS (options));
+
+  gimp = options->tool_options.tool_info->gimp;
+
+  gimp_ui_manager_activate_action (menus_get_image_manager_singleton (gimp),
+                                   "filters",
+                                   "filters-gegl-styles");
 }
 
 GtkWidget *
@@ -1155,3 +1322,64 @@ gimp_text_options_deserialize_property (GimpConfig *object,
 
   return FALSE;
 }
+
+void
+gimp_text_options_update_toggles (GimpTextOptions *options,
+                                  GimpTextBuffer  *text_buffer)
+{
+  gboolean       vals[]  = { TRUE, TRUE, TRUE, TRUE };
+  const gchar   *names[] = { "bold", "italic", "underline", "strikethrough" };
+  GtkTextTag    *tags[4];
+  GtkTextBuffer *buffer;
+  GtkTextIter    start, end, iter;
+  GList         *list;
+  gint           i;
+
+  g_return_if_fail (GIMP_IS_TEXT_OPTIONS (options));
+  g_return_if_fail (GIMP_IS_TEXT_BUFFER (text_buffer));
+
+  buffer = GTK_TEXT_BUFFER (text_buffer);
+
+  tags[0] = text_buffer->bold_tag;
+  tags[1] = text_buffer->italic_tag;
+  tags[2] = text_buffer->underline_tag;
+  tags[3] = text_buffer->strikethrough_tag;
+
+  if (gtk_text_buffer_get_has_selection (buffer))
+    gtk_text_buffer_get_selection_bounds (buffer, &start, &end);
+  else
+    gtk_text_buffer_get_bounds (buffer, &start, &end);
+
+  for (iter = start;
+       gtk_text_iter_in_range (&iter, &start, &end);
+       gtk_text_iter_forward_cursor_position (&iter))
+    {
+      for (i = 0; i < 4; i++)
+        if (vals[i] &&
+            (! tags[i] ||
+             ! gtk_text_iter_has_tag (&iter, tags[i])))
+          vals[i] = FALSE;
+
+      for (i = 0; i < 4; i++)
+        if (vals[i])
+          break;
+      if (i == 4)
+        break;
+    }
+
+  for (list = options->private->toggles; list; list = list->next)
+    {
+      GtkToggleButton *tog  = GTK_TOGGLE_BUTTON (list->data);
+      const char      *prop = g_object_get_data (G_OBJECT (tog), "decoration-prop-name");
+
+      for (i = 0; i < 4; i++)
+        if (g_strcmp0 (prop, names[i]) == 0)
+          {
+            g_signal_handlers_block_by_func (tog, gimp_text_options_toggle_changed, options);
+            gtk_toggle_button_set_active (tog, vals[i]);
+            g_signal_handlers_unblock_by_func (tog, gimp_text_options_toggle_changed, options);
+            break;
+          }
+    }
+}
+

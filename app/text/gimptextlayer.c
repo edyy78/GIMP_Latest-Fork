@@ -121,6 +121,11 @@ static void       gimp_text_layer_text_changed   (GimpTextLayer     *layer);
 static gboolean   gimp_text_layer_render         (GimpTextLayer     *layer);
 static void       gimp_text_layer_render_layout  (GimpTextLayer     *layer,
                                                   GimpTextLayout    *layout);
+static void       gimp_text_layer_commit_surface (cairo_surface_t   *surface,
+                                                  GimpDrawable      *drawable,
+                                                  GimpTextLayout    *layout,
+                                                  gint               width,
+                                                  gint               height);
 
 
 G_DEFINE_TYPE_WITH_PRIVATE (GimpTextLayer, gimp_text_layer, GIMP_TYPE_LAYER)
@@ -943,7 +948,6 @@ gimp_text_layer_render_layout (GimpTextLayer  *layer,
   GimpDrawable       *drawable = GIMP_DRAWABLE (layer);
   GimpItem           *item     = GIMP_ITEM (layer);
   const Babl         *format;
-  GeglBuffer         *buffer;
   cairo_t            *cr;
   cairo_surface_t    *surface;
   gint                width;
@@ -974,6 +978,20 @@ gimp_text_layer_render_layout (GimpTextLayer  *layer,
     }
 
   cr = cairo_create (surface);
+
+  if (layer->text->outline == GIMP_TEXT_OUTLINE_NONE)
+    {
+      cairo_set_operator (cr, CAIRO_OPERATOR_CLEAR);
+      cairo_paint (cr);
+
+      cairo_destroy (cr);
+      cairo_surface_flush (surface);
+
+      gimp_text_layer_commit_surface (surface, drawable, layout,
+                                      width, height);
+      return;
+    }
+
   if (layer->text->outline != GIMP_TEXT_OUTLINE_STROKE_ONLY)
     {
       cairo_save (cr);
@@ -983,7 +1001,7 @@ gimp_text_layer_render_layout (GimpTextLayer  *layer,
       cairo_restore (cr);
     }
 
-  if (layer->text->outline != GIMP_TEXT_OUTLINE_NONE)
+  if (layer->text->outline != GIMP_TEXT_OUTLINE_FILLED_ONLY)
     {
       GimpText *text = layer->text;
 
@@ -1061,6 +1079,20 @@ gimp_text_layer_render_layout (GimpTextLayer  *layer,
 
   cairo_surface_flush (surface);
 
+  gimp_text_layer_commit_surface (surface, drawable, layout,
+                                  width, height);
+}
+
+static void
+gimp_text_layer_commit_surface (cairo_surface_t *surface,
+                                GimpDrawable    *drawable,
+                                GimpTextLayout  *layout,
+                                gint             width,
+                                gint             height)
+{
+  const Babl *format;
+  GeglBuffer *buffer;
+
 #if CAIRO_VERSION >= CAIRO_VERSION_ENCODE(1, 17, 2)
   /* The CAIRO_FORMAT_RGBA128F surface maps to the layout TRC and space. */
   switch (gimp_text_layout_get_trc (layout))
@@ -1080,13 +1112,11 @@ gimp_text_layer_render_layout (GimpTextLayer  *layer,
 #else
   format = babl_format_with_space ("cairo-ARGB32", gimp_text_layout_get_space (layout));
 #endif
-  buffer = gimp_cairo_surface_create_buffer (surface, format);
 
+  buffer = gimp_cairo_surface_create_buffer (surface, format);
   gimp_gegl_buffer_copy (buffer, NULL, GEGL_ABYSS_NONE,
                          gimp_drawable_get_buffer (drawable), NULL);
-
   g_object_unref (buffer);
   cairo_surface_destroy (surface);
-
   gimp_drawable_update (drawable, 0, 0, width, height);
 }
