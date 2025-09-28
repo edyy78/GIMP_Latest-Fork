@@ -28,6 +28,8 @@
       <item><attribute name="action">text-tool.text-tool-direction-ttb-rtl-upright</attribute></item>
       <item><attribute name="action">text-tool.text-tool-direction-ttb-ltr</attribute></item>
       <item><attribute name="action">text-tool.text-tool-direction-ttb-ltr-upright</attribute></item>
+      <item><attribute name="action">text-tool.text-tool-direction-sideways-rl</attribute></item>
+      <item><attribute name="action">text-tool.text-tool-direction-sideways-lr</attribute></item>
     </submenu>
   </menu>
 </interface>

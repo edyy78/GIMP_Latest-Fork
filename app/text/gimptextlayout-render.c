@@ -51,7 +51,8 @@ gimp_text_layout_render (GimpTextLayout    *layout,
   cairo_transform (cr, &trafo);
 
   if (base_dir == GIMP_TEXT_DIRECTION_TTB_RTL ||
-      base_dir == GIMP_TEXT_DIRECTION_TTB_RTL_UPRIGHT)
+      base_dir == GIMP_TEXT_DIRECTION_TTB_RTL_UPRIGHT ||
+      base_dir == GIMP_TEXT_DIRECTION_SIDEWAYS_RL)
     {
       gimp_text_layout_get_size (layout, &width, &height);
       cairo_translate (cr, width, 0);
@@ -59,7 +60,8 @@ gimp_text_layout_render (GimpTextLayout    *layout,
     }
 
   if (base_dir == GIMP_TEXT_DIRECTION_TTB_LTR ||
-      base_dir == GIMP_TEXT_DIRECTION_TTB_LTR_UPRIGHT)
+      base_dir == GIMP_TEXT_DIRECTION_TTB_LTR_UPRIGHT ||
+      base_dir == GIMP_TEXT_DIRECTION_SIDEWAYS_LR)
     {
       gimp_text_layout_get_size (layout, &width, &height);
       cairo_translate (cr, 0, height);

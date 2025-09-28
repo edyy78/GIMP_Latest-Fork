@@ -192,7 +192,9 @@ gimp_text_layout_new (GimpText     *text,
     case GIMP_TEXT_BOX_DYNAMIC:
       break;
     case GIMP_TEXT_BOX_FIXED:
-      if (! PANGO_GRAVITY_IS_VERTICAL (pango_context_get_base_gravity (context)))
+      if (! (PANGO_GRAVITY_IS_VERTICAL (pango_context_get_base_gravity (context)) ||
+            text->base_dir == GIMP_TEXT_DIRECTION_SIDEWAYS_RL ||
+            text->base_dir == GIMP_TEXT_DIRECTION_SIDEWAYS_LR))
         pango_layout_set_width (layout->layout,
                                 pango_units_from_double
                                 (gimp_units_to_pixels (text->box_width,
@@ -772,7 +774,9 @@ gimp_text_layout_position (GimpTextLayout *layout)
           (base_dir == GIMP_TEXT_DIRECTION_TTB_RTL && align == PANGO_ALIGN_RIGHT) ||
           (base_dir == GIMP_TEXT_DIRECTION_TTB_RTL_UPRIGHT && align == PANGO_ALIGN_RIGHT) ||
           (base_dir == GIMP_TEXT_DIRECTION_TTB_LTR && align == PANGO_ALIGN_LEFT) ||
-          (base_dir == GIMP_TEXT_DIRECTION_TTB_LTR_UPRIGHT && align == PANGO_ALIGN_LEFT))
+          (base_dir == GIMP_TEXT_DIRECTION_TTB_LTR_UPRIGHT && align == PANGO_ALIGN_LEFT) ||
+          (base_dir == GIMP_TEXT_DIRECTION_SIDEWAYS_RL && align == PANGO_ALIGN_RIGHT) ||
+          (base_dir == GIMP_TEXT_DIRECTION_SIDEWAYS_LR && align == PANGO_ALIGN_RIGHT))
         {
           layout->extents.x +=
             PANGO_PIXELS (pango_layout_get_width (layout->layout)) - width;
@@ -798,7 +802,9 @@ gimp_text_layout_position (GimpTextLayout *layout)
       layout->extents.height += 2 * border;
     }
 
-  if (PANGO_GRAVITY_IS_VERTICAL (pango_context_get_base_gravity (context)))
+  if (PANGO_GRAVITY_IS_VERTICAL (pango_context_get_base_gravity (context)) ||
+     layout->text->base_dir == GIMP_TEXT_DIRECTION_SIDEWAYS_RL ||
+     layout->text->base_dir == GIMP_TEXT_DIRECTION_SIDEWAYS_LR)
     {
       gint temp;
 
@@ -917,6 +923,18 @@ gimp_text_get_pango_context (GimpText *text,
       pango_context_set_base_dir (context, PANGO_DIRECTION_LTR);
       pango_context_set_gravity_hint (context, PANGO_GRAVITY_HINT_STRONG);
       pango_context_set_base_gravity (context, PANGO_GRAVITY_WEST);
+      break;
+
+    case GIMP_TEXT_DIRECTION_SIDEWAYS_RL:
+      pango_context_set_base_dir (context, PANGO_DIRECTION_LTR);
+      pango_context_set_gravity_hint (context, PANGO_GRAVITY_HINT_STRONG);
+      pango_context_set_base_gravity (context, PANGO_GRAVITY_SOUTH);
+      break;
+
+    case GIMP_TEXT_DIRECTION_SIDEWAYS_LR:
+      pango_context_set_base_dir (context, PANGO_DIRECTION_LTR);
+      pango_context_set_gravity_hint (context, PANGO_GRAVITY_HINT_STRONG);
+      pango_context_set_base_gravity (context, PANGO_GRAVITY_SOUTH);
       break;
     }
 

@@ -237,6 +237,8 @@ G_BEGIN_DECLS
 #define GIMP_ICON_FORMAT_TEXT_DIRECTION_TTB_RTL_UPRIGHT   "gimp-text-dir-ttb-rtl-upright" /* use FDO */
 #define GIMP_ICON_FORMAT_TEXT_DIRECTION_TTB_LTR           "gimp-text-dir-ttb-ltr" /* use FDO */
 #define GIMP_ICON_FORMAT_TEXT_DIRECTION_TTB_LTR_UPRIGHT   "gimp-text-dir-ttb-ltr-upright" /* use FDO */
+#define GIMP_ICON_FORMAT_TEXT_DIRECTION_SIDEWAYS_RL       "gimp-text-dir-sideways-rl" /* use FDO */
+#define GIMP_ICON_FORMAT_TEXT_DIRECTION_SIDEWAYS_LR       "gimp-text-dir-sideways-lr" /* use FDO */
 #define GIMP_ICON_FORMAT_TEXT_SPACING_LETTER "gimp-letter-spacing"
 #define GIMP_ICON_FORMAT_TEXT_SPACING_LINE   "gimp-line-spacing"
 

@@ -688,6 +688,7 @@ gimp_text_tool_editor_get_cursor_rect (GimpTextTool   *text_tool,
       break;
     case GIMP_TEXT_DIRECTION_TTB_RTL:
     case GIMP_TEXT_DIRECTION_TTB_RTL_UPRIGHT:
+    case GIMP_TEXT_DIRECTION_SIDEWAYS_RL:
       {
       gint temp, width, height;
 
@@ -704,6 +705,7 @@ gimp_text_tool_editor_get_cursor_rect (GimpTextTool   *text_tool,
       break;
     case GIMP_TEXT_DIRECTION_TTB_LTR:
     case GIMP_TEXT_DIRECTION_TTB_LTR_UPRIGHT:
+    case GIMP_TEXT_DIRECTION_SIDEWAYS_LR:
       {
       gint temp, width, height;
 
@@ -1802,12 +1804,14 @@ gimp_text_tool_fix_position (GimpTextTool *text_tool,
       break;
       case GIMP_TEXT_DIRECTION_TTB_RTL:
       case GIMP_TEXT_DIRECTION_TTB_RTL_UPRIGHT:
+      case GIMP_TEXT_DIRECTION_SIDEWAYS_RL:
       temp = width - *x;
       *x = *y;
       *y = temp;
       break;
       case GIMP_TEXT_DIRECTION_TTB_LTR:
       case GIMP_TEXT_DIRECTION_TTB_LTR_UPRIGHT:
+      case GIMP_TEXT_DIRECTION_SIDEWAYS_LR:
       temp = *x;
       *x = height - *y;
       *y = temp;
@@ -1827,6 +1831,7 @@ gimp_text_tool_convert_gdkkeyevent (GimpTextTool *text_tool,
 
     case GIMP_TEXT_DIRECTION_TTB_RTL:
     case GIMP_TEXT_DIRECTION_TTB_RTL_UPRIGHT:
+    case GIMP_TEXT_DIRECTION_SIDEWAYS_RL:
 #ifdef _WIN32
       switch (kevent->keyval)
         {
@@ -1871,6 +1876,7 @@ gimp_text_tool_convert_gdkkeyevent (GimpTextTool *text_tool,
       break;
     case GIMP_TEXT_DIRECTION_TTB_LTR:
     case GIMP_TEXT_DIRECTION_TTB_LTR_UPRIGHT:
+    case GIMP_TEXT_DIRECTION_SIDEWAYS_LR:
 #ifdef _WIN32
       switch (kevent->keyval)
         {

@@ -328,6 +328,8 @@
 #define GIMP_HELP_TEXT_TOOL_DIRECTION_TTB_RTL_UP  "gimp-text-tool-direction-ttb-rtl-upright"
 #define GIMP_HELP_TEXT_TOOL_DIRECTION_TTB_LTR     "gimp-text-tool-direction-ttb-ltr"
 #define GIMP_HELP_TEXT_TOOL_DIRECTION_TTB_LTR_UP  "gimp-text-tool-direction-ttb-ltr-upright"
+#define GIMP_HELP_TEXT_TOOL_DIRECTION_SIDEWAYS_RL "gimp-text-tool-direction-sideways-rl"
+#define GIMP_HELP_TEXT_TOOL_DIRECTION_SIDEWAYS_LR "gimp-text-tool-direction-sideways-lr"
 
 #define GIMP_HELP_TOOL_AIRBRUSH                   "gimp-tool-airbrush"
 #define GIMP_HELP_TOOL_ALIGN                      "gimp-tool-align"

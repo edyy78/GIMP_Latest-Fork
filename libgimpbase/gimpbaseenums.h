@@ -1135,6 +1135,8 @@ typedef enum
  * @GIMP_TEXT_DIRECTION_TTB_RTL_UPRIGHT: Upright characters are from top to bottom, Lines are from right to left
  * @GIMP_TEXT_DIRECTION_TTB_LTR: Characters are from top to bottom, Lines are from left to right
  * @GIMP_TEXT_DIRECTION_TTB_LTR_UPRIGHT: Upright characters are from top to bottom, Lines are from left to right
+ * @GIMP_TEXT_DIRECTION_SIDEWAYS_RL: Characters are rotated 90° clockwise, Lines are from right to left
+ * @GIMP_TEXT_DIRECTION_SIDEWAYS_LR: Characters are rotated 90° counterclockwise, Lines are from left to right
  *
  * Text directions.
  **/
@@ -1149,7 +1151,9 @@ typedef enum
   GIMP_TEXT_DIRECTION_TTB_RTL,          /*< desc="Vertical, right to left (mixed orientation)"  >*/
   GIMP_TEXT_DIRECTION_TTB_RTL_UPRIGHT,  /*< desc="Vertical, right to left (upright orientation)" >*/
   GIMP_TEXT_DIRECTION_TTB_LTR,          /*< desc="Vertical, left to right (mixed orientation)"  >*/
-  GIMP_TEXT_DIRECTION_TTB_LTR_UPRIGHT   /*< desc="Vertical, left to right (upright orientation)" >*/
+  GIMP_TEXT_DIRECTION_TTB_LTR_UPRIGHT,  /*< desc="Vertical, left to right (upright orientation)" >*/
+  GIMP_TEXT_DIRECTION_SIDEWAYS_RL,      /*< desc="Sideways, 90° clockwise, right to left" >*/
+  GIMP_TEXT_DIRECTION_SIDEWAYS_LR       /*< desc="Sideways, 90° counterclockwise, left to right" >*/
 } GimpTextDirection;
 
 

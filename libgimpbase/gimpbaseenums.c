@@ -1693,6 +1693,8 @@ gimp_text_direction_get_type (void)
     { GIMP_TEXT_DIRECTION_TTB_RTL_UPRIGHT, "GIMP_TEXT_DIRECTION_TTB_RTL_UPRIGHT", "ttb-rtl-upright" },
     { GIMP_TEXT_DIRECTION_TTB_LTR, "GIMP_TEXT_DIRECTION_TTB_LTR", "ttb-ltr" },
     { GIMP_TEXT_DIRECTION_TTB_LTR_UPRIGHT, "GIMP_TEXT_DIRECTION_TTB_LTR_UPRIGHT", "ttb-ltr-upright" },
+    { GIMP_TEXT_DIRECTION_SIDEWAYS_RL, "GIMP_TEXT_DIRECTION_SIDEWAYS_RL", "sideways-rl" },
+    { GIMP_TEXT_DIRECTION_SIDEWAYS_LR, "GIMP_TEXT_DIRECTION_SIDEWAYS_LR", "sideways-lr" },
     { 0, NULL, NULL }
   };
 
@@ -1704,6 +1706,8 @@ gimp_text_direction_get_type (void)
     { GIMP_TEXT_DIRECTION_TTB_RTL_UPRIGHT, NC_("text-direction", "Vertical, right to left (upright orientation)"), NULL },
     { GIMP_TEXT_DIRECTION_TTB_LTR, NC_("text-direction", "Vertical, left to right (mixed orientation)"), NULL },
     { GIMP_TEXT_DIRECTION_TTB_LTR_UPRIGHT, NC_("text-direction", "Vertical, left to right (upright orientation)"), NULL },
+    { GIMP_TEXT_DIRECTION_SIDEWAYS_RL, NC_("text-direction", "Sideways, 90° clockwise, right to left"), NULL },
+    { GIMP_TEXT_DIRECTION_SIDEWAYS_LR, NC_("text-direction", "Sideways, 90° counterclockwise, left to right"), NULL },
     { 0, NULL, NULL }
   };
 
