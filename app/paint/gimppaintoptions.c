@@ -62,6 +62,7 @@
 #define DEFAULT_USE_JITTER              FALSE
 #define DEFAULT_JITTER_AMOUNT           0.2
 
+#define DEFAULT_JITTER_ENABLED          TRUE
 #define DEFAULT_DYNAMICS_ENABLED        TRUE
 
 #define DEFAULT_FADE_LENGTH             100.0
@@ -111,9 +112,11 @@ enum
   PROP_HARD,
 
   PROP_USE_JITTER,
+  PROP_JITTER_SETTINGS_SHOWN,
   PROP_JITTER_AMOUNT,
 
   PROP_DYNAMICS_ENABLED,
+  PROP_DYNAMICS_SETTINGS_SHOWN,
 
   PROP_FADE_LENGTH,
   PROP_FADE_REVERSE,
@@ -134,10 +137,12 @@ enum
   PROP_GRADIENT_VIEW_SIZE,
 
   PROP_USE_SMOOTHING,
+  PROP_SMOOTHING_SETTINGS_SHOWN,
   PROP_SMOOTHING_QUALITY,
   PROP_SMOOTHING_FACTOR,
 
   PROP_EXPAND_USE,
+  PROP_EXPAND_LAYERS_SETTINGS_SHOWN,
   PROP_EXPAND_AMOUNT,
   PROP_EXPAND_FILL_TYPE,
   PROP_EXPAND_MASK_FILL_TYPE
@@ -313,11 +318,23 @@ gimp_paint_options_class_init (GimpPaintOptionsClass *klass)
                             _("Scatter brush as you paint"),
                             DEFAULT_USE_JITTER,
                             GIMP_PARAM_STATIC_STRINGS);
+  GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_JITTER_SETTINGS_SHOWN,
+                            "jitter-settings-shown",
+                            _("Showing Jitter settings"),
+                            _("Showing sub-settings for the jitter"),
+                            DEFAULT_USE_JITTER,
+                            GIMP_PARAM_STATIC_STRINGS);
 
   GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_EXPAND_USE,
                             "expand-use",
                             _("Expand Layers"),
                             _("Expand active layer as you paint"),
+                            DEFAULT_EXPAND_USE,
+                            GIMP_PARAM_STATIC_STRINGS);
+  GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_EXPAND_LAYERS_SETTINGS_SHOWN,
+                            "expand-layers-settings-shown",
+                            _("Showing Expand Layers settings"),
+                            _("Showing sub-settings for the Expand Layers feature"),
                             DEFAULT_EXPAND_USE,
                             GIMP_PARAM_STATIC_STRINGS);
 
@@ -348,6 +365,12 @@ gimp_paint_options_class_init (GimpPaintOptionsClass *klass)
                             "dynamics-enabled",
                             _("Enable dynamics"),
                             _("Apply dynamics curves to paint settings"),
+                            DEFAULT_DYNAMICS_ENABLED,
+                            GIMP_PARAM_STATIC_STRINGS);
+  GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_DYNAMICS_SETTINGS_SHOWN,
+                            "dynamics-settings-shown",
+                            _("Showing dynamics settings"),
+                            _("Showing sub-settings for the dynamics"),
                             DEFAULT_DYNAMICS_ENABLED,
                             GIMP_PARAM_STATIC_STRINGS);
 
@@ -463,6 +486,12 @@ gimp_paint_options_class_init (GimpPaintOptionsClass *klass)
                             "use-smoothing",
                             _("Smooth stroke"),
                             _("Paint smoother strokes"),
+                            FALSE,
+                            GIMP_PARAM_STATIC_STRINGS);
+  GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_SMOOTHING_SETTINGS_SHOWN,
+                            "smoothing-settings-shown",
+                            _("Showing Smoothing settings"),
+                            _("Showing sub-settings for Smoothing"),
                             FALSE,
                             GIMP_PARAM_STATIC_STRINGS);
   GIMP_CONFIG_PROP_INT (object_class, PROP_SMOOTHING_QUALITY,
@@ -609,12 +638,18 @@ gimp_paint_options_set_property (GObject      *object,
     case PROP_USE_JITTER:
       jitter_options->use_jitter = g_value_get_boolean (value);
       break;
+    case PROP_JITTER_SETTINGS_SHOWN:
+      options->jitter_settings_shown = g_value_get_boolean (value);
+      break;
     case PROP_JITTER_AMOUNT:
       jitter_options->jitter_amount = g_value_get_double (value);
       break;
 
     case PROP_DYNAMICS_ENABLED:
       options->dynamics_enabled = g_value_get_boolean (value);
+      break;
+    case PROP_DYNAMICS_SETTINGS_SHOWN:
+      options->dynamics_settings_shown = g_value_get_boolean (value);
       break;
 
     case PROP_FADE_LENGTH:
@@ -671,6 +706,9 @@ gimp_paint_options_set_property (GObject      *object,
     case PROP_USE_SMOOTHING:
       smoothing_options->use_smoothing = g_value_get_boolean (value);
       break;
+    case PROP_SMOOTHING_SETTINGS_SHOWN:
+      options->smoothing_settings_shown = g_value_get_boolean (value);
+      break;
     case PROP_SMOOTHING_QUALITY:
       smoothing_options->smoothing_quality = g_value_get_int (value);
       break;
@@ -680,6 +718,9 @@ gimp_paint_options_set_property (GObject      *object,
 
     case PROP_EXPAND_USE:
       options->expand_use = g_value_get_boolean (value);
+      break;
+    case PROP_EXPAND_LAYERS_SETTINGS_SHOWN:
+      options->expand_use_shown = g_value_get_boolean (value);
       break;
     case PROP_EXPAND_AMOUNT:
       options->expand_amount = g_value_get_double (value);
@@ -768,12 +809,18 @@ gimp_paint_options_get_property (GObject    *object,
     case PROP_USE_JITTER:
       g_value_set_boolean (value, jitter_options->use_jitter);
       break;
+    case PROP_JITTER_SETTINGS_SHOWN:
+      g_value_set_boolean (value, options->jitter_settings_shown);
+      break;
     case PROP_JITTER_AMOUNT:
       g_value_set_double (value, jitter_options->jitter_amount);
       break;
 
     case PROP_DYNAMICS_ENABLED:
       g_value_set_boolean (value, options->dynamics_enabled);
+      break;
+    case PROP_DYNAMICS_SETTINGS_SHOWN:
+      g_value_set_boolean (value, options->dynamics_settings_shown);
       break;
 
     case PROP_FADE_LENGTH:
@@ -830,6 +877,9 @@ gimp_paint_options_get_property (GObject    *object,
     case PROP_USE_SMOOTHING:
       g_value_set_boolean (value, smoothing_options->use_smoothing);
       break;
+    case PROP_SMOOTHING_SETTINGS_SHOWN:
+      g_value_set_boolean (value, options->smoothing_settings_shown);
+      break;
     case PROP_SMOOTHING_QUALITY:
       g_value_set_int (value, smoothing_options->smoothing_quality);
       break;
@@ -839,6 +889,9 @@ gimp_paint_options_get_property (GObject    *object,
 
     case PROP_EXPAND_USE:
       g_value_set_boolean (value, options->expand_use);
+      break;
+    case PROP_EXPAND_LAYERS_SETTINGS_SHOWN:
+      g_value_set_boolean (value, options->expand_use_shown);
       break;
     case PROP_EXPAND_AMOUNT:
       g_value_set_double (value, options->expand_amount);
