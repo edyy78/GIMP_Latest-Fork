@@ -140,10 +140,12 @@
 
 
 ;3 INSTALLER SOURCE
+#define ASSETS_DIR BUILD_DIR + "\build\windows\installer"
 
 ;3.1.1 Icons and other files
-#define ASSETS_DIR BUILD_DIR + "\build\windows\installer"
 #include ASSETS_DIR + "\splash-dimensions.h"
+#define WIZARD_SMALL_IMAGE ASSETS_DIR + "\gimp.scale-100.bmp," + ASSETS_DIR + "\gimp.scale-125.bmp," + ASSETS_DIR + "\gimp.scale-150.bmp," + ASSETS_DIR + "\gimp.scale-175.bmp," + ASSETS_DIR + "\gimp.scale-200.bmp," + ASSETS_DIR + "\gimp.scale-225.bmp," + ASSETS_DIR + "\gimp.scale-250.bmp"
+#define WIZARD_IMAGE ASSETS_DIR + "\install-end.scale-100.bmp," + ASSETS_DIR + "\install-end.scale-125.bmp," + ASSETS_DIR + "\install-end.scale-150.bmp," + ASSETS_DIR + "\install-end.scale-175.bmp," + ASSETS_DIR + "\install-end.scale-200.bmp," + ASSETS_DIR + "\install-end.scale-225.bmp," + ASSETS_DIR + "\install-end.scale-250.bmp"
 
 ;3.1.2 Installer lang files
 [Languages]
@@ -245,10 +247,15 @@ AlwaysShowDirOnReadyPage=yes
 
 ;3.4.2 INSTALLER UI: uses modern Win32 "Vista" (still used today) design
 WizardStyle=modern
+//WizardStyle=modern dynamic
 WizardSizePercent=100
 WizardResizable=no
-WizardSmallImageFile={#ASSETS_DIR}\gimp.scale-100.bmp,{#ASSETS_DIR}\gimp.scale-125.bmp,{#ASSETS_DIR}\gimp.scale-150.bmp,{#ASSETS_DIR}\gimp.scale-175.bmp,{#ASSETS_DIR}\gimp.scale-200.bmp,{#ASSETS_DIR}\gimp.scale-225.bmp,{#ASSETS_DIR}\gimp.scale-250.bmp
-WizardImageFile={#ASSETS_DIR}\install-end.scale-100.bmp,{#ASSETS_DIR}\install-end.scale-125.bmp,{#ASSETS_DIR}\install-end.scale-150.bmp,{#ASSETS_DIR}\install-end.scale-175.bmp,{#ASSETS_DIR}\install-end.scale-200.bmp,{#ASSETS_DIR}\install-end.scale-225.bmp,{#ASSETS_DIR}\install-end.scale-250.bmp
+WizardImageAlphaFormat=defined
+WizardSmallImageFile={#WIZARD_SMALL_IMAGE}
+//WizardSmallImageFileDynamicDark={#WIZARD_SMALL_IMAGE}
+//WizardSmallImageBackColorDynamicDark=clNone
+WizardImageFile={#WIZARD_IMAGE}
+//WizardImageFileDynamicDark={#WIZARD_IMAGE}
 WizardImageStretch=yes
 [LangOptions]
 DialogFontName=Segoe UI
@@ -637,6 +644,14 @@ begin
 
 	MeasureLabel.Free;
 end;
+
+//function GetThemedBgColor: TColor;
+//begin
+//  if IsDarkInstallMode then
+//    Result := $2b2b2b
+//  else
+//    Result := $ffffff;
+//end;
 
 #include "util_general.isi"
 
@@ -1034,7 +1049,9 @@ end;
 //2. LICENSE
 procedure InfoBeforeLikeLicense();
 begin
-	WizardForm.Bevel.Visible := False;
+    //if not IsDarkInstallMode then begin
+	    WizardForm.Bevel.Visible := False;
+	//end;
 
 	WizardForm.InfoBeforeClickLabel.Visible := False;
 	WizardForm.InfoBeforeMemo.Height := WizardForm.InfoBeforeMemo.Height + WizardForm.InfoBeforeMemo.Top - WizardForm.InfoBeforeClickLabel.Top;
@@ -1258,7 +1275,9 @@ end;
 //7.1 BEFORE INSTALL
 procedure PreparingFaceLift();
 begin
-	WizardForm.Bevel.Visible := False;
+    //if not IsDarkInstallMode then begin
+	    WizardForm.Bevel.Visible := False;
+	//end;
 end;
 
 //Create restore point
@@ -1669,7 +1688,9 @@ end;
 procedure InstallingFaceLift();
 var lblMessage1,lblURL,lblMessage2: TLabel; //TNewStaticText doesn't support alignment
 begin
-	WizardForm.Bevel.Visible := False;
+    //if not IsDarkInstallMode then begin
+	    WizardForm.Bevel.Visible := False;
+	//end;
 
 	with WizardForm.ProgressGauge do
 	begin
