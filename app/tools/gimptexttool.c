@@ -250,6 +250,7 @@ static void
 gimp_text_tool_init (GimpTextTool *text_tool)
 {
   GimpTool *tool = GIMP_TOOL (text_tool);
+  gulong    handler;
 
   text_tool->buffer = gimp_text_buffer_new ();
 
@@ -259,9 +260,12 @@ gimp_text_tool_init (GimpTextTool *text_tool)
   g_signal_connect (text_tool->buffer, "end-user-action",
                     G_CALLBACK (gimp_text_tool_buffer_end_edit),
                     text_tool);
-  g_signal_connect (text_tool->buffer, "color-applied",
-                    G_CALLBACK (gimp_text_tool_buffer_color_applied),
-                    text_tool);
+
+  handler =  g_signal_connect (text_tool->buffer, "color-applied",
+                               G_CALLBACK (gimp_text_tool_buffer_color_applied),
+                               text_tool);
+  g_object_set_data (G_OBJECT (text_tool->buffer), "gimp-text-tool-color-applied-handler",
+                     GUINT_TO_POINTER (handler));
 
   text_tool->handle_rectangle_change_complete = TRUE;
 

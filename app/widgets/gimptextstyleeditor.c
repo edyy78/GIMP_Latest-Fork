@@ -58,6 +58,13 @@ enum
   PROP_RESOLUTION_Y
 };
 
+typedef struct
+{
+  gint       start_offset;
+  gint       end_offset;
+  GeglColor *color;
+} ColorChunk;
+
 
 static void      gimp_text_style_editor_constructed       (GObject             *object);
 static void      gimp_text_style_editor_dispose           (GObject             *object);
@@ -86,10 +93,12 @@ static void      gimp_text_style_editor_set_font          (GimpTextStyleEditor *
                                                            GtkTextTag          *font_tag);
 static void      gimp_text_style_editor_set_default_font  (GimpTextStyleEditor *editor);
 
+static void      gimp_text_style_editor_color_changed     (GimpColorButton     *button,
+                                                           GimpTextStyleEditor *editor);
+static void      gimp_text_style_editor_color_clicked     (GimpColorButton     *button,
+                                                           GimpTextStyleEditor *editor);
 static void      gimp_text_style_editor_color_response    (GimpColorPanel      *panel,
                                                            GimpColorDialogState state,
-                                                           GimpTextStyleEditor *editor);
-static void      gimp_text_style_editor_color_changed     (GimpColorButton     *button,
                                                            GimpTextStyleEditor *editor);
 static void      gimp_text_style_editor_set_color         (GimpTextStyleEditor *editor,
                                                            GtkTextTag          *color_tag);
@@ -120,6 +129,9 @@ static void      gimp_text_style_editor_set_kerning       (GimpTextStyleEditor *
 static void      gimp_text_style_editor_update            (GimpTextStyleEditor *editor);
 static gboolean  gimp_text_style_editor_update_idle       (GimpTextStyleEditor *editor);
 
+static void      color_chunk_destroy                      (ColorChunk          *chunk);
+
+static GList *color_chunks = NULL;
 
 G_DEFINE_TYPE (GimpTextStyleEditor, gimp_text_style_editor,
                GTK_TYPE_BOX)
@@ -254,6 +266,7 @@ gimp_text_style_editor_init (GimpTextStyleEditor *editor)
   editor->color_button = gimp_color_panel_new (_("Change color of selected text"),
                                                color,
                                                GIMP_COLOR_AREA_FLAT, 20, 20);
+  gimp_color_button_set_update (GIMP_COLOR_BUTTON (editor->color_button), TRUE);
   gimp_widget_set_fully_opaque (editor->color_button, TRUE);
   g_object_unref (color);
 
@@ -264,9 +277,15 @@ gimp_text_style_editor_init (GimpTextStyleEditor *editor)
   gimp_help_set_help_data (editor->color_button,
                            _("Change color of selected text"), NULL);
 
-  g_signal_connect (GIMP_COLOR_PANEL (editor->color_button), "response",
-                    G_CALLBACK (gimp_text_style_editor_color_response),
-                    editor);
+  g_signal_connect_object (editor->color_button, "color-changed",
+                           G_CALLBACK (gimp_text_style_editor_color_changed),
+                           editor, 0);
+  g_signal_connect_object (GIMP_COLOR_PANEL (editor->color_button), "response",
+                           G_CALLBACK (gimp_text_style_editor_color_response),
+                           editor, 0);
+  g_signal_connect_object (GIMP_COLOR_PANEL (editor->color_button), "clicked",
+                           G_CALLBACK (gimp_text_style_editor_color_clicked),
+                           editor, 0);
 
   editor->kerning_adjustment = gtk_adjustment_new (0.0, -1000.0, 1000.0,
                                                    1.0, 10.0, 0.0);
@@ -760,14 +779,152 @@ gimp_text_style_editor_color_changed (GimpColorButton     *button,
 }
 
 static void
-gimp_text_style_editor_color_response (GimpColorPanel       *panel,
-                                       GimpColorDialogState  state,
-                                       GimpTextStyleEditor  *editor)
+gimp_text_style_editor_color_clicked (GimpColorButton     *button,
+                                      GimpTextStyleEditor *editor)
 {
-  if (state == GIMP_COLOR_DIALOG_OK)
-    gimp_text_style_editor_color_changed (GIMP_COLOR_BUTTON (panel),
-                                          editor);
+  GtkTextBuffer *buffer = GTK_TEXT_BUFFER (editor->buffer);
+  gulong         text_tool_color_applied_handler;
+  GeglColor     *color;
+  GeglColor     *last_color;
+  gdouble        rlc, glc, blc;
+  gdouble        rc, gc, bc;
+  GtkTextIter    start, end, iter, chunk_start;
+  gboolean       same_color;
 
+  text_tool_color_applied_handler =
+    GPOINTER_TO_UINT (g_object_get_data (G_OBJECT (editor->buffer),
+                      "gimp-text-tool-color-applied-handler"));
+
+  /* We temporarily block the "color-applied" signal handler from the
+   * text tool buffer. Without blocking it, every internal update of the
+   * color button would trigger the handler and insert a new entry in the
+   * color history, even though the user did not explicitly apply a new
+   * color.
+   *
+   * By blocking the handler here, we ensure that the color history is
+   * only updated when the user explicitly confirms their choice (e.g.
+   * by clicking "OK" in the color dialog). The handler is unblocked
+   * immediately afterwards, so that subsequent user actions will again
+   * be correctly propagated and recorded.
+   */
+  if (text_tool_color_applied_handler)
+    g_signal_handler_block (editor->buffer, text_tool_color_applied_handler);
+
+  /* free previous chunks */
+  if (color_chunks)
+    {
+      g_list_free_full (color_chunks, (GDestroyNotify) color_chunk_destroy);
+      color_chunks = NULL;
+    }
+
+  if (! gtk_text_buffer_get_has_selection (buffer))
+    return;
+
+  gtk_text_buffer_get_selection_bounds (buffer, &start, &end);
+
+  /* fallback to text color */
+  if (! gimp_text_buffer_get_iter_color (editor->buffer, &start, &last_color))
+    last_color = gegl_color_duplicate (editor->text->color);
+
+  gegl_color_get_rgba (last_color, &rlc, &glc, &blc, NULL);
+
+  chunk_start = start;
+
+  for (iter = start;
+       gtk_text_iter_compare (&iter, &end) < 0;
+       gtk_text_iter_forward_char (&iter))
+    {
+      if (! gimp_text_buffer_get_iter_color (editor->buffer, &iter, &color))
+        color = gegl_color_duplicate (editor->text->color);
+
+      gegl_color_get_rgba (color, &rc, &gc, &bc, NULL);
+
+      same_color = (rlc == rc && glc == gc && blc == bc);
+
+      if (! same_color)
+        {
+          ColorChunk *chunk = g_new0 (ColorChunk, 1);
+
+          chunk->start_offset = gtk_text_iter_get_offset (&chunk_start);
+          chunk->end_offset   = gtk_text_iter_get_offset (&iter);
+          chunk->color        = last_color;
+
+          color_chunks = g_list_append (color_chunks, chunk);
+
+          last_color = gegl_color_duplicate (color);
+
+          rlc = rc;
+          glc = gc;
+          blc = bc;
+
+          chunk_start = iter;
+        }
+
+      g_clear_object (&color);
+    }
+
+  /* if the last chunk is not empty, add it */
+  if (! gtk_text_iter_equal (&chunk_start, &end))
+    {
+      ColorChunk *chunk = g_new0 (ColorChunk, 1);
+
+      chunk->start_offset = gtk_text_iter_get_offset (&chunk_start);
+      chunk->end_offset   = gtk_text_iter_get_offset (&end);
+
+      chunk->color = last_color;
+      last_color   = NULL;
+
+      color_chunks = g_list_append (color_chunks, chunk);
+    }
+
+  g_clear_object (&last_color);
+}
+
+static void
+gimp_text_style_editor_color_response (GimpColorPanel      *panel,
+                                       GimpColorDialogState state,
+                                       GimpTextStyleEditor *editor)
+{
+
+  gulong text_tool_color_applied_handler =
+    GPOINTER_TO_UINT (g_object_get_data (G_OBJECT (editor->buffer),
+                      "gimp-text-tool-color-applied-handler"));
+
+  if (text_tool_color_applied_handler)
+    g_signal_handler_unblock (editor->buffer, text_tool_color_applied_handler);
+
+  if (state == GIMP_COLOR_DIALOG_CANCEL)
+    {
+      if (! color_chunks)
+        return;
+
+      /* restore the colors in the chunks */
+      for (GList *l = color_chunks; l; l = l->next)
+        {
+          ColorChunk    *chunk  = l->data;
+          GtkTextBuffer *buffer = GTK_TEXT_BUFFER (editor->buffer);
+          GtkTextIter    start, end;
+
+          gtk_text_buffer_get_iter_at_offset (buffer, &start, chunk->start_offset);
+          gtk_text_buffer_get_iter_at_offset (buffer, &end, chunk->end_offset);
+
+          gimp_text_buffer_set_color (editor->buffer,
+                                      &start, &end,
+                                      chunk->color);
+        }
+    }
+  else if (state == GIMP_COLOR_DIALOG_OK)
+    {
+      gimp_text_style_editor_color_changed (GIMP_COLOR_BUTTON (panel),
+                                            editor);
+
+    }
+
+  if (color_chunks)
+  {
+    g_list_free_full (color_chunks, (GDestroyNotify) color_chunk_destroy);
+    color_chunks = NULL;
+  }
 }
 
 static void
@@ -782,17 +939,33 @@ gimp_text_style_editor_set_color (GimpTextStyleEditor *editor,
   if (! color)
     color = gegl_color_new ("black");
 
+  g_signal_handlers_block_by_func (editor->color_button,
+                                   gimp_text_style_editor_color_changed,
+                                   editor);
+
   gimp_color_button_set_color (GIMP_COLOR_BUTTON (editor->color_button),
                                color);
   g_clear_object (&color);
 
   /* FIXME should have "inconsistent" state as for font and size */
+
+  g_signal_handlers_unblock_by_func (editor->color_button,
+                                     gimp_text_style_editor_color_changed,
+                                     editor);
 }
 
 static void
 gimp_text_style_editor_set_default_color (GimpTextStyleEditor *editor)
 {
+  g_signal_handlers_block_by_func (editor->color_button,
+                                   gimp_text_style_editor_color_changed,
+                                   editor);
+
   gimp_color_button_set_color (GIMP_COLOR_BUTTON (editor->color_button), editor->text->color);
+
+  g_signal_handlers_unblock_by_func (editor->color_button,
+                                     gimp_text_style_editor_color_changed,
+                                     editor);
 }
 
 static void
@@ -1328,4 +1501,11 @@ gimp_text_style_editor_update_idle (GimpTextStyleEditor *editor)
     }
 
   return FALSE;
+}
+
+static void
+color_chunk_destroy (ColorChunk *chunk)
+{
+  g_clear_object (&chunk->color);
+  g_free (chunk);
 }
