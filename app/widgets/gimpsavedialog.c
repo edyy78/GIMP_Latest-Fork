@@ -102,6 +102,8 @@ gimp_save_dialog_constructed (GObject *object)
    */
   G_OBJECT_CLASS (parent_class)->constructed (object);
 
+  gtk_window_set_modal (GTK_WINDOW (dialog), TRUE);
+
   gimp_save_dialog_add_extra_widgets (dialog);
 }
 
