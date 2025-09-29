@@ -17,6 +17,8 @@ stamp_operations_enums = custom_target('stamp-operations-enums.h',
   build_by_default: true
 )
 
+subdir('opencl')
+
 libappoperations_sources = [
   'gimp-operation-config.c',
   'gimp-operations.c',
@@ -62,7 +64,7 @@ libappoperations_sources = [
 ]
 
 libappoperations = static_library('appoperations',
-  libappoperations_sources,
+  [libappoperations_sources, opencl_headers],
   include_directories: [ rootInclude, rootAppInclude, ],
   c_args: '-DG_LOG_DOMAIN="Gimp-Operations"',
   dependencies: [

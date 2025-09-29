@@ -1360,6 +1360,16 @@ gimp_layer_mode_get_function (GimpLayerMode mode)
   return GIMP_OPERATION_LAYER_MODE_GET_CLASS (operation)->process;
 }
 
+GimpLayerModeCLFunc
+gimp_layer_mode_get_cl_function (GimpLayerMode mode)
+{
+  GeglOperation *operation;
+
+  operation = gimp_layer_mode_get_operation (mode);
+
+  return GIMP_OPERATION_LAYER_MODE_GET_CLASS (operation)->cl_process;
+}
+
 GimpLayerModeBlendFunc
 gimp_layer_mode_get_blend_function (GimpLayerMode mode)
 {

@@ -50,6 +50,7 @@ struct _GimpOperationLayerMode
   GimpLayerCompositeMode       prop_composite_mode;
 
   GimpLayerModeFunc            function;
+  GimpLayerModeCLFunc          cl_function;
   GimpLayerModeBlendFunc       blend_function;
   gboolean                     is_last_node;
   gboolean                     has_mask;
@@ -71,6 +72,14 @@ struct _GimpOperationLayerModeClass
                                                     void                   *mask,
                                                     void                   *out,
                                                     glong                   samples,
+                                                    const GeglRectangle    *roi,
+                                                    gint                    level);
+  gboolean                 (* cl_process)          (GeglOperation          *self,
+                                                    cl_mem                  in_tex,
+                                                    cl_mem                  aux_tex,
+                                                    cl_mem                  mask_tex,
+                                                    cl_mem                  out_tex,
+                                                    size_t                  global_worksize,
                                                     const GeglRectangle    *roi,
                                                     gint                    level);
 
