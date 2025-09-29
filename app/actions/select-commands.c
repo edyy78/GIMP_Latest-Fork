@@ -225,7 +225,7 @@ select_shrink_cmd_callback (GimpAction *action,
 
       gimp_item_bounds (GIMP_ITEM (gimp_image_get_mask (image)),
                         NULL, NULL, &width, &height);
-      max_value = MIN (width, height) / 2;
+      max_value = MIN (MIN (width, height) / 2, 2342);
 
       gimp_image_get_resolution (image, &xres, &yres);
 
@@ -289,7 +289,7 @@ select_grow_cmd_callback (GimpAction *action,
 
       width  = gimp_image_get_width  (image);
       height = gimp_image_get_height (image);
-      max_value = MAX (width, height);
+      max_value = MIN (MAX (width, height), 2342);
 
       gimp_image_get_resolution (image, &xres, &yres);
 
@@ -342,7 +342,12 @@ select_border_cmd_callback (GimpAction *action,
 
       gimp_item_bounds (GIMP_ITEM (gimp_image_get_mask (image)),
                         NULL, NULL, &width, &height);
-      max_value = MIN (width, height) / 2;
+      /* NOTE: Max is 2342, from gimp:border.
+       * However, if the border_style is "smooth" the border radius will be
+       * increased by 1 during shrink operation in gimp_gegl_apply_border,
+       * reaching invalid values. Lower max input value by 1 to avoid that.
+       */
+      max_value = MIN (MIN (width, height) / 2, 2341);
 
       gimp_image_get_resolution (image, &xres, &yres);
 
