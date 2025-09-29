@@ -720,6 +720,12 @@ edit_paste (GimpDisplay   *display,
         {
           gimp_image_set_selected_layers (image, pasted_layers);
 
+          for (GList *iter = pasted_layers; iter; iter = iter->next)
+            {
+              if (GIMP_IS_DRAWABLE (iter->data))
+                gimp_drawable_enable_resize_undo (GIMP_DRAWABLE (iter->data));
+            }
+
           g_list_free (pasted_layers);
           gimp_image_flush (image);
         }
