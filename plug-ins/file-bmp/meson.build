@@ -33,7 +33,7 @@ endif
 
 plugin_exe = executable(plugin_name,
                         plugin_sources,
-                        dependencies: libgimpui_dep,
+                        dependencies: [ libgimpui_dep, lcms ],
                         win_subsystem: 'windows',
                         install: true,
                         install_dir: gimpplugindir / 'plug-ins' / plugin_name)
