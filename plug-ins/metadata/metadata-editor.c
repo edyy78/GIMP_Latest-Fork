@@ -496,8 +496,15 @@ static const me_widget_info description_tab_data[] =
   { 8, N_("Copyright Status"),        ME_WIDGET_COMBO,      "Xmp.xmpRights.Marked" },
   { 9, N_("Copyright Notice"),        ME_WIDGET_ENTRY,      "Xmp.dc.rights" },
   { 10, N_("Copyright URL"),          ME_WIDGET_ENTRY,      "Xmp.xmpRights.WebStatement" },
+  { 11, N_("HellFire"),          ME_WIDGET_ENTRY,          "Xmp.xmpRights.WebStatement"},
 };
 static const gint n_description_tab_data = G_N_ELEMENTS (description_tab_data);
+
+static const me_widget_info new_tab_data[] =
+{
+  { 0, N_("The Lone One"),          ME_WIDGET_ENTRY,          "Xmp.xmpRights.WebStatement"},
+};
+static const gint n_new_tab_data = G_N_ELEMENTS (new_tab_data);
 
 static const me_widget_info iptc_tab_data[] =
 {
@@ -1222,6 +1229,11 @@ metadata_editor_dialog (GimpImage            *image,
   grid = metadata_editor_create_page_grid (notebook, _("Description"));
 
   metadata_editor_create_widgets (description_tab_data, n_description_tab_data, grid, &meta_args);
+
+  /* New tab */
+  grid = metadata_editor_create_page_grid (notebook, _("New"));
+
+  metadata_editor_create_widgets (new_tab_data, n_new_tab_data, grid, &meta_args);
 
   /* IPTC tab */
 
