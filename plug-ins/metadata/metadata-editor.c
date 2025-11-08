@@ -138,6 +138,9 @@ static gboolean metadata_editor_dialog           (GimpImage           *image,
 static void metadata_dialog_editor_set_metadata  (GExiv2Metadata      *metadata,
                                                   metadata_editor     *meta_info);
 
+static void metadata_license_set_info           (GtkComboBox          *combo,
+                                                 metadata_editor      *meta_info);
+
 static void impex_combo_callback                (GtkComboBoxText      *combo,
                                                  gpointer              data);
 
@@ -492,19 +495,25 @@ static const me_widget_info description_tab_data[] =
   { 4, N_("Description Writer"),      ME_WIDGET_ENTRY,      "Xmp.photoshop.CaptionWriter" },
   { 5, N_("Rating"),                  ME_WIDGET_COMBO,      "Xmp.xmp.Rating" },
   { 6, N_("Keywords"),                ME_WIDGET_TEXT,       "Xmp.dc.subject" },
-  { 7, "",                            ME_WIDGET_SEPARATOR,  "" },
-  { 8, N_("Copyright Status"),        ME_WIDGET_COMBO,      "Xmp.xmpRights.Marked" },
-  { 9, N_("Copyright Notice"),        ME_WIDGET_ENTRY,      "Xmp.dc.rights" },
-  { 10, N_("Copyright URL"),          ME_WIDGET_ENTRY,      "Xmp.xmpRights.WebStatement" },
-  { 11, N_("HellFire"),          ME_WIDGET_ENTRY,          "Xmp.xmpRights.WebStatement"},
 };
 static const gint n_description_tab_data = G_N_ELEMENTS (description_tab_data);
 
-static const me_widget_info new_tab_data[] =
+static const me_widget_info copyright_tab_data[] =
 {
-  { 0, N_("The Lone One"),          ME_WIDGET_ENTRY,          "Xmp.xmpRights.WebStatement"},
+  { 0, N_("License"),                 ME_WIDGET_COMBO,      "Xmp.cc:license" },
+  { 1, N_("Copyright Status"),        ME_WIDGET_COMBO,      "Xmp.xmpRights.Marked" },
+  { 2, N_("Copyright Notice"),        ME_WIDGET_ENTRY,      "Xmp.dc.rights" },
+  { 3, N_("Copyright URL"),           ME_WIDGET_ENTRY,      "Xmp.xmpRights.WebStatement" }, 
+  { 4, N_("Usage Terms"),             ME_WIDGET_TEXT,       "Xmp.xmpRights.UsageTerms" },
+  { 5, N_("Owners"),                  ME_WIDGET_TEXT,       "Xmp.xmpRights:Owner"},
+  { 6, N_("Certificate URL"),         ME_WIDGET_ENTRY,      "Xmp.xmpRights:Certificate"},
+  { 7, "",                            ME_WIDGET_SEPARATOR,      ""},
+  { 8, N_("License URL"),             ME_WIDGET_ENTRY,      "Xmp.dc.rights" },
+  { 9, N_("Attribution Name"),        ME_WIDGET_TEXT,       "Xmp.dc.rights" },
+  { 10, N_("Attribution URL"),        ME_WIDGET_ENTRY,     "Xmp.cc:attributionURL" },
+  { 11, N_("More Permissions"),       ME_WIDGET_TEXT,       "Xmp.dc.rights" },
 };
-static const gint n_new_tab_data = G_N_ELEMENTS (new_tab_data);
+static const gint n_copyright_tab_data = G_N_ELEMENTS (copyright_tab_data);
 
 static const me_widget_info iptc_tab_data[] =
 {
@@ -537,7 +546,6 @@ static const me_widget_info iptc_tab_data[] =
   { 25, N_("Instructions"),           ME_WIDGET_TEXT,       "Xmp.photoshop.Instructions" },
   { 26, N_("Credit Line"),            ME_WIDGET_ENTRY,      "Xmp.photoshop.Credit" },
   { 27, N_("Source"),                 ME_WIDGET_ENTRY,      "Xmp.photoshop.Source" },
-  { 28, N_("Usage Terms"),            ME_WIDGET_TEXT,       "Xmp.xmpRights.UsageTerms" },
 };
 static const gint n_iptc_tab_data = G_N_ELEMENTS (iptc_tab_data);
 
@@ -1230,10 +1238,10 @@ metadata_editor_dialog (GimpImage            *image,
 
   metadata_editor_create_widgets (description_tab_data, n_description_tab_data, grid, &meta_args);
 
-  /* New tab */
-  grid = metadata_editor_create_page_grid (notebook, _("New"));
+  /* Copyright tab */
+  grid = metadata_editor_create_page_grid (notebook, _("Copyright"));
 
-  metadata_editor_create_widgets (new_tab_data, n_new_tab_data, grid, &meta_args);
+  metadata_editor_create_widgets (copyright_tab_data, n_copyright_tab_data, grid, &meta_args);
 
   /* IPTC tab */
 
@@ -2583,6 +2591,17 @@ metadata_dialog_editor_set_metadata (GExiv2Metadata  *metadata,
       g_free (display);
     }
   gtk_combo_box_set_active (GTK_COMBO_BOX (combo_widget), 0);
+
+  combo_widget = metadata_editor_get_widget (meta_info, "Xmp.cc:license");
+  for (i = 0; i < n_license; i++)
+    {
+      gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (combo_widget),
+                                      gettext (license[i].display));
+    }
+  gtk_combo_box_set_active (GTK_COMBO_BOX (combo_widget), 0);
+  g_signal_connect (combo_widget, "changed",
+                    G_CALLBACK (metadata_license_set_info),
+                    meta_info);
 
   combo_widget = metadata_editor_get_widget (meta_info, "Xmp.xmpRights.Marked");
   for (i = 0; i < n_marked; i++)
@@ -4671,6 +4690,21 @@ metadata_dialog_editor_set_metadata (GExiv2Metadata  *metadata,
                     G_CALLBACK (on_series_date_button_clicked),
                     metadata_editor_get_widget (meta_info,
                                                 "Xmp.DICOM.SeriesDateTime"));
+}
+
+static void 
+metadata_license_set_info (GtkComboBox          *combo,
+                           metadata_editor      *meta_info)
+{
+    GtkWidget *entry;
+    GString *d;
+
+    d = g_string_new ("Hell");
+
+    entry = metadata_editor_get_widget (meta_info, "Xmp.cc:attributionURL");
+    gtk_entry_set_text (GTK_ENTRY (entry), d->str);
+
+
 }
 
 
