@@ -166,6 +166,10 @@ extern const gint   n_urgency;
 extern const combobox_int_tag marked[];
 extern const gint             n_marked;
 
+/* Creative Commons License Types */
+extern const combobox_str_tag license[];
+extern const gint             n_license;
+
 /* Phone Types */
 extern const combobox_str_tag phone_types[];
 extern const gint             n_phone_types;

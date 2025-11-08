@@ -264,6 +264,19 @@ const combobox_int_tag marked[] =
 };
 const gint n_marked = G_N_ELEMENTS (marked);
 
+/* Creative Commons License Types */
+const combobox_str_tag license[] =
+{
+  { "CC BY",       N_("CC BY")          },
+  { "CC BY-SA",    N_("CC BY-SA")       },
+  { "CC BY-NC",    N_("CC BY-NC")       },
+  { "CC BY-NC-SA", N_("CC BY-NC-SA")    },
+  { "CC BY-ND",    N_("CC BY-ND")       },
+  { "CC BY-NC-ND", N_("CC BY-NC-ND")    },
+  { "CC0",         N_("CC0")            },
+};
+const gint n_license = G_N_ELEMENTS (license);
+
 /* Phone Types */
 const combobox_str_tag phone_types[] =
 {
