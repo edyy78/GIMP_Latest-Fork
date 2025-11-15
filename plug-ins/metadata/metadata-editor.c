@@ -503,15 +503,15 @@ static const me_widget_info copyright_tab_data[] =
   { 0, N_("License"),                 ME_WIDGET_COMBO,      "Xmp.cc:license" },
   { 1, N_("Copyright Status"),        ME_WIDGET_COMBO,      "Xmp.xmpRights.Marked" },
   { 2, N_("Copyright Notice"),        ME_WIDGET_ENTRY,      "Xmp.dc.rights" },
-  { 3, N_("Copyright URL"),           ME_WIDGET_ENTRY,      "Xmp.xmpRights.WebStatement" }, 
+  { 3, N_("Copyright URL"),           ME_WIDGET_ENTRY,      "Xmp.xmpRights.WebStatement" },
   { 4, N_("Usage Terms"),             ME_WIDGET_TEXT,       "Xmp.xmpRights.UsageTerms" },
   { 5, N_("Owners"),                  ME_WIDGET_TEXT,       "Xmp.xmpRights:Owner"},
   { 6, N_("Certificate URL"),         ME_WIDGET_ENTRY,      "Xmp.xmpRights:Certificate"},
   { 7, "",                            ME_WIDGET_SEPARATOR,      ""},
-  { 8, N_("License URL"),             ME_WIDGET_ENTRY,      "Xmp.dc.rights" },
-  { 9, N_("Attribution Name"),        ME_WIDGET_TEXT,       "Xmp.dc.rights" },
-  { 10, N_("Attribution URL"),        ME_WIDGET_ENTRY,     "Xmp.cc:attributionURL" },
-  { 11, N_("More Permissions"),       ME_WIDGET_TEXT,       "Xmp.dc.rights" },
+  { 8, N_("License URL"),             ME_WIDGET_ENTRY,      "Xmp.cc:license" },
+  { 9, N_("Attribution Name"),        ME_WIDGET_TEXT,       "Xmp.cc:attributionName" },
+  { 10, N_("Attribution URL"),        ME_WIDGET_ENTRY,      "Xmp.cc:attributionURL" },
+  { 11, N_("More Permissions"),       ME_WIDGET_TEXT,       "Xmp.cc:morePermissions" },
 };
 static const gint n_copyright_tab_data = G_N_ELEMENTS (copyright_tab_data);
 
@@ -5742,3 +5742,4 @@ gpsaltsys_combo_callback (GtkComboBoxText *combo,
 
   last_gpsaltsys_sel = selection;
 }
+
