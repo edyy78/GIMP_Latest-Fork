@@ -41,12 +41,10 @@ const metadata_tag default_metadata_tags[] =
   { "Xmp.dc.creator",                            MODE_MULTI,  13,  TAG_TYPE_XMP, GIMP_XMP_SEQ   }, //  1
   { "Xmp.dc.description",                        MODE_MULTI,  14,  TAG_TYPE_XMP, GIMP_XMP_TEXT  }, //  2
   { "Xmp.dc.subject",                            MODE_MULTI,  15,  TAG_TYPE_XMP, GIMP_XMP_BAG   }, //  3
-  { "Xmp.dc.rights",                             MODE_SINGLE, 17,  TAG_TYPE_XMP, GIMP_XMP_TEXT  }, //  4
   { "Xmp.photoshop.AuthorsPosition",             MODE_SINGLE, 19,  TAG_TYPE_XMP, GIMP_XMP_TEXT  }, //  5
   { "Xmp.photoshop.CaptionWriter",               MODE_SINGLE, 21,  TAG_TYPE_XMP, GIMP_XMP_TEXT  }, //  6
   { "Xmp.xmp.Rating",                            MODE_COMBO,  -1,  TAG_TYPE_XMP, GIMP_XMP_NONE  }, //  7
-  { "Xmp.xmpRights.Marked",                      MODE_COMBO,  -1,  TAG_TYPE_XMP, GIMP_XMP_NONE  }, //  8
-  { "Xmp.xmpRights.WebStatement",                MODE_SINGLE, -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  }, //  9
+
 
   /* IPTC */
   { "Xmp.photoshop.DateCreated",                 MODE_SINGLE,  0,  TAG_TYPE_XMP, GIMP_XMP_TEXT  }, // 10
@@ -58,7 +56,6 @@ const metadata_tag default_metadata_tags[] =
   { "Xmp.iptc.Location",                         MODE_SINGLE, 18,  TAG_TYPE_XMP, GIMP_XMP_TEXT  }, // 16
   { "Xmp.iptc.CountryCode",                      MODE_SINGLE, 20,  TAG_TYPE_XMP, GIMP_XMP_TEXT  }, // 17
   { "Xmp.iptc.SubjectCode",                      MODE_MULTI,  -1,  TAG_TYPE_XMP, GIMP_XMP_BAG   }, // 18
-  { "Xmp.xmpRights.UsageTerms",                  MODE_MULTI,  -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  }, // 19
   { "Xmp.photoshop.City",                        MODE_SINGLE,  5,  TAG_TYPE_XMP, GIMP_XMP_TEXT  }, // 20
   { "Xmp.photoshop.State",                       MODE_SINGLE,  6,  TAG_TYPE_XMP, GIMP_XMP_TEXT  }, // 21
   { "Xmp.photoshop.Country",                     MODE_SINGLE,  7,  TAG_TYPE_XMP, GIMP_XMP_TEXT  }, // 22
@@ -136,7 +133,27 @@ const metadata_tag default_metadata_tags[] =
   { "Xmp.iptc.CiAdrCtry",                        MODE_SINGLE, -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  }, // 82
   { "Xmp.iptc.CiTelWork",                        MODE_MULTI,  -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  }, // 83
   { "Xmp.iptc.CiEmailWork",                      MODE_MULTI,  -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  }, // 84
-  { "Xmp.iptc.CiUrlWork",                        MODE_MULTI,  -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  }  // 85
+  { "Xmp.iptc.CiUrlWork",                        MODE_MULTI,  -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  },  // 85
+
+  /* Copyright */
+  { "Xmp.dc.rights",                             MODE_SINGLE, 17,  TAG_TYPE_XMP, GIMP_XMP_TEXT  }, //  4
+  { "Xmp.xmpRights.Marked",                      MODE_COMBO,  -1,  TAG_TYPE_XMP, GIMP_XMP_NONE  }, //  8
+  { "Xmp.xmpRights.WebStatement",                MODE_SINGLE, -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  }, //  9
+  { "Xmp.xmpRights.UsageTerms",                  MODE_MULTI,  -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  }, // 19
+
+  { "Xmp.cc:license",                            MODE_SINGLE, -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  },
+  { "Xmp.cc:morePermissions",                    MODE_MULTI,  -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  },
+  { "Xmp.cc:attributionName",                    MODE_SINGLE, -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  },
+  { "Xmp.cc:attributionURL",                     MODE_SINGLE, -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  },
+  { "Xmp.cc:userGuidelines",                     MODE_MULTI,  -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  },
+
+  { "Xmp.cc:permits",                            MODE_MULTI,  -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  },
+  { "Xmp.cc:requires",                           MODE_MULTI,  -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  },
+  { "Xmp.cc:prohibits",                          MODE_MULTI,  -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  },
+  { "Xmp.cc:jurisdiction",                       MODE_MULTI,  -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  },
+  { "Xmp.cc:legalcode",                          MODE_SINGLE, -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  },
+  { "Xmp.cc:deprecatedOn",                       MODE_SINGLE, -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  }
+
 
 };
 const gint n_default_metadata_tags = G_N_ELEMENTS (default_metadata_tags);
@@ -521,3 +538,4 @@ metadata_format_gps_altitude (const gdouble  value,
 
   return g_strdup_printf ("%.2f%s", gps_value, measurement_symbol);
 }
+
