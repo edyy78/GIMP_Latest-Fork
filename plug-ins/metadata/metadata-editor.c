@@ -500,18 +500,26 @@ static const gint n_description_tab_data = G_N_ELEMENTS (description_tab_data);
 
 static const me_widget_info copyright_tab_data[] =
 {
-  { 0, N_("License"),                 ME_WIDGET_COMBO,      "Xmp.cc:license" },
+  { 0, N_("License"),                 ME_WIDGET_COMBO,      "" },
   { 1, N_("Copyright Status"),        ME_WIDGET_COMBO,      "Xmp.xmpRights.Marked" },
   { 2, N_("Copyright Notice"),        ME_WIDGET_ENTRY,      "Xmp.dc.rights" },
   { 3, N_("Copyright URL"),           ME_WIDGET_ENTRY,      "Xmp.xmpRights.WebStatement" },
   { 4, N_("Usage Terms"),             ME_WIDGET_TEXT,       "Xmp.xmpRights.UsageTerms" },
-  { 5, N_("Owners"),                  ME_WIDGET_TEXT,       "Xmp.xmpRights:Owner"},
-  { 6, N_("Certificate URL"),         ME_WIDGET_ENTRY,      "Xmp.xmpRights:Certificate"},
+  { 5, N_("Owners"),                  ME_WIDGET_TEXT,       "Xmp.xmpRights.Owner"},
+  { 6, N_("Certificate URL"),         ME_WIDGET_ENTRY,      "Xmp.xmpRights.Certificate"},
   { 7, "",                            ME_WIDGET_SEPARATOR,      ""},
-  { 8, N_("License URL"),             ME_WIDGET_ENTRY,      "Xmp.cc:license" },
-  { 9, N_("Attribution Name"),        ME_WIDGET_TEXT,       "Xmp.cc:attributionName" },
-  { 10, N_("Attribution URL"),        ME_WIDGET_ENTRY,      "Xmp.cc:attributionURL" },
-  { 11, N_("More Permissions"),       ME_WIDGET_TEXT,       "Xmp.cc:morePermissions" },
+  { 8, N_("License URL"),             ME_WIDGET_ENTRY,      "Xmp.cc.License" },
+  { 9, N_("Attribution Name"),        ME_WIDGET_TEXT,       "Xmp.cc.AttributionName" },
+  { 10, N_("Attribution URL"),        ME_WIDGET_ENTRY,      "Xmp.cc.AttributionURL" },
+  { 11, N_("More Permissions"),       ME_WIDGET_TEXT,       "Xmp.cc.MorePermissions" },
+  { 12, N_("User Guidelines"),        ME_WIDGET_TEXT,       "Xmp.cc.UserGuidelines" },
+  { 13, "",                           ME_WIDGET_SEPARATOR,  ""},
+  { 14, N_("Permits"),                ME_WIDGET_TEXT,       "Xmp.cc.Permits" },
+  { 15, N_("Requires"),               ME_WIDGET_TEXT,       "Xmp.cc.Requires" },
+  { 16, N_("Prohibits"),              ME_WIDGET_TEXT,       "Xmp.cc.Prohibits" },
+  { 17, N_("Jurisdiction"),           ME_WIDGET_TEXT,       "Xmp.cc.Jurisdiction" },
+  { 18, N_("Legal Code"),             ME_WIDGET_TEXT,       "Xmp.cc.LegalCode" },
+  { 19, N_("Deprecated On"),          ME_WIDGET_TEXT,       "Xmp.cc.DeprecatedOn" },
 };
 static const gint n_copyright_tab_data = G_N_ELEMENTS (copyright_tab_data);
 
@@ -4696,13 +4704,13 @@ static void
 metadata_license_set_info (GtkComboBox          *combo,
                            metadata_editor      *meta_info)
 {
-    GtkWidget *entry;
+    /*GtkWidget *entry;
     GString *d;
 
     d = g_string_new ("Hell");
 
-    entry = metadata_editor_get_widget (meta_info, "Xmp.cc:attributionURL");
-    gtk_entry_set_text (GTK_ENTRY (entry), d->str);
+    entry = metadata_editor_get_widget (meta_info, "Xmp.cc.attributionURL");
+    gtk_entry_set_text (GTK_ENTRY (entry), d->str); */
 
 
 }

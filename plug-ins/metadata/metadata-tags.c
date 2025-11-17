@@ -140,21 +140,21 @@ const metadata_tag default_metadata_tags[] =
   { "Xmp.xmpRights.Marked",                      MODE_COMBO,  -1,  TAG_TYPE_XMP, GIMP_XMP_NONE  }, //  8
   { "Xmp.xmpRights.WebStatement",                MODE_SINGLE, -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  }, //  9
   { "Xmp.xmpRights.UsageTerms",                  MODE_MULTI,  -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  }, // 19
+  { "Xmp.xmpRights.Owner",                       MODE_MULTI,  -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  },
+  { "Xmp.xmpRights.Certificate",                 MODE_SINGLE, -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  },
 
-  { "Xmp.cc:license",                            MODE_SINGLE, -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  },
-  { "Xmp.cc:morePermissions",                    MODE_MULTI,  -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  },
-  { "Xmp.cc:attributionName",                    MODE_SINGLE, -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  },
-  { "Xmp.cc:attributionURL",                     MODE_SINGLE, -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  },
-  { "Xmp.cc:userGuidelines",                     MODE_MULTI,  -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  },
+  { "Xmp.cc.License",                            MODE_SINGLE, -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  },
+  { "Xmp.cc.MorePermissions",                    MODE_MULTI,  -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  },
+  { "Xmp.cc.AttributionName",                    MODE_SINGLE, -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  },
+  { "Xmp.cc.AttributionURL",                     MODE_SINGLE, -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  },
+  { "Xmp.cc.UserGuidelines",                     MODE_MULTI,  -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  },
 
-  { "Xmp.cc:permits",                            MODE_MULTI,  -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  },
-  { "Xmp.cc:requires",                           MODE_MULTI,  -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  },
-  { "Xmp.cc:prohibits",                          MODE_MULTI,  -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  },
-  { "Xmp.cc:jurisdiction",                       MODE_MULTI,  -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  },
-  { "Xmp.cc:legalcode",                          MODE_SINGLE, -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  },
-  { "Xmp.cc:deprecatedOn",                       MODE_SINGLE, -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  }
-
-
+  { "Xmp.cc.Permits",                            MODE_MULTI,  -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  },
+  { "Xmp.cc.Requires",                           MODE_MULTI,  -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  },
+  { "Xmp.cc.Prohibits",                          MODE_MULTI,  -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  },
+  { "Xmp.cc.Jurisdiction",                       MODE_MULTI,  -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  },
+  { "Xmp.cc.LegalCode",                          MODE_SINGLE, -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  },
+  { "Xmp.cc.DeprecatedOn",                       MODE_SINGLE, -1,  TAG_TYPE_XMP, GIMP_XMP_TEXT  },
 };
 const gint n_default_metadata_tags = G_N_ELEMENTS (default_metadata_tags);
 
